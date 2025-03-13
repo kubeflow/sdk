@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import inspect
-import json
 import math
 import os
 import queue
@@ -77,20 +76,6 @@ def get_container_devices(
         raise Exception(f"Failed to get device count for resources: {resources.limits}")
 
     return device, device_count
-
-
-# TODO (andreyvelich): Discuss how to make this validation easier for users.
-def validate_trainer(trainer: types.Trainer):
-    """
-    Validate that trainer has the correct configuration.
-    """
-
-    if (
-        trainer.func or trainer.func_args or trainer.packages_to_install
-    ) and trainer.fine_tuning_config:
-        raise ValueError(
-            "Trainer function parameters and fine tuning config can't be set together"
-        )
 
 
 # TODO (andreyvelich): Discuss if we want to support V1ResourceRequirements resources as input.
@@ -228,17 +213,6 @@ def get_script_for_python_packages(
     )
 
     return script_for_python_packages
-
-
-def get_lora_config(lora_config: types.LoraConfig) -> List[models.IoK8sApiCoreV1EnvVar]:
-    """
-    Get the TrainJob env from the given Lora config.
-    """
-
-    env = models.IoK8sApiCoreV1EnvVar(
-        name=constants.ENV_LORA_CONFIG, value=json.dumps(lora_config.__dict__)
-    )
-    return [env]
 
 
 def get_dataset_config(

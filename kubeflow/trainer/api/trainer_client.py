@@ -189,7 +189,7 @@ class TrainerClient:
     def train(
         self,
         runtime_ref: str,
-        trainer: Optional[types.Trainer] = None,
+        trainer: Optional[types.CustomTrainer] = None,
         dataset_config: Optional[types.HuggingFaceDatasetConfig] = None,
         model_config: Optional[types.HuggingFaceModelInputConfig] = None,
     ) -> str:
@@ -203,9 +203,6 @@ class TrainerClient:
             TimeoutError: Timeout to create TrainJobs.
             RuntimeError: Failed to create TrainJobs.
         """
-
-        if trainer:
-            utils.validate_trainer(trainer)
 
         # Generate unique name for the TrainJob.
         # TODO (andreyvelich): Discuss this TrainJob name generation.
@@ -241,16 +238,6 @@ class TrainerClient:
                 trainer.func_args,
                 trainer.packages_to_install,
                 trainer.pip_index_url,
-            )
-
-        # Add the Lora config to the Trainer envs.
-        if (
-            trainer
-            and trainer.fine_tuning_config
-            and trainer.fine_tuning_config.peft_config
-        ):
-            trainer_crd.env = utils.get_lora_config(
-                trainer.fine_tuning_config.peft_config
             )
 
         train_job = models.TrainerV1alpha1TrainJob(

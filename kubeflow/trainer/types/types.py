@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable, Dict, List, Optional
 
@@ -50,39 +50,28 @@ class TrainJob:
     status: Optional[str] = "Unknown"
 
 
-# Configuration for the Lora to configure parameter efficient fine-tuning.
+# Configuration for the custom trainer.
 @dataclass
-class LoraConfig:
-    r: Optional[int] = field(
-        default=None, metadata={"help": "Lora attention dimension"}
-    )
-    lora_alpha: Optional[int] = field(default=None, metadata={"help": "Lora alpha"})
-    lora_dropout: Optional[float] = field(
-        default=None, metadata={"help": "Lora dropout"}
-    )
+class CustomTrainer:
+    """Custom Trainer configuration. Configure the self-contained function
+        that encapsulates the entire model training process.
 
-
-@dataclass
-class FineTuningConfig:
-    # TODO (andreyvelich): Add more configs once we support them, e.g. QLoRA.
-    peft_config: Optional[LoraConfig] = None
-
-
-# Configuration for the Trainer.
-# TODO (andreyvelich): Discuss what values should be on the Trainer.
-@dataclass
-class Trainer:
-    """Trainer configuration.
-    TODO: Add the description
+    Args:
+        func (`Callable`): The function that encapsulates the entire model training process.
+        func_args (`Optional[Dict]`): The arguments to pass to the function.
+        packages_to_install (`Optional[List[str]]`):
+            A list of Python packages to install before running the function.
+        pip_index_url (`Optional[str]`): The PyPI URL from which to install Python packages.
+        num_nodes (`Optional[int]`): The number of nodes to use for training.
+        resources_per_node (`Optional[Dict]`): The computing resources to allocate per node.
     """
 
-    func: Optional[Callable] = None
+    func: Callable
     func_args: Optional[Dict] = None
     packages_to_install: Optional[List[str]] = None
-    pip_index_url: str = constants.DEFAULT_PIP_INDEX_URL
-    fine_tuning_config: Optional[FineTuningConfig] = None
+    pip_index_url: Optional[str] = constants.DEFAULT_PIP_INDEX_URL
     num_nodes: Optional[int] = None
-    resources_per_node: Optional[dict] = None
+    resources_per_node: Optional[Dict] = None
 
 
 # Configuration for the HuggingFace dataset provider.
