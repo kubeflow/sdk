@@ -15,39 +15,10 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Callable, Dict, List, Optional
+from enum import Enum
+from typing import Callable, Dict, List, Optional, Union
 
 from kubeflow.trainer.constants import constants
-
-
-# Representation for the Training Runtime.
-@dataclass
-class Runtime:
-    name: str
-    phase: str
-    accelerator: str
-    accelerator_count: str
-
-
-# Representation for the TrainJob component.
-@dataclass
-class Component:
-    name: str
-    status: Optional[str]
-    device: str
-    device_count: str
-    pod_name: str
-
-
-# Representation for the TrainJob.
-# TODO (andreyvelich): Discuss what fields users want to get.
-@dataclass
-class TrainJob:
-    name: str
-    runtime_ref: str
-    creation_timestamp: datetime
-    components: List[Component]
-    status: Optional[str] = "Unknown"
 
 
 # Configuration for the custom trainer.
@@ -69,9 +40,66 @@ class CustomTrainer:
     func: Callable
     func_args: Optional[Dict] = None
     packages_to_install: Optional[List[str]] = None
-    pip_index_url: Optional[str] = constants.DEFAULT_PIP_INDEX_URL
+    pip_index_url: str = constants.DEFAULT_PIP_INDEX_URL
     num_nodes: Optional[int] = None
     resources_per_node: Optional[Dict] = None
+
+
+# Configuration for the Builtin Trainer.
+@dataclass
+class BuiltinTrainer:
+    pass
+
+
+class TrainerType(Enum):
+    CUSTOM_TRAINER = CustomTrainer.__name__
+    BUILTIN_TRAINER = BuiltinTrainer.__name__
+
+
+class Framework(Enum):
+    TORCH = "torch"
+    DEEPSPEED = "deepspeed"
+    MLX = "mlx"
+    TORCHTUNE = "torchtune"
+
+
+# Representation for the Trainer of the runtime.
+@dataclass
+class Trainer:
+    trainer_type: TrainerType
+    framework: Framework
+    entrypoint: str
+    accelerator: str = constants.UNKNOWN
+    accelerator_count: Union[str, float, int] = constants.UNKNOWN
+
+
+# Representation for the Training Runtime.
+@dataclass
+class Runtime:
+    name: str
+    trainer: Trainer
+    pretrained_model: Optional[str] = None
+
+
+# Representation for the TrainJob steps.
+@dataclass
+class Step:
+    name: str
+    status: Optional[str]
+    pod_name: str
+    device: str = constants.UNKNOWN
+    device_count: Union[str, int] = constants.UNKNOWN
+
+
+# Representation for the TrainJob.
+# TODO (andreyvelich): Discuss what fields users want to get.
+@dataclass
+class TrainJob:
+    name: str
+    creation_timestamp: datetime
+    runtime: Runtime
+    steps: List[Step]
+    status: Optional[str] = constants.UNKNOWN
 
 
 # Configuration for the HuggingFace dataset initializer.
@@ -102,3 +130,45 @@ class Initializer:
 
     dataset: Optional[HuggingFaceDatasetInitializer] = None
     model: Optional[HuggingFaceModelInitializer] = None
+
+
+# The dict where key is the container image and value its representation.
+# Each Trainer representation defines trainer parameters (e.g. type, framework, entrypoint).
+# TODO (andreyvelich): We should allow user to overrides the default image names.
+ALL_TRAINERS: Dict[str, Trainer] = {
+    # Custom Trainers.
+    "pytorch/pytorch": Trainer(
+        trainer_type=TrainerType.CUSTOM_TRAINER,
+        framework=Framework.TORCH,
+        entrypoint="torchrun",
+    ),
+    "ghcr.io/kubeflow/trainer/mlx-runtime": Trainer(
+        trainer_type=TrainerType.CUSTOM_TRAINER,
+        framework=Framework.MLX,
+        entrypoint="mpirun --hostfile /etc/mpi/hostfile -x LD_LIBRARY_PATH=/usr/local/lib/ python3",
+    ),
+    "ghcr.io/kubeflow/trainer/deepspeed-runtime": Trainer(
+        trainer_type=TrainerType.CUSTOM_TRAINER,
+        framework=Framework.DEEPSPEED,
+        entrypoint="mpirun --hostfile /etc/mpi/hostfile python3",
+    ),
+    # Builtin Trainers.
+    "ghcr.io/kubeflow/trainer/torchtune-trainer": Trainer(
+        trainer_type=TrainerType.BUILTIN_TRAINER,
+        framework=Framework.TORCHTUNE,
+        entrypoint="tune run",
+    ),
+}
+
+# The default trainer configuration when runtime detection fails
+DEFAULT_TRAINER = Trainer(
+    trainer_type=TrainerType.CUSTOM_TRAINER,
+    framework=Framework.TORCH,
+    entrypoint="torchrun",
+)
+
+# The default runtime configuration for the train() API
+DEFAULT_RUNTIME = Runtime(
+    name="torch-distributed",
+    trainer=DEFAULT_TRAINER,
+)
