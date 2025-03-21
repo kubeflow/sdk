@@ -98,11 +98,14 @@ POD_PENDING = "Pending"
 # The default PIP index URL to download Python packages.
 DEFAULT_PIP_INDEX_URL = os.getenv("DEFAULT_PIP_INDEX_URL", "https://pypi.org/simple")
 
-# The default command for the Trainer.
+# The default command for the Trainer container.
 DEFAULT_COMMAND = ["bash", "-c"]
 
 # The Torch env name for the number of procs per node (e.g. number of GPUs per Pod).
 TORCH_ENV_NUM_PROC_PER_NODE = "PET_NPROC_PER_NODE"
+
+# The default home directory for the MPI user.
+DEFAULT_MPI_USER_HOME = os.getenv("DEFAULT_MPI_USER_HOME", "/home/mpiuser")
 
 # The OpenMPI env name for the number of slots per nude (e.g. number of GPUs per Pod).
 MPI_ENV_NUM_SLOTS_PER_NODE = "OMPI_MCA_orte_set_default_slots"
