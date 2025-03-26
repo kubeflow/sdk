@@ -287,7 +287,7 @@ def get_entrypoint_using_train_func(
         # The default file location is: /home/mpiuser/<FILE_NAME>.py
         func_file = os.path.join(constants.DEFAULT_MPI_USER_HOME, func_file)
     else:
-        container_command = constants.DEFAULT_COMMAND
+        container_command = constants.DEFAULT_CUSTOM_COMMAND
         python_entrypoint = " ".join(runtime.trainer.entrypoint)
 
     exec_script = textwrap.dedent(
@@ -315,6 +315,98 @@ def get_entrypoint_using_train_func(
 
     # Return container command and args to execute training function.
     return container_command, [exec_script]
+
+
+def get_args_using_torchtune_config(
+    fine_tuning_config: types.TorchTuneConfig,
+) -> Tuple[List[str], List[str]]:
+    """
+    Get the Trainer args from the TorchTuneConfig.
+    """
+    args = []
+
+    # Override the dtype if it is provided.
+    if fine_tuning_config.dtype:
+        if not isinstance(fine_tuning_config.dtype, types.DataType):
+            raise ValueError(f"Invalid dtype: {fine_tuning_config.dtype}.")
+
+        args.append(f"dtype={fine_tuning_config.dtype}")
+
+    # Override the batch size if it is provided.
+    if fine_tuning_config.batch_size:
+        args.append(f"batch_size={fine_tuning_config.batch_size}")
+
+    # Override the epochs if it is provided.
+    if fine_tuning_config.epochs:
+        args.append(f"epochs={fine_tuning_config.epochs}")
+
+    # Override the loss if it is provided.
+    if fine_tuning_config.loss:
+        args.append(f"loss={fine_tuning_config.loss}")
+
+    return constants.DEFAULT_TORCHTUNE_COMMAND, args
+
+
+def get_trainer_crd_from_custom_trainer(
+    trainer: types.CustomTrainer,
+    runtime: types.Runtime,
+) -> models.TrainerV1alpha1Trainer:
+    """
+    Get the Trainer CRD from the custom trainer.
+    """
+    trainer_crd = models.TrainerV1alpha1Trainer()
+
+    # Add number of nodes to the Trainer.
+    if trainer.num_nodes:
+        trainer_crd.num_nodes = trainer.num_nodes
+
+    # Add resources per node to the Trainer.
+    if trainer.resources_per_node:
+        trainer_crd.resources_per_node = get_resources_per_node(
+            trainer.resources_per_node
+        )
+
+    # Add command and args to the Trainer.
+    trainer_crd.command = constants.DEFAULT_CUSTOM_COMMAND
+    # TODO: Support train function parameters.
+    trainer_crd.command, trainer_crd.args = get_entrypoint_using_train_func(
+        runtime,
+        trainer.func,
+        trainer.func_args,
+        trainer.pip_index_url,
+        trainer.packages_to_install,
+    )
+
+    return trainer_crd
+
+
+def get_trainer_crd_from_builtin_trainer(
+    trainer: types.BuiltinTrainer,
+) -> models.TrainerV1alpha1Trainer:
+    """
+    Get the Trainer CRD from the builtin trainer.
+    """
+    if not isinstance(trainer.config, types.TorchTuneConfig):
+        raise ValueError(f"The BuiltinTrainer config is invalid: {trainer.config}")
+
+    trainer_crd = models.TrainerV1alpha1Trainer()
+
+    # Add number of nodes to the Trainer.
+    if trainer.config.num_nodes:
+        trainer_crd.num_nodes = trainer.config.num_nodes
+
+    # Add resources per node to the Trainer.
+    if trainer.config.resources_per_node:
+        trainer_crd.resources_per_node = get_resources_per_node(
+            trainer.config.resources_per_node
+        )
+
+    # Parse args in the TorchTuneConfig to the Trainer, preparing for the mutation of
+    # the torchtune config in the runtime plugin.
+    # Ref:https://github.com/kubeflow/trainer/tree/master/docs/proposals/2401-llm-trainer-v2
+    trainer_crd.command, trainer_crd.args = get_args_using_torchtune_config(trainer)
+
+    return trainer_crd
 
 
 def get_script_for_python_packages(

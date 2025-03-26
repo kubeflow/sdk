@@ -27,11 +27,14 @@ from kubeflow.trainer.constants.constants import DATASET_PATH, MODEL_PATH
 from kubeflow.trainer.types.types import (
     BuiltinTrainer,
     CustomTrainer,
+    DataType,
     Framework,
     HuggingFaceDatasetInitializer,
     HuggingFaceModelInitializer,
     Initializer,
+    Loss,
     Runtime,
     Trainer,
     TrainerType,
+    TorchTuneConfig,
 )

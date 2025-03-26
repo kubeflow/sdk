@@ -152,7 +152,18 @@ class TrainerClient:
         initializer: Optional[types.Initializer] = None,
         trainer: Optional[types.CustomTrainer] = None,
     ) -> str:
-        """Create the TrainJob. TODO (andreyvelich): Add description
+        """
+        Create the TrainJob. You can configure these types of training task:
+
+        - Custom Training Task: Training with a self-contained function that encapsulates
+            the entire model training process, e.g. `CustomTrainer`.
+
+        Args:
+            runtime (`types.Runtime`): Reference to one of existing Runtimes.
+            initializer (`Optional[types.Initializer]`):
+                Configuration for the dataset and model initializers.
+            trainer (`Optional[types.CustomTrainer]`):
+                Configuration for Custom Training Task.
 
         Returns:
             str: The unique name of the TrainJob that has been generated.
@@ -170,29 +181,22 @@ class TrainerClient:
         # Build the Trainer.
         trainer_crd = models.TrainerV1alpha1Trainer()
 
-        # Add number of nodes to the Trainer.
-        if trainer and trainer.num_nodes:
-            trainer_crd.num_nodes = trainer.num_nodes
-
-        # Add resources per node to the Trainer.
-        if trainer and trainer.resources_per_node:
-            trainer_crd.resources_per_node = utils.get_resources_per_node(
-                trainer.resources_per_node
-            )
-
-        # Add command and args to the Trainer if training function is set.
-        if trainer and trainer.func:
-
-            # TODO: Support train function parameters.
-            trainer_crd.command, trainer_crd.args = (
-                utils.get_entrypoint_using_train_func(
-                    runtime,
-                    trainer.func,
-                    trainer.func_args,
-                    trainer.pip_index_url,
-                    trainer.packages_to_install,
+        if trainer:
+            # If users choose to use a custom training function.
+            if isinstance(trainer, types.CustomTrainer):
+                trainer_crd = utils.get_trainer_crd_from_custom_trainer(
+                    trainer, runtime
                 )
-            )
+
+            # If users choose to use a builtin trainer for post-training.
+            elif isinstance(trainer, types.BuiltinTrainer):
+                trainer_crd = utils.get_trainer_crd_from_builtin_trainer(trainer)
+
+            else:
+                raise ValueError(
+                    f"The trainer type {type(trainer)} is not supported. "
+                    "Please use CustomTrainer or BuiltinTrainer."
+                )
 
         train_job = models.TrainerV1alpha1TrainJob(
             apiVersion=constants.API_VERSION,
