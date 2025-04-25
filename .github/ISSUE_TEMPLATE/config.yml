@@ -1,0 +1,12 @@
+blank_issues_enabled: true
+
+contact_links:
+  - name: Kubeflow Documentation
+    url: https://www.kubeflow.org/docs/
+    about: Much help can be found in the docs
+  - name: Kubeflow Slack Channels
+    url: https://www.kubeflow.org/docs/about/community/#kubeflow-slack-channels
+    about: Ask the Kubeflow community on CNCF Slack
+  - name: Kubeflow Community Meeting
+    url: https://bit.ly/kf-meeting-notes
+    about: Join the Kubeflow Community Meeting
