@@ -7,6 +7,6 @@ contact_links:
   - name: Kubeflow Slack Channels
     url: https://www.kubeflow.org/docs/about/community/#kubeflow-slack-channels
     about: Ask the Kubeflow community on CNCF Slack
-  - name: Kubeflow Community Meeting
-    url: https://bit.ly/kf-meeting-notes
-    about: Join the Kubeflow Community Meeting
+  - name: Kubeflow Training and AutoML WG Community Meeting
+    url: https://bit.ly/2PWVCkV
+    about: Join the Kubeflow Training working group meeting
