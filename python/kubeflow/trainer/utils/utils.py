@@ -564,8 +564,6 @@ def get_args_in_dataset_preprocess_config(
 
         args.append(f"dataset.source={dataset_preprocess_config.source}")
 
-    # Override the data dir or data files if it is provided.
-
     # Override the split field if it is provided.
     if dataset_preprocess_config.split:
         args.append(f"dataset.split={dataset_preprocess_config.split}")
