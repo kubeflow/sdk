@@ -256,6 +256,10 @@ def get_entrypoint_using_train_func(
     """
     Get the Trainer command and args from the given training function and parameters.
     """
+    # Check if the runtime has a trainer.
+    if not runtime.trainer:
+        raise ValueError(f"Runtime must have a trainer: {runtime}")
+    
     # Check if training function is callable.
     if not callable(train_func):
         raise ValueError(

@@ -175,7 +175,7 @@ class Trainer:
 @dataclass
 class Runtime:
     name: str
-    trainer: Trainer
+    trainer: Optional[Trainer] = None
     pretrained_model: Optional[str] = None
 
 
