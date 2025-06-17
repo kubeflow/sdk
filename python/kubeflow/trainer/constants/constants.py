@@ -52,6 +52,9 @@ DATASET_INITIALIZER = "dataset-initializer"
 # Also, it represents the `trainjob-ancestor-step` label value for the model initializer step.
 MODEL_INITIALIZER = "model-initializer"
 
+# The env name for the access token of dataset/model initializer.
+INITIALIZER_ENV_ACCESS_TOKEN = "ACCESS_TOKEN"
+
 # The default path to the users' workspace.
 # TODO (andreyvelich): Discuss how to keep this path is sync with pkg.initializers.constants
 WORKSPACE_PATH = "/workspace"

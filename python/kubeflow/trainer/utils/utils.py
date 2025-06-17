@@ -497,7 +497,13 @@ def get_dataset_initializer(
             dataset.storage_uri
             if dataset.storage_uri.startswith("hf://")
             else "hf://" + dataset.storage_uri
-        )
+        ),
+        env=[
+            models.IoK8sApiCoreV1EnvVar(
+                name=constants.INITIALIZER_ENV_ACCESS_TOKEN,
+                value=dataset.access_token,
+            ),
+        ]
     )
 
     return dataset_initializer
@@ -518,7 +524,13 @@ def get_model_initializer(
             model.storage_uri
             if model.storage_uri.startswith("hf://")
             else "hf://" + model.storage_uri
-        )
+        ),
+        env=[
+            models.IoK8sApiCoreV1EnvVar(
+                name=constants.INITIALIZER_ENV_ACCESS_TOKEN,
+                value=model.access_token,
+            ),
+        ]
     )
 
     return model_initializer
