@@ -369,7 +369,8 @@ def get_args_using_torchtune_config(
             else initializer.dataset.storage_uri
         )
         storage_uri_parsed = urlparse(storage_uri)
-        relative_path = re.sub(r"^/[^/]+", "", storage_uri_parsed.path)
+        parts = storage_uri_parsed.path.strip("/").split("/")
+        relative_path = "/".join(parts[1:]) if len(parts) > 1 else "."
 
         if "." in relative_path:
             args.append(
@@ -575,10 +576,10 @@ def get_args_in_dataset_preprocess_config(
     if dataset_preprocess_config.source:
         if not isinstance(dataset_preprocess_config.source, types.DataFormat):
             raise ValueError(
-                f"Invalid data format: {dataset_preprocess_config.source}."
+                f"Invalid data format: {dataset_preprocess_config.source.value}."
             )
 
-        args.append(f"dataset.source={dataset_preprocess_config.source}")
+        args.append(f"dataset.source={dataset_preprocess_config.source.value}")
 
     # Override the split field if it is provided.
     if dataset_preprocess_config.split:
