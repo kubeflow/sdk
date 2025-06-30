@@ -168,7 +168,7 @@ class TrainerClient:
             initializer (`Optional[types.Initializer]`):
                 Configuration for the dataset and model initializers.
             trainer (`Optional[types.CustomTrainer, types.BuiltinTrainer]`):
-                Configuration for Custom Training Task or Config-driven Task with Existing Trainer.
+                Configuration for Custom Training Task or Config-driven Task with Builtin Trainer.
 
         Returns:
             str: The unique name of the TrainJob that has been generated.
