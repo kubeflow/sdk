@@ -504,7 +504,7 @@ def get_dataset_initializer(
                 name=constants.INITIALIZER_ENV_ACCESS_TOKEN,
                 value=dataset.access_token,
             ),
-        ]
+        ] if dataset.access_token else None
     )
 
     return dataset_initializer
@@ -531,7 +531,7 @@ def get_model_initializer(
                 name=constants.INITIALIZER_ENV_ACCESS_TOKEN,
                 value=model.access_token,
             ),
-        ]
+        ] if model.access_token else None
     )
 
     return model_initializer
