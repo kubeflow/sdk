@@ -40,7 +40,7 @@ from kubeflow.trainer.types.types import (
 )
 
 __all__ = [
-    "BuiltinTrainer", "CustomTrainer", "DataFormat", "DataType", "Framework",
-    "HuggingFaceDatasetInitializer", "HuggingFaceModelInitializer", "Initializer",
-    "Loss", "Runtime", "TorchTuneConfig", "TorchTuneInstructDataset", "Trainer", "TrainerType"
+    "BuiltinTrainer", "CustomTrainer", "DataFormat", "DATASET_PATH", "MODEL_PATH", "DataType", "Framework",
+    "HuggingFaceDatasetInitializer", "HuggingFaceModelInitializer", "Initializer", "Loss", "Runtime",
+    "TorchTuneConfig", "TorchTuneInstructDataset", "Trainer", "TrainerClient", "TrainerType"
 ]
