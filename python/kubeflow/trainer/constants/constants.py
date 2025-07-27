@@ -72,10 +72,6 @@ LAUNCHER = "launcher"
 # single VM where distributed training code is executed.
 NODE = "node"
 
-# The label key to identify the accelerator type for model training (e.g. GPU-Tesla-V100-16GB).
-# TODO: Potentially, we should take this from the Node selectors.
-ACCELERATOR_LABEL = "trainer.kubeflow.org/accelerator"
-
 # Unknown indicates that the value can't be identified.
 UNKNOWN = "Unknown"
 

@@ -450,9 +450,6 @@ def create_cluster_training_runtime(
         metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
             name=name,
             namespace=namespace,
-            labels={
-                "trainer.kubeflow.org/accelerator": "gpu-tesla-v100-16gb",
-            },
         ),
         spec=models.TrainerV1alpha1TrainingRuntimeSpec(
             mlPolicy=models.TrainerV1alpha1MLPolicy(
@@ -514,7 +511,6 @@ def create_runtime_type(
             trainer_type=types.TrainerType.CUSTOM_TRAINER,
             framework=types.Framework.TORCH,
             entrypoint=[constants.TORCH_ENTRYPOINT],
-            accelerator="gpu-tesla-v100-16gb",
             accelerator_count=4,
         ),
     )
@@ -541,7 +537,6 @@ def get_train_job_data_type(
                 trainer_type=types.TrainerType.CUSTOM_TRAINER,
                 framework=types.Framework.TORCH,
                 entrypoint=["torchrun"],
-                accelerator="gpu-tesla-v100-16gb",
                 accelerator_count=4,
             ),
         ),

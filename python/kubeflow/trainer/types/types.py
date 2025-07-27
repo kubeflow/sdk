@@ -167,7 +167,6 @@ class Trainer:
     trainer_type: TrainerType
     framework: Framework
     entrypoint: Optional[List[str]] = None
-    accelerator: str = constants.UNKNOWN
     accelerator_count: Union[str, float, int] = constants.UNKNOWN
 
 

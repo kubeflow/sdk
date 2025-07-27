@@ -140,14 +140,6 @@ def get_runtime_trainer(
     if isinstance(trainer.accelerator_count, (int, float)) and ml_policy.num_nodes:
         trainer.accelerator_count *= ml_policy.num_nodes
 
-    # TODO (andreyvelich): Currently, we get the accelerator type from
-    # the runtime labels.
-    if (
-        runtime_metadata.labels
-        and constants.ACCELERATOR_LABEL in runtime_metadata.labels
-    ):
-        trainer.accelerator = runtime_metadata.labels[constants.ACCELERATOR_LABEL]
-
     return trainer
 
 
