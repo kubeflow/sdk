@@ -37,8 +37,17 @@ TRAINJOB_KIND = "TrainJob"
 # The plural for the TrainJob.
 TRAINJOB_PLURAL = "trainjobs"
 
-# The default status for the TrainJob.
+# The default status for the TrainJob once users create it.
 TRAINJOB_CREATED = "Created"
+
+# The running status of the TrainJob, defined when all training node (e.g. Pods) are running.
+TRAINJOB_RUNNING = "Running"
+
+# The complete status of the TrainJob, defined when TrainJob CR has complete condition.
+TRAINJOB_COMPLETE = "Complete"
+
+# The failed status of the TrainJob, defined when TrainJob CR has failed condition.
+TRAINJOB_FAILED = "Failed"
 
 # The label key to identify the relationship between TrainJob and Pod template in the runtime.
 # For example, what PodTemplate must be overridden by TrainJob's .spec.trainer APIs.

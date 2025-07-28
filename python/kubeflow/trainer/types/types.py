@@ -163,9 +163,10 @@ class Framework(Enum):
 
 # Representation for the Trainer of the runtime.
 @dataclass
-class Trainer:
+class RuntimeTrainer:
     trainer_type: TrainerType
     framework: Framework
+    num_nodes: int = 1  # The default value is set in the APIs.
     entrypoint: Optional[List[str]] = None
     accelerator_count: Union[str, float, int] = constants.UNKNOWN
 
@@ -174,7 +175,7 @@ class Trainer:
 @dataclass
 class Runtime:
     name: str
-    trainer: Optional[Trainer] = None
+    trainer: RuntimeTrainer
     pretrained_model: Optional[str] = None
 
 
@@ -196,6 +197,7 @@ class TrainJob:
     creation_timestamp: datetime
     runtime: Runtime
     steps: List[Step]
+    num_nodes: int
     status: Optional[str] = constants.UNKNOWN
 
 
@@ -232,14 +234,14 @@ class Initializer:
 # The dict where key is the container image and value its representation.
 # Each Trainer representation defines trainer parameters (e.g. type, framework, entrypoint).
 # TODO (andreyvelich): We should allow user to overrides the default image names.
-ALL_TRAINERS: Dict[str, Trainer] = {
+ALL_TRAINERS: Dict[str, RuntimeTrainer] = {
     # Custom Trainers.
-    "pytorch/pytorch": Trainer(
+    "pytorch/pytorch": RuntimeTrainer(
         trainer_type=TrainerType.CUSTOM_TRAINER,
         framework=Framework.TORCH,
         entrypoint=[constants.TORCH_ENTRYPOINT],
     ),
-    "ghcr.io/kubeflow/trainer/mlx-runtime": Trainer(
+    "ghcr.io/kubeflow/trainer/mlx-runtime": RuntimeTrainer(
         trainer_type=TrainerType.CUSTOM_TRAINER,
         framework=Framework.MLX,
         entrypoint=[
@@ -250,7 +252,7 @@ ALL_TRAINERS: Dict[str, Trainer] = {
             "-c",
         ],
     ),
-    "ghcr.io/kubeflow/trainer/deepspeed-runtime": Trainer(
+    "ghcr.io/kubeflow/trainer/deepspeed-runtime": RuntimeTrainer(
         trainer_type=TrainerType.CUSTOM_TRAINER,
         framework=Framework.DEEPSPEED,
         entrypoint=[
@@ -262,7 +264,7 @@ ALL_TRAINERS: Dict[str, Trainer] = {
         ],
     ),
     # Builtin Trainers.
-    "ghcr.io/kubeflow/trainer/torchtune-trainer": Trainer(
+    "ghcr.io/kubeflow/trainer/torchtune-trainer": RuntimeTrainer(
         trainer_type=TrainerType.BUILTIN_TRAINER,
         framework=Framework.TORCHTUNE,
         entrypoint=constants.DEFAULT_TORCHTUNE_COMMAND,
@@ -270,7 +272,7 @@ ALL_TRAINERS: Dict[str, Trainer] = {
 }
 
 # The default trainer configuration when runtime detection fails
-DEFAULT_TRAINER = Trainer(
+DEFAULT_TRAINER = RuntimeTrainer(
     trainer_type=TrainerType.CUSTOM_TRAINER,
     framework=Framework.TORCH,
     entrypoint=[constants.TORCH_ENTRYPOINT],

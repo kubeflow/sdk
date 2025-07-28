@@ -109,8 +109,7 @@ def get_runtime_trainer_container(
 def get_runtime_trainer(
     replicated_jobs: List[models.JobsetV1alpha2ReplicatedJob],
     ml_policy: models.TrainerV1alpha1MLPolicy,
-    runtime_metadata: models.IoK8sApimachineryPkgApisMetaV1ObjectMeta,
-) -> types.Trainer:
+) -> types.RuntimeTrainer:
     """
     Get the runtime trainer object.
     """
@@ -139,6 +138,10 @@ def get_runtime_trainer(
     # Multiply accelerator_count by the number of nodes.
     if isinstance(trainer.accelerator_count, (int, float)) and ml_policy.num_nodes:
         trainer.accelerator_count *= ml_policy.num_nodes
+
+    # Add number of training nodes.
+    if ml_policy.num_nodes:
+        trainer.num_nodes = ml_policy.num_nodes
 
     return trainer
 
