@@ -851,22 +851,6 @@ def test_get_job_logs(training_client, test_case):
             ),
         ),
         TestCase(
-            name="timeout error when waiting for job",
-            expected_status=FAILED,
-            config={
-                "name": TIMEOUT,
-                "timeout": 1,
-                "polling_interval": 0.5,
-            },
-            expected_error=TimeoutError,
-        ),
-        TestCase(
-            name="runtime error when waiting for job",
-            expected_status=FAILED,
-            config={"name": RUNTIME},
-            expected_error=RuntimeError,
-        ),
-        TestCase(
             name="invalid status set error",
             expected_status=FAILED,
             config={
@@ -883,6 +867,17 @@ def test_get_job_logs(training_client, test_case):
                 "status": {constants.TRAINJOB_RUNNING},
             },
             expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="timeout error to wait for failed status",
+            expected_status=FAILED,
+            config={
+                "name": BASIC_TRAIN_JOB_NAME,
+                "status": {constants.TRAINJOB_FAILED},
+                "timeout": 1,
+                "polling_interval": 0.5,
+            },
+            expected_error=TimeoutError,
         ),
     ],
 )
