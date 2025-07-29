@@ -26,7 +26,6 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Optional, Type
 from unittest.mock import Mock, patch
-from pydantic import BaseModel
 
 import pytest
 from kubeflow.trainer import TrainerClient
@@ -369,7 +368,7 @@ def mock_read_namespaced_pod_log(*args, **kwargs):
     return "test log content"
 
 
-def normalize_model(model_obj, model_class) -> BaseModel:
+def normalize_model(model_obj, model_class):
     # Simulate real api behavior
     # Converts model to raw dictionary, like a real API response
     # Parses dict and ensures correct model instantiation and type validation
@@ -804,6 +803,127 @@ def test_list_jobs(training_client, test_case):
             name="valid flow with all defaults",
             expected_status=SUCCESS,
             config={"name": BASIC_TRAIN_JOB_NAME},
+            expected_output={
+                "node-0": "test log content",
+            },
+        ),
+        TestCase(
+            name="runtime error when getting logs",
+            expected_status=FAILED,
+            config={"name": RUNTIME},
+            expected_error=RuntimeError,
+        ),
+    ],
+)
+def test_get_job_logs(training_client, test_case):
+    """Test TrainerClient.get_job_logs with basic success path."""
+    print("Executing test:", test_case.name)
+    try:
+        logs = training_client.get_job_logs(test_case.config.get("name"))
+        assert test_case.expected_status == SUCCESS
+        assert logs == test_case.expected_output
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="wait for complete status (default)",
+            expected_status=SUCCESS,
+            config={"name": BASIC_TRAIN_JOB_NAME},
+            expected_output=get_train_job_data_type(
+                train_job_name=BASIC_TRAIN_JOB_NAME
+            ),
+        ),
+        TestCase(
+            name="wait for multiple statuses",
+            expected_status=SUCCESS,
+            config={
+                "name": BASIC_TRAIN_JOB_NAME,
+                "status": {constants.TRAINJOB_RUNNING, constants.TRAINJOB_COMPLETE},
+            },
+            expected_output=get_train_job_data_type(
+                train_job_name=BASIC_TRAIN_JOB_NAME
+            ),
+        ),
+        TestCase(
+            name="timeout error when waiting for job",
+            expected_status=FAILED,
+            config={
+                "name": TIMEOUT,
+                "timeout": 1,
+                "polling_interval": 0.5,
+            },
+            expected_error=TimeoutError,
+        ),
+        TestCase(
+            name="runtime error when waiting for job",
+            expected_status=FAILED,
+            config={"name": RUNTIME},
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="invalid status set error",
+            expected_status=FAILED,
+            config={
+                "name": BASIC_TRAIN_JOB_NAME,
+                "status": {"InvalidStatus"},
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="job failed when not expected",
+            expected_status=FAILED,
+            config={
+                "name": "failed-job",
+                "status": {constants.TRAINJOB_RUNNING},
+            },
+            expected_error=RuntimeError,
+        ),
+    ],
+)
+def test_wait_for_job_status(training_client, test_case):
+    """Test TrainerClient.wait_for_job_status with various scenarios."""
+    print("Executing test:", test_case.name)
+
+    original_get_job = training_client.get_job
+
+    # TrainJob has unexpected failed status.
+    def mock_get_job(name):
+        job = original_get_job(name)
+        if test_case.config.get("name") == "failed-job":
+            job.status = constants.TRAINJOB_FAILED
+        return job
+
+    training_client.get_job = mock_get_job
+
+    try:
+        job = training_client.wait_for_job_status(**test_case.config)
+
+        assert test_case.expected_status == SUCCESS
+        assert isinstance(job, types.TrainJob)
+        # Job status should be in the expected set.
+        assert job.status in test_case.config.get(
+            "status", {constants.TRAINJOB_COMPLETE}
+        )
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid flow with all defaults",
+            expected_status=SUCCESS,
+            config={"name": BASIC_TRAIN_JOB_NAME},
             expected_output=None,
         ),
         TestCase(
@@ -835,38 +955,6 @@ def test_delete_job(training_client, test_case):
             constants.TRAINJOB_PLURAL,
             name=test_case.config.get("name"),
         )
-
-    except Exception as e:
-        assert type(e) is test_case.expected_error
-    print("test execution complete")
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TestCase(
-            name="valid flow with all defaults",
-            expected_status=SUCCESS,
-            config={"name": BASIC_TRAIN_JOB_NAME},
-            expected_output={
-                "node-0": "test log content",
-            },
-        ),
-        TestCase(
-            name="runtime error when getting logs",
-            expected_status=FAILED,
-            config={"name": RUNTIME},
-            expected_error=RuntimeError,
-        ),
-    ],
-)
-def test_get_job_logs(training_client, test_case):
-    """Test TrainerClient.get_job_logs with basic success path."""
-    print("Executing test:", test_case.name)
-    try:
-        logs = training_client.get_job_logs(test_case.config.get("name"))
-        assert test_case.expected_status == SUCCESS
-        assert logs == test_case.expected_output
 
     except Exception as e:
         assert type(e) is test_case.expected_error
