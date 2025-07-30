@@ -413,6 +413,18 @@ def get_trainer_crd_from_custom_trainer(
         trainer.packages_to_install,
     )
 
+    # Add environment variables to the Trainer.
+    if trainer.env:
+        env_vars = []
+        for key, value in trainer.env.items():
+            env_vars.append(
+                models.IoK8sApiCoreV1EnvVar(
+                    name=key,
+                    value=value
+                )
+            )
+        trainer_crd.env = env_vars
+
     return trainer_crd
 
 
