@@ -440,13 +440,13 @@ class TrainerClient:
         status: Set[str] = {constants.TRAINJOB_COMPLETE},
         timeout: int = 600,
         polling_interval: int = 5,
-    ):
+    ) -> types.TrainJob:
         """Wait for TrainJob to reach the desired status
 
         Args:
             name: Name of the TrainJob.
-            status: Set of expected statuses. It must be subset of Running, Complete, and Failed
-                statuses.
+            status: Set of expected statuses. It must be subset of Created, Running, Complete, and
+                Failed statuses.
             timeout: How many seconds to wait until TrainJob reaches one of the expected conditions.
             polling_interval: The polling interval in seconds to check TrainJob status.
 
@@ -454,13 +454,13 @@ class TrainerClient:
             TrainJob: The training job that reaches desired status.
 
         Raises:
-
             ValueError: The input values are incorrect.
             RuntimeError: Failed to get TrainJob or TrainJob reaches unexpected Failed status.
             TimeoutError: Timeout to wait for TrainJob status.
         """
 
         job_statuses = {
+            constants.TRAINJOB_CREATED,
             constants.TRAINJOB_RUNNING,
             constants.TRAINJOB_COMPLETE,
             constants.TRAINJOB_FAILED,
