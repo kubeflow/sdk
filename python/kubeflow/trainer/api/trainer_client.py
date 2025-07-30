@@ -437,9 +437,9 @@ class TrainerClient:
     def wait_for_job_status(
         self,
         name: str,
-        status: Set = {constants.TRAINJOB_COMPLETE},
+        status: Set[str] = {constants.TRAINJOB_COMPLETE},
         timeout: int = 600,
-        polling_interval=5,
+        polling_interval: int = 5,
     ):
         """Wait for TrainJob to reach the desired status
 
