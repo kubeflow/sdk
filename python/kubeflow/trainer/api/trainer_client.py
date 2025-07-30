@@ -575,6 +575,7 @@ class TrainerClient:
                 if trainjob_crd.spec.trainer and trainjob_crd.spec.trainer.num_nodes
                 else runtime.trainer.num_nodes
             ),
+            status=constants.TRAINJOB_CREATED,  # The default TrainJob status.
         )
 
         # Select Pods created by the appropriate JobSet. It checks the following ReplicatedJob.name:
@@ -649,10 +650,7 @@ class TrainerClient:
                 f"Failed to list {constants.TRAINJOB_KIND}'s steps: {namespace}/{name}"
             )
 
-        # Add the TrainJob status.
-        # The TrainJob exists at that stage so its status can safely default to Created.
-        trainjob.status = constants.TRAINJOB_CREATED
-        # Otherwise, we read the TrainJob status from its conditions.
+        # Update the TrainJob status from its conditions.
         if trainjob_crd.status and trainjob_crd.status.conditions:
             for c in trainjob_crd.status.conditions:
                 if c.type == constants.TRAINJOB_COMPLETE and c.status == "True":
