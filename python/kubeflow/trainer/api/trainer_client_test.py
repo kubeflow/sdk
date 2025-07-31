@@ -102,6 +102,11 @@ def training_client(request):
             list_namespaced_pod=Mock(side_effect=list_namespaced_pod_response),
             read_namespaced_pod_log=Mock(side_effect=mock_read_namespaced_pod_log),
         ),
+    ), patch(
+        "kubernetes.watch.Watch",
+        return_value=Mock(
+            stream=Mock(side_effect=mock_watch),
+        ),
     ):
         yield TrainerClient()
 
@@ -366,6 +371,32 @@ def mock_read_namespaced_pod_log(*args, **kwargs):
     if kwargs.get("namespace") == FAIL_LOGS:
         raise Exception("Failed to read logs")
     return "test log content"
+
+
+def mock_watch(*args, **kwargs):
+    """Simulate watch event"""
+    if kwargs.get("timeout_seconds") == 1:
+        raise TimeoutError("Watch timeout")
+
+    events = [
+        {
+            "type": "MODIFIED",
+            "object": {
+                "metadata": {
+                    "name": f"{BASIC_TRAIN_JOB_NAME}-node-0",
+                    "labels": {
+                        constants.JOBSET_NAME_LABEL: BASIC_TRAIN_JOB_NAME,
+                        constants.JOBSET_RJOB_NAME_LABEL: constants.NODE,
+                        constants.JOB_INDEX_LABEL: "0",
+                    },
+                },
+                "spec": {"containers": [{"name": constants.NODE}]},
+                "status": {"phase": "Running"},
+            },
+        }
+    ]
+
+    return iter(events)
 
 
 def normalize_model(model_obj, model_class):
@@ -875,7 +906,6 @@ def test_get_job_logs(training_client, test_case):
                 "name": BASIC_TRAIN_JOB_NAME,
                 "status": {constants.TRAINJOB_FAILED},
                 "timeout": 1,
-                "polling_interval": 0.5,
             },
             expected_error=TimeoutError,
         ),

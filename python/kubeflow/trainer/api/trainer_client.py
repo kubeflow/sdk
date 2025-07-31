@@ -439,7 +439,6 @@ class TrainerClient:
         name: str,
         status: Set[str] = {constants.TRAINJOB_COMPLETE},
         timeout: int = 600,
-        polling_interval: int = 5,
     ) -> types.TrainJob:
         """Wait for TrainJob to reach the desired status
 
@@ -448,10 +447,9 @@ class TrainerClient:
             status: Set of expected statuses. It must be subset of Created, Running, Complete, and
                 Failed statuses.
             timeout: How many seconds to wait until TrainJob reaches one of the expected conditions.
-            polling_interval: The polling interval in seconds to check TrainJob status.
 
         Returns:
-            TrainJob: The training job that reaches desired status.
+            TrainJob: The training job that reaches the desired status.
 
         Raises:
             ValueError: The input values are incorrect.
@@ -469,24 +467,40 @@ class TrainerClient:
             raise ValueError(
                 f"Expected status {status} must be a subset of {job_statuses}"
             )
-        for _ in range(round(timeout / polling_interval)):
-            trainjob = self.get_job(name)
 
-            # Raise an error if TrainJob is Failed and it is not the expected status.
-            if (
-                constants.TRAINJOB_FAILED not in status
-                and trainjob.status == constants.TRAINJOB_FAILED
+        # Use Kubernetes watch API to monitor the TrainJob's Pods.
+        w = watch.Watch()
+        try:
+            for event in w.stream(
+                self.core_api.list_namespaced_pod,
+                self.namespace,
+                label_selector=constants.POD_LABEL_SELECTOR.format(trainjob_name=name),
+                timeout_seconds=timeout,
             ):
-                raise RuntimeError(f"TrainJob {name} is Failed")
+                # Check the status after event is generated for the TrainJob's Pods.
+                trainjob = self.get_job(name)
+                logger.debug(f"TrainJob {name}, status {trainjob.status}")
 
-            # Return the TrainJob if it reaches the expected status.
-            if trainjob.status in status:
-                return trainjob
+                # Raise an error if TrainJob is Failed and it is not the expected status.
+                if (
+                    constants.TRAINJOB_FAILED not in status
+                    and trainjob.status == constants.TRAINJOB_FAILED
+                ):
+                    raise RuntimeError(f"TrainJob {name} is Failed")
 
-            time.sleep(polling_interval)
+                # Return the TrainJob if it reaches the expected status.
+                if trainjob.status in status:
+                    return trainjob
+
+        except TimeoutError:
+            raise TimeoutError(f"Timeout to get the TrainJob {name}")
+        except Exception:
+            raise RuntimeError(f"Failed to watch Pods for TrainJob {name}")
+        finally:
+            w.stop()
 
         raise TimeoutError(
-            f"Timeout waiting for TrainJob {name} to reach {status} Status"
+            f"Timeout waiting for TrainJob {name} to reach status: {status} status"
         )
 
     def delete_job(self, name: str):
@@ -578,23 +592,11 @@ class TrainerClient:
             status=constants.TRAINJOB_CREATED,  # The default TrainJob status.
         )
 
-        # Select Pods created by the appropriate JobSet. It checks the following ReplicatedJob.name:
-        # dataset-initializer, model-initializer, launcher, node.
-        label_selector = "{}={},{} in ({}, {}, {}, {})".format(
-            constants.JOBSET_NAME_LABEL,
-            name,
-            constants.JOBSET_RJOB_NAME_LABEL,
-            constants.DATASET_INITIALIZER,
-            constants.MODEL_INITIALIZER,
-            constants.LAUNCHER,
-            constants.NODE,
-        )
-
         # Add the TrainJob components, e.g. trainer nodes and initializer.
         try:
             response = self.core_api.list_namespaced_pod(
                 namespace,
-                label_selector=label_selector,
+                label_selector=constants.POD_LABEL_SELECTOR.format(trainjob_name=name),
                 async_req=True,
             ).get(constants.DEFAULT_TIMEOUT)
 

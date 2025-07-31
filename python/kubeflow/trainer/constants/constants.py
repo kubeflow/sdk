@@ -106,6 +106,17 @@ JOB_INDEX_LABEL = "batch.kubernetes.io/job-completion-index"
 # but one or more of the containers has not been made ready to run.
 POD_PENDING = "Pending"
 
+# The label selector for Pods created by the TrainJob.
+# It checks the following rJob.name: dataset-initializer, model-initializer, launcher, node.
+POD_LABEL_SELECTOR = ("{}={{trainjob_name}},{} in ({}, {}, {}, {})").format(
+    JOBSET_NAME_LABEL,
+    JOBSET_RJOB_NAME_LABEL,
+    DATASET_INITIALIZER,
+    MODEL_INITIALIZER,
+    LAUNCHER,
+    NODE,
+)
+
 # The default PIP index URL to download Python packages.
 DEFAULT_PIP_INDEX_URL = os.getenv("DEFAULT_PIP_INDEX_URL", "https://pypi.org/simple")
 
