@@ -18,7 +18,6 @@ import queue
 import random
 import string
 import uuid
-import time
 from typing import Dict, List, Optional, Union, Set
 
 from kubeflow.trainer.constants import constants
