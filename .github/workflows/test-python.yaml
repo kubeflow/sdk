@@ -8,6 +8,15 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dependency-group:
+          - {name: dev,  make-target: test-python-dev}
+          - {name: prod, make-target: test-python}
+
+    name: Test ${{ matrix.dependency-group.name }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -21,9 +30,10 @@ jobs:
 
       - name: Run Tests
         run: |
-          make test-python report=xml
+          make ${{ matrix.dependency-group.make-target }} report=xml
 
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }} # Pass the GITHUB_TOKEN
+          flag-name: ${{ matrix.dependency-group.name }}
