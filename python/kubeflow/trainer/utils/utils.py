@@ -151,7 +151,7 @@ def get_runtime_trainer(
 
     # Set the Trainer entrypoint.
     if framework == types.TORCH_TUNE:
-        trainer.set_command(constants.TORCHTUNE_COMMAND)
+        trainer.set_command(constants.TORCH_TUNE_COMMAND)
     elif ml_policy.torch:
         trainer.set_command(constants.TORCH_COMMAND)
     elif ml_policy.mpi:
@@ -496,7 +496,7 @@ def get_args_in_dataset_preprocess_config(
         )
 
     # Override the dataset type field in the torchtune config.
-    args.append(f"dataset={constants.TORCHTUNE_INSTRUCT_DATASET}")
+    args.append(f"dataset={constants.TORCH_TUNE_INSTRUCT_DATASET}")
 
     # Override the dataset source field if it is provided.
     if dataset_preprocess_config.source:

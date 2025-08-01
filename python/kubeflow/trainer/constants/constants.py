@@ -166,7 +166,7 @@ TORCH_COMMAND = (
 TORCH_ENV_NUM_PROC_PER_NODE = "PET_NPROC_PER_NODE"
 
 # The default command for the TorchTune BuiltinTrainer.
-TORCHTUNE_COMMAND = ("tune", "run")
+TORCH_TUNE_COMMAND = ("tune", "run")
 
 # The Instruct Datasets class in torchtune
-TORCHTUNE_INSTRUCT_DATASET = "torchtune.datasets.instruct_dataset"
+TORCH_TUNE_INSTRUCT_DATASET = "torchtune.datasets.instruct_dataset"
