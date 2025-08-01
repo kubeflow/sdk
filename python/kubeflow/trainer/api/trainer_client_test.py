@@ -222,12 +222,14 @@ def get_resource_requirements() -> models.IoK8sApiCoreV1ResourceRequirements:
     )
 
 
-def get_custom_trainer(include_env: bool = False) -> models.TrainerV1alpha1Trainer:
+def get_custom_trainer(
+        env: Optional[list[models.IoK8sApiCoreV1EnvVar]] = None,
+) -> models.TrainerV1alpha1Trainer:
     """
     Get the custom trainer for the TrainJob.
     """
 
-    trainer = models.TrainerV1alpha1Trainer(
+    return models.TrainerV1alpha1Trainer(
         command=["bash", "-c"],
         args=[
             '\nif ! [ -x "$(command -v pip)" ]; then\n    python -m ensurepip '
@@ -240,15 +242,8 @@ def get_custom_trainer(include_env: bool = False) -> models.TrainerV1alpha1Train
             '"$SCRIPT" > "trainer_client_test.py"\ntorchrun "trainer_client_test.py"'
         ],
         numNodes=2,
+        env=env,
     )
-
-    if include_env:
-        trainer.env = [
-            models.IoK8sApiCoreV1EnvVar(name="TEST_ENV", value="test_value"),
-            models.IoK8sApiCoreV1EnvVar(name="ANOTHER_ENV", value="another_value"),
-        ]
-
-    return trainer
 
 def get_builtin_trainer() -> models.TrainerV1alpha1Trainer:
     """
@@ -721,7 +716,12 @@ def test_list_runtimes(training_client, test_case):
             },
             expected_output=get_train_job(
                 train_job_name=TRAIN_JOB_WITH_CUSTOM_TRAINER_ENV,
-                train_job_trainer=get_custom_trainer(include_env=True),
+                train_job_trainer=get_custom_trainer(
+                    env = [
+                        models.IoK8sApiCoreV1EnvVar(name="TEST_ENV", value="test_value"),
+                        models.IoK8sApiCoreV1EnvVar(name="ANOTHER_ENV", value="another_value"),
+                    ],
+                ),
             ),
         ),
         TestCase(
