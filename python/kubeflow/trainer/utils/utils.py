@@ -17,7 +17,7 @@ import os
 import queue
 import textwrap
 import threading
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Optional
 from urllib.parse import urlparse
 
 from kubeflow.trainer.constants import constants
@@ -49,7 +49,7 @@ def get_default_target_namespace(context: Optional[str] = None) -> str:
 
 def get_container_devices(
     resources: Optional[models.IoK8sApiCoreV1ResourceRequirements],
-) -> Optional[Tuple[str, str]]:
+) -> Optional[tuple[str, str]]:
     """
     Get the device type and device count for the given container.
     """
@@ -82,7 +82,7 @@ def get_container_devices(
 
 
 def get_runtime_trainer_container(
-    replicated_jobs: List[models.JobsetV1alpha2ReplicatedJob],
+    replicated_jobs: list[models.JobsetV1alpha2ReplicatedJob],
 ) -> Optional[models.IoK8sApiCoreV1Container]:
     """
     Get the runtime node container from the given replicated jobs.
@@ -107,11 +107,12 @@ def get_runtime_trainer_container(
 
 
 def get_runtime_trainer(
-    replicated_jobs: List[models.JobsetV1alpha2ReplicatedJob],
+    framework: str,
+    replicated_jobs: list[models.JobsetV1alpha2ReplicatedJob],
     ml_policy: models.TrainerV1alpha1MLPolicy,
 ) -> types.RuntimeTrainer:
     """
-    Get the runtime trainer object.
+    Get the RuntimeTrainer object.
     """
 
     trainer_container = get_runtime_trainer_container(replicated_jobs)
@@ -121,7 +122,15 @@ def get_runtime_trainer(
 
     # Extract image name from the container image to get appropriate Trainer.
     image_name = trainer_container.image.split(":")[0]
-    trainer = types.ALL_TRAINERS.get(image_name, types.DEFAULT_TRAINER)
+
+    trainer = types.RuntimeTrainer(
+        trainer_type=(
+            types.TrainerType.BUILTIN_TRAINER
+            if framework == types.TORCH_TUNE
+            else types.TrainerType.CUSTOM_TRAINER
+        ),
+        framework=framework,
+    )
 
     # Get the container devices.
     if devices := get_container_devices(trainer_container.resources):
@@ -142,6 +151,16 @@ def get_runtime_trainer(
     # Add number of training nodes.
     if ml_policy.num_nodes:
         trainer.num_nodes = ml_policy.num_nodes
+
+    # Set the Trainer entrypoint.
+    if framework == types.TORCH_TUNE:
+        trainer.set_command(constants.TORCHTUNE_COMMAND)
+    elif ml_policy.torch:
+        trainer.set_command(constants.TORCH_COMMAND)
+    elif ml_policy.mpi:
+        trainer.set_command(constants.MPI_COMMAND)
+    else:
+        trainer.set_command(constants.DEFAULT_COMMAND)
 
     return trainer
 
@@ -199,8 +218,7 @@ def get_trainjob_node_step(
     # For the MPI use-cases, the launcher container is always node-0
     # Thus, we should increase the index for other nodes.
     if (
-        trainjob_runtime.trainer.entrypoint
-        and trainjob_runtime.trainer.entrypoint[0] == constants.MPI_ENTRYPOINT
+        trainjob_runtime.trainer.command[0] == "mpirun"
         and replicated_job_name != constants.LAUNCHER
     ):
         # TODO (andreyvelich): We should also override the device_count
@@ -240,17 +258,47 @@ def get_resources_per_node(
     return resources
 
 
-def get_entrypoint_using_train_func(
+def get_script_for_python_packages(
+    packages_to_install: list[str],
+    pip_index_url: str,
+    is_mpi: bool,
+) -> str:
+    """
+    Get init script to install Python packages from the given pip index URL.
+    """
+    # packages_str = " ".join([str(package) for package in packages_to_install])
+    packages_str = " ".join(packages_to_install)
+
+    script_for_python_packages = textwrap.dedent(
+        """
+        if ! [ -x "$(command -v pip)" ]; then
+            python -m ensurepip || python -m ensurepip --user || apt-get install python-pip
+        fi
+
+        PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet \
+        --no-warn-script-location --index-url {} {} {}
+        """.format(
+            pip_index_url,
+            packages_str,
+            # For the OpenMPI, the packages must be installed for the mpiuser.
+            "--user" if is_mpi else "",
+        )
+    )
+
+    return script_for_python_packages
+
+
+def get_command_using_train_func(
     runtime: types.Runtime,
     train_func: Callable,
     train_func_parameters: Optional[Dict[str, Any]],
     pip_index_url: str,
-    packages_to_install: Optional[List[str]] = None,
-) -> Tuple[List[str], List[str]]:
+    packages_to_install: Optional[list[str]] = None,
+) -> list[str]:
     """
-    Get the Trainer command and args from the given training function and parameters.
+    Get the Trainer container command from the given training function and parameters.
     """
-    # Check if the runtime has a trainer.
+    # Check if the runtime has a Trainer.
     if not runtime.trainer:
         raise ValueError(f"Runtime must have a trainer: {runtime}")
 
@@ -280,55 +328,109 @@ def get_entrypoint_using_train_func(
     else:
         func_code = f"{func_code}\n{train_func.__name__}({train_func_parameters})\n"
 
-    # Prepare the template to execute script.
-    # Currently, we override the file where the training function is defined.
-    # That allows to execute the training script with the entrypoint.
-    if runtime.trainer.entrypoint is None:
-        raise Exception(f"Runtime trainer must have an entrypoint: {runtime.trainer}")
-
-    # We don't allow to override python entrypoint for `mpirun`
-    if runtime.trainer.entrypoint[0] == constants.MPI_ENTRYPOINT:
-        container_command = runtime.trainer.entrypoint
-        python_entrypoint = "python"
-        # The default file location is: /home/mpiuser/<FILE_NAME>.py
+    is_mpi = runtime.trainer.command[0] == "mpirun"
+    # The default file location for OpenMPI is: /home/mpiuser/<FILE_NAME>.py
+    if is_mpi:
         func_file = os.path.join(constants.DEFAULT_MPI_USER_HOME, func_file)
-    else:
-        container_command = constants.DEFAULT_CUSTOM_COMMAND
-        python_entrypoint = " ".join(runtime.trainer.entrypoint)
-
-    exec_script = textwrap.dedent(
-        """
-                read -r -d '' SCRIPT << EOM\n
-                {func_code}
-                EOM
-                printf "%s" \"$SCRIPT\" > \"{func_file}\"
-                {python_entrypoint} \"{func_file}\""""
-    )
-
-    # Add function code to the execute script.
-    exec_script = exec_script.format(
-        func_code=func_code,
-        func_file=func_file,
-        python_entrypoint=python_entrypoint,
-    )
 
     # Install Python packages if that is required.
-    if packages_to_install is not None:
-        exec_script = (
-            get_script_for_python_packages(
-                packages_to_install, pip_index_url, runtime.trainer.entrypoint
-            )
-            + exec_script
+    install_packages = ""
+    if packages_to_install:
+        install_packages = get_script_for_python_packages(
+            packages_to_install,
+            pip_index_url,
+            is_mpi,
         )
 
-    # Return container command and args to execute training function.
-    return container_command, [exec_script]
+    # Add function code to the Trainer command.
+    command = []
+    for c in runtime.trainer.command:
+        if "{func_file}" in c:
+            exec_script = c.format(func_code=func_code, func_file=func_file)
+            if install_packages:
+                exec_script = install_packages + exec_script
+            command.append(exec_script)
+        else:
+            command.append(c)
+
+    return command
+
+
+def get_trainer_crd_from_custom_trainer(
+    runtime: types.Runtime,
+    trainer: types.CustomTrainer,
+) -> models.TrainerV1alpha1Trainer:
+    """
+    Get the Trainer CRD from the custom trainer.
+    """
+    trainer_crd = models.TrainerV1alpha1Trainer()
+
+    # Add number of nodes to the Trainer.
+    if trainer.num_nodes:
+        trainer_crd.num_nodes = trainer.num_nodes
+
+    # Add resources per node to the Trainer.
+    if trainer.resources_per_node:
+        trainer_crd.resources_per_node = get_resources_per_node(
+            trainer.resources_per_node
+        )
+
+    # Add command to the Trainer.
+    # TODO: Support train function parameters.
+    trainer_crd.command = get_command_using_train_func(
+        runtime,
+        trainer.func,
+        trainer.func_args,
+        trainer.pip_index_url,
+        trainer.packages_to_install,
+    )
+
+    # Add environment variables to the Trainer.
+    if trainer.env:
+        trainer_crd.env = [
+            models.IoK8sApiCoreV1EnvVar(name=key, value=value)
+            for key, value in trainer.env.items()
+        ]
+
+    return trainer_crd
+
+
+def get_trainer_crd_from_builtin_trainer(
+    runtime: types.Runtime,
+    trainer: types.BuiltinTrainer,
+    initializer: Optional[types.Initializer] = None,
+) -> models.TrainerV1alpha1Trainer:
+    """
+    Get the Trainer CRD from the builtin trainer.
+    """
+    if not isinstance(trainer.config, types.TorchTuneConfig):
+        raise ValueError(f"The BuiltinTrainer config is invalid: {trainer.config}")
+
+    trainer_crd = models.TrainerV1alpha1Trainer()
+
+    # Add number of nodes to the Trainer.
+    if trainer.config.num_nodes:
+        trainer_crd.num_nodes = trainer.config.num_nodes
+
+    # Add resources per node to the Trainer.
+    if trainer.config.resources_per_node:
+        trainer_crd.resources_per_node = get_resources_per_node(
+            trainer.config.resources_per_node
+        )
+
+    trainer_crd.command = list(runtime.trainer.command)
+    # Parse args in the TorchTuneConfig to the Trainer, preparing for the mutation of
+    # the torchtune config in the runtime plugin.
+    # Ref:https://github.com/kubeflow/trainer/tree/master/docs/proposals/2401-llm-trainer-v2
+    trainer_crd.args = get_args_using_torchtune_config(trainer.config, initializer)
+
+    return trainer_crd
 
 
 def get_args_using_torchtune_config(
     fine_tuning_config: types.TorchTuneConfig,
     initializer: Optional[types.Initializer] = None,
-) -> Tuple[List[str], List[str]]:
+) -> list[str]:
     """
     Get the Trainer args from the TorchTuneConfig.
     """
@@ -380,108 +482,55 @@ def get_args_using_torchtune_config(
             fine_tuning_config.dataset_preprocess_config
         )
 
-    return constants.DEFAULT_TORCHTUNE_COMMAND, args
+    return args
 
 
-def get_trainer_crd_from_custom_trainer(
-    trainer: types.CustomTrainer,
-    runtime: types.Runtime,
-) -> models.TrainerV1alpha1Trainer:
+def get_args_in_dataset_preprocess_config(
+    dataset_preprocess_config: types.TorchTuneInstructDataset,
+) -> list[str]:
     """
-    Get the Trainer CRD from the custom trainer.
+    Get the args from the given dataset preprocess config.
     """
-    trainer_crd = models.TrainerV1alpha1Trainer()
+    args = []
 
-    # Add number of nodes to the Trainer.
-    if trainer.num_nodes:
-        trainer_crd.num_nodes = trainer.num_nodes
-
-    # Add resources per node to the Trainer.
-    if trainer.resources_per_node:
-        trainer_crd.resources_per_node = get_resources_per_node(
-            trainer.resources_per_node
+    if not isinstance(dataset_preprocess_config, types.TorchTuneInstructDataset):
+        raise ValueError(
+            f"Invalid dataset preprocess config type: {type(dataset_preprocess_config)}."
         )
 
-    # Add command and args to the Trainer.
-    trainer_crd.command = constants.DEFAULT_CUSTOM_COMMAND
-    # TODO: Support train function parameters.
-    trainer_crd.command, trainer_crd.args = get_entrypoint_using_train_func(
-        runtime,
-        trainer.func,
-        trainer.func_args,
-        trainer.pip_index_url,
-        trainer.packages_to_install,
-    )
+    # Override the dataset type field in the torchtune config.
+    args.append(f"dataset={constants.TORCHTUNE_INSTRUCT_DATASET}")
 
-    # Add environment variables to the Trainer.
-    if trainer.env:
-        trainer_crd.env = [
-            models.IoK8sApiCoreV1EnvVar(name=key, value=value)
-            for key, value in trainer.env.items()
-        ]
+    # Override the dataset source field if it is provided.
+    if dataset_preprocess_config.source:
+        if not isinstance(dataset_preprocess_config.source, types.DataFormat):
+            raise ValueError(
+                f"Invalid data format: {dataset_preprocess_config.source.value}."
+            )
 
-    return trainer_crd
+        args.append(f"dataset.source={dataset_preprocess_config.source.value}")
 
+    # Override the split field if it is provided.
+    if dataset_preprocess_config.split:
+        args.append(f"dataset.split={dataset_preprocess_config.split}")
 
-def get_trainer_crd_from_builtin_trainer(
-    trainer: types.BuiltinTrainer,
-    initializer: Optional[types.Initializer] = None,
-) -> models.TrainerV1alpha1Trainer:
-    """
-    Get the Trainer CRD from the builtin trainer.
-    """
-    if not isinstance(trainer.config, types.TorchTuneConfig):
-        raise ValueError(f"The BuiltinTrainer config is invalid: {trainer.config}")
-
-    trainer_crd = models.TrainerV1alpha1Trainer()
-
-    # Add number of nodes to the Trainer.
-    if trainer.config.num_nodes:
-        trainer_crd.num_nodes = trainer.config.num_nodes
-
-    # Add resources per node to the Trainer.
-    if trainer.config.resources_per_node:
-        trainer_crd.resources_per_node = get_resources_per_node(
-            trainer.config.resources_per_node
+    # Override the train_on_input field if it is provided.
+    if dataset_preprocess_config.train_on_input:
+        args.append(
+            f"dataset.train_on_input={dataset_preprocess_config.train_on_input}"
         )
 
-    # Parse args in the TorchTuneConfig to the Trainer, preparing for the mutation of
-    # the torchtune config in the runtime plugin.
-    # Ref:https://github.com/kubeflow/trainer/tree/master/docs/proposals/2401-llm-trainer-v2
-    trainer_crd.command, trainer_crd.args = get_args_using_torchtune_config(
-        trainer.config, initializer
-    )
-
-    return trainer_crd
-
-
-def get_script_for_python_packages(
-    packages_to_install: List[str],
-    pip_index_url: str,
-    runtime_entrypoint: List[str],
-) -> str:
-    """
-    Get init script to install Python packages from the given pip index URL.
-    """
-    packages_str = " ".join([str(package) for package in packages_to_install])
-
-    script_for_python_packages = textwrap.dedent(
-        """
-        if ! [ -x "$(command -v pip)" ]; then
-            python -m ensurepip || python -m ensurepip --user || apt-get install python-pip
-        fi
-
-        PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet \
-        --no-warn-script-location --index-url {} {} {}
-        """.format(
-            pip_index_url,
-            packages_str,
-            # For the OpenMPI, the packages must be installed for the mpiuser.
-            "--user" if runtime_entrypoint[0] == constants.MPI_ENTRYPOINT else "",
+    # Override the new_system_prompt field if it is provided.
+    if dataset_preprocess_config.new_system_prompt:
+        args.append(
+            f"dataset.new_system_prompt={dataset_preprocess_config.new_system_prompt}"
         )
-    )
 
-    return script_for_python_packages
+    # Override the column_map field if it is provided.
+    if dataset_preprocess_config.column_map:
+        args.append(f"dataset.column_map={dataset_preprocess_config.column_map}")
+
+    return args
 
 
 def get_dataset_initializer(
@@ -556,58 +605,10 @@ def wrap_log_stream(q: queue.Queue, log_stream: Any):
             return
 
 
-def get_log_queue_pool(log_streams: List[Any]) -> List[queue.Queue]:
+def get_log_queue_pool(log_streams: list[Any]) -> list[queue.Queue]:
     pool = []
     for log_stream in log_streams:
         q = queue.Queue(maxsize=100)
         pool.append(q)
         threading.Thread(target=wrap_log_stream, args=(q, log_stream)).start()
     return pool
-
-
-def get_args_in_dataset_preprocess_config(
-    dataset_preprocess_config: types.TorchTuneInstructDataset,
-) -> List[str]:
-    """
-    Get the args from the given dataset preprocess config.
-    """
-    args = []
-
-    if not isinstance(dataset_preprocess_config, types.TorchTuneInstructDataset):
-        raise ValueError(
-            f"Invalid dataset preprocess config type: {type(dataset_preprocess_config)}."
-        )
-
-    # Override the dataset type field in the torchtune config.
-    args.append(f"dataset={constants.TORCHTUNE_INSTRUCT_DATASET}")
-
-    # Override the dataset source field if it is provided.
-    if dataset_preprocess_config.source:
-        if not isinstance(dataset_preprocess_config.source, types.DataFormat):
-            raise ValueError(
-                f"Invalid data format: {dataset_preprocess_config.source.value}."
-            )
-
-        args.append(f"dataset.source={dataset_preprocess_config.source.value}")
-
-    # Override the split field if it is provided.
-    if dataset_preprocess_config.split:
-        args.append(f"dataset.split={dataset_preprocess_config.split}")
-
-    # Override the train_on_input field if it is provided.
-    if dataset_preprocess_config.train_on_input:
-        args.append(
-            f"dataset.train_on_input={dataset_preprocess_config.train_on_input}"
-        )
-
-    # Override the new_system_prompt field if it is provided.
-    if dataset_preprocess_config.new_system_prompt:
-        args.append(
-            f"dataset.new_system_prompt={dataset_preprocess_config.new_system_prompt}"
-        )
-
-    # Override the column_map field if it is provided.
-    if dataset_preprocess_config.column_map:
-        args.append(f"dataset.column_map={dataset_preprocess_config.column_map}")
-
-    return args

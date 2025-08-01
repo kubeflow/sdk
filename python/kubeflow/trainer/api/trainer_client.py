@@ -151,7 +151,7 @@ class TrainerClient:
 
     def train(
         self,
-        runtime: types.Runtime = types.DEFAULT_RUNTIME,
+        runtime: Optional[types.Runtime] = None,
         initializer: Optional[types.Initializer] = None,
         trainer: Optional[Union[types.CustomTrainer, types.BuiltinTrainer]] = None,
     ) -> str:
@@ -164,7 +164,8 @@ class TrainerClient:
             the post-training logic, requiring only parameter adjustments, e.g. `BuiltinTrainer`.
 
         Args:
-            runtime (`types.Runtime`): Reference to one of existing Runtimes.
+            runtime (`types.Runtime`): Reference to one of existing Runtimes. By default the
+                torch-distributed Runtime is used.
             initializer (`Optional[types.Initializer]`):
                 Configuration for the dataset and model initializers.
             trainer (`Optional[types.CustomTrainer, types.BuiltinTrainer]`):
@@ -179,6 +180,9 @@ class TrainerClient:
             RuntimeError: Failed to create TrainJobs.
         """
 
+        if runtime is None:
+            runtime = self.get_runtime("torch-distributed")
+
         # Generate unique name for the TrainJob.
         # TODO (andreyvelich): Discuss this TrainJob name generation.
         train_job_name = random.choice(string.ascii_lowercase) + uuid.uuid4().hex[:11]
@@ -190,13 +194,13 @@ class TrainerClient:
             # If users choose to use a custom training function.
             if isinstance(trainer, types.CustomTrainer):
                 trainer_crd = utils.get_trainer_crd_from_custom_trainer(
-                    trainer, runtime
+                    runtime, trainer
                 )
 
             # If users choose to use a builtin trainer for post-training.
             elif isinstance(trainer, types.BuiltinTrainer):
                 trainer_crd = utils.get_trainer_crd_from_builtin_trainer(
-                    trainer, initializer
+                    runtime, trainer, initializer
                 )
 
             else:
@@ -549,9 +553,19 @@ class TrainerClient:
         ):
             raise Exception(f"ClusterTrainingRuntime CRD is invalid: {runtime_crd}")
 
+        if (
+            not runtime_crd.metadata.labels
+            or constants.RUNTIME_FRAMEWORK_LABEL not in runtime_crd.metadata.labels
+        ):
+            raise Exception(
+                f"Runtime {runtime_crd.metadata.name} must have "
+                f"{constants.RUNTIME_FRAMEWORK_LABEL} label"
+            )
+
         return types.Runtime(
             name=runtime_crd.metadata.name,
             trainer=utils.get_runtime_trainer(
+                runtime_crd.metadata.labels[constants.RUNTIME_FRAMEWORK_LABEL],
                 runtime_crd.spec.template.spec.replicated_jobs,
                 runtime_crd.spec.ml_policy,
             ),
