@@ -35,7 +35,7 @@ class CustomTrainer:
         pip_index_url (`Optional[str]`): The PyPI URL from which to install Python packages.
         num_nodes (`Optional[int]`): The number of nodes to use for training.
         resources_per_node (`Optional[Dict]`): The computing resources to allocate per node.
-        env (`Optional[Dict[str, str]]`): Environment variables to set in the training containers.
+        env (`Optional[Dict[str, str]]`): The environment variables to set in the training nodes.
     """
 
     func: Callable
