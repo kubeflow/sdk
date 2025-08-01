@@ -55,6 +55,7 @@ ignore = ["E203"]
 [dependency-groups]
 dev = [
     "ruff>=0.12.2",
+    "kubeflow_trainer_api@git+https://github.com/kubeflow/trainer.git@master#subdirectory=api/python_api",
 ]
 
 [tool.uv]
