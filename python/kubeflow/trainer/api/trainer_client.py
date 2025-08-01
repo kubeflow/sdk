@@ -181,7 +181,7 @@ class TrainerClient:
         """
 
         if runtime is None:
-            runtime = self.get_runtime("torch-distributed")
+            runtime = self.get_runtime(constants.TORCH_RUNTIME)
 
         # Generate unique name for the TrainJob.
         # TODO (andreyvelich): Discuss this TrainJob name generation.
