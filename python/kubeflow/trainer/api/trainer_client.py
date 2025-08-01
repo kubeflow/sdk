@@ -105,6 +105,16 @@ class TrainerClient:
                 return result
 
             for runtime in runtime_list.items:
+                if not (
+                    runtime.metadata
+                    and runtime.metadata.labels
+                    and constants.RUNTIME_FRAMEWORK_LABEL in runtime.metadata.labels
+                ):
+                    logger.warning(
+                        f"Runtime {runtime.metadata} must have "
+                        f"{constants.RUNTIME_FRAMEWORK_LABEL} label."
+                    )
+                    continue
                 result.append(self.__get_runtime_from_crd(runtime))
 
         except multiprocessing.TimeoutError:
@@ -553,9 +563,9 @@ class TrainerClient:
         ):
             raise Exception(f"ClusterTrainingRuntime CRD is invalid: {runtime_crd}")
 
-        if (
-            not runtime_crd.metadata.labels
-            or constants.RUNTIME_FRAMEWORK_LABEL not in runtime_crd.metadata.labels
+        if not (
+            runtime_crd.metadata.labels
+            and constants.RUNTIME_FRAMEWORK_LABEL in runtime_crd.metadata.labels
         ):
             raise Exception(
                 f"Runtime {runtime_crd.metadata.name} must have "

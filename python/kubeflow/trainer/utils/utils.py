@@ -120,9 +120,6 @@ def get_runtime_trainer(
     if not (trainer_container and trainer_container.image):
         raise Exception(f"Runtime doesn't have trainer container {replicated_jobs}")
 
-    # Extract image name from the container image to get appropriate Trainer.
-    image_name = trainer_container.image.split(":")[0]
-
     trainer = types.RuntimeTrainer(
         trainer_type=(
             types.TrainerType.BUILTIN_TRAINER
