@@ -51,6 +51,14 @@ To run the unit tests (if present), execute:
 pytest
 ```
 
+#### Development Testing
+For development and before submitting PRs, run:
+```sh
+make test-python-dev
+```
+
+This tests against latest master branch dependencies to catch integration issues early.
+
 ### Code Coverage
 To run tests and measure coverage:
 ```sh
