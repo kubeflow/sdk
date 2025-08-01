@@ -203,12 +203,20 @@ class TrainerClient:
         if trainer:
             # If users choose to use a custom training function.
             if isinstance(trainer, types.CustomTrainer):
+                if runtime.trainer.trainer_type != types.TrainerType.CUSTOM_TRAINER:
+                    raise ValueError(
+                        f"CustomTrainer can't be used with {runtime} runtime"
+                    )
                 trainer_crd = utils.get_trainer_crd_from_custom_trainer(
                     runtime, trainer
                 )
 
             # If users choose to use a builtin trainer for post-training.
             elif isinstance(trainer, types.BuiltinTrainer):
+                if runtime.trainer.trainer_type != types.TrainerType.BUILTIN_TRAINER:
+                    raise ValueError(
+                        f"BuiltinTrainer can't be used with {runtime} runtime"
+                    )
                 trainer_crd = utils.get_trainer_crd_from_builtin_trainer(
                     runtime, trainer, initializer
                 )

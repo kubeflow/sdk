@@ -55,6 +55,7 @@ FAILED = "Failed"
 DEFAULT_NAMESPACE = "default"
 # In all tests runtime name is equal to the framework name.
 TORCH_RUNTIME = "torch"
+TORCH_TUNE_RUNTIME = "torchtune"
 FAIL_LOGS = "fail_logs"
 LIST_RUNTIMES = "list_runtimes"
 BASIC_TRAIN_JOB_NAME = "basic-job"
@@ -667,10 +668,10 @@ def test_list_runtimes(trainer_client, test_case):
                         loss=types.Loss.CEWithChunkedOutputLoss,
                     )
                 ),
-                "runtime": "torchtune",
+                "runtime": TORCH_TUNE_RUNTIME,
             },
             expected_output=get_train_job(
-                runtime_name="torchtune",
+                runtime_name=TORCH_TUNE_RUNTIME,
                 train_job_name=TRAIN_JOB_WITH_BUILT_IN_TRAINER,
                 train_job_trainer=get_builtin_trainer(),
             ),
@@ -734,6 +735,18 @@ def test_list_runtimes(trainer_client, test_case):
                 "namespace": RUNTIME,
             },
             expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="value error when runtime doesn't support CustomTrainer",
+            expected_status=FAILED,
+            config={
+                "trainer": types.CustomTrainer(
+                    func=lambda: print("Hello World"),
+                    num_nodes=2,
+                ),
+                "runtime": TORCH_TUNE_RUNTIME,
+            },
+            expected_error=ValueError,
         ),
     ],
 )
