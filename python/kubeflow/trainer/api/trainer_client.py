@@ -111,7 +111,7 @@ class TrainerClient:
                     and constants.RUNTIME_FRAMEWORK_LABEL in runtime.metadata.labels
                 ):
                     logger.warning(
-                        f"Runtime {runtime.metadata} must have "
+                        f"Runtime {runtime.metadata.name} must have "  # type: ignore
                         f"{constants.RUNTIME_FRAMEWORK_LABEL} label."
                     )
                     continue
