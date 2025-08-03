@@ -62,7 +62,6 @@ BASIC_TRAIN_JOB_NAME = "basic-job"
 TRAIN_JOBS = "trainjobs"
 TRAIN_JOB_WITH_BUILT_IN_TRAINER = "train-job-with-built-in-trainer"
 TRAIN_JOB_WITH_CUSTOM_TRAINER = "train-job-with-custom-trainer"
-TRAIN_JOB_WITH_CUSTOM_TRAINER_ENV = "train-job-with-custom-trainer-env"
 
 
 # --------------------------
@@ -216,7 +215,7 @@ def get_resource_requirements() -> models.IoK8sApiCoreV1ResourceRequirements:
 
 
 def get_custom_trainer(
-        env: Optional[list[models.IoK8sApiCoreV1EnvVar]] = None,
+    env: Optional[list[models.IoK8sApiCoreV1EnvVar]] = None,
 ) -> models.TrainerV1alpha1Trainer:
     """
     Get the custom trainer for the TrainJob.
@@ -238,6 +237,7 @@ def get_custom_trainer(
         numNodes=2,
         env=env,
     )
+
 
 def get_builtin_trainer() -> models.TrainerV1alpha1Trainer:
     """
@@ -711,11 +711,16 @@ def test_list_runtimes(trainer_client, test_case):
                 )
             },
             expected_output=get_train_job(
-                train_job_name=TRAIN_JOB_WITH_CUSTOM_TRAINER_ENV,
+                runtime_name=TORCH_RUNTIME,
+                train_job_name=TRAIN_JOB_WITH_CUSTOM_TRAINER,
                 train_job_trainer=get_custom_trainer(
-                    env = [
-                        models.IoK8sApiCoreV1EnvVar(name="TEST_ENV", value="test_value"),
-                        models.IoK8sApiCoreV1EnvVar(name="ANOTHER_ENV", value="another_value"),
+                    env=[
+                        models.IoK8sApiCoreV1EnvVar(
+                            name="TEST_ENV", value="test_value"
+                        ),
+                        models.IoK8sApiCoreV1EnvVar(
+                            name="ANOTHER_ENV", value="another_value"
+                        ),
                     ],
                 ),
             ),
