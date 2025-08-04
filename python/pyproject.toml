@@ -28,13 +28,16 @@ classifiers = [
 dependencies = [
   "kubernetes>=27.2.0",
   "pydantic>=2.10.0",
-  "kubeflow_trainer_api@git+https://github.com/kubeflow/trainer.git@master#subdirectory=api/python_api"
+  "kubeflow-trainer-api>=2.0.0",
 ]
 [project.optional-dependencies]
 test = [
   "pytest>=7.0",
   "pytest-mock>=3.10",
   "coverage>=7.0",
+]
+dev = [
+  "kubeflow_trainer_api@git+https://github.com/kubeflow/trainer.git@master#subdirectory=api/python_api",
 ]
 
 [project.urls]
@@ -55,7 +58,6 @@ ignore = ["E203"]
 [dependency-groups]
 dev = [
     "ruff>=0.12.2",
-    "kubeflow_trainer_api@git+https://github.com/kubeflow/trainer.git@master#subdirectory=api/python_api",
 ]
 
 [tool.uv]
