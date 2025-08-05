@@ -28,6 +28,12 @@ cd python
 pip install -e .
 ```
 
+#### Development Build (Optional)
+To install the latest API modules directly from the master branch:
+```sh
+pip install -e ".[dev]"
+```
+
 Install development tools:
 ```sh
 pip install pytest black isort flake8 coverage pre-commit
@@ -50,14 +56,6 @@ To run the unit tests (if present), execute:
 ```sh
 pytest
 ```
-
-#### Development Testing
-For development and before submitting PRs, run:
-```sh
-make test-python-dev
-```
-
-This tests against latest master branch dependencies to catch integration issues early.
 
 ### Code Coverage
 To run tests and measure coverage:
