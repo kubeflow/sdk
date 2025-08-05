@@ -17,6 +17,7 @@ import multiprocessing
 import queue
 import random
 import string
+import time
 import uuid
 from typing import Dict, List, Optional, Union, Set
 
@@ -159,6 +160,56 @@ class TrainerClient:
 
         return self.__get_runtime_from_crd(runtime)  # type: ignore
 
+    def get_runtime_packages(self, runtime: types.Runtime):
+        """
+        Print the installed Python packages for the given Runtime. If Runtime has GPUs it also
+        prints available GPUs on the single training node.
+
+        Args:
+            runtime: Reference to one of existing Runtimes.
+
+        Raises:
+            ValueError: Input arguments are invalid.
+            RuntimeError: Failed to get Runtime.
+
+        """
+
+        if isinstance(runtime.trainer, types.BuiltinTrainer):
+            raise ValueError("Cannot get Runtime packages for BuiltinTrainer")
+
+        def print_packages():
+            import subprocess
+            import shutil
+
+            if shutil.which("pip"):
+                pip_list = subprocess.run(
+                    ["pip", "list"], capture_output=True, text=True
+                )
+                print(pip_list.stdout)
+            else:
+                print("Unable to get installed packages: pip command not found")
+
+            if shutil.which("nvidia-smi"):
+                print("\nAvailable GPUs on the single training node")
+                print(subprocess.run(["nvidia-smi"]).stdout)
+
+        # Create the TrainJob and wait until it completes.
+        # If Runtime trainer has GPU resources use them, otherwise run TrainJob with 1 CPU.
+        job_name = self.train(
+            runtime=runtime,
+            trainer=types.CustomTrainer(
+                func=print_packages,
+                num_nodes=1,
+                resources_per_node=(
+                    {"cpu": 1} if runtime.trainer.device != "gpu" else None
+                ),
+            ),
+        )
+
+        self.wait_for_job_status(job_name)
+        print(self.get_job_logs(job_name)["node-0"])
+        self.delete_job(job_name)
+
     def train(
         self,
         runtime: Optional[types.Runtime] = None,
@@ -174,11 +225,11 @@ class TrainerClient:
             the post-training logic, requiring only parameter adjustments, e.g. `BuiltinTrainer`.
 
         Args:
-            runtime (`types.Runtime`): Reference to one of existing Runtimes. By default the
+            runtime: Reference to one of existing Runtimes. By default the
                 torch-distributed Runtime is used.
-            initializer (`Optional[types.Initializer]`):
+            initializer:
                 Configuration for the dataset and model initializers.
-            trainer (`Optional[types.CustomTrainer, types.BuiltinTrainer]`):
+            trainer:
                 Configuration for Custom Training Task or Config-driven Task with Builtin Trainer.
 
         Returns:
@@ -460,6 +511,7 @@ class TrainerClient:
         name: str,
         status: Set[str] = {constants.TRAINJOB_COMPLETE},
         timeout: int = 600,
+        polling_interval: int = 2,
     ) -> types.TrainJob:
         """Wait for TrainJob to reach the desired status
 
@@ -468,6 +520,7 @@ class TrainerClient:
             status: Set of expected statuses. It must be subset of Created, Running, Complete, and
                 Failed statuses.
             timeout: How many seconds to wait until TrainJob reaches one of the expected conditions.
+            polling_interval: The polling interval in seconds to check TrainJob status.
 
         Returns:
             TrainJob: The training job that reaches the desired status.
@@ -489,36 +542,28 @@ class TrainerClient:
                 f"Expected status {status} must be a subset of {job_statuses}"
             )
 
-        # Use Kubernetes watch API to monitor the TrainJob's Pods.
-        w = watch.Watch()
-        try:
-            for event in w.stream(
-                self.core_api.list_namespaced_pod,
-                self.namespace,
-                label_selector=constants.POD_LABEL_SELECTOR.format(trainjob_name=name),
-                timeout_seconds=timeout,
+        if polling_interval > timeout:
+            raise ValueError(
+                f"Polling interval {polling_interval} must be less than timeout: {timeout}"
+            )
+
+        for _ in range(round(timeout / polling_interval)):
+            # Check the status after event is generated for the TrainJob's Pods.
+            trainjob = self.get_job(name)
+            logger.debug(f"TrainJob {name}, status {trainjob.status}")
+
+            # Raise an error if TrainJob is Failed and it is not the expected status.
+            if (
+                constants.TRAINJOB_FAILED not in status
+                and trainjob.status == constants.TRAINJOB_FAILED
             ):
-                # Check the status after event is generated for the TrainJob's Pods.
-                trainjob = self.get_job(name)
-                logger.debug(f"TrainJob {name}, status {trainjob.status}")
+                raise RuntimeError(f"TrainJob {name} is Failed")
 
-                # Raise an error if TrainJob is Failed and it is not the expected status.
-                if (
-                    constants.TRAINJOB_FAILED not in status
-                    and trainjob.status == constants.TRAINJOB_FAILED
-                ):
-                    raise RuntimeError(f"TrainJob {name} is Failed")
+            # Return the TrainJob if it reaches the expected status.
+            if trainjob.status in status:
+                return trainjob
 
-                # Return the TrainJob if it reaches the expected status.
-                if trainjob.status in status:
-                    return trainjob
-
-        except TimeoutError:
-            raise TimeoutError(f"Timeout to get the TrainJob {name}")
-        except Exception:
-            raise RuntimeError(f"Failed to watch Pods for TrainJob {name}")
-        finally:
-            w.stop()
+            time.sleep(polling_interval)
 
         raise TimeoutError(
             f"Timeout waiting for TrainJob {name} to reach status: {status} status"
@@ -691,12 +736,16 @@ class TrainerClient:
                 elif c.type == constants.TRAINJOB_FAILED and c.status == "True":
                     trainjob.status = c.type
         else:
-            # The TrainJob running status is defined when all training node (e.g. Pods) are running.
+            # The TrainJob running status is defined when all training node (e.g. Pods) are
+            # running or succeeded.
             num_running_nodes = sum(
                 1
                 for step in trainjob.steps
                 if step.name.startswith(constants.NODE)
-                and step.status == constants.TRAINJOB_RUNNING
+                and (
+                    step.status == constants.TRAINJOB_RUNNING
+                    or step.status == constants.POD_SUCCEEDED
+                )
             )
 
             if trainjob.num_nodes == num_running_nodes:

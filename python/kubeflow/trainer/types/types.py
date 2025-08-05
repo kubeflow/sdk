@@ -168,7 +168,8 @@ class RuntimeTrainer:
     trainer_type: TrainerType
     framework: str
     num_nodes: int = 1  # The default value is set in the APIs.
-    accelerator_count: Union[str, float, int] = constants.UNKNOWN
+    device: str = constants.UNKNOWN
+    device_count: str = constants.UNKNOWN
     __command: tuple[str, ...] = field(init=False, repr=False)
 
     @property
@@ -194,7 +195,7 @@ class Step:
     status: Optional[str]
     pod_name: str
     device: str = constants.UNKNOWN
-    device_count: Union[str, int] = constants.UNKNOWN
+    device_count: str = constants.UNKNOWN
 
 
 # Representation for the TrainJob.
