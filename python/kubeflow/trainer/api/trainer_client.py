@@ -186,7 +186,12 @@ class TrainerClient:
         def print_packages():
             import subprocess
             import shutil
+            import sys
 
+            # Print Python version.
+            print(f"Python: {sys.version}")
+
+            # Print Python packages.
             if shutil.which("pip"):
                 pip_list = subprocess.run(
                     ["pip", "list"], capture_output=True, text=True
@@ -195,9 +200,13 @@ class TrainerClient:
             else:
                 print("Unable to get installed packages: pip command not found")
 
+            # Print nvidia-smi if GPUs are available.
             if shutil.which("nvidia-smi"):
-                print("\nAvailable GPUs on the single training node")
-                print(subprocess.run(["nvidia-smi"]).stdout)
+                print("Available GPUs on the single training node")
+                nvidia_smi = subprocess.run(
+                    ["nvidia-smi"], capture_output=True, text=True
+                )
+                print(nvidia_smi.stdout)
 
         # Create the TrainJob and wait until it completes.
         # If Runtime trainer has GPU resources use them, otherwise run TrainJob with 1 CPU.
