@@ -16,7 +16,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Callable, Dict, Optional, Union
+from typing import Callable, Dict, Optional
 
 from kubeflow.trainer.constants import constants
 
