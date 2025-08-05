@@ -177,6 +177,12 @@ class TrainerClient:
         if isinstance(runtime.trainer, types.BuiltinTrainer):
             raise ValueError("Cannot get Runtime packages for BuiltinTrainer")
 
+        # Run mpirun only within the single process.
+        if runtime.trainer.command[0] == "mpirun":
+            mpi_command = list(constants.MPI_COMMAND)
+            mpi_command[1:3] = ["-np", "1"]
+            runtime.trainer.set_command(tuple(mpi_command))
+
         def print_packages():
             import subprocess
             import shutil
