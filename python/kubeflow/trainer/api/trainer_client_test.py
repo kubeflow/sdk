@@ -56,6 +56,10 @@ DEFAULT_NAMESPACE = "default"
 # In all tests runtime name is equal to the framework name.
 TORCH_RUNTIME = "torch"
 TORCH_TUNE_RUNTIME = "torchtune"
+
+# 2 nodes * 2 nproc
+RUNTIME_DEVICES = "4"
+
 FAIL_LOGS = "fail_logs"
 LIST_RUNTIMES = "list_runtimes"
 BASIC_TRAIN_JOB_NAME = "basic-job"
@@ -94,11 +98,6 @@ def trainer_client(request):
         return_value=Mock(
             list_namespaced_pod=Mock(side_effect=list_namespaced_pod_response),
             read_namespaced_pod_log=Mock(side_effect=mock_read_namespaced_pod_log),
-        ),
-    ), patch(
-        "kubernetes.watch.Watch",
-        return_value=Mock(
-            stream=Mock(side_effect=mock_watch),
         ),
     ):
         yield TrainerClient()
@@ -509,7 +508,8 @@ def create_runtime_type(
         trainer_type=types.TrainerType.CUSTOM_TRAINER,
         framework=name,
         num_nodes=2,
-        accelerator_count=4,
+        device="gpu",
+        device_count=RUNTIME_DEVICES,
     )
     trainer.set_command(constants.TORCH_COMMAND)
     return types.Runtime(
@@ -528,7 +528,8 @@ def get_train_job_data_type(
     trainer = types.RuntimeTrainer(
         trainer_type=types.TrainerType.CUSTOM_TRAINER,
         framework=runtime_name,
-        accelerator_count=4,
+        device="gpu",
+        device_count=RUNTIME_DEVICES,
         num_nodes=2,
     )
     trainer.set_command(constants.TORCH_COMMAND)
@@ -641,6 +642,45 @@ def test_list_runtimes(trainer_client, test_case):
 
     except Exception as e:
         assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid flow with custom trainer runtime",
+            expected_status=SUCCESS,
+            config={"runtime": create_runtime_type(name=TORCH_RUNTIME)},
+        ),
+        TestCase(
+            name="value error with builtin trainer runtime",
+            expected_status=FAILED,
+            config={
+                "runtime": types.Runtime(
+                    name="torchtune-runtime",
+                    trainer=types.RuntimeTrainer(
+                        trainer_type=types.TrainerType.BUILTIN_TRAINER,
+                        framework="torchtune",
+                        num_nodes=1,
+                        device="cpu",
+                        device_count="1",
+                    ),
+                )
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_get_runtime_packages(trainer_client, test_case):
+    """Test TrainerClient.get_runtime_packages with basic success path."""
+    print("Executing test:", test_case.name)
+
+    try:
+        trainer_client.get_runtime_packages(**test_case.config)
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+
     print("test execution complete")
 
 
@@ -945,6 +985,16 @@ def test_get_job_logs(trainer_client, test_case):
             expected_error=ValueError,
         ),
         TestCase(
+            name="polling interval is more than timeout error",
+            expected_status=FAILED,
+            config={
+                "name": BASIC_TRAIN_JOB_NAME,
+                "timeout": 1,
+                "polling_interval": 2,
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
             name="job failed when not expected",
             expected_status=FAILED,
             config={
@@ -959,7 +1009,8 @@ def test_get_job_logs(trainer_client, test_case):
             config={
                 "name": BASIC_TRAIN_JOB_NAME,
                 "status": {constants.TRAINJOB_FAILED},
-                "timeout": 1,
+                "polling_interval": 1,
+                "timeout": 2,
             },
             expected_error=TimeoutError,
         ),

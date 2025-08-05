@@ -174,7 +174,7 @@ class TrainerClient:
 
         """
 
-        if isinstance(runtime.trainer, types.BuiltinTrainer):
+        if runtime.trainer.trainer_type == types.TrainerType.BUILTIN_TRAINER:
             raise ValueError("Cannot get Runtime packages for BuiltinTrainer")
 
         # Run mpirun only within the single process.
