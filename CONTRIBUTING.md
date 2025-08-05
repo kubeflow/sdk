@@ -29,14 +29,9 @@ pip install -e .
 ```
 
 #### Development Build (Optional)
-To install the latest API modules directly from the master branch:
+To install development tools and the latest API modules directly from the master branch:
 ```sh
 pip install -e ".[dev]"
-```
-
-Install development tools:
-```sh
-pip install pytest black isort flake8 coverage pre-commit
 ```
 
 ## Development Workflow

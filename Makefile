@@ -69,7 +69,7 @@ uv-venv:
  # make test-python will produce html coverage by default. Run with `make test-python report=xml` to produce xml report.
 .PHONY: test-python
 test-python: uv-venv
-	@uv pip install --project $(PY_DIR) --group dev "$(PY_DIR)[test,dev]"
+	@uv pip install --project $(PY_DIR) -e "$(PY_DIR)[dev]"
 	@uv run coverage run --source=kubeflow.trainer.api.trainer_client,kubeflow.trainer.utils.utils -m pytest ./python/kubeflow/trainer/api/trainer_client_test.py
 	@uv run coverage report -m kubeflow/trainer/api/trainer_client.py kubeflow/trainer/utils/utils.py
 ifeq ($(report),xml)

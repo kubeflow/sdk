@@ -31,13 +31,13 @@ dependencies = [
   "kubeflow-trainer-api>=2.0.0",
 ]
 [project.optional-dependencies]
-test = [
+dev = [
   "pytest>=7.0",
   "pytest-mock>=3.10",
   "coverage>=7.0",
-]
-dev = [
   "kubeflow_trainer_api@git+https://github.com/kubeflow/trainer.git@master#subdirectory=api/python_api",
+  "ruff>=0.12.2",
+  "pre-commit>=4.2.0",
 ]
 
 [project.urls]
@@ -55,10 +55,7 @@ line-length = 100
 select = ["E", "F", "W"]
 ignore = ["E203"]
 
-[dependency-groups]
-dev = [
-    "ruff>=0.12.2",
-]
+
 
 [tool.uv]
 package = true
