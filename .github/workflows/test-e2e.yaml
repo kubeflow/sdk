@@ -39,9 +39,8 @@ jobs:
           echo "Installing Papermill and Jupyter"
           pip install papermill==2.6.0 jupyter==1.1.1 ipykernel==6.29.5
 
-          echo "Installing Kubeflow SDK locally from ./python"
-          # This path (./python) is relative to the *main* repository checkout (kubeflow/sdk)
-          pip install ./python
+          echo "Installing Kubeflow SDK locally"
+          pip install .
         working-directory: . # Ensure pip runs from the SDK repo root
 
       - name: Setup cluster

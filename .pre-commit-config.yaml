@@ -10,7 +10,6 @@ repos:
     rev: v0.4.4
     hooks:
       - id: ruff
-        args: [--select=E,F,W]
 exclude: |
   (?x)^(
     python/kubeflow/trainer/__init__.py|

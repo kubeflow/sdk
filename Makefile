@@ -19,8 +19,6 @@ SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
-
-PY_DIR := $(PROJECT_DIR)/python
 VENV_DIR := $(PROJECT_DIR)/.venv
 
 ##@ General
@@ -54,8 +52,8 @@ ruff: ## Install Ruff
 
 .PHONY: verify
 verify: uv uv-venv ruff  ## install all required tools
-	@cd $(PY_DIR) && uv lock --check
-	@cd $(PY_DIR) && uvx ruff check --show-fixes
+	@uv lock --check
+	@uvx ruff check --show-fixes
 
 .PHONY: uv-venv
 uv-venv:
@@ -69,9 +67,9 @@ uv-venv:
  # make test-python will produce html coverage by default. Run with `make test-python report=xml` to produce xml report.
 .PHONY: test-python
 test-python: uv-venv
-	@uv pip install -e "$(PY_DIR)[dev]"
+	@uv pip install -e ".[dev]"
 	@uv run coverage run --source=kubeflow.trainer.api.trainer_client,kubeflow.trainer.utils.utils -m pytest ./python/kubeflow/trainer/api/trainer_client_test.py
-	@uv run coverage report -m kubeflow/trainer/api/trainer_client.py kubeflow/trainer/utils/utils.py
+	@uv run coverage report -m python/kubeflow/trainer/api/trainer_client.py python/kubeflow/trainer/utils/utils.py
 ifeq ($(report),xml)
 	@uv run coverage xml
 else

@@ -24,7 +24,6 @@ source .venv/bin/activate
 
 Install dependencies in editable mode:
 ```sh
-cd python
 pip install -e .
 ```
 
