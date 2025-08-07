@@ -15,8 +15,6 @@
 
 from __future__ import absolute_import
 
-__version__ = "0.1.0"
-
 # Import the Kubeflow Trainer client.
 from kubeflow.trainer.api.trainer_client import TrainerClient  # noqa: F401
 
