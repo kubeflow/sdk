@@ -12,7 +12,7 @@ repos:
       - id: ruff
 exclude: |
   (?x)^(
-    kubeflow/trainer/__init__.py|
-    kubeflow/trainer/api/__init__.py|
-    kubeflow/trainer/models/.*|
+    python/kubeflow/trainer/__init__.py|
+    python/kubeflow/trainer/api/__init__.py|
+    python/kubeflow/trainer/models/.*|
   )$
