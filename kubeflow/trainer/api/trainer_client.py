@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import logging
 import multiprocessing
 import queue
@@ -177,11 +178,14 @@ class TrainerClient:
         if runtime.trainer.trainer_type == types.TrainerType.BUILTIN_TRAINER:
             raise ValueError("Cannot get Runtime packages for BuiltinTrainer")
 
+        # Create a deepcopy of the runtime to avoid modifying the original command.
+        runtime_copy = copy.deepcopy(runtime)
+
         # Run mpirun only within the single process.
-        if runtime.trainer.command[0] == "mpirun":
+        if runtime_copy.trainer.command[0] == "mpirun":
             mpi_command = list(constants.MPI_COMMAND)
             mpi_command[1:3] = ["-np", "1"]
-            runtime.trainer.set_command(tuple(mpi_command))
+            runtime_copy.trainer.set_command(tuple(mpi_command))
 
         def print_packages():
             import subprocess
@@ -211,12 +215,12 @@ class TrainerClient:
         # Create the TrainJob and wait until it completes.
         # If Runtime trainer has GPU resources use them, otherwise run TrainJob with 1 CPU.
         job_name = self.train(
-            runtime=runtime,
+            runtime=runtime_copy,
             trainer=types.CustomTrainer(
                 func=print_packages,
                 num_nodes=1,
                 resources_per_node=(
-                    {"cpu": 1} if runtime.trainer.device != "gpu" else None
+                    {"cpu": 1} if runtime_copy.trainer.device != "gpu" else None
                 ),
             ),
         )
