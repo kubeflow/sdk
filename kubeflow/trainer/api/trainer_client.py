@@ -25,9 +25,9 @@ logger = logging.getLogger(__name__)
 
 
 class TrainerClient:
-
-    def __init__( self,
-            backend_config: KubernetesBackendConfig = KubernetesBackendConfig(),
+    def __init__(
+        self,
+        backend_config: KubernetesBackendConfig = KubernetesBackendConfig(),
     ):
         """Initialize a Kubeflow Trainer client.
 
@@ -42,17 +42,16 @@ class TrainerClient:
         else:
             raise ValueError("Invalid backend config '{}'".format(backend_config))
 
-
     def list_runtimes(self) -> types.Runtime:
         """List of the available Runtimes.
 
-            Returns:
-                List[Runtime]: List of available training runtimes.
-                    If no runtimes exist, an empty list is returned.
+        Returns:
+            List[Runtime]: List of available training runtimes.
+                If no runtimes exist, an empty list is returned.
 
-            Raises:
-                TimeoutError: Timeout to list Runtimes.
-                RuntimeError: Failed to list Runtimes.
+        Raises:
+            TimeoutError: Timeout to list Runtimes.
+            RuntimeError: Failed to list Runtimes.
         """
         return self.__backend.list_runtimes()
 
@@ -62,19 +61,19 @@ class TrainerClient:
             name: Name of the runtime.
             Returns:
                 types.TrainingRuntime: Runtime object.
-            """
+        """
         return self.__backend.get_runtime(name=name)
 
     def list_jobs(self, runtime: Optional[types.Runtime] = None) -> List[types.TrainJob]:
         """List of all TrainJobs.
 
-            Returns:
-                List[TrainJob]: List of created TrainJobs.
-                    If no TrainJob exist, an empty list is returned.
+        Returns:
+            List[TrainJob]: List of created TrainJobs.
+                If no TrainJob exist, an empty list is returned.
 
-            Raises:
-                TimeoutError: Timeout to list TrainJobs.
-                RuntimeError: Failed to list TrainJobs.
+        Raises:
+            TimeoutError: Timeout to list TrainJobs.
+            RuntimeError: Failed to list TrainJobs.
         """
         return self.__backend.list_jobs(runtime=runtime)
 
@@ -85,29 +84,31 @@ class TrainerClient:
     def delete_job(self, name: str):
         """Delete the TrainJob.
 
-            Args:
-                name: Name of the TrainJob.
+        Args:
+            name: Name of the TrainJob.
 
-            Raises:
-                TimeoutError: Timeout to delete TrainJob.
-                RuntimeError: Failed to delete TrainJob.
+        Raises:
+            TimeoutError: Timeout to delete TrainJob.
+            RuntimeError: Failed to delete TrainJob.
         """
         return self.__backend.delete_job(name=name)
 
-    def get_job_logs(self,
-                     name: str,
-                     follow: Optional[bool] = False,
-                     step: str = constants.NODE,
-                     node_rank: int = 0,
-        )-> Dict[str, str]:
+    def get_job_logs(
+        self,
+        name: str,
+        follow: Optional[bool] = False,
+        step: str = constants.NODE,
+        node_rank: int = 0,
+    ) -> Dict[str, str]:
         """Get the logs from TrainJob"""
         return self.__backend.get_job_logs(name=name, follow=follow, step=step, node_rank=node_rank)
 
-    def train(self,
-              runtime: types.Runtime = None,
-              initializer: Optional[types.Initializer] = None,
-              trainer: Optional[Union[types.CustomTrainer, types.BuiltinTrainer]] = None,
-        ) -> str:
+    def train(
+        self,
+        runtime: types.Runtime = None,
+        initializer: Optional[types.Initializer] = None,
+        trainer: Optional[Union[types.CustomTrainer, types.BuiltinTrainer]] = None,
+    ) -> str:
         """
         Create the TrainJob. You can configure these types of training task:
         - Custom Training Task: Training with a self-contained function that encapsulates
@@ -154,7 +155,9 @@ class TrainerClient:
             TimeoutError: Timeout to wait for TrainJob status.
         """
         return self.__backend.wait_for_job_status(
-            name=name, status=status, timeout=timeout,
+            name=name,
+            status=status,
+            timeout=timeout,
             polling_interval=polling_interval,
         )
 

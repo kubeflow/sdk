@@ -72,9 +72,7 @@ def get_container_devices(
         device = constants.CPU_LABEL
         device_count = resources.limits[constants.CPU_LABEL].actual_instance
     else:
-        raise Exception(
-            f"Unknown device type in the container resources: {resources.limits}"
-        )
+        raise Exception(f"Unknown device type in the container resources: {resources.limits}")
     if device_count is None:
         raise Exception(f"Failed to get device count for resources: {resources.limits}")
 
@@ -221,7 +219,7 @@ def get_trainjob_node_step(
         # TODO (andreyvelich): We should also override the device_count
         # based on OMPI_MCA_orte_set_default_slots value. Right now, it is hard to do
         # since we inject this env only to the Launcher Pod.
-        step.name = f"{constants.NODE}-{job_index+1}"
+        step.name = f"{constants.NODE}-{job_index + 1}"
 
     if container.env:
         for env in container.env:
@@ -368,9 +366,7 @@ def get_trainer_crd_from_custom_trainer(
 
     # Add resources per node to the Trainer.
     if trainer.resources_per_node:
-        trainer_crd.resources_per_node = get_resources_per_node(
-            trainer.resources_per_node
-        )
+        trainer_crd.resources_per_node = get_resources_per_node(trainer.resources_per_node)
 
     # Add command to the Trainer.
     # TODO: Support train function parameters.
@@ -385,8 +381,7 @@ def get_trainer_crd_from_custom_trainer(
     # Add environment variables to the Trainer.
     if trainer.env:
         trainer_crd.env = [
-            models.IoK8sApiCoreV1EnvVar(name=key, value=value)
-            for key, value in trainer.env.items()
+            models.IoK8sApiCoreV1EnvVar(name=key, value=value) for key, value in trainer.env.items()
         ]
 
     return trainer_crd
@@ -411,9 +406,7 @@ def get_trainer_crd_from_builtin_trainer(
 
     # Add resources per node to the Trainer.
     if trainer.config.resources_per_node:
-        trainer_crd.resources_per_node = get_resources_per_node(
-            trainer.config.resources_per_node
-        )
+        trainer_crd.resources_per_node = get_resources_per_node(trainer.config.resources_per_node)
 
     trainer_crd.command = list(runtime.trainer.command)
     # Parse args in the TorchTuneConfig to the Trainer, preparing for the mutation of
@@ -466,18 +459,12 @@ def get_args_using_torchtune_config(
         relative_path = "/".join(parts[1:]) if len(parts) > 1 else "."
 
         if relative_path != "." and "." in relative_path:
-            args.append(
-                f"dataset.data_files={os.path.join(constants.DATASET_PATH, relative_path)}"
-            )
+            args.append(f"dataset.data_files={os.path.join(constants.DATASET_PATH, relative_path)}")
         else:
-            args.append(
-                f"dataset.data_dir={os.path.join(constants.DATASET_PATH, relative_path)}"
-            )
+            args.append(f"dataset.data_dir={os.path.join(constants.DATASET_PATH, relative_path)}")
 
     if fine_tuning_config.dataset_preprocess_config:
-        args += get_args_in_dataset_preprocess_config(
-            fine_tuning_config.dataset_preprocess_config
-        )
+        args += get_args_in_dataset_preprocess_config(fine_tuning_config.dataset_preprocess_config)
 
     return args
 
@@ -501,9 +488,7 @@ def get_args_in_dataset_preprocess_config(
     # Override the dataset source field if it is provided.
     if dataset_preprocess_config.source:
         if not isinstance(dataset_preprocess_config.source, types.DataFormat):
-            raise ValueError(
-                f"Invalid data format: {dataset_preprocess_config.source.value}."
-            )
+            raise ValueError(f"Invalid data format: {dataset_preprocess_config.source.value}.")
 
         args.append(f"dataset.source={dataset_preprocess_config.source.value}")
 
@@ -513,15 +498,11 @@ def get_args_in_dataset_preprocess_config(
 
     # Override the train_on_input field if it is provided.
     if dataset_preprocess_config.train_on_input:
-        args.append(
-            f"dataset.train_on_input={dataset_preprocess_config.train_on_input}"
-        )
+        args.append(f"dataset.train_on_input={dataset_preprocess_config.train_on_input}")
 
     # Override the new_system_prompt field if it is provided.
     if dataset_preprocess_config.new_system_prompt:
-        args.append(
-            f"dataset.new_system_prompt={dataset_preprocess_config.new_system_prompt}"
-        )
+        args.append(f"dataset.new_system_prompt={dataset_preprocess_config.new_system_prompt}")
 
     # Override the column_map field if it is provided.
     if dataset_preprocess_config.column_map:

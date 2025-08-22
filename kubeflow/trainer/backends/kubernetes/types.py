@@ -18,7 +18,6 @@ from kubernetes import client
 from kubeflow.trainer.types import types
 
 
-
 class KubernetesBackendConfig(types.BackendConfig):
     namespace: Optional[str] = None
     config_file: Optional[str] = None

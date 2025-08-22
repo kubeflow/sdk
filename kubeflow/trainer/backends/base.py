@@ -20,7 +20,6 @@ from kubeflow.trainer.types import types
 
 
 class TrainingBackend(abc.ABC):
-
     def list_runtimes(self) -> List[types.Runtime]:
         raise NotImplementedError()
 
@@ -38,9 +37,7 @@ class TrainingBackend(abc.ABC):
     ) -> str:
         raise NotImplementedError()
 
-    def list_jobs(
-        self, runtime: Optional[types.Runtime] = None
-    ) -> List[types.TrainJob]:
+    def list_jobs(self, runtime: Optional[types.Runtime] = None) -> List[types.TrainJob]:
         raise NotImplementedError()
 
     def get_job(self, name: str) -> types.TrainJob:
