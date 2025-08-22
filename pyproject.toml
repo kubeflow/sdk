@@ -5,9 +5,10 @@ requires-python = ">=3.9"
 authors = [
   { name = "The Kubeflow Authors", email = "kubeflow-discuss@googlegroups.com" },
 ]
-license = { file = "../LICENSE" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 description = "Kubeflow Python SDK to manage ML workloads and to interact with Kubeflow APIs."
-readme = "../README.md"
+readme = "README.md"
 keywords = ["kubeflow", "trainer", "model training", "llm", "ai"]
 classifiers = [
   "Intended Audience :: Developers",
@@ -28,7 +29,16 @@ classifiers = [
 dependencies = [
   "kubernetes>=27.2.0",
   "pydantic>=2.10.0",
-  "kubeflow_trainer_api@git+https://github.com/kubeflow/trainer.git@master#subdirectory=api/python_api"
+  "kubeflow-trainer-api>=2.0.0",
+]
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0",
+  "pytest-mock>=3.10",
+  "coverage>=7.0",
+  "kubeflow_trainer_api@git+https://github.com/kubeflow/trainer.git@master#subdirectory=api/python_api",
+  "ruff>=0.12.2",
+  "pre-commit>=4.2.0",
 ]
 
 [project.urls]
@@ -37,7 +47,7 @@ Documentation = "https://www.kubeflow.org/docs/components"
 Source = "https://github.com/kubeflow/sdk"
 
 [tool.hatch.version]
-path = "kubeflow/trainer/__init__.py"
+path = "kubeflow/__init__.py"
 
 [tool.ruff]
 line-length = 100
@@ -45,11 +55,6 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "W"]
 ignore = ["E203"]
-
-[dependency-groups]
-dev = [
-    "ruff>=0.12.2",
-]
 
 [tool.uv]
 package = true
