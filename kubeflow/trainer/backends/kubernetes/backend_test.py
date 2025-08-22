@@ -35,7 +35,7 @@ from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 from kubeflow.trainer.utils import utils
 from kubeflow.trainer.backends.kubernetes.types import KubernetesBackendConfig
-from kubeflow.trainer.backends.kubernetes.k8s import KubernetesBackend
+from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
 
 
 @dataclass
@@ -236,7 +236,7 @@ def get_custom_trainer(
             "torch numpy \n\nread -r -d '' SCRIPT << EOM\n\nfunc=lambda: "
             'print("Hello World"),\n\n<lambda>('
             "{'learning_rate': 0.001, 'batch_size': 32})\n\nEOM\nprintf \"%s\" "
-            '"$SCRIPT" > "k8s_test.py"\ntorchrun "k8s_test.py"',
+            '"$SCRIPT" > "backend_test.py"\ntorchrun "backend_test.py"',
         ],
         numNodes=2,
         env=env,

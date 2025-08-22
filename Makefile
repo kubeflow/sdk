@@ -68,8 +68,8 @@ uv-venv:
 .PHONY: test-python
 test-python: uv-venv
 	@uv pip install -e ".[dev]"
-	@uv run coverage run --source=kubeflow.trainer.backends.kubernetes.k8s,kubeflow.trainer.utils.utils -m pytest ./kubeflow/trainer/backends/kubernetes/k8s_test.py
-	@uv run coverage report -m kubeflow/trainer/backends/kubernetes/k8s.py kubeflow/trainer/utils/utils.py
+	@uv run coverage run --source=kubeflow.trainer.backends.kubernetes.backend,kubeflow.trainer.utils.utils -m pytest ./kubeflow/trainer/backends/kubernetes/backend_test.py
+	@uv run coverage report -m kubeflow/trainer/backends/kubernetes/backend.py kubeflow/trainer/utils/utils.py
 ifeq ($(report),xml)
 	@uv run coverage xml
 else

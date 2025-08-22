@@ -13,11 +13,11 @@
 # limitations under the License.
 
 import logging
-from typing import Dict, Optional, Union, Set, List
+from typing import Dict, List, Optional, Set, Union
 
-from kubeflow.trainer.backends.kubernetes.k8s import KubernetesBackend
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
+from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.trainer.backends.kubernetes.types import KubernetesBackendConfig
 
 

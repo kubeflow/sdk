@@ -19,7 +19,7 @@ from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 
 
-class TrainingBackend(abc.ABC):
+class RunnerBackend(abc.ABC):
     def list_runtimes(self) -> List[types.Runtime]:
         raise NotImplementedError()
 

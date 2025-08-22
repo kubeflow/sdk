@@ -1,4 +1,4 @@
-# Copyright 2024 The Kubeflow Authors.
+# Copyright 2025 The Kubeflow Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,13 +27,13 @@ from kubeflow.trainer.types import types
 from kubeflow.trainer.utils import utils
 from kubeflow_trainer_api import models
 from kubernetes import client, config, watch
-from kubeflow.trainer.backends.base import TrainingBackend
+from kubeflow.trainer.backends.base import RunnerBackend
 from kubeflow.trainer.backends.kubernetes import types as k8s_types
 
 logger = logging.getLogger(__name__)
 
 
-class KubernetesBackend(TrainingBackend):
+class KubernetesBackend(RunnerBackend):
     def __init__(
         self,
         cfg: k8s_types.KubernetesBackendConfig,
@@ -56,17 +56,6 @@ class KubernetesBackend(TrainingBackend):
         self.namespace = cfg.namespace
 
     def list_runtimes(self) -> List[types.Runtime]:
-        """List of the available Runtimes.
-
-        Returns:
-            List[Runtime]: List of available training runtimes.
-                If no runtimes exist, an empty list is returned.
-
-        Raises:
-            TimeoutError: Timeout to list Runtimes.
-            RuntimeError: Failed to list Runtimes.
-        """
-
         result = []
         try:
             thread = self.custom_api.list_cluster_custom_object(
@@ -139,19 +128,6 @@ class KubernetesBackend(TrainingBackend):
         return self.__get_runtime_from_crd(runtime)  # type: ignore
 
     def get_runtime_packages(self, runtime: types.Runtime):
-        """
-        Print the installed Python packages for the given Runtime. If Runtime has GPUs it also
-        prints available GPUs on the single training node.
-
-        Args:
-            runtime: Reference to one of existing Runtimes.
-
-        Raises:
-            ValueError: Input arguments are invalid.
-            RuntimeError: Failed to get Runtime.
-
-        """
-
         if runtime.trainer.trainer_type == types.TrainerType.BUILTIN_TRAINER:
             raise ValueError("Cannot get Runtime packages for BuiltinTrainer")
 
@@ -206,31 +182,6 @@ class KubernetesBackend(TrainingBackend):
         initializer: Optional[types.Initializer] = None,
         trainer: Optional[Union[types.CustomTrainer, types.BuiltinTrainer]] = None,
     ) -> str:
-        """
-        Create the TrainJob. You can configure these types of training task:
-
-        - Custom Training Task: Training with a self-contained function that encapsulates
-            the entire model training process, e.g. `CustomTrainer`.
-        - Config-driven Task with Existing Trainer: Training with a trainer that already includes
-            the post-training logic, requiring only parameter adjustments, e.g. `BuiltinTrainer`.
-
-        Args:
-            runtime: Reference to one of existing Runtimes. By default the
-                torch-distributed Runtime is used.
-            initializer:
-                Configuration for the dataset and model initializers.
-            trainer:
-                Configuration for Custom Training Task or Config-driven Task with Builtin Trainer.
-
-        Returns:
-            str: The unique name of the TrainJob that has been generated.
-
-        Raises:
-            ValueError: Input arguments are invalid.
-            TimeoutError: Timeout to create TrainJobs.
-            RuntimeError: Failed to create TrainJobs.
-        """
-
         if runtime is None:
             runtime = self.get_runtime(constants.TORCH_RUNTIME)
 
@@ -305,17 +256,6 @@ class KubernetesBackend(TrainingBackend):
         return train_job_name
 
     def list_jobs(self, runtime: Optional[types.Runtime] = None) -> List[types.TrainJob]:
-        """List of all TrainJobs.
-
-        Returns:
-            List[TrainerV1alpha1TrainJob]: List of created TrainJobs.
-                If no TrainJob exist, an empty list is returned.
-
-        Raises:
-            TimeoutError: Timeout to list TrainJobs.
-            RuntimeError: Failed to list TrainJobs.
-        """
-
         result = []
         try:
             thread = self.custom_api.list_namespaced_custom_object(
@@ -475,24 +415,6 @@ class KubernetesBackend(TrainingBackend):
         timeout: int = 600,
         polling_interval: int = 2,
     ) -> types.TrainJob:
-        """Wait for TrainJob to reach the desired status
-
-        Args:
-            name: Name of the TrainJob.
-            status: Set of expected statuses. It must be subset of Created, Running, Complete, and
-                Failed statuses.
-            timeout: How many seconds to wait until TrainJob reaches one of the expected conditions.
-            polling_interval: The polling interval in seconds to check TrainJob status.
-
-        Returns:
-            TrainJob: The training job that reaches the desired status.
-
-        Raises:
-            ValueError: The input values are incorrect.
-            RuntimeError: Failed to get TrainJob or TrainJob reaches unexpected Failed status.
-            TimeoutError: Timeout to wait for TrainJob status.
-        """
-
         job_statuses = {
             constants.TRAINJOB_CREATED,
             constants.TRAINJOB_RUNNING,
@@ -528,16 +450,6 @@ class KubernetesBackend(TrainingBackend):
         raise TimeoutError(f"Timeout waiting for TrainJob {name} to reach status: {status} status")
 
     def delete_job(self, name: str):
-        """Delete the TrainJob.
-
-        Args:
-            name: Name of the TrainJob.
-
-        Raises:
-            TimeoutError: Timeout to delete TrainJob.
-            RuntimeError: Failed to delete TrainJob.
-        """
-
         try:
             self.custom_api.delete_namespaced_custom_object(
                 constants.GROUP,
