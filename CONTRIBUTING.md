@@ -8,7 +8,7 @@ Thank you for your interest in contributing to the Kubeflow SDK!
 - Python 3.9–3.11
 - [pip](https://pip.pypa.io/en/stable/)
 - [pre-commit](https://pre-commit.com/)
-- uv
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
 
 ### Setting Up Your Development Environment
 Clone the repository:
