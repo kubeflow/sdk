@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Callable, Dict, Optional
+from pydantic import BaseModel
 
 from kubeflow.trainer.constants import constants
 
@@ -238,3 +239,7 @@ class Initializer:
 
     dataset: Optional[HuggingFaceDatasetInitializer] = None
     model: Optional[HuggingFaceModelInitializer] = None
+
+# Training Backends Types
+class BackendConfig(BaseModel):
+    pass

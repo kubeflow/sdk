@@ -1,0 +1,68 @@
+# Copyright 2025 The Kubeflow Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import abc
+
+from typing import Dict, List, Optional, Set, Union
+from kubeflow.trainer.constants import constants
+from kubeflow.trainer.types import types
+
+
+class TrainingBackend(abc.ABC):
+
+    def list_runtimes(self) -> List[types.Runtime]:
+        raise NotImplementedError()
+
+    def get_runtime(self, name: str) -> types.Runtime:
+        raise NotImplementedError()
+
+    def get_runtime_packages(self, runtime: types.Runtime):
+        raise NotImplementedError()
+
+    def train(
+        self,
+        runtime: Optional[types.Runtime] = None,
+        initializer: Optional[types.Initializer] = None,
+        trainer: Optional[Union[types.CustomTrainer, types.BuiltinTrainer]] = None,
+    ) -> str:
+        raise NotImplementedError()
+
+    def list_jobs(
+        self, runtime: Optional[types.Runtime] = None
+    ) -> List[types.TrainJob]:
+        raise NotImplementedError()
+
+    def get_job(self, name: str) -> types.TrainJob:
+        raise NotImplementedError()
+
+    def get_job_logs(
+        self,
+        name: str,
+        follow: Optional[bool] = False,
+        step: str = constants.NODE,
+        node_rank: int = 0,
+    ) -> Dict[str, str]:
+        raise NotImplementedError()
+
+    def wait_for_job_status(
+        self,
+        name: str,
+        status: Set[str] = {constants.TRAINJOB_COMPLETE},
+        timeout: int = 600,
+        polling_interval: int = 2,
+    ) -> types.TrainJob:
+        raise NotImplementedError()
+
+    def delete_job(self, name: str):
+        raise NotImplementedError()
