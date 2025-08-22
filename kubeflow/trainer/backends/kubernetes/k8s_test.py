@@ -30,11 +30,11 @@ from unittest.mock import Mock, patch
 import pytest
 from kubeflow_trainer_api import models
 
-from kubeflow.trainer import TrainerClient
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 from kubeflow.trainer.utils import utils
 from kubeflow.trainer.backends.kubernetes.types import KubernetesBackendConfig
+from kubeflow.trainer.backends.kubernetes.k8s import KubernetesBackend
 
 
 @dataclass
@@ -102,7 +102,7 @@ def trainer_client(request):
             read_namespaced_pod_log=Mock(side_effect=mock_read_namespaced_pod_log),
         ),
     ):
-        yield TrainerClient(KubernetesBackendConfig())
+        yield KubernetesBackend(KubernetesBackendConfig())
 
 
 # --------------------------
@@ -233,7 +233,7 @@ def get_custom_trainer(
             "torch numpy \n\nread -r -d '' SCRIPT << EOM\n\nfunc=lambda: "
             'print("Hello World"),\n\n<lambda>('
             "{'learning_rate': 0.001, 'batch_size': 32})\n\nEOM\nprintf \"%s\" "
-            '"$SCRIPT" > "trainer_client_test.py"\ntorchrun "trainer_client_test.py"',
+            '"$SCRIPT" > "k8s_test.py"\ntorchrun "k8s_test.py"',
         ],
         numNodes=2,
         env=env,
