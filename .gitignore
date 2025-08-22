@@ -5,12 +5,8 @@ __debug_bin
 .DS_Store
 .swp
 *~
-.venv/
 
 # Python cache files
 __pycache__/
 *.egg-info/
 bin
-.ruff_cache
-.pytest_cache
-

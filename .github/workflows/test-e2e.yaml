@@ -1,0 +1,74 @@
+name: E2E Test
+
+on:
+  pull_request
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-test:
+    name: E2E Test
+    runs-on: oracle-vm-16cpu-64gb-x86-64
+
+    strategy:
+      fail-fast: false
+      matrix:
+        kubernetes-version: ["1.30.0", "1.31.0", "1.32.3", "1.33.1"]
+        trainer-ref: ["master"]
+
+    steps:
+      - name: Checkout Kubeflow SDK repository
+        uses: actions/checkout@v4
+
+      - name: Checkout Kubeflow Trainer repository
+        uses: actions/checkout@v4
+        with:
+          repository: kubeflow/trainer
+          ref: ${{ matrix.trainer-ref }}
+          path: trainer
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: Install Python dependencies
+        run: |
+          echo "Installing Papermill and Jupyter"
+          pip install papermill==2.6.0 jupyter==1.1.1 ipykernel==6.29.5
+
+          echo "Installing Kubeflow SDK locally"
+          pip install .
+        working-directory: . # Ensure pip runs from the SDK repo root
+
+      - name: Setup cluster
+        run: |
+          cd ./trainer
+          make test-e2e-setup-cluster \
+            K8S_VERSION=${{ matrix.kubernetes-version }} \
+        working-directory: . # Execute make from the root of the SDK repo
+
+      - name: Run e2e test for example Notebooks
+        run: |
+          mkdir -p artifacts/notebooks # Create the output directory
+          cd ./trainer
+          # Execute make commands, passing notebook paths and output locations
+          make test-e2e-notebook \
+            NOTEBOOK_INPUT=./examples/pytorch/image-classification/mnist.ipynb \
+            NOTEBOOK_OUTPUT=../artifacts/notebooks/${{ matrix.kubernetes-version }}_mnist.ipynb \
+            PAPERMILL_TIMEOUT=900
+          make test-e2e-notebook \
+            NOTEBOOK_INPUT=./examples/pytorch/question-answering/fine-tune-distilbert.ipynb \
+            NOTEBOOK_OUTPUT=../artifacts/notebooks/${{ matrix.kubernetes-version }}_fine-tune-distilbert.ipynb \
+            PAPERMILL_TIMEOUT=900
+        working-directory: . # Execute make from the root of the SDK repo
+
+      - name: Upload Artifacts to GitHub
+        uses: actions/upload-artifact@v4
+        if: always() # Ensure artifacts are uploaded even if previous steps fail
+        with:
+          name: ${{ matrix.kubernetes-version }}
+          path: ./artifacts/notebooks/* # Path relative to the workspace root
+          retention-days: 1 #

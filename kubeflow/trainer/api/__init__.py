@@ -1,4 +1,4 @@
-# flake8: noqa
+# ruff: noqa
 
 # import apis into api package
 

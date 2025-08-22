@@ -15,19 +15,18 @@
 
 from __future__ import absolute_import
 
-__version__ = "0.1.0"
-
 # Import the Kubeflow Trainer client.
 from kubeflow.trainer.api.trainer_client import TrainerClient  # noqa: F401
+
 # Import the Kubeflow Trainer constants.
 from kubeflow.trainer.constants.constants import DATASET_PATH, MODEL_PATH  # noqa: F401
+
 # Import the Kubeflow Trainer types.
 from kubeflow.trainer.types.types import (
     BuiltinTrainer,
     CustomTrainer,
     DataFormat,
     DataType,
-    Framework,
     HuggingFaceDatasetInitializer,
     HuggingFaceModelInitializer,
     Initializer,
@@ -35,12 +34,25 @@ from kubeflow.trainer.types.types import (
     Runtime,
     TorchTuneConfig,
     TorchTuneInstructDataset,
-    Trainer,
+    RuntimeTrainer,
     TrainerType,
 )
 
 __all__ = [
-    "BuiltinTrainer", "CustomTrainer", "DataFormat", "DataType", "Framework",
-    "HuggingFaceDatasetInitializer", "HuggingFaceModelInitializer", "Initializer",
-    "Loss", "Runtime", "TorchTuneConfig", "TorchTuneInstructDataset", "Trainer", "TrainerType"
+    "BuiltinTrainer",
+    "CustomTrainer",
+    "DataFormat",
+    "DATASET_PATH",
+    "DataType",
+    "HuggingFaceDatasetInitializer",
+    "HuggingFaceModelInitializer",
+    "Initializer",
+    "Loss",
+    "MODEL_PATH",
+    "Runtime",
+    "TorchTuneConfig",
+    "TorchTuneInstructDataset",
+    "RuntimeTrainer",
+    "TrainerClient",
+    "TrainerType",
 ]

@@ -12,13 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import logging
 import multiprocessing
 import queue
 import random
 import string
+import time
 import uuid
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Set
 
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
@@ -105,6 +107,16 @@ class TrainerClient:
                 return result
 
             for runtime in runtime_list.items:
+                if not (
+                    runtime.metadata
+                    and runtime.metadata.labels
+                    and constants.RUNTIME_FRAMEWORK_LABEL in runtime.metadata.labels
+                ):
+                    logger.warning(
+                        f"Runtime {runtime.metadata.name} must have "  # type: ignore
+                        f"{constants.RUNTIME_FRAMEWORK_LABEL} label."
+                    )
+                    continue
                 result.append(self.__get_runtime_from_crd(runtime))
 
         except multiprocessing.TimeoutError:
@@ -149,9 +161,77 @@ class TrainerClient:
 
         return self.__get_runtime_from_crd(runtime)  # type: ignore
 
+    def get_runtime_packages(self, runtime: types.Runtime):
+        """
+        Print the installed Python packages for the given Runtime. If Runtime has GPUs it also
+        prints available GPUs on the single training node.
+
+        Args:
+            runtime: Reference to one of existing Runtimes.
+
+        Raises:
+            ValueError: Input arguments are invalid.
+            RuntimeError: Failed to get Runtime.
+
+        """
+
+        if runtime.trainer.trainer_type == types.TrainerType.BUILTIN_TRAINER:
+            raise ValueError("Cannot get Runtime packages for BuiltinTrainer")
+
+        # Create a deepcopy of the runtime to avoid modifying the original command.
+        runtime_copy = copy.deepcopy(runtime)
+
+        # Run mpirun only within the single process.
+        if runtime_copy.trainer.command[0] == "mpirun":
+            mpi_command = list(constants.MPI_COMMAND)
+            mpi_command[1:3] = ["-np", "1"]
+            runtime_copy.trainer.set_command(tuple(mpi_command))
+
+        def print_packages():
+            import subprocess
+            import shutil
+            import sys
+
+            # Print Python version.
+            print(f"Python: {sys.version}")
+
+            # Print Python packages.
+            if shutil.which("pip"):
+                pip_list = subprocess.run(
+                    ["pip", "list"], capture_output=True, text=True
+                )
+                print(pip_list.stdout)
+            else:
+                print("Unable to get installed packages: pip command not found")
+
+            # Print nvidia-smi if GPUs are available.
+            if shutil.which("nvidia-smi"):
+                print("Available GPUs on the single training node")
+                nvidia_smi = subprocess.run(
+                    ["nvidia-smi"], capture_output=True, text=True
+                )
+                print(nvidia_smi.stdout)
+
+        # Create the TrainJob and wait until it completes.
+        # If Runtime trainer has GPU resources use them, otherwise run TrainJob with 1 CPU.
+        job_name = self.train(
+            runtime=runtime_copy,
+            trainer=types.CustomTrainer(
+                func=print_packages,
+                num_nodes=1,
+                resources_per_node=(
+                    {"cpu": 1} if runtime_copy.trainer.device != "gpu" else None
+                ),
+            ),
+        )
+
+        self.wait_for_job_status(job_name)
+        print(self.get_job_logs(job_name)["node-0"])
+        self.delete_job(job_name)
+
     def train(
         self,
-        runtime: types.Runtime = types.DEFAULT_RUNTIME,
+        runtime: Optional[types.Runtime] = None,
         initializer: Optional[types.Initializer] = None,
         trainer: Optional[Union[types.CustomTrainer, types.BuiltinTrainer]] = None,
     ) -> str:
@@ -164,10 +244,11 @@ class TrainerClient:
             the post-training logic, requiring only parameter adjustments, e.g. `BuiltinTrainer`.
 
         Args:
-            runtime (`types.Runtime`): Reference to one of existing Runtimes.
-            initializer (`Optional[types.Initializer]`):
+            runtime: Reference to one of existing Runtimes. By default the
+                torch-distributed Runtime is used.
+            initializer:
                 Configuration for the dataset and model initializers.
-            trainer (`Optional[types.CustomTrainer, types.BuiltinTrainer]`):
+            trainer:
                 Configuration for Custom Training Task or Config-driven Task with Builtin Trainer.
 
         Returns:
@@ -179,6 +260,9 @@ class TrainerClient:
             RuntimeError: Failed to create TrainJobs.
         """
 
+        if runtime is None:
+            runtime = self.get_runtime(constants.TORCH_RUNTIME)
+
         # Generate unique name for the TrainJob.
         # TODO (andreyvelich): Discuss this TrainJob name generation.
         train_job_name = random.choice(string.ascii_lowercase) + uuid.uuid4().hex[:11]
@@ -189,14 +273,22 @@ class TrainerClient:
         if trainer:
             # If users choose to use a custom training function.
             if isinstance(trainer, types.CustomTrainer):
+                if runtime.trainer.trainer_type != types.TrainerType.CUSTOM_TRAINER:
+                    raise ValueError(
+                        f"CustomTrainer can't be used with {runtime} runtime"
+                    )
                 trainer_crd = utils.get_trainer_crd_from_custom_trainer(
-                    trainer, runtime
+                    runtime, trainer
                 )
 
             # If users choose to use a builtin trainer for post-training.
             elif isinstance(trainer, types.BuiltinTrainer):
+                if runtime.trainer.trainer_type != types.TrainerType.BUILTIN_TRAINER:
+                    raise ValueError(
+                        f"BuiltinTrainer can't be used with {runtime} runtime"
+                    )
                 trainer_crd = utils.get_trainer_crd_from_builtin_trainer(
-                    trainer, initializer
+                    runtime, trainer, initializer
                 )
 
             else:
@@ -433,6 +525,69 @@ class TrainerClient:
 
         return logs_dict
 
+    def wait_for_job_status(
+        self,
+        name: str,
+        status: Set[str] = {constants.TRAINJOB_COMPLETE},
+        timeout: int = 600,
+        polling_interval: int = 2,
+    ) -> types.TrainJob:
+        """Wait for TrainJob to reach the desired status
+
+        Args:
+            name: Name of the TrainJob.
+            status: Set of expected statuses. It must be subset of Created, Running, Complete, and
+                Failed statuses.
+            timeout: How many seconds to wait until TrainJob reaches one of the expected conditions.
+            polling_interval: The polling interval in seconds to check TrainJob status.
+
+        Returns:
+            TrainJob: The training job that reaches the desired status.
+
+        Raises:
+            ValueError: The input values are incorrect.
+            RuntimeError: Failed to get TrainJob or TrainJob reaches unexpected Failed status.
+            TimeoutError: Timeout to wait for TrainJob status.
+        """
+
+        job_statuses = {
+            constants.TRAINJOB_CREATED,
+            constants.TRAINJOB_RUNNING,
+            constants.TRAINJOB_COMPLETE,
+            constants.TRAINJOB_FAILED,
+        }
+        if not status.issubset(job_statuses):
+            raise ValueError(
+                f"Expected status {status} must be a subset of {job_statuses}"
+            )
+
+        if polling_interval > timeout:
+            raise ValueError(
+                f"Polling interval {polling_interval} must be less than timeout: {timeout}"
+            )
+
+        for _ in range(round(timeout / polling_interval)):
+            # Check the status after event is generated for the TrainJob's Pods.
+            trainjob = self.get_job(name)
+            logger.debug(f"TrainJob {name}, status {trainjob.status}")
+
+            # Raise an error if TrainJob is Failed and it is not the expected status.
+            if (
+                constants.TRAINJOB_FAILED not in status
+                and trainjob.status == constants.TRAINJOB_FAILED
+            ):
+                raise RuntimeError(f"TrainJob {name} is Failed")
+
+            # Return the TrainJob if it reaches the expected status.
+            if trainjob.status in status:
+                return trainjob
+
+            time.sleep(polling_interval)
+
+        raise TimeoutError(
+            f"Timeout waiting for TrainJob {name} to reach status: {status} status"
+        )
+
     def delete_job(self, name: str):
         """Delete the TrainJob.
 
@@ -480,12 +635,21 @@ class TrainerClient:
         ):
             raise Exception(f"ClusterTrainingRuntime CRD is invalid: {runtime_crd}")
 
+        if not (
+            runtime_crd.metadata.labels
+            and constants.RUNTIME_FRAMEWORK_LABEL in runtime_crd.metadata.labels
+        ):
+            raise Exception(
+                f"Runtime {runtime_crd.metadata.name} must have "
+                f"{constants.RUNTIME_FRAMEWORK_LABEL} label"
+            )
+
         return types.Runtime(
             name=runtime_crd.metadata.name,
             trainer=utils.get_runtime_trainer(
+                runtime_crd.metadata.labels[constants.RUNTIME_FRAMEWORK_LABEL],
                 runtime_crd.spec.template.spec.replicated_jobs,
                 runtime_crd.spec.ml_policy,
-                runtime_crd.metadata,
             ),
         )
 
@@ -506,43 +670,28 @@ class TrainerClient:
         name = trainjob_crd.metadata.name
         namespace = trainjob_crd.metadata.namespace
 
+        runtime = self.get_runtime(trainjob_crd.spec.runtime_ref.name)
+
         # Construct the TrainJob from the CRD.
         trainjob = types.TrainJob(
             name=name,
             creation_timestamp=trainjob_crd.metadata.creation_timestamp,
-            runtime=self.get_runtime(trainjob_crd.spec.runtime_ref.name),
+            runtime=runtime,
             steps=[],
-        )
-
-        # Add the TrainJob status.
-        # TODO (andreyvelich): Discuss how we should show TrainJob status to SDK users.
-        # The TrainJob exists at that stage so its status can safely default to Created
-        trainjob.status = constants.TRAINJOB_CREATED
-        # Then it can be read from the TrainJob conditions if any
-        if trainjob_crd.status and trainjob_crd.status.conditions:
-            for c in trainjob_crd.status.conditions:
-                if c.type == "Complete" and c.status == "True":
-                    trainjob.status = "Succeeded"
-                elif c.type == "Failed" and c.status == "True":
-                    trainjob.status = "Failed"
-
-        # Select Pods created by the appropriate JobSet. It checks the following ReplicatedJob.name:
-        # dataset-initializer, model-initializer, launcher, node.
-        label_selector = "{}={},{} in ({}, {}, {}, {})".format(
-            constants.JOBSET_NAME_LABEL,
-            name,
-            constants.JOBSET_RJOB_NAME_LABEL,
-            constants.DATASET_INITIALIZER,
-            constants.MODEL_INITIALIZER,
-            constants.LAUNCHER,
-            constants.NODE,
+            # Number of nodes is taken from TrainJob or TrainingRuntime
+            num_nodes=(
+                trainjob_crd.spec.trainer.num_nodes
+                if trainjob_crd.spec.trainer and trainjob_crd.spec.trainer.num_nodes
+                else runtime.trainer.num_nodes
+            ),
+            status=constants.TRAINJOB_CREATED,  # The default TrainJob status.
         )
 
         # Add the TrainJob components, e.g. trainer nodes and initializer.
         try:
             response = self.core_api.list_namespaced_pod(
                 namespace,
-                label_selector=label_selector,
+                label_selector=constants.POD_LABEL_SELECTOR.format(trainjob_name=name),
                 async_req=True,
             ).get(constants.DEFAULT_TIMEOUT)
 
@@ -567,26 +716,28 @@ class TrainerClient:
                     constants.DATASET_INITIALIZER,
                     constants.MODEL_INITIALIZER,
                 }:
-                    step = utils.get_trainjob_initializer_step(
-                        pod.metadata.name,
-                        pod.spec,
-                        pod.status,
+                    trainjob.steps.append(
+                        utils.get_trainjob_initializer_step(
+                            pod.metadata.name,
+                            pod.spec,
+                            pod.status,
+                        )
                     )
                 # Get the Node step.
                 elif pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL] in {
                     constants.LAUNCHER,
                     constants.NODE,
                 }:
-                    step = utils.get_trainjob_node_step(
-                        pod.metadata.name,
-                        pod.spec,
-                        pod.status,
-                        trainjob.runtime,
-                        pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL],
-                        int(pod.metadata.labels[constants.JOB_INDEX_LABEL]),
+                    trainjob.steps.append(
+                        utils.get_trainjob_node_step(
+                            pod.metadata.name,
+                            pod.spec,
+                            pod.status,
+                            trainjob.runtime,
+                            pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL],
+                            int(pod.metadata.labels[constants.JOB_INDEX_LABEL]),
+                        )
                     )
-
-                trainjob.steps.append(step)
         except multiprocessing.TimeoutError:
             raise TimeoutError(
                 f"Timeout to list {constants.TRAINJOB_KIND}'s steps: {namespace}/{name}"
@@ -595,5 +746,28 @@ class TrainerClient:
             raise RuntimeError(
                 f"Failed to list {constants.TRAINJOB_KIND}'s steps: {namespace}/{name}"
             )
+
+        # Update the TrainJob status from its conditions.
+        if trainjob_crd.status and trainjob_crd.status.conditions:
+            for c in trainjob_crd.status.conditions:
+                if c.type == constants.TRAINJOB_COMPLETE and c.status == "True":
+                    trainjob.status = c.type
+                elif c.type == constants.TRAINJOB_FAILED and c.status == "True":
+                    trainjob.status = c.type
+        else:
+            # The TrainJob running status is defined when all training node (e.g. Pods) are
+            # running or succeeded.
+            num_running_nodes = sum(
+                1
+                for step in trainjob.steps
+                if step.name.startswith(constants.NODE)
+                and (
+                    step.status == constants.TRAINJOB_RUNNING
+                    or step.status == constants.POD_SUCCEEDED
+                )
+            )
+
+            if trainjob.num_nodes == num_running_nodes:
+                trainjob.status = constants.TRAINJOB_RUNNING
 
         return trainjob

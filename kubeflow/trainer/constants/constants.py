@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import textwrap
 
 # How long to wait in seconds for requests to the Kubernetes API Server.
 DEFAULT_TIMEOUT = 120
@@ -37,12 +38,28 @@ TRAINJOB_KIND = "TrainJob"
 # The plural for the TrainJob.
 TRAINJOB_PLURAL = "trainjobs"
 
-# The default status for the TrainJob.
+# The default status for the TrainJob once users create it.
 TRAINJOB_CREATED = "Created"
+
+# The running status of the TrainJob, defined when all training node (e.g. Pods) are
+# running or succeeded.
+TRAINJOB_RUNNING = "Running"
+
+# The complete status of the TrainJob, defined when TrainJob CR has complete condition.
+TRAINJOB_COMPLETE = "Complete"
+
+# The failed status of the TrainJob, defined when TrainJob CR has failed condition.
+TRAINJOB_FAILED = "Failed"
+
+# The succeeded phase of the Pod.
+POD_SUCCEEDED = "Succeeded"
 
 # The label key to identify the relationship between TrainJob and Pod template in the runtime.
 # For example, what PodTemplate must be overridden by TrainJob's .spec.trainer APIs.
 TRAINJOB_ANCESTOR_LABEL = "trainer.kubeflow.org/trainjob-ancestor-step"
+
+# The label key to identify ML framework that runtime uses (e.g. torch, deepspeed, torchtune, etc.)
+RUNTIME_FRAMEWORK_LABEL = "trainer.kubeflow.org/framework"
 
 # The name of the ReplicatedJob and container of the dataset initializer.
 # Also, it represents the `trainjob-ancestor-step` label value for the dataset initializer step.
@@ -72,10 +89,6 @@ LAUNCHER = "launcher"
 # single VM where distributed training code is executed.
 NODE = "node"
 
-# The label key to identify the accelerator type for model training (e.g. GPU-Tesla-V100-16GB).
-# TODO: Potentially, we should take this from the Node selectors.
-ACCELERATOR_LABEL = "trainer.kubeflow.org/accelerator"
-
 # Unknown indicates that the value can't be identified.
 UNKNOWN = "Unknown"
 
@@ -101,30 +114,63 @@ JOB_INDEX_LABEL = "batch.kubernetes.io/job-completion-index"
 # but one or more of the containers has not been made ready to run.
 POD_PENDING = "Pending"
 
+# The label selector for Pods created by the TrainJob.
+# It checks the following rJob.name: dataset-initializer, model-initializer, launcher, node.
+POD_LABEL_SELECTOR = ("{}={{trainjob_name}},{} in ({}, {}, {}, {})").format(
+    JOBSET_NAME_LABEL,
+    JOBSET_RJOB_NAME_LABEL,
+    DATASET_INITIALIZER,
+    MODEL_INITIALIZER,
+    LAUNCHER,
+    NODE,
+)
+
 # The default PIP index URL to download Python packages.
 DEFAULT_PIP_INDEX_URL = os.getenv("DEFAULT_PIP_INDEX_URL", "https://pypi.org/simple")
 
-# The default command for the Custom Trainer.
-DEFAULT_CUSTOM_COMMAND = ["bash", "-c"]
+# The exec script to embed training function into container command.
+# __ENTRYPOINT__ depends on the MLPolicy, func_code and func_file is substituted in the `train` API.
+EXEC_FUNC_SCRIPT = textwrap.dedent(
+    """
+        read -r -d '' SCRIPT << EOM\n
+        {func_code}
+        EOM
+        printf "%s" \"$SCRIPT\" > \"{func_file}\"
+        __ENTRYPOINT__ \"{func_file}\""""
+)
 
-# The default command for the TorchTune Trainer.
-DEFAULT_TORCHTUNE_COMMAND = ["tune", "run"]
-
-# The default entrypoint for torchrun.
-TORCH_ENTRYPOINT = "torchrun"
-
-# The Torch env name for the number of procs per node (e.g. number of GPUs per Pod).
-TORCH_ENV_NUM_PROC_PER_NODE = "PET_NPROC_PER_NODE"
+# The default command for the PlainML CustomTrainer.
+DEFAULT_COMMAND = (
+    "bash",
+    "-c",
+    EXEC_FUNC_SCRIPT.replace("__ENTRYPOINT__", "python"),
+)
 
 # The default home directory for the MPI user.
 DEFAULT_MPI_USER_HOME = os.getenv("DEFAULT_MPI_USER_HOME", "/home/mpiuser")
 
-# The default location for MPI hostfile.
-# TODO (andreyvelich): We should get this info from Runtime CRD.
-MPI_HOSTFILE = "/etc/mpi/hostfile"
+# The default command for the OpenMPI CustomTrainer.
+MPI_COMMAND = (
+    "mpirun",
+    "--hostfile",
+    "/etc/mpi/hostfile",
+    *DEFAULT_COMMAND,
+)
 
-# The default entrypoint for mpirun.
-MPI_ENTRYPOINT = "mpirun"
+# The default name for the Torch runtime.
+TORCH_RUNTIME = "torch-distributed"
+
+# The default container command for the Torch CustomTrainer
+TORCH_COMMAND = (
+    "bash",
+    "-c",
+    EXEC_FUNC_SCRIPT.replace("__ENTRYPOINT__", "torchrun"),
+)
+# The Torch env name for the number of procs per node (e.g. number of GPUs per Pod).
+TORCH_ENV_NUM_PROC_PER_NODE = "PET_NPROC_PER_NODE"
+
+# The default command for the TorchTune BuiltinTrainer.
+TORCH_TUNE_COMMAND = ("tune", "run")
 
 # The Instruct Datasets class in torchtune
-TORCHTUNE_INSTRUCT_DATASET = "torchtune.datasets.instruct_dataset"
+TORCH_TUNE_INSTRUCT_DATASET = "torchtune.datasets.instruct_dataset"

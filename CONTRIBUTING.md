@@ -5,10 +5,9 @@ Thank you for your interest in contributing to the Kubeflow SDK!
 ## Getting Started
 
 ### Prerequisites
-- Python 3.9–3.11
+- Python 3.8–3.11
 - [pip](https://pip.pypa.io/en/stable/)
 - [pre-commit](https://pre-commit.com/)
-- uv
 
 ### Setting Up Your Development Environment
 Clone the repository:
@@ -17,19 +16,21 @@ git clone https://github.com/kubeflow/sdk.git
 cd sdk
 ```
 
-Install uv if not installed [Official Docs](https://docs.astral.sh/uv/getting-started/installation/) or using the following command
+Create a virtual environment and activate it:
 ```sh
-make uv
+python3 -m venv .venv
+source .venv/bin/activate
 ```
-### Install SDK & Dependencies
-Use uv to create a virtualenv if not created and install dependencies
+
+Install dependencies in editable mode:
 ```sh
-uv sync
+cd python
+pip install -e .
 ```
 
 Install development tools:
 ```sh
-uv sync --dev
+pip install pytest black isort flake8 coverage pre-commit
 ```
 
 ## Development Workflow
@@ -59,20 +60,20 @@ coverage report -m
 
 ### Code Formatting
 To check formatting:
-```shell
-make verify 
+```sh
+black --check .
 ```
-
-#### Using Ruff
-
-```shell
-uvx ruff check --show-fixes
+To auto-format all files:
+```sh
+black .
 ```
-
-To auto-format, lint all files:
-
-```shell
-uvx ruff check --fix
+To sort imports:
+```sh
+isort .
+```
+To lint:
+```sh
+flake8 --exclude .venv
 ```
 
 ## Continuous Integration
