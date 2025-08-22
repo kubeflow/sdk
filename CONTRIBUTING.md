@@ -4,13 +4,13 @@ Thank you for your interest in contributing to the Kubeflow SDK!
 
 ## Getting Started
 
-### Prerequisites
+## Prerequisites
 - Python 3.9–3.11
 - [pip](https://pip.pypa.io/en/stable/)
 - [pre-commit](https://pre-commit.com/)
 - uv
 
-### Setting Up Your Development Environment
+## Development
 Clone the repository:
 ```sh
 git clone https://github.com/kubeflow/sdk.git
@@ -30,7 +30,7 @@ uv sync
 #### Development Build (Optional)
 To install development tools and the latest API modules directly from the master branch:
 ```sh
-uv sync --dev
+uv pip install -e ".[dev]"
 
 ```
 
@@ -39,14 +39,14 @@ uv sync --dev
 ### Pre-commit
 We use pre-commit to ensure consistent code formatting. To enable pre-commit hooks, run:
 ```sh
-pre-commit install
+uv run pre-commit install
 ```
 To run all hooks manually:
 ```sh
-pre-commit run --all-files
+uv run pre-commit run --all-files
 ```
 
-### Testing
+## Testing
 To run the unit tests (if present), execute:
 ```sh
 pytest
@@ -59,22 +59,26 @@ coverage run -m pytest
 coverage report -m
 ```
 
-### Code Formatting
+## Coding Style
 To check formatting:
 ```shell
 make verify 
 ```
 
-#### Using Ruff
+### Using Ruff
 
 ```shell
-uv run ruff check --show-fixes
+uv run ruff check --fix
 ```
 
 To auto-format, lint all files:
 
 ```shell
-uv run ruff check --fix
+uv run ruff format .
+```
+
+```shell
+uv run pre
 ```
 
 ## Continuous Integration
