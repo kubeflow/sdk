@@ -23,3 +23,6 @@ class KubernetesBackendConfig(types.BackendConfig):
     config_file: Optional[str] = None
     context: Optional[str] = None
     client_configuration: Optional[client.Configuration] = None
+
+    class Config:
+        arbitrary_types_allowed = True
