@@ -27,13 +27,13 @@ from kubeflow.trainer.types import types
 from kubeflow.trainer.utils import utils
 from kubeflow_trainer_api import models
 from kubernetes import client, config, watch
-from kubeflow.trainer.backends.base import RunnerBackend
+from kubeflow.trainer.backends.base import ExecutionBackend
 from kubeflow.trainer.backends.kubernetes import types as k8s_types
 
 logger = logging.getLogger(__name__)
 
 
-class KubernetesBackend(RunnerBackend):
+class KubernetesBackend(ExecutionBackend):
     def __init__(
         self,
         cfg: k8s_types.KubernetesBackendConfig,

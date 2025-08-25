@@ -64,11 +64,26 @@ class TrainerClient:
         """
         return self.__backend.get_runtime(name=name)
 
+    def get_runtime_packages(self, runtime: types.Runtime):
+        """
+        Print the installed Python packages for the given Runtime. If Runtime has GPUs it also
+        prints available GPUs on the single training node.
+
+        Args:
+            runtime: Reference to one of existing Runtimes.
+
+        Raises:
+            ValueError: Input arguments are invalid.
+            RuntimeError: Failed to get Runtime.
+
+        """
+        return self.__backend.get_runtime_packages(runtime=runtime)
+
     def list_jobs(self, runtime: Optional[types.Runtime] = None) -> List[types.TrainJob]:
         """List of all TrainJobs.
 
         Returns:
-            List[TrainJob]: List of created TrainJobs.
+            List: List of created TrainJobs.
                 If no TrainJob exist, an empty list is returned.
 
         Raises:
@@ -116,10 +131,10 @@ class TrainerClient:
         - Config-driven Task with Existing Trainer: Training with a trainer that already includes
             the post-training logic, requiring only parameter adjustments, e.g. `BuiltinTrainer`.
         Args:
-            runtime (`types.Runtime`): Reference to one of existing Runtimes.
-            initializer (`Optional[types.Initializer]`):
+            runtime: Reference to one of existing Runtimes.
+            initializer:
                 Configuration for the dataset and model initializers.
-            trainer (`Optional[types.CustomTrainer, types.BuiltinTrainer]`):
+            trainer:
                 Configuration for Custom Training Task or Config-driven Task with Builtin Trainer.
         Returns:
             str: The unique name of the TrainJob that has been generated.
@@ -160,18 +175,3 @@ class TrainerClient:
             timeout=timeout,
             polling_interval=polling_interval,
         )
-
-    def get_runtime_packages(self, runtime: types.Runtime):
-        """
-        Print the installed Python packages for the given Runtime. If Runtime has GPUs it also
-        prints available GPUs on the single training node.
-
-        Args:
-            runtime: Reference to one of existing Runtimes.
-
-        Raises:
-            ValueError: Input arguments are invalid.
-            RuntimeError: Failed to get Runtime.
-
-        """
-        return self.__backend.get_runtime_packages(runtime=runtime)
