@@ -123,18 +123,6 @@ class TrainerClient:
         """Get the TrainJob object"""
         return self.__backend.get_job(name=name)
 
-    def delete_job(self, name: str):
-        """Delete the TrainJob.
-
-        Args:
-            name: Name of the TrainJob.
-
-        Raises:
-            TimeoutError: Timeout to delete TrainJob.
-            RuntimeError: Failed to delete TrainJob.
-        """
-        return self.__backend.delete_job(name=name)
-
     def get_job_logs(
         self,
         name: str,
@@ -175,3 +163,15 @@ class TrainerClient:
             timeout=timeout,
             polling_interval=polling_interval,
         )
+
+    def delete_job(self, name: str):
+        """Delete the TrainJob.
+
+        Args:
+            name: Name of the TrainJob.
+
+        Raises:
+            TimeoutError: Timeout to delete TrainJob.
+            RuntimeError: Failed to delete TrainJob.
+        """
+        return self.__backend.delete_job(name=name)
