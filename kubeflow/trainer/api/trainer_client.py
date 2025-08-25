@@ -79,6 +79,33 @@ class TrainerClient:
         """
         return self.__backend.get_runtime_packages(runtime=runtime)
 
+    def train(
+        self,
+        runtime: types.Runtime = None,
+        initializer: Optional[types.Initializer] = None,
+        trainer: Optional[Union[types.CustomTrainer, types.BuiltinTrainer]] = None,
+    ) -> str:
+        """
+        Create the TrainJob. You can configure these types of training task:
+        - Custom Training Task: Training with a self-contained function that encapsulates
+            the entire model training process, e.g. `CustomTrainer`.
+        - Config-driven Task with Existing Trainer: Training with a trainer that already includes
+            the post-training logic, requiring only parameter adjustments, e.g. `BuiltinTrainer`.
+        Args:
+            runtime: Reference to one of existing Runtimes.
+            initializer:
+                Configuration for the dataset and model initializers.
+            trainer:
+                Configuration for Custom Training Task or Config-driven Task with Builtin Trainer.
+        Returns:
+            str: The unique name of the TrainJob that has been generated.
+        Raises:
+            ValueError: Input arguments are invalid.
+            TimeoutError: Timeout to create TrainJobs.
+            RuntimeError: Failed to create TrainJobs.
+        """
+        return self.__backend.train(runtime=runtime, initializer=initializer, trainer=trainer)
+
     def list_jobs(self, runtime: Optional[types.Runtime] = None) -> List[types.TrainJob]:
         """List of all TrainJobs.
 
@@ -117,33 +144,6 @@ class TrainerClient:
     ) -> Dict[str, str]:
         """Get the logs from TrainJob"""
         return self.__backend.get_job_logs(name=name, follow=follow, step=step, node_rank=node_rank)
-
-    def train(
-        self,
-        runtime: types.Runtime = None,
-        initializer: Optional[types.Initializer] = None,
-        trainer: Optional[Union[types.CustomTrainer, types.BuiltinTrainer]] = None,
-    ) -> str:
-        """
-        Create the TrainJob. You can configure these types of training task:
-        - Custom Training Task: Training with a self-contained function that encapsulates
-            the entire model training process, e.g. `CustomTrainer`.
-        - Config-driven Task with Existing Trainer: Training with a trainer that already includes
-            the post-training logic, requiring only parameter adjustments, e.g. `BuiltinTrainer`.
-        Args:
-            runtime: Reference to one of existing Runtimes.
-            initializer:
-                Configuration for the dataset and model initializers.
-            trainer:
-                Configuration for Custom Training Task or Config-driven Task with Builtin Trainer.
-        Returns:
-            str: The unique name of the TrainJob that has been generated.
-        Raises:
-            ValueError: Input arguments are invalid.
-            TimeoutError: Timeout to create TrainJobs.
-            RuntimeError: Failed to create TrainJobs.
-        """
-        return self.__backend.train(runtime=runtime, initializer=initializer, trainer=trainer)
 
     def wait_for_job_status(
         self,
