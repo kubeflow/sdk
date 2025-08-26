@@ -30,7 +30,7 @@ uv sync
 #### Development Build (Optional)
 To install development tools and the latest API modules directly from the master branch:
 ```sh
-uv pip install -e ".[dev]"
+uv sync
 
 ```
 
