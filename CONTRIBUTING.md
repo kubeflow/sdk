@@ -77,10 +77,6 @@ To auto-format, lint all files:
 uv run ruff format .
 ```
 
-```shell
-uv run pre
-```
-
 ## Continuous Integration
 All PRs are automatically checked by CI. Please ensure all checks pass before requesting review.
 
