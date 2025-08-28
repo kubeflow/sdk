@@ -32,7 +32,7 @@ class CustomTrainer:
         func_args (`Optional[Dict]`): The arguments to pass to the function.
         packages_to_install (`Optional[List[str]]`):
             A list of Python packages to install before running the function.
-        pip_index_url (`Optional[str]`): The PyPI URL from which to install Python packages.
+        pip_index_urls (`Optional[list[str]]`): The PyPI URLs from which to install Python packages.
         num_nodes (`Optional[int]`): The number of nodes to use for training.
         resources_per_node (`Optional[Dict]`): The computing resources to allocate per node.
         env (`Optional[Dict[str, str]]`): The environment variables to set in the training nodes.
@@ -41,7 +41,7 @@ class CustomTrainer:
     func: Callable
     func_args: Optional[Dict] = None
     packages_to_install: Optional[list[str]] = None
-    pip_index_url: str = constants.DEFAULT_PIP_INDEX_URL
+    pip_index_urls: list[str] = field(default_factory=lambda: constants.DEFAULT_PIP_INDEX_URLS)
     num_nodes: Optional[int] = None
     resources_per_node: Optional[Dict] = None
     env: Optional[Dict[str, str]] = None

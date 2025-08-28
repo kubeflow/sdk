@@ -723,7 +723,7 @@ def test_get_runtime_packages(trainer_client, test_case):
                     func=lambda: print("Hello World"),
                     func_args={"learning_rate": 0.001, "batch_size": 32},
                     packages_to_install=["torch", "numpy"],
-                    pip_index_url=constants.DEFAULT_PIP_INDEX_URL,
+                    pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
                     num_nodes=2,
                 )
             },
@@ -741,7 +741,7 @@ def test_get_runtime_packages(trainer_client, test_case):
                     func=lambda: print("Hello World"),
                     func_args={"learning_rate": 0.001, "batch_size": 32},
                     packages_to_install=["torch", "numpy"],
-                    pip_index_url=constants.DEFAULT_PIP_INDEX_URL,
+                    pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
                     num_nodes=2,
                     env={
                         "TEST_ENV": "test_value",

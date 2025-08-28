@@ -126,7 +126,15 @@ POD_LABEL_SELECTOR = ("{}={{trainjob_name}},{} in ({}, {}, {}, {})").format(
 )
 
 # The default PIP index URL to download Python packages.
-DEFAULT_PIP_INDEX_URL = os.getenv("DEFAULT_PIP_INDEX_URL", "https://pypi.org/simple")
+DEFAULT_PYPI_URL = "https://pypi.org/simple"
+# Handle environment variable for multiple URLs (comma-separated)
+DEFAULT_PIP_INDEX_URLS = (
+    os.getenv("DEFAULT_PIP_INDEX_URLS", DEFAULT_PYPI_URL).split(",") 
+    if os.getenv("DEFAULT_PIP_INDEX_URLS") 
+    else [DEFAULT_PYPI_URL]
+)
+# Keep backward compatibility
+DEFAULT_PIP_INDEX_URL = DEFAULT_PYPI_URL
 
 # The exec script to embed training function into container command.
 # __ENTRYPOINT__ depends on the MLPolicy, func_code and func_file is substituted in the `train` API.
