@@ -267,14 +267,13 @@ def get_script_for_python_packages(
     if include_pypi and constants.DEFAULT_PYPI_URL not in pip_index_urls:
         pip_index_urls.append(constants.DEFAULT_PYPI_URL)
 
+    # first url will be the index-url.
     options = [f"--index-url {pip_index_urls[0]}"]
     options.extend(f"--extra-index-url {extra_index_url}" for extra_index_url in pip_index_urls[1:])
     # For the OpenMPI, the packages must be installed for the mpiuser.
     if is_mpi:
         options.append("--user")
     
-    options_str = " ".join(options)
-
     script_for_python_packages = textwrap.dedent(
         """
         if ! [ -x "$(command -v pip)" ]; then
@@ -284,7 +283,7 @@ def get_script_for_python_packages(
         PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet \
         --no-warn-script-location {} {}
         """.format(
-            options_str,
+            " ".join(options),
             packages_str,
         )
     )
