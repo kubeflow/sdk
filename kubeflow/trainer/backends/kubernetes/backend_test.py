@@ -31,11 +31,11 @@ from unittest.mock import Mock, patch
 import pytest
 from kubeflow_trainer_api import models
 
+from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
+from kubeflow.trainer.backends.kubernetes.types import KubernetesBackendConfig
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 from kubeflow.trainer.utils import utils
-from kubeflow.trainer.backends.kubernetes.types import KubernetesBackendConfig
-from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
 
 
 @dataclass
@@ -84,13 +84,21 @@ def trainer_client(request):
         patch(
             "kubernetes.client.CustomObjectsApi",
             return_value=Mock(
-                create_namespaced_custom_object=Mock(side_effect=conditional_error_handler),
-                patch_namespaced_custom_object=Mock(side_effect=conditional_error_handler),
-                delete_namespaced_custom_object=Mock(side_effect=conditional_error_handler),
+                create_namespaced_custom_object=Mock(
+                    side_effect=conditional_error_handler
+                ),
+                patch_namespaced_custom_object=Mock(
+                    side_effect=conditional_error_handler
+                ),
+                delete_namespaced_custom_object=Mock(
+                    side_effect=conditional_error_handler
+                ),
                 get_namespaced_custom_object=Mock(
                     side_effect=get_namespaced_custom_object_response
                 ),
-                get_cluster_custom_object=Mock(side_effect=get_cluster_custom_object_response),
+                get_cluster_custom_object=Mock(
+                    side_effect=get_cluster_custom_object_response
+                ),
                 list_namespaced_custom_object=Mock(
                     side_effect=list_namespaced_custom_object_response
                 ),
@@ -299,7 +307,9 @@ def get_namespaced_custom_object_response(*args, **kwargs):
     if args[2] == RUNTIME or args[4] == RUNTIME:
         raise RuntimeError()
     if args[3] == TRAIN_JOBS:  # TODO: review this.
-        mock_thread.get.return_value = add_status(create_train_job(train_job_name=args[4]))
+        mock_thread.get.return_value = add_status(
+            create_train_job(train_job_name=args[4])
+        )
 
     return mock_thread
 
@@ -469,7 +479,9 @@ def create_cluster_training_runtime(
                     name=name,
                     namespace=namespace,
                 ),
-                spec=models.JobsetV1alpha2JobSetSpec(replicatedJobs=[get_replicated_job()]),
+                spec=models.JobsetV1alpha2JobSetSpec(
+                    replicatedJobs=[get_replicated_job()]
+                ),
             ),
         ),
     )
@@ -637,7 +649,9 @@ def test_list_runtimes(trainer_client, test_case):
         assert test_case.expected_status == SUCCESS
         assert isinstance(runtimes, list)
         assert all(isinstance(r, types.Runtime) for r in runtimes)
-        assert [asdict(r) for r in runtimes] == [asdict(r) for r in test_case.expected_output]
+        assert [asdict(r) for r in runtimes] == [
+            asdict(r) for r in test_case.expected_output
+        ]
 
     except Exception as e:
         assert type(e) is test_case.expected_error
@@ -754,8 +768,12 @@ def test_get_runtime_packages(trainer_client, test_case):
                 train_job_name=TRAIN_JOB_WITH_CUSTOM_TRAINER,
                 train_job_trainer=get_custom_trainer(
                     env=[
-                        models.IoK8sApiCoreV1EnvVar(name="TEST_ENV", value="test_value"),
-                        models.IoK8sApiCoreV1EnvVar(name="ANOTHER_ENV", value="another_value"),
+                        models.IoK8sApiCoreV1EnvVar(
+                            name="TEST_ENV", value="test_value"
+                        ),
+                        models.IoK8sApiCoreV1EnvVar(
+                            name="ANOTHER_ENV", value="another_value"
+                        ),
                     ],
                 ),
             ),
@@ -795,7 +813,9 @@ def test_train(trainer_client, test_case):
     print("Executing test:", test_case.name)
     try:
         trainer_client.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
-        runtime = trainer_client.get_runtime(test_case.config.get("runtime", TORCH_RUNTIME))
+        runtime = trainer_client.get_runtime(
+            test_case.config.get("runtime", TORCH_RUNTIME)
+        )
 
         train_job_name = trainer_client.train(
             runtime=runtime, trainer=test_case.config.get("trainer", None)
@@ -903,7 +923,9 @@ def test_list_jobs(trainer_client, test_case):
         assert test_case.expected_status == SUCCESS
         assert isinstance(jobs, list)
         assert len(jobs) == 2
-        assert [asdict(j) for j in jobs] == [asdict(r) for r in test_case.expected_output]
+        assert [asdict(j) for j in jobs] == [
+            asdict(r) for r in test_case.expected_output
+        ]
 
     except Exception as e:
         assert type(e) is test_case.expected_error
@@ -1028,7 +1050,9 @@ def test_wait_for_job_status(trainer_client, test_case):
         assert test_case.expected_status == SUCCESS
         assert isinstance(job, types.TrainJob)
         # Job status should be in the expected set.
-        assert job.status in test_case.config.get("status", {constants.TRAINJOB_COMPLETE})
+        assert job.status in test_case.config.get(
+            "status", {constants.TRAINJOB_COMPLETE}
+        )
 
     except Exception as e:
         assert type(e) is test_case.expected_error

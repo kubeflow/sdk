@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from typing import Optional
+
 from kubernetes import client
 from pydantic import BaseModel
 

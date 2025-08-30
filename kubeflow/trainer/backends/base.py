@@ -13,8 +13,8 @@
 # limitations under the License.
 
 import abc
-
 from typing import Dict, List, Optional, Set, Union
+
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 
@@ -37,7 +37,9 @@ class ExecutionBackend(abc.ABC):
     ) -> str:
         raise NotImplementedError()
 
-    def list_jobs(self, runtime: Optional[types.Runtime] = None) -> List[types.TrainJob]:
+    def list_jobs(
+        self, runtime: Optional[types.Runtime] = None
+    ) -> List[types.TrainJob]:
         raise NotImplementedError()
 
     def get_job(self, name: str) -> types.TrainJob:

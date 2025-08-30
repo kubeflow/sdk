@@ -15,11 +15,10 @@
 import logging
 from typing import Dict, List, Optional, Set, Union
 
-from kubeflow.trainer.constants import constants
-from kubeflow.trainer.types import types
 from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.trainer.backends.kubernetes.types import KubernetesBackendConfig
-
+from kubeflow.trainer.constants import constants
+from kubeflow.trainer.types import types
 
 logger = logging.getLogger(__name__)
 
@@ -104,9 +103,13 @@ class TrainerClient:
             TimeoutError: Timeout to create TrainJobs.
             RuntimeError: Failed to create TrainJobs.
         """
-        return self.__backend.train(runtime=runtime, initializer=initializer, trainer=trainer)
+        return self.__backend.train(
+            runtime=runtime, initializer=initializer, trainer=trainer
+        )
 
-    def list_jobs(self, runtime: Optional[types.Runtime] = None) -> List[types.TrainJob]:
+    def list_jobs(
+        self, runtime: Optional[types.Runtime] = None
+    ) -> List[types.TrainJob]:
         """List of all TrainJobs.
 
         Returns:
@@ -131,7 +134,9 @@ class TrainerClient:
         node_rank: int = 0,
     ) -> Dict[str, str]:
         """Get the logs from TrainJob"""
-        return self.__backend.get_job_logs(name=name, follow=follow, step=step, node_rank=node_rank)
+        return self.__backend.get_job_logs(
+            name=name, follow=follow, step=step, node_rank=node_rank
+        )
 
     def wait_for_job_status(
         self,
