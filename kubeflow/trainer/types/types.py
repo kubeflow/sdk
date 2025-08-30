@@ -205,7 +205,7 @@ class TrainJob:
     runtime: Runtime
     steps: list[Step]
     num_nodes: int
-    status: Optional[str] = constants.UNKNOWN
+    status: str = constants.UNKNOWN
 
 
 # Configuration for the HuggingFace dataset initializer.

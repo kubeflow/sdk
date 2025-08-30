@@ -14,13 +14,13 @@
 
 import abc
 
-from typing import Dict, List, Optional, Set, Union
+from typing import Optional, Union
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 
 
 class ExecutionBackend(abc.ABC):
-    def list_runtimes(self) -> List[types.Runtime]:
+    def list_runtimes(self) -> list[types.Runtime]:
         raise NotImplementedError()
 
     def get_runtime(self, name: str) -> types.Runtime:
@@ -37,7 +37,7 @@ class ExecutionBackend(abc.ABC):
     ) -> str:
         raise NotImplementedError()
 
-    def list_jobs(self, runtime: Optional[types.Runtime] = None) -> List[types.TrainJob]:
+    def list_jobs(self, runtime: Optional[types.Runtime] = None) -> list[types.TrainJob]:
         raise NotImplementedError()
 
     def get_job(self, name: str) -> types.TrainJob:
@@ -49,13 +49,13 @@ class ExecutionBackend(abc.ABC):
         follow: Optional[bool] = False,
         step: str = constants.NODE,
         node_rank: int = 0,
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         raise NotImplementedError()
 
     def wait_for_job_status(
         self,
         name: str,
-        status: Set[str] = {constants.TRAINJOB_COMPLETE},
+        status: set[str] = {constants.TRAINJOB_COMPLETE},
         timeout: int = 600,
         polling_interval: int = 2,
     ) -> types.TrainJob:

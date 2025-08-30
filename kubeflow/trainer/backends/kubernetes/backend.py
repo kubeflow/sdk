@@ -20,7 +20,7 @@ import random
 import string
 import time
 import uuid
-from typing import Dict, List, Optional, Union, Set
+from typing import Optional, Union
 
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
@@ -55,7 +55,7 @@ class KubernetesBackend(ExecutionBackend):
 
         self.namespace = cfg.namespace
 
-    def list_runtimes(self) -> List[types.Runtime]:
+    def list_runtimes(self) -> list[types.Runtime]:
         result = []
         try:
             thread = self.custom_api.list_cluster_custom_object(
@@ -85,16 +85,16 @@ class KubernetesBackend(ExecutionBackend):
                     continue
                 result.append(self.__get_runtime_from_crd(runtime))
 
-        except multiprocessing.TimeoutError:
+        except multiprocessing.TimeoutError as e:
             raise TimeoutError(
                 f"Timeout to list {constants.CLUSTER_TRAINING_RUNTIME_KIND}s "
                 f"in namespace: {self.namespace}"
-            )
-        except Exception:
+            ) from e
+        except Exception as e:
             raise RuntimeError(
                 f"Failed to list {constants.CLUSTER_TRAINING_RUNTIME_KIND}s "
                 f"in namespace: {self.namespace}"
-            )
+            ) from e
 
         return result
 
@@ -114,16 +114,16 @@ class KubernetesBackend(ExecutionBackend):
                 thread.get(constants.DEFAULT_TIMEOUT)  # type: ignore
             )
 
-        except multiprocessing.TimeoutError:
+        except multiprocessing.TimeoutError as e:
             raise TimeoutError(
                 f"Timeout to get {constants.CLUSTER_TRAINING_RUNTIME_PLURAL}: "
                 f"{self.namespace}/{name}"
-            )
-        except Exception:
+            ) from e
+        except Exception as e:
             raise RuntimeError(
                 f"Failed to get {constants.CLUSTER_TRAINING_RUNTIME_PLURAL}: "
                 f"{self.namespace}/{name}"
-            )
+            ) from e
 
         return self.__get_runtime_from_crd(runtime)  # type: ignore
 
@@ -240,14 +240,14 @@ class KubernetesBackend(ExecutionBackend):
                 constants.TRAINJOB_PLURAL,
                 train_job.to_dict(),
             )
-        except multiprocessing.TimeoutError:
+        except multiprocessing.TimeoutError as e:
             raise TimeoutError(
                 f"Timeout to create {constants.TRAINJOB_KIND}: {self.namespace}/{train_job_name}"
-            )
-        except Exception:
+            ) from e
+        except Exception as e:
             raise RuntimeError(
                 f"Failed to create {constants.TRAINJOB_KIND}: {self.namespace}/{train_job_name}"
-            )
+            ) from e
 
         logger.debug(
             f"{constants.TRAINJOB_KIND} {self.namespace}/{train_job_name} has been created"
@@ -255,7 +255,7 @@ class KubernetesBackend(ExecutionBackend):
 
         return train_job_name
 
-    def list_jobs(self, runtime: Optional[types.Runtime] = None) -> List[types.TrainJob]:
+    def list_jobs(self, runtime: Optional[types.Runtime] = None) -> list[types.TrainJob]:
         result = []
         try:
             thread = self.custom_api.list_namespaced_custom_object(
@@ -285,14 +285,14 @@ class KubernetesBackend(ExecutionBackend):
 
                 result.append(self.__get_trainjob_from_crd(trainjob))
 
-        except multiprocessing.TimeoutError:
+        except multiprocessing.TimeoutError as e:
             raise TimeoutError(
                 f"Timeout to list {constants.TRAINJOB_KIND}s in namespace: {self.namespace}"
-            )
-        except Exception:
+            ) from e
+        except Exception as e:
             raise RuntimeError(
                 f"Failed to list {constants.TRAINJOB_KIND}s in namespace: {self.namespace}"
-            )
+            ) from e
 
         return result
 
@@ -313,10 +313,14 @@ class KubernetesBackend(ExecutionBackend):
                 thread.get(constants.DEFAULT_TIMEOUT)  # type: ignore
             )
 
-        except multiprocessing.TimeoutError:
-            raise TimeoutError(f"Timeout to get {constants.TRAINJOB_KIND}: {self.namespace}/{name}")
-        except Exception:
-            raise RuntimeError(f"Failed to get {constants.TRAINJOB_KIND}: {self.namespace}/{name}")
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(
+                f"Timeout to get {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
+            ) from e
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to get {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
+            ) from e
 
         return self.__get_trainjob_from_crd(trainjob)  # type: ignore
 
@@ -326,7 +330,7 @@ class KubernetesBackend(ExecutionBackend):
         follow: Optional[bool] = False,
         step: str = constants.NODE,
         node_rank: int = 0,
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """Get the logs from TrainJob"""
 
         # Get the TrainJob Pod name.
@@ -403,15 +407,17 @@ class KubernetesBackend(ExecutionBackend):
                     container=constants.NODE,
                 )
 
-        except Exception:
-            raise RuntimeError(f"Failed to read logs for the pod {self.namespace}/{pod_name}")
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to read logs for the pod {self.namespace}/{pod_name}"
+            ) from e
 
         return logs_dict
 
     def wait_for_job_status(
         self,
         name: str,
-        status: Set[str] = {constants.TRAINJOB_COMPLETE},
+        status: set[str] = {constants.TRAINJOB_COMPLETE},
         timeout: int = 600,
         polling_interval: int = 2,
     ) -> types.TrainJob:
@@ -458,14 +464,14 @@ class KubernetesBackend(ExecutionBackend):
                 constants.TRAINJOB_PLURAL,
                 name=name,
             )
-        except multiprocessing.TimeoutError:
+        except multiprocessing.TimeoutError as e:
             raise TimeoutError(
                 f"Timeout to delete {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
-            )
-        except Exception:
+            ) from e
+        except Exception as e:
             raise RuntimeError(
                 f"Failed to delete {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
-            )
+            ) from e
 
         logger.debug(f"{constants.TRAINJOB_KIND} {self.namespace}/{name} has been deleted")
 
@@ -580,14 +586,14 @@ class KubernetesBackend(ExecutionBackend):
                             int(pod.metadata.labels[constants.JOB_INDEX_LABEL]),
                         )
                     )
-        except multiprocessing.TimeoutError:
+        except multiprocessing.TimeoutError as e:
             raise TimeoutError(
                 f"Timeout to list {constants.TRAINJOB_KIND}'s steps: {namespace}/{name}"
-            )
-        except Exception:
+            ) from e
+        except Exception as e:
             raise RuntimeError(
                 f"Failed to list {constants.TRAINJOB_KIND}'s steps: {namespace}/{name}"
-            )
+            ) from e
 
         # Update the TrainJob status from its conditions.
         if trainjob_crd.status and trainjob_crd.status.conditions:
