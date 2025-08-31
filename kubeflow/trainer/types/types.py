@@ -43,7 +43,9 @@ class CustomTrainer:
     func: Callable
     func_args: Optional[dict] = None
     packages_to_install: Optional[list[str]] = None
-    pip_index_urls: list[str] = field(default_factory=lambda: constants.DEFAULT_PIP_INDEX_URLS)
+    pip_index_urls: list[str] = field(
+        default_factory=lambda: list(constants.DEFAULT_PIP_INDEX_URLS)
+    )
     num_nodes: Optional[int] = None
     resources_per_node: Optional[dict] = None
     env: Optional[dict[str, str]] = None
