@@ -166,7 +166,7 @@ class TrainerClient:
 
         Args:
             name: Name of the TrainJob.
-            status: Expected statues. Must be a subset of Created, Running, Complete, and
+            status: Expected statuses. Must be a subset of Created, Running, Complete, and
                 Failed statuses.
             timeout: Maximum number of seconds to wait for the TrainJob to reach one of the
                 expected statuses.
