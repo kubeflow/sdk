@@ -32,7 +32,7 @@ class CustomTrainer:
         func_args (`Optional[Dict]`): The arguments to pass to the function.
         packages_to_install (`Optional[List[str]]`):
             A list of Python packages to install before running the function.
-        pip_index_urls (`Optional[list[str]]`): The PyPI URLs from which to install
+        pip_index_urls (`list[str]`): The PyPI URLs from which to install
             Python packages. The first URL will be the index-url, and remaining ones
             are extra-index-urls.
         num_nodes (`Optional[int]`): The number of nodes to use for training.
