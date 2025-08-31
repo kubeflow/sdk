@@ -255,14 +255,20 @@ def get_resources_per_node(
 
 def get_script_for_python_packages(
     packages_to_install: list[str],
-    pip_index_url: str,
-    is_mpi: bool,
+    pip_index_urls: list[str] = constants.DEFAULT_PIP_INDEX_URLS,
+    is_mpi: bool = False,
 ) -> str:
     """
-    Get init script to install Python packages from the given pip index URL.
+    Get init script to install Python packages from the given pip index URLs.
     """
-    # packages_str = " ".join([str(package) for package in packages_to_install])
     packages_str = " ".join(packages_to_install)
+
+    # first url will be the index-url.
+    options = [f"--index-url {pip_index_urls[0]}"]
+    options.extend(f"--extra-index-url {extra_index_url}" for extra_index_url in pip_index_urls[1:])
+    # For the OpenMPI, the packages must be installed for the mpiuser.
+    if is_mpi:
+        options.append("--user")
 
     script_for_python_packages = textwrap.dedent(
         """
@@ -271,12 +277,10 @@ def get_script_for_python_packages(
         fi
 
         PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet \
-        --no-warn-script-location --index-url {} {} {}
+        --no-warn-script-location {} {}
         """.format(
-            pip_index_url,
+            " ".join(options),
             packages_str,
-            # For the OpenMPI, the packages must be installed for the mpiuser.
-            "--user" if is_mpi else "",
         )
     )
 
@@ -286,8 +290,8 @@ def get_script_for_python_packages(
 def get_command_using_train_func(
     runtime: types.Runtime,
     train_func: Callable,
-    train_func_parameters: Optional[dict[str, Any]],
-    pip_index_url: str,
+    train_func_parameters: Optional[Dict[str, Any]],
+    pip_index_urls: list[str] = constants.DEFAULT_PIP_INDEX_URLS,
     packages_to_install: Optional[list[str]] = None,
 ) -> list[str]:
     """
@@ -333,7 +337,7 @@ def get_command_using_train_func(
     if packages_to_install:
         install_packages = get_script_for_python_packages(
             packages_to_install,
-            pip_index_url,
+            pip_index_urls,
             is_mpi,
         )
 
@@ -374,7 +378,7 @@ def get_trainer_crd_from_custom_trainer(
         runtime,
         trainer.func,
         trainer.func_args,
-        trainer.pip_index_url,
+        trainer.pip_index_urls,
         trainer.packages_to_install,
     )
 
