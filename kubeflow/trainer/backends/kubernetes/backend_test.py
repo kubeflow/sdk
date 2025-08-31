@@ -25,7 +25,7 @@ import random
 import string
 import uuid
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, Optional, Type
+from typing import Any, Optional, Type
 from unittest.mock import Mock, patch
 
 import pytest
@@ -42,7 +42,7 @@ from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
 class TestCase:
     name: str
     expected_status: str
-    config: Dict[str, Any] = field(default_factory=dict)
+    config: dict[str, Any] = field(default_factory=dict)
     expected_output: Optional[Any] = None
     expected_error: Optional[Type[Exception]] = None
     __test__ = False

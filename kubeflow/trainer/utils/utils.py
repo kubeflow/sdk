@@ -17,7 +17,7 @@ import os
 import queue
 import textwrap
 import threading
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 
 from kubeflow.trainer.constants import constants
@@ -37,7 +37,7 @@ def get_default_target_namespace(context: Optional[str] = None) -> str:
             # If context is set, we should get namespace from it.
             if context:
                 for c in all_contexts:
-                    if isinstance(c, Dict) and c.get("name") == context:
+                    if isinstance(c, dict) and c.get("name") == context:
                         return c["context"]["namespace"]
             # Otherwise, try to get namespace from the current context.
             return current_context["context"]["namespace"]
@@ -286,7 +286,7 @@ def get_script_for_python_packages(
 def get_command_using_train_func(
     runtime: types.Runtime,
     train_func: Callable,
-    train_func_parameters: Optional[Dict[str, Any]],
+    train_func_parameters: Optional[dict[str, Any]],
     pip_index_url: str,
     packages_to_install: Optional[list[str]] = None,
 ) -> list[str]:

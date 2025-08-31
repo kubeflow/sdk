@@ -16,7 +16,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Callable, Dict, Optional
+from typing import Callable, Optional
 
 from kubeflow.trainer.constants import constants
 
@@ -39,12 +39,12 @@ class CustomTrainer:
     """
 
     func: Callable
-    func_args: Optional[Dict] = None
+    func_args: Optional[dict] = None
     packages_to_install: Optional[list[str]] = None
     pip_index_url: str = constants.DEFAULT_PIP_INDEX_URL
     num_nodes: Optional[int] = None
-    resources_per_node: Optional[Dict] = None
-    env: Optional[Dict[str, str]] = None
+    resources_per_node: Optional[dict] = None
+    env: Optional[dict[str, str]] = None
 
 
 # TODO(Electronic-Waste): Add more loss functions.
@@ -103,7 +103,7 @@ class TorchTuneInstructDataset:
     split: Optional[str] = None
     train_on_input: Optional[bool] = None
     new_system_prompt: Optional[str] = None
-    column_map: Optional[Dict[str, str]] = None
+    column_map: Optional[dict[str, str]] = None
 
 
 # Configuration for the TorchTune LLM Trainer.
@@ -134,7 +134,7 @@ class TorchTuneConfig:
     loss: Optional[Loss] = None
     num_nodes: Optional[int] = None
     dataset_preprocess_config: Optional[TorchTuneInstructDataset] = None
-    resources_per_node: Optional[Dict] = None
+    resources_per_node: Optional[dict] = None
 
 
 # Configuration for the Builtin Trainer.
