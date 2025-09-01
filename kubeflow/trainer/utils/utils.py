@@ -17,7 +17,7 @@ import os
 import queue
 import textwrap
 import threading
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, Optional
 from urllib.parse import urlparse
 
 from kubeflow.trainer.constants import constants
