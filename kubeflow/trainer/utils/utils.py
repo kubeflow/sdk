@@ -17,7 +17,7 @@ import os
 import queue
 import textwrap
 import threading
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 
 from kubeflow.trainer.constants import constants
@@ -255,8 +255,8 @@ def get_resources_per_node(
 
 def get_script_for_python_packages(
     packages_to_install: list[str],
-    pip_index_urls: list[str] = constants.DEFAULT_PIP_INDEX_URLS,
-    is_mpi: bool = False,
+    pip_index_urls: list[str],
+    is_mpi: bool,
 ) -> str:
     """
     Get init script to install Python packages from the given pip index URLs.
@@ -290,9 +290,9 @@ def get_script_for_python_packages(
 def get_command_using_train_func(
     runtime: types.Runtime,
     train_func: Callable,
-    train_func_parameters: Optional[Dict[str, Any]],
-    pip_index_urls: list[str] = constants.DEFAULT_PIP_INDEX_URLS,
-    packages_to_install: Optional[list[str]] = None,
+    train_func_parameters: Optional[dict[str, Any]],
+    pip_index_urls: list[str],
+    packages_to_install: Optional[list[str]],
 ) -> list[str]:
     """
     Get the Trainer container command from the given training function and parameters.

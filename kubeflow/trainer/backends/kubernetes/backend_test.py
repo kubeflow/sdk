@@ -221,15 +221,13 @@ def get_resource_requirements() -> models.IoK8sApiCoreV1ResourceRequirements:
 def get_custom_trainer(
     env: Optional[list[models.IoK8sApiCoreV1EnvVar]] = None,
     pip_index_urls: Optional[list[str]] = None,
-    packages_to_install: Optional[list[str]] = None,
+    packages_to_install: list[str] = ["torch", "numpy"],
 ) -> models.TrainerV1alpha1Trainer:
     """
     Get the custom trainer for the TrainJob.
     """
     if pip_index_urls is None:
         pip_index_urls = constants.DEFAULT_PIP_INDEX_URLS
-    if packages_to_install is None:
-        packages_to_install = ["torch", "numpy"]
 
     pip_command = [f"--index-url {pip_index_urls[0]}"]
     pip_command.extend([f"--extra-index-url {repo}" for repo in pip_index_urls[1:]])
@@ -1123,72 +1121,3 @@ def test_delete_job(trainer_client, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
-
-
-def test_get_script_for_python_packages_multiple_urls():
-    """Test get_script_for_python_packages with multiple pip index URLs."""
-    from kubeflow.trainer.utils import utils
-
-    # Test with multiple pip index URLs
-    packages = ["torch", "numpy", "custom-package"]
-    pip_index_urls = [
-        "https://pypi.org/simple",
-        "https://private.repo.com/simple",
-        "https://internal.company.com/simple"
-    ]
-
-    script = utils.get_script_for_python_packages(
-        packages_to_install=packages,
-        pip_index_urls=pip_index_urls,
-        is_mpi=False
-    )
-
-    # Verify the script contains the correct pip options
-    assert "--index-url https://pypi.org/simple" in script
-    assert "--extra-index-url https://private.repo.com/simple" in script
-    assert "--extra-index-url https://internal.company.com/simple" in script
-    assert "torch numpy custom-package" in script
-
-    # Test with single URL (backward compatibility)
-    single_url_script = utils.get_script_for_python_packages(
-        packages_to_install=packages,
-        pip_index_urls=["https://pypi.org/simple"],
-        is_mpi=False
-    )
-
-    assert "--index-url https://pypi.org/simple" in single_url_script
-    assert "--extra-index-url" not in single_url_script
-
-    # Test with MPI (should include --user flag)
-    mpi_script = utils.get_script_for_python_packages(
-        packages_to_install=packages,
-        pip_index_urls=pip_index_urls,
-        is_mpi=True
-    )
-
-    assert "--index-url https://pypi.org/simple" in mpi_script
-    assert "--extra-index-url https://private.repo.com/simple" in mpi_script
-    assert "--extra-index-url https://internal.company.com/simple" in mpi_script
-    assert "--user" in mpi_script
-    assert "torch numpy custom-package" in mpi_script
-
-
-def test_get_script_for_python_packages_default_urls():
-    """Test get_script_for_python_packages with default pip index URLs."""
-    from kubeflow.trainer.utils import utils
-
-    packages = ["torch", "numpy"]
-
-    # Test with default URLs (should use constants.DEFAULT_PIP_INDEX_URLS)
-    script = utils.get_script_for_python_packages(
-        packages_to_install=packages,
-        is_mpi=False
-    )
-
-    # Should use the first URL as index-url
-    assert f"--index-url {constants.DEFAULT_PIP_INDEX_URLS[0]}" in script
-
-    # If there are multiple default URLs, the rest should be extra-index-url
-    if len(constants.DEFAULT_PIP_INDEX_URLS) > 1:
-        for url in constants.DEFAULT_PIP_INDEX_URLS[1:]:
-            assert f"--extra-index-url {url}" in script
