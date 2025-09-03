@@ -352,10 +352,8 @@ class KubernetesBackend(ExecutionBackend):
                     follow=True,
                 )
 
-                # Stream logs incrementally
+                # Stream logs incrementally.
                 for logline in log_stream:
-                    if logline is None:
-                        return
                     yield logline  # type:ignore
             else:
                 logs = self.core_api.read_namespaced_pod_log(
