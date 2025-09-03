@@ -163,7 +163,7 @@ class TrainerClient:
         Args:
             name: Name of the TrainJob.
             step: Step of the TrainJob to collect logs from, like dataset-initializer or node-0.
-            follow: Whether to stream logs in realtime as they produced.
+            follow: Whether to stream logs in realtime as they are produced.
 
         Returns:
             Iterator of log lines.
