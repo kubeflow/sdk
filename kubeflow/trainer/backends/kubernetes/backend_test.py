@@ -917,14 +917,12 @@ def test_list_jobs(trainer_client, test_case):
             name="valid flow with all defaults",
             expected_status=SUCCESS,
             config={"name": BASIC_TRAIN_JOB_NAME},
-            expected_output={
-                "node-0": "test log content",
-            },
+            expected_output=["test log content"],
         ),
         TestCase(
             name="runtime error when getting logs",
             expected_status=FAILED,
-            config={"name": RUNTIME},
+            config={"name": BASIC_TRAIN_JOB_NAME, "namespace": FAIL_LOGS},
             expected_error=RuntimeError,
         ),
     ],
@@ -933,10 +931,12 @@ def test_get_job_logs(trainer_client, test_case):
     """Test TrainerClient.get_job_logs with basic success path."""
     print("Executing test:", test_case.name)
     try:
+        trainer_client.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
         logs = trainer_client.get_job_logs(test_case.config.get("name"))
+        # Convert iterator to list for comparison.
+        logs_list = list(logs)
         assert test_case.expected_status == SUCCESS
-        assert logs == test_case.expected_output
-
+        assert logs_list == test_case.expected_output
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")

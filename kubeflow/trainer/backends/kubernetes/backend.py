@@ -331,7 +331,6 @@ class KubernetesBackend(ExecutionBackend):
         step: str = constants.NODE + "-0",
     ) -> Iterator[str]:
         """Get the TrainJob logs"""
-
         # Get the TrainJob Pod name.
         pod_name = None
         for c in self.get_job(name).steps:
