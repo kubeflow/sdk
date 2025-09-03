@@ -15,12 +15,12 @@
 import copy
 import logging
 import multiprocessing
-import queue
 import random
 import string
 import time
 import uuid
-from typing import Optional, Union
+from typing import Optional, Union, Iterator
+import re
 
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
@@ -173,7 +173,7 @@ class KubernetesBackend(ExecutionBackend):
         )
 
         self.wait_for_job_status(job_name)
-        print(self.get_job_logs(job_name)["node-0"])
+        print(self.get_job_logs(job_name))
         self.delete_job(job_name)
 
     def train(
@@ -328,91 +328,48 @@ class KubernetesBackend(ExecutionBackend):
         self,
         name: str,
         follow: Optional[bool] = False,
-        step: str = constants.NODE,
-        node_rank: int = 0,
-    ) -> dict[str, str]:
-        """Get the logs from TrainJob"""
+        step: str = constants.NODE + "-0",
+    ) -> Iterator[str]:
+        """Get the TrainJob logs"""
 
         # Get the TrainJob Pod name.
         pod_name = None
         for c in self.get_job(name).steps:
-            if c.status != constants.POD_PENDING:
-                if c.name == step or c.name == f"{step}-{node_rank}":
-                    pod_name = c.pod_name
+            if c.status != constants.POD_PENDING and c.name == step:
+                pod_name = c.pod_name
+                break
         if pod_name is None:
-            return {}
+            return iter([])
 
-        # Dict where key is the Pod type and value is the Pod logs.
-        logs_dict = {}
-
-        # TODO (andreyvelich): Potentially, refactor this.
-        # Support logging of multiple Pods.
-        # TODO (andreyvelich): Currently, follow is supported only for node container.
-        if follow and step == constants.NODE:
-            log_streams = []
-            log_streams.append(
-                watch.Watch().stream(
+        try:
+            if follow:
+                log_stream = watch.Watch().stream(
                     self.core_api.read_namespaced_pod_log,
                     name=pod_name,
                     namespace=self.namespace,
-                    container=constants.NODE,
+                    container=re.sub(r"-\d+$", "", step),  # Remove the number for the node step.
+                    follow=True,
                 )
-            )
-            finished = [False] * len(log_streams)
 
-            # Create thread and queue per stream, for non-blocking iteration.
-            log_queue_pool = utils.get_log_queue_pool(log_streams)
-
-            # Iterate over every watching pods' log queue
-            while True:
-                for index, log_queue in enumerate(log_queue_pool):
-                    if all(finished):
+                # Stream logs incrementally
+                for logline in log_stream:
+                    if logline is None:
                         break
-                    if finished[index]:
-                        continue
-                    # grouping the every 50 log lines of the same pod.
-                    for _ in range(50):
-                        try:
-                            logline = log_queue.get(timeout=1)
-                            if logline is None:
-                                finished[index] = True
-                                break
-                            # Print logs to the StdOut and update results dict.
-                            print(f"[{step}-{node_rank}]: {logline}")
-                            logs_dict[f"{step}-{node_rank}"] = (
-                                logs_dict.get(f"{step}-{node_rank}", "") + logline + "\n"
-                            )
-                        except queue.Empty:
-                            break
-                if all(finished):
-                    return logs_dict
-
-        try:
-            if step == constants.DATASET_INITIALIZER:
-                logs_dict[constants.DATASET_INITIALIZER] = self.core_api.read_namespaced_pod_log(
-                    name=pod_name,
-                    namespace=self.namespace,
-                    container=constants.DATASET_INITIALIZER,
-                )
-            elif step == constants.MODEL_INITIALIZER:
-                logs_dict[constants.MODEL_INITIALIZER] = self.core_api.read_namespaced_pod_log(
-                    name=pod_name,
-                    namespace=self.namespace,
-                    container=constants.MODEL_INITIALIZER,
-                )
+                    yield logline
             else:
-                logs_dict[f"{step}-{node_rank}"] = self.core_api.read_namespaced_pod_log(
+                logs = self.core_api.read_namespaced_pod_log(
                     name=pod_name,
                     namespace=self.namespace,
-                    container=constants.NODE,
+                    container=re.sub(r"-\d+$", "", step),  # Remove the number for the node step.
                 )
+
+                for line in logs.splitlines():
+                    yield line
 
         except Exception as e:
             raise RuntimeError(
                 f"Failed to read logs for the pod {self.namespace}/{pod_name}"
             ) from e
-
-        return logs_dict
 
     def wait_for_job_status(
         self,

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Optional, Union
+from typing import Optional, Union, Iterator
 
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
@@ -120,8 +120,7 @@ class TrainerClient:
             runtime: Reference to one of the existing runtimes.
 
         Returns:
-            List: List of created TrainJobs.
-                If no TrainJob exist, an empty list is returned.
+            List of created TrainJobs. If no TrainJob exist, an empty list is returned.
 
         Raises:
             TimeoutError: Timeout to list TrainJobs.
@@ -148,12 +147,33 @@ class TrainerClient:
     def get_job_logs(
         self,
         name: str,
+        step: str = constants.NODE + "-0",
         follow: Optional[bool] = False,
-        step: str = constants.NODE,
-        node_rank: int = 0,
-    ) -> dict[str, str]:
-        """Get the logs from TrainJob"""
-        return self.backend.get_job_logs(name=name, follow=follow, step=step, node_rank=node_rank)
+    ) -> Iterator[str]:
+        """Get logs from a specific step of a TrainJob.
+
+        You can watch for the logs in realtime as follows:
+        ```python
+        from kubeflow.trainer import TrainerClient
+
+        for logline in TrainerClient().get_job_logs(name="s8d44aa4fb6d", follow=True):
+            print(logline)
+        ```
+
+        Args:
+            name: Name of the TrainJob.
+            step: Step of the TrainJob to collect logs from, like dataset-initializer or node-0.
+            follow: Whether to stream logs in realtime as they produced.
+
+        Returns:
+            Iterator of log lines.
+
+
+        Raises:
+            TimeoutError: Timeout to get a TrainJob.
+            RuntimeError: Failed to get a TrainJob.
+        """
+        return self.backend.get_job_logs(name=name, follow=follow, step=step)
 
     def wait_for_job_status(
         self,

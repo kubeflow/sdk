@@ -14,7 +14,7 @@
 
 import abc
 
-from typing import Optional, Union
+from typing import Optional, Union, Iterator
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 
@@ -47,9 +47,8 @@ class ExecutionBackend(abc.ABC):
         self,
         name: str,
         follow: Optional[bool] = False,
-        step: str = constants.NODE,
-        node_rank: int = 0,
-    ) -> dict[str, str]:
+        step: str = constants.NODE + "-0",
+    ) -> Iterator[str]:
         raise NotImplementedError()
 
     def wait_for_job_status(
