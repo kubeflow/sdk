@@ -173,7 +173,7 @@ class KubernetesBackend(ExecutionBackend):
         )
 
         self.wait_for_job_status(job_name)
-        print(self.get_job_logs(job_name))
+        print("\n".join(self.get_job_logs(name=job_name)))
         self.delete_job(job_name)
 
     def train(
@@ -338,28 +338,30 @@ class KubernetesBackend(ExecutionBackend):
                 pod_name = c.pod_name
                 break
         if pod_name is None:
-            return iter([])
+            return
 
+        # Remove the number for the node step.
+        container_name = re.sub(r"-\d+$", "", step)
         try:
             if follow:
                 log_stream = watch.Watch().stream(
                     self.core_api.read_namespaced_pod_log,
                     name=pod_name,
                     namespace=self.namespace,
-                    container=re.sub(r"-\d+$", "", step),  # Remove the number for the node step.
+                    container=container_name,
                     follow=True,
                 )
 
                 # Stream logs incrementally
                 for logline in log_stream:
                     if logline is None:
-                        break
+                        return
                     yield logline  # type:ignore
             else:
                 logs = self.core_api.read_namespaced_pod_log(
                     name=pod_name,
                     namespace=self.namespace,
-                    container=re.sub(r"-\d+$", "", step),  # Remove the number for the node step.
+                    container=container_name,
                 )
 
                 for line in logs.splitlines():

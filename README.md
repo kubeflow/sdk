@@ -5,6 +5,7 @@
 [![Join Slack](https://img.shields.io/badge/Join_Slack-blue?logo=slack)](https://www.kubeflow.org/docs/about/community/#kubeflow-slack-channels)
 [![Coverage Status](https://coveralls.io/repos/github/kubeflow/sdk/badge.svg?branch=main)](https://coveralls.io/github/kubeflow/sdk?branch=main)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/kubeflow/sdk)
+
 <!-- TODO(kramaranya): update when release [![Python Supported Versions](https://img.shields.io/pypi/pyversions/kubeflow.svg?color=%2334D058)](https://pypi.org/project/kubeflow/) -->
 
 ## Overview
@@ -36,6 +37,7 @@ ML applications rather than managing complex infrastrutcure.
 ```bash
 pip install git+https://github.com/kubeflow/sdk.git@main
 ```
+
 <!-- TODO(kramaranya): update before release pip install -U kubeflow -->
 
 ### Run your first PyTorch distributed job
@@ -49,7 +51,7 @@ def get_torch_dist():
     import torch.distributed as dist
 
     dist.init_process_group(backend="gloo")
-    print(f"PyTorch Distributed Environment")
+    print("PyTorch Distributed Environment")
     print(f"WORLD_SIZE: {dist.get_world_size()}")
     print(f"RANK: {dist.get_rank()}")
     print(f"LOCAL_RANK: {os.environ['LOCAL_RANK']}")
@@ -70,17 +72,17 @@ job_id = TrainerClient().train(
 TrainerClient().wait_for_job_status(job_id)
 
 # Print TrainJob logs
-print(TrainerClient().get_job_logs(name=job_id, node_rank=0)["node-0"])
+print("\n".join(TrainerClient().get_job_logs(name=job_id)))
 ```
 
 ## Supported Kubeflow Projects
 
-| Project                     | Status | Description                                                |
-|-----------------------------|--------|------------------------------------------------------------|
+| Project                     | Status           | Description                                                |
+| --------------------------- | ---------------- | ---------------------------------------------------------- |
 | **Kubeflow Trainer**        | ✅ **Available** | Train and fine-tune AI models with various frameworks      |
-| **Kubeflow Katib**          | 🚧 Planned | Hyperparameter optimization                                |
-| **Kubeflow Pipelines**      | 🚧 Planned | Build, run, and track AI workflows                         |
-| **Kubeflow Model Registry** | 🚧 Planned | Manage model artifacts, versions and ML artifacts metadata |
+| **Kubeflow Katib**          | 🚧 Planned       | Hyperparameter optimization                                |
+| **Kubeflow Pipelines**      | 🚧 Planned       | Build, run, and track AI workflows                         |
+| **Kubeflow Model Registry** | 🚧 Planned       | Manage model artifacts, versions and ML artifacts metadata |
 
 ## Community
 
@@ -98,6 +100,7 @@ Kubeflow SDK is a community project and is still under active development. We we
 ## Documentation
 
 <!-- TODO(kramaranya): add kubeflow sdk docs -->
+
 - **[Design Document](https://docs.google.com/document/d/1rX7ELAHRb_lvh0Y7BK1HBYAbA0zi9enB0F_358ZC58w/edit)**: Kubeflow SDK design proposal
 - **[Component Guides](https://www.kubeflow.org/docs/components/)**: Individual component documentation
 - **[DeepWiki](https://deepwiki.com/kubeflow/sdk)**: AI-powered repository documentation
