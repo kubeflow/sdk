@@ -354,7 +354,7 @@ class KubernetesBackend(ExecutionBackend):
                 for logline in log_stream:
                     if logline is None:
                         break
-                    yield logline
+                    yield logline  # type:ignore
             else:
                 logs = self.core_api.read_namespaced_pod_log(
                     name=pod_name,

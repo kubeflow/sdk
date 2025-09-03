@@ -14,9 +14,7 @@
 
 import inspect
 import os
-import queue
 import textwrap
-import threading
 from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 
@@ -571,22 +569,3 @@ def get_model_initializer(
     )
 
     return model_initializer
-
-
-def wrap_log_stream(q: queue.Queue, log_stream: Any):
-    while True:
-        try:
-            logline = next(log_stream)
-            q.put(logline)
-        except StopIteration:
-            q.put(None)
-            return
-
-
-def get_log_queue_pool(log_streams: list[Any]) -> list[queue.Queue]:
-    pool = []
-    for log_stream in log_streams:
-        q = queue.Queue(maxsize=100)
-        pool.append(q)
-        threading.Thread(target=wrap_log_stream, args=(q, log_stream)).start()
-    return pool
