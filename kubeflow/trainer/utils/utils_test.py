@@ -25,7 +25,7 @@ from kubeflow.trainer.constants import constants
 class TestCase:
     name: str
     config: Dict[str, Any]
-    expected_output: Dict[str, Any]
+    expected_output: str
     __test__ = False
 
 
@@ -43,15 +43,17 @@ class TestCase:
                 ],
                 "is_mpi": False
             },
-            expected_output={
-                "contains": [
-                    "--index-url https://pypi.org/simple",
-                    "--extra-index-url https://private.repo.com/simple",
-                    "--extra-index-url https://internal.company.com/simple",
-                    "torch numpy custom-package"
-                ],
-                "not_contains": []
-            }
+            expected_output=(
+                '\nif ! [ -x "$(command -v pip)" ]; then\n'
+                '    python -m ensurepip || python -m ensurepip --user || '
+                'apt-get install python-pip\n'
+                'fi\n\n'
+                'PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet '
+                '--no-warn-script-location --index-url https://pypi.org/simple '
+                '--extra-index-url https://private.repo.com/simple '
+                '--extra-index-url https://internal.company.com/simple '
+                'torch numpy custom-package\n'
+            )
         ),
         TestCase(
             name="single pip index URL (backward compatibility)",
@@ -60,15 +62,15 @@ class TestCase:
                 "pip_index_urls": ["https://pypi.org/simple"],
                 "is_mpi": False
             },
-            expected_output={
-                "contains": [
-                    "--index-url https://pypi.org/simple",
-                    "torch numpy custom-package"
-                ],
-                "not_contains": [
-                    "--extra-index-url"
-                ]
-            }
+            expected_output=(
+                '\nif ! [ -x "$(command -v pip)" ]; then\n'
+                '    python -m ensurepip || python -m ensurepip --user || '
+                'apt-get install python-pip\n'
+                'fi\n\n'
+                'PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet '
+                '--no-warn-script-location --index-url https://pypi.org/simple '
+                'torch numpy custom-package\n'
+            )
         ),
         TestCase(
             name="multiple pip index URLs with MPI",
@@ -81,16 +83,17 @@ class TestCase:
                 ],
                 "is_mpi": True
             },
-            expected_output={
-                "contains": [
-                    "--index-url https://pypi.org/simple",
-                    "--extra-index-url https://private.repo.com/simple",
-                    "--extra-index-url https://internal.company.com/simple",
-                    "--user",
-                    "torch numpy custom-package"
-                ],
-                "not_contains": []
-            }
+            expected_output=(
+                '\nif ! [ -x "$(command -v pip)" ]; then\n'
+                '    python -m ensurepip || python -m ensurepip --user || '
+                'apt-get install python-pip\n'
+                'fi\n\n'
+                'PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet '
+                '--no-warn-script-location --index-url https://pypi.org/simple '
+                '--extra-index-url https://private.repo.com/simple '
+                '--extra-index-url https://internal.company.com/simple '
+                '--user torch numpy custom-package\n'
+            )
         ),
         TestCase(
             name="default pip index URLs",
@@ -99,13 +102,15 @@ class TestCase:
                 "pip_index_urls": constants.DEFAULT_PIP_INDEX_URLS,
                 "is_mpi": False
             },
-            expected_output={
-                "contains": [
-                    f"--index-url {constants.DEFAULT_PIP_INDEX_URLS[0]}",
-                    "torch numpy"
-                ],
-                "not_contains": []
-            }
+            expected_output=(
+                '\nif ! [ -x "$(command -v pip)" ]; then\n'
+                '    python -m ensurepip || python -m ensurepip --user || '
+                'apt-get install python-pip\n'
+                'fi\n\n'
+                'PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet '
+                f'--no-warn-script-location --index-url '
+                f'{constants.DEFAULT_PIP_INDEX_URLS[0]} torch numpy\n'
+            )
         ),
     ],
 )
@@ -118,14 +123,4 @@ def test_get_script_for_python_packages(test_case):
         is_mpi=test_case.config["is_mpi"]
     )
 
-    # Verify the script contains expected elements
-    for expected_text in test_case.expected_output["contains"]:
-        assert expected_text in script, (
-            f"Expected '{expected_text}' to be in script"
-        )
-
-    # Verify the script does not contain unexpected elements
-    for unexpected_text in test_case.expected_output["not_contains"]:
-        assert unexpected_text not in script, (
-            f"Expected '{unexpected_text}' to NOT be in script"
-        )
+    assert test_case.expected_output == script
