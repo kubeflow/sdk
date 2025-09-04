@@ -220,15 +220,12 @@ def get_resource_requirements() -> models.IoK8sApiCoreV1ResourceRequirements:
 
 def get_custom_trainer(
     env: Optional[list[models.IoK8sApiCoreV1EnvVar]] = None,
-    pip_index_urls: Optional[list[str]] = None,
+    pip_index_urls: Optional[list[str]] = constants.DEFAULT_PIP_INDEX_URLS,
     packages_to_install: list[str] = ["torch", "numpy"],
 ) -> models.TrainerV1alpha1Trainer:
     """
     Get the custom trainer for the TrainJob.
     """
-    if pip_index_urls is None:
-        pip_index_urls = constants.DEFAULT_PIP_INDEX_URLS
-
     pip_command = [f"--index-url {pip_index_urls[0]}"]
     pip_command.extend([f"--extra-index-url {repo}" for repo in pip_index_urls[1:]])
     pip_command = " ".join(pip_command)

@@ -125,7 +125,7 @@ POD_LABEL_SELECTOR = ("{}={{trainjob_name}},{} in ({}, {}, {}, {})").format(
     NODE,
 )
 
-# Handle environment variable for multiple URLs (comma-separated)
+# Handle environment variable for multiple URLs (comma-separated).
 # The first URL will be the index-url, and remaining ones are extra-index-urls.
 DEFAULT_PIP_INDEX_URLS = os.getenv("DEFAULT_PIP_INDEX_URLS", "https://pypi.org/simple").split(",")
 
