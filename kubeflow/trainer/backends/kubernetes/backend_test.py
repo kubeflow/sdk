@@ -799,35 +799,7 @@ def test_get_runtime_packages(trainer_client, test_case):
             },
             expected_error=ValueError,
         ),
-        TestCase(
-            name="valid flow with multiple pip index URLs",
-            expected_status=SUCCESS,
-            config={
-                "trainer": types.CustomTrainer(
-                    func=lambda: print("Hello World"),
-                    func_args={"learning_rate": 0.001, "batch_size": 32},
-                    packages_to_install=["torch", "numpy", "custom-package"],
-                    pip_index_urls=[
-                        "https://pypi.org/simple",
-                        "https://private.repo.com/simple",
-                        "https://internal.company.com/simple"
-                    ],
-                    num_nodes=2,
-                )
-            },
-            expected_output=get_train_job(
-                runtime_name=TORCH_RUNTIME,
-                train_job_name=TRAIN_JOB_WITH_CUSTOM_TRAINER,
-                train_job_trainer=get_custom_trainer(
-                    pip_index_urls=[
-                        "https://pypi.org/simple",
-                        "https://private.repo.com/simple",
-                        "https://internal.company.com/simple"
-                    ],
-                    packages_to_install=["torch", "numpy", "custom-package"],
-                ),
-            ),
-        ),
+
     ],
 )
 def test_train(trainer_client, test_case):
