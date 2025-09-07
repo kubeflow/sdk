@@ -1,24 +1,20 @@
 # Contributing to the Kubeflow SDK
 
-Thank you for your interest in contributing to the Kubeflow SDK!
+This guide explains how to contribute to the Kubeflow SDK project.
+For the Kubeflow SDK documentation, please check [the official Kubeflow documentation](https://www.kubeflow.org/docs/components/).
 
-## Getting Started
-
-### Prerequisites
+## Requirements
 - Python 3.9–3.11
-- [pip](https://pip.pypa.io/en/stable/)
 - [pre-commit](https://pre-commit.com/)
 - uv
 
-### Setting Up Your Development Environment
-Clone the repository:
-```sh
-git clone https://github.com/kubeflow/sdk.git
-cd sdk
-```
+
+## Development
+
+The Kubeflow SDK project includes a Makefile with several helpful commands to streamline your development workflow.
 
 Install uv if not installed [Official Docs](https://docs.astral.sh/uv/getting-started/installation/) or using the following command
-```sh
+```shell
 make uv
 ```
 ### Install SDK & Dependencies
@@ -27,18 +23,15 @@ Use uv to create a virtualenv if not created and install dependencies
 uv sync
 ```
 
-#### Development Build (Optional)
+#### API Models
 To install development tools and the latest API modules directly from the master branch:
-```sh
+```shell
 uv sync --dev
-
 ```
-
-## Development Workflow
 
 ### Pre-commit
 We use pre-commit to ensure consistent code formatting. To enable pre-commit hooks, run:
-```sh
+```shell
 pre-commit install
 ```
 To run all hooks manually:
@@ -46,45 +39,77 @@ To run all hooks manually:
 pre-commit run --all-files
 ```
 
-### Testing
-To run the unit tests (if present), execute:
-```sh
-pytest
+## Testing
+
+The Kubeflow SDK project includes several types of tests to ensure code quality and functionality.
+
+### Unit Testing
+To run unit tests locally use the following make command
+
+```shell
+make test-python
 ```
 
-### Code Coverage
-To run tests and measure coverage:
-```sh
-coverage run -m pytest
-coverage report -m
-```
+### E2E Tests
+E2E test run in CI on a kind cluster using [Kubeflow Trainer E2E Scripts](https://github.com/kubeflow/trainer/blob/master/CONTRIBUTING.md#e2e-tests).
+Clone the `Kubeflow Trainer` repo and run the provided commands against `Trainer` Makefile.
+For more details check [the Kubeflow Trainer Contributing Guide](https://github.com/kubeflow/trainer/blob/master/CONTRIBUTING.md#e2e-tests).
 
-### Code Formatting
+## Coding Style
+Make sure to install [pre-commit](https://pre-commit.com/) (`uv pip install pre-commit`) and run `pre-commit install` from the root of the repository at least once before creating git commits.
+
+The pre-commit hooks ensure code quality and consistency. They are executed in CI. PRs that fail to comply with the hooks will not be able to pass the corresponding CI gate. The hooks are only executed against staged files unless you run `pre-commit run --all`, in which case, they'll be executed against every file in the repository.
+
+Specific programmatically generated files listed in the `exclude` field in [.pre-commit-config.yaml](.pre-commit-config.yaml) are deliberately excluded from the hooks.
+
 To check formatting:
+
 ```shell
 make verify 
 ```
 
-#### Using Ruff
+### Using Ruff
+
+You can use ruff directly to check the linting issues before commiting your code
 
 ```shell
 uv run ruff check --show-fixes
 ```
 
-To auto-format, lint all files:
+To fix all lint issues automatically using ruff append `--fix` to your ruff check command.
 
 ```shell
-uv run ruff check --fix
+uv run ruff check --fix .
 ```
 
-## Continuous Integration
-All PRs are automatically checked by CI. Please ensure all checks pass before requesting review.
+To auto-format, lint all files
 
-## Getting Help
-For questions, open an issue or contact a maintainer listed in `OWNERS`.
+```shell
+uv run ruff format .
+```
 
-## Resources
-- [Kubeflow Trainer Docs](https://www.kubeflow.org/docs/components/trainer/)
-- [Source Code](https://github.com/kubeflow/trainer)
+## Best Practices
 
----
+### Pull Request Title Conventions
+
+We enforce a pull request (PR) title convention to quickly indicate the type and scope of a PR.
+The PR titles are used to generated changelog for releases.
+
+PR titles must:
+
+- Follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/).
+- Have an appropriate [type and scope](./.github/workflows/check-pr-title.yaml)
+
+Examples:
+
+- fix: Check empty value for ml_policy
+- chore(ci): Remove unused scripts
+- feat(docs): Create guide for LLM Fine-Tuning
+
+### Kubeflow Enhancement Proposal (KEP)
+
+For any significant features or enhancement for Kubeflow SDK project we follow the
+[Kubeflow Enhancement Proposal process](https://github.com/kubeflow/community/tree/master/proposals).
+
+If you want to submit a significant change to the Kubeflow Trainer, please submit a new KEP under
+[./docs/proposals](./docs/proposals/) directory.
