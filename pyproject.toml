@@ -31,7 +31,8 @@ dependencies = [
   "pydantic>=2.10.0",
   "kubeflow-trainer-api>=2.0.0",
 ]
-[project.optional-dependencies]
+
+[dependency-groups]
 dev = [
   "pytest>=7.0",
   "pytest-mock>=3.10",
@@ -62,9 +63,6 @@ package = true
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.hatch.build.targets]
-packages = ["kubeflow"]
 
 [tool.hatch.metadata]
 allow-direct-references = true

@@ -14,10 +14,8 @@
 
 import inspect
 import os
-import queue
 import textwrap
-import threading
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 
 from kubeflow.trainer.constants import constants
@@ -37,7 +35,7 @@ def get_default_target_namespace(context: Optional[str] = None) -> str:
             # If context is set, we should get namespace from it.
             if context:
                 for c in all_contexts:
-                    if isinstance(c, Dict) and c.get("name") == context:
+                    if isinstance(c, dict) and c.get("name") == context:
                         return c["context"]["namespace"]
             # Otherwise, try to get namespace from the current context.
             return current_context["context"]["namespace"]
@@ -72,9 +70,7 @@ def get_container_devices(
         device = constants.CPU_LABEL
         device_count = resources.limits[constants.CPU_LABEL].actual_instance
     else:
-        raise Exception(
-            f"Unknown device type in the container resources: {resources.limits}"
-        )
+        raise Exception(f"Unknown device type in the container resources: {resources.limits}")
     if device_count is None:
         raise Exception(f"Failed to get device count for resources: {resources.limits}")
 
@@ -221,7 +217,7 @@ def get_trainjob_node_step(
         # TODO (andreyvelich): We should also override the device_count
         # based on OMPI_MCA_orte_set_default_slots value. Right now, it is hard to do
         # since we inject this env only to the Launcher Pod.
-        step.name = f"{constants.NODE}-{job_index+1}"
+        step.name = f"{constants.NODE}-{job_index + 1}"
 
     if container.env:
         for env in container.env:
@@ -257,14 +253,20 @@ def get_resources_per_node(
 
 def get_script_for_python_packages(
     packages_to_install: list[str],
-    pip_index_url: str,
+    pip_index_urls: list[str],
     is_mpi: bool,
 ) -> str:
     """
-    Get init script to install Python packages from the given pip index URL.
+    Get init script to install Python packages from the given pip index URLs.
     """
-    # packages_str = " ".join([str(package) for package in packages_to_install])
     packages_str = " ".join(packages_to_install)
+
+    # first url will be the index-url.
+    options = [f"--index-url {pip_index_urls[0]}"]
+    options.extend(f"--extra-index-url {extra_index_url}" for extra_index_url in pip_index_urls[1:])
+    # For the OpenMPI, the packages must be installed for the mpiuser.
+    if is_mpi:
+        options.append("--user")
 
     script_for_python_packages = textwrap.dedent(
         """
@@ -273,12 +275,10 @@ def get_script_for_python_packages(
         fi
 
         PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet \
-        --no-warn-script-location --index-url {} {} {}
+        --no-warn-script-location {} {}
         """.format(
-            pip_index_url,
+            " ".join(options),
             packages_str,
-            # For the OpenMPI, the packages must be installed for the mpiuser.
-            "--user" if is_mpi else "",
         )
     )
 
@@ -288,9 +288,9 @@ def get_script_for_python_packages(
 def get_command_using_train_func(
     runtime: types.Runtime,
     train_func: Callable,
-    train_func_parameters: Optional[Dict[str, Any]],
-    pip_index_url: str,
-    packages_to_install: Optional[list[str]] = None,
+    train_func_parameters: Optional[dict[str, Any]],
+    pip_index_urls: list[str],
+    packages_to_install: Optional[list[str]],
 ) -> list[str]:
     """
     Get the Trainer container command from the given training function and parameters.
@@ -335,7 +335,7 @@ def get_command_using_train_func(
     if packages_to_install:
         install_packages = get_script_for_python_packages(
             packages_to_install,
-            pip_index_url,
+            pip_index_urls,
             is_mpi,
         )
 
@@ -368,9 +368,7 @@ def get_trainer_crd_from_custom_trainer(
 
     # Add resources per node to the Trainer.
     if trainer.resources_per_node:
-        trainer_crd.resources_per_node = get_resources_per_node(
-            trainer.resources_per_node
-        )
+        trainer_crd.resources_per_node = get_resources_per_node(trainer.resources_per_node)
 
     # Add command to the Trainer.
     # TODO: Support train function parameters.
@@ -378,15 +376,14 @@ def get_trainer_crd_from_custom_trainer(
         runtime,
         trainer.func,
         trainer.func_args,
-        trainer.pip_index_url,
+        trainer.pip_index_urls,
         trainer.packages_to_install,
     )
 
     # Add environment variables to the Trainer.
     if trainer.env:
         trainer_crd.env = [
-            models.IoK8sApiCoreV1EnvVar(name=key, value=value)
-            for key, value in trainer.env.items()
+            models.IoK8sApiCoreV1EnvVar(name=key, value=value) for key, value in trainer.env.items()
         ]
 
     return trainer_crd
@@ -411,9 +408,7 @@ def get_trainer_crd_from_builtin_trainer(
 
     # Add resources per node to the Trainer.
     if trainer.config.resources_per_node:
-        trainer_crd.resources_per_node = get_resources_per_node(
-            trainer.config.resources_per_node
-        )
+        trainer_crd.resources_per_node = get_resources_per_node(trainer.config.resources_per_node)
 
     trainer_crd.command = list(runtime.trainer.command)
     # Parse args in the TorchTuneConfig to the Trainer, preparing for the mutation of
@@ -466,18 +461,12 @@ def get_args_using_torchtune_config(
         relative_path = "/".join(parts[1:]) if len(parts) > 1 else "."
 
         if relative_path != "." and "." in relative_path:
-            args.append(
-                f"dataset.data_files={os.path.join(constants.DATASET_PATH, relative_path)}"
-            )
+            args.append(f"dataset.data_files={os.path.join(constants.DATASET_PATH, relative_path)}")
         else:
-            args.append(
-                f"dataset.data_dir={os.path.join(constants.DATASET_PATH, relative_path)}"
-            )
+            args.append(f"dataset.data_dir={os.path.join(constants.DATASET_PATH, relative_path)}")
 
     if fine_tuning_config.dataset_preprocess_config:
-        args += get_args_in_dataset_preprocess_config(
-            fine_tuning_config.dataset_preprocess_config
-        )
+        args += get_args_in_dataset_preprocess_config(fine_tuning_config.dataset_preprocess_config)
 
     return args
 
@@ -501,9 +490,7 @@ def get_args_in_dataset_preprocess_config(
     # Override the dataset source field if it is provided.
     if dataset_preprocess_config.source:
         if not isinstance(dataset_preprocess_config.source, types.DataFormat):
-            raise ValueError(
-                f"Invalid data format: {dataset_preprocess_config.source.value}."
-            )
+            raise ValueError(f"Invalid data format: {dataset_preprocess_config.source.value}.")
 
         args.append(f"dataset.source={dataset_preprocess_config.source.value}")
 
@@ -513,15 +500,11 @@ def get_args_in_dataset_preprocess_config(
 
     # Override the train_on_input field if it is provided.
     if dataset_preprocess_config.train_on_input:
-        args.append(
-            f"dataset.train_on_input={dataset_preprocess_config.train_on_input}"
-        )
+        args.append(f"dataset.train_on_input={dataset_preprocess_config.train_on_input}")
 
     # Override the new_system_prompt field if it is provided.
     if dataset_preprocess_config.new_system_prompt:
-        args.append(
-            f"dataset.new_system_prompt={dataset_preprocess_config.new_system_prompt}"
-        )
+        args.append(f"dataset.new_system_prompt={dataset_preprocess_config.new_system_prompt}")
 
     # Override the column_map field if it is provided.
     if dataset_preprocess_config.column_map:
@@ -590,22 +573,3 @@ def get_model_initializer(
     )
 
     return model_initializer
-
-
-def wrap_log_stream(q: queue.Queue, log_stream: Any):
-    while True:
-        try:
-            logline = next(log_stream)
-            q.put(logline)
-        except StopIteration:
-            q.put(None)
-            return
-
-
-def get_log_queue_pool(log_streams: list[Any]) -> list[queue.Queue]:
-    pool = []
-    for log_stream in log_streams:
-        q = queue.Queue(maxsize=100)
-        pool.append(q)
-        threading.Thread(target=wrap_log_stream, args=(q, log_stream)).start()
-    return pool

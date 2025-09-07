@@ -1,7 +1,9 @@
 approvers:
   - andreyvelich
+  - astefanutti
   - Electronic-Waste
 reviewers:
-  - astefanutti
+  - kramaranya
+  - szaher
 emeritus_approvers:
   - tenzen-y

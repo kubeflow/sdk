@@ -13,33 +13,36 @@
 # limitations under the License.
 
 """
-Unit tests for the TrainerClient class in the Kubeflow Trainer SDK.
+Unit tests for the KubernetesBackend class in the Kubeflow Trainer SDK.
 
 This module uses pytest and unittest.mock to simulate Kubernetes API interactions.
-It tests TrainerClient's behavior across job listing, resource creation etc
+It tests KubernetesBackend's behavior across job listing, resource creation etc
 """
+
 import datetime
 import multiprocessing
 import random
 import string
 import uuid
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, Optional, Type
+from typing import Any, Optional, Type
 from unittest.mock import Mock, patch
 
 import pytest
-from kubeflow.trainer import TrainerClient
+from kubeflow_trainer_api import models
+
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 from kubeflow.trainer.utils import utils
-from kubeflow_trainer_api import models
+from kubeflow.trainer.backends.kubernetes.types import KubernetesBackendConfig
+from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
 
 
 @dataclass
 class TestCase:
     name: str
     expected_status: str
-    config: Dict[str, Any] = field(default_factory=dict)
+    config: dict[str, Any] = field(default_factory=dict)
     expected_output: Optional[Any] = None
     expected_error: Optional[Type[Exception]] = None
     __test__ = False
@@ -74,33 +77,35 @@ TRAIN_JOB_WITH_CUSTOM_TRAINER = "train-job-with-custom-trainer"
 
 
 @pytest.fixture
-def trainer_client(request):
-    """Provide a TrainerClient with mocked Kubernetes APIs."""
-    with patch("kubernetes.config.load_kube_config", return_value=None), patch(
-        "kubernetes.client.CustomObjectsApi",
-        return_value=Mock(
-            create_namespaced_custom_object=Mock(side_effect=conditional_error_handler),
-            patch_namespaced_custom_object=Mock(side_effect=conditional_error_handler),
-            delete_namespaced_custom_object=Mock(side_effect=conditional_error_handler),
-            get_namespaced_custom_object=Mock(
-                side_effect=get_namespaced_custom_object_response
+def kubernetes_backend(request):
+    """Provide a KubernetesBackend with mocked Kubernetes APIs."""
+    with (
+        patch("kubernetes.config.load_kube_config", return_value=None),
+        patch(
+            "kubernetes.client.CustomObjectsApi",
+            return_value=Mock(
+                create_namespaced_custom_object=Mock(side_effect=conditional_error_handler),
+                patch_namespaced_custom_object=Mock(side_effect=conditional_error_handler),
+                delete_namespaced_custom_object=Mock(side_effect=conditional_error_handler),
+                get_namespaced_custom_object=Mock(
+                    side_effect=get_namespaced_custom_object_response
+                ),
+                get_cluster_custom_object=Mock(side_effect=get_cluster_custom_object_response),
+                list_namespaced_custom_object=Mock(
+                    side_effect=list_namespaced_custom_object_response
+                ),
+                list_cluster_custom_object=Mock(side_effect=list_cluster_custom_object),
             ),
-            get_cluster_custom_object=Mock(
-                side_effect=get_cluster_custom_object_response
-            ),
-            list_namespaced_custom_object=Mock(
-                side_effect=list_namespaced_custom_object_response
-            ),
-            list_cluster_custom_object=Mock(side_effect=list_cluster_custom_object),
         ),
-    ), patch(
-        "kubernetes.client.CoreV1Api",
-        return_value=Mock(
-            list_namespaced_pod=Mock(side_effect=list_namespaced_pod_response),
-            read_namespaced_pod_log=Mock(side_effect=mock_read_namespaced_pod_log),
+        patch(
+            "kubernetes.client.CoreV1Api",
+            return_value=Mock(
+                list_namespaced_pod=Mock(side_effect=list_namespaced_pod_response),
+                read_namespaced_pod_log=Mock(side_effect=mock_read_namespaced_pod_log),
+            ),
         ),
     ):
-        yield TrainerClient()
+        yield KubernetesBackend(KubernetesBackendConfig())
 
 
 # --------------------------
@@ -215,11 +220,17 @@ def get_resource_requirements() -> models.IoK8sApiCoreV1ResourceRequirements:
 
 def get_custom_trainer(
     env: Optional[list[models.IoK8sApiCoreV1EnvVar]] = None,
+    pip_index_urls: Optional[list[str]] = constants.DEFAULT_PIP_INDEX_URLS,
+    packages_to_install: list[str] = ["torch", "numpy"],
 ) -> models.TrainerV1alpha1Trainer:
     """
     Get the custom trainer for the TrainJob.
     """
+    pip_command = [f"--index-url {pip_index_urls[0]}"]
+    pip_command.extend([f"--extra-index-url {repo}" for repo in pip_index_urls[1:]])
+    pip_command = " ".join(pip_command)
 
+    packages_command = " ".join(packages_to_install)
     return models.TrainerV1alpha1Trainer(
         command=[
             "bash",
@@ -227,11 +238,11 @@ def get_custom_trainer(
             '\nif ! [ -x "$(command -v pip)" ]; then\n    python -m ensurepip '
             "|| python -m ensurepip --user || apt-get install python-pip"
             "\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet"
-            "         --no-warn-script-location --index-url https://pypi.org/simple "
-            "torch numpy \n\nread -r -d '' SCRIPT << EOM\n\nfunc=lambda: "
+            f"         --no-warn-script-location {pip_command} {packages_command}"
+            "\n\nread -r -d '' SCRIPT << EOM\n\nfunc=lambda: "
             'print("Hello World"),\n\n<lambda>('
             "{'learning_rate': 0.001, 'batch_size': 32})\n\nEOM\nprintf \"%s\" "
-            '"$SCRIPT" > "trainer_client_test.py"\ntorchrun "trainer_client_test.py"',
+            '"$SCRIPT" > "backend_test.py"\ntorchrun "backend_test.py"',
         ],
         numNodes=2,
         env=env,
@@ -294,9 +305,7 @@ def get_namespaced_custom_object_response(*args, **kwargs):
     if args[2] == RUNTIME or args[4] == RUNTIME:
         raise RuntimeError()
     if args[3] == TRAIN_JOBS:  # TODO: review this.
-        mock_thread.get.return_value = add_status(
-            create_train_job(train_job_name=args[4])
-        )
+        mock_thread.get.return_value = add_status(create_train_job(train_job_name=args[4]))
 
     return mock_thread
 
@@ -466,9 +475,7 @@ def create_cluster_training_runtime(
                     name=name,
                     namespace=namespace,
                 ),
-                spec=models.JobsetV1alpha2JobSetSpec(
-                    replicatedJobs=[get_replicated_job()]
-                ),
+                spec=models.JobsetV1alpha2JobSetSpec(replicatedJobs=[get_replicated_job()]),
             ),
         ),
     )
@@ -597,11 +604,11 @@ def get_train_job_data_type(
         ),
     ],
 )
-def test_get_runtime(trainer_client, test_case):
-    """Test TrainerClient.get_runtime with basic success path."""
+def test_get_runtime(kubernetes_backend, test_case):
+    """Test KubernetesBackend.get_runtime with basic success path."""
     print("Executing test:", test_case.name)
     try:
-        runtime = trainer_client.get_runtime(**test_case.config)
+        runtime = kubernetes_backend.get_runtime(**test_case.config)
 
         assert test_case.expected_status == SUCCESS
         assert isinstance(runtime, types.Runtime)
@@ -626,19 +633,17 @@ def test_get_runtime(trainer_client, test_case):
         ),
     ],
 )
-def test_list_runtimes(trainer_client, test_case):
-    """Test TrainerClient.list_runtimes with basic success path."""
+def test_list_runtimes(kubernetes_backend, test_case):
+    """Test KubernetesBackend.list_runtimes with basic success path."""
     print("Executing test:", test_case.name)
     try:
-        trainer_client.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
-        runtimes = trainer_client.list_runtimes()
+        kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
+        runtimes = kubernetes_backend.list_runtimes()
 
         assert test_case.expected_status == SUCCESS
         assert isinstance(runtimes, list)
         assert all(isinstance(r, types.Runtime) for r in runtimes)
-        assert [asdict(r) for r in runtimes] == [
-            asdict(r) for r in test_case.expected_output
-        ]
+        assert [asdict(r) for r in runtimes] == [asdict(r) for r in test_case.expected_output]
 
     except Exception as e:
         assert type(e) is test_case.expected_error
@@ -672,12 +677,12 @@ def test_list_runtimes(trainer_client, test_case):
         ),
     ],
 )
-def test_get_runtime_packages(trainer_client, test_case):
-    """Test TrainerClient.get_runtime_packages with basic success path."""
+def test_get_runtime_packages(kubernetes_backend, test_case):
+    """Test KubernetesBackend.get_runtime_packages with basic success path."""
     print("Executing test:", test_case.name)
 
     try:
-        trainer_client.get_runtime_packages(**test_case.config)
+        kubernetes_backend.get_runtime_packages(**test_case.config)
     except Exception as e:
         assert type(e) is test_case.expected_error
 
@@ -724,14 +729,17 @@ def test_get_runtime_packages(trainer_client, test_case):
                     func=lambda: print("Hello World"),
                     func_args={"learning_rate": 0.001, "batch_size": 32},
                     packages_to_install=["torch", "numpy"],
-                    pip_index_url=constants.DEFAULT_PIP_INDEX_URL,
+                    pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
                     num_nodes=2,
                 )
             },
             expected_output=get_train_job(
                 runtime_name=TORCH_RUNTIME,
                 train_job_name=TRAIN_JOB_WITH_CUSTOM_TRAINER,
-                train_job_trainer=get_custom_trainer(),
+                train_job_trainer=get_custom_trainer(
+                    pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
+                    packages_to_install=["torch", "numpy"],
+                ),
             ),
         ),
         TestCase(
@@ -742,7 +750,7 @@ def test_get_runtime_packages(trainer_client, test_case):
                     func=lambda: print("Hello World"),
                     func_args={"learning_rate": 0.001, "batch_size": 32},
                     packages_to_install=["torch", "numpy"],
-                    pip_index_url=constants.DEFAULT_PIP_INDEX_URL,
+                    pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
                     num_nodes=2,
                     env={
                         "TEST_ENV": "test_value",
@@ -755,13 +763,11 @@ def test_get_runtime_packages(trainer_client, test_case):
                 train_job_name=TRAIN_JOB_WITH_CUSTOM_TRAINER,
                 train_job_trainer=get_custom_trainer(
                     env=[
-                        models.IoK8sApiCoreV1EnvVar(
-                            name="TEST_ENV", value="test_value"
-                        ),
-                        models.IoK8sApiCoreV1EnvVar(
-                            name="ANOTHER_ENV", value="another_value"
-                        ),
+                        models.IoK8sApiCoreV1EnvVar(name="TEST_ENV", value="test_value"),
+                        models.IoK8sApiCoreV1EnvVar(name="ANOTHER_ENV", value="another_value"),
                     ],
+                    pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
+                    packages_to_install=["torch", "numpy"],
                 ),
             ),
         ),
@@ -793,18 +799,17 @@ def test_get_runtime_packages(trainer_client, test_case):
             },
             expected_error=ValueError,
         ),
+
     ],
 )
-def test_train(trainer_client, test_case):
-    """Test TrainerClient.train with basic success path."""
+def test_train(kubernetes_backend, test_case):
+    """Test KubernetesBackend.train with basic success path."""
     print("Executing test:", test_case.name)
     try:
-        trainer_client.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
-        runtime = trainer_client.get_runtime(
-            test_case.config.get("runtime", TORCH_RUNTIME)
-        )
+        kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
+        runtime = kubernetes_backend.get_runtime(test_case.config.get("runtime", TORCH_RUNTIME))
 
-        train_job_name = trainer_client.train(
+        train_job_name = kubernetes_backend.train(
             runtime=runtime, trainer=test_case.config.get("trainer", None)
         )
 
@@ -815,7 +820,7 @@ def test_train(trainer_client, test_case):
         expected_output = test_case.expected_output
         expected_output.metadata.name = train_job_name
 
-        trainer_client.custom_api.create_namespaced_custom_object.assert_called_with(
+        kubernetes_backend.custom_api.create_namespaced_custom_object.assert_called_with(
             constants.GROUP,
             constants.VERSION,
             DEFAULT_NAMESPACE,
@@ -854,11 +859,11 @@ def test_train(trainer_client, test_case):
         ),
     ],
 )
-def test_get_job(trainer_client, test_case):
-    """Test TrainerClient.get_job with basic success path."""
+def test_get_job(kubernetes_backend, test_case):
+    """Test KubernetesBackend.get_job with basic success path."""
     print("Executing test:", test_case.name)
     try:
-        job = trainer_client.get_job(**test_case.config)
+        job = kubernetes_backend.get_job(**test_case.config)
 
         assert test_case.expected_status == SUCCESS
         assert asdict(job) == asdict(test_case.expected_output)
@@ -900,19 +905,17 @@ def test_get_job(trainer_client, test_case):
         ),
     ],
 )
-def test_list_jobs(trainer_client, test_case):
-    """Test TrainerClient.list_jobs with basic success path."""
+def test_list_jobs(kubernetes_backend, test_case):
+    """Test KubernetesBackend.list_jobs with basic success path."""
     print("Executing test:", test_case.name)
     try:
-        trainer_client.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
-        jobs = trainer_client.list_jobs()
+        kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
+        jobs = kubernetes_backend.list_jobs()
 
         assert test_case.expected_status == SUCCESS
         assert isinstance(jobs, list)
         assert len(jobs) == 2
-        assert [asdict(j) for j in jobs] == [
-            asdict(r) for r in test_case.expected_output
-        ]
+        assert [asdict(j) for j in jobs] == [asdict(r) for r in test_case.expected_output]
 
     except Exception as e:
         assert type(e) is test_case.expected_error
@@ -926,26 +929,26 @@ def test_list_jobs(trainer_client, test_case):
             name="valid flow with all defaults",
             expected_status=SUCCESS,
             config={"name": BASIC_TRAIN_JOB_NAME},
-            expected_output={
-                "node-0": "test log content",
-            },
+            expected_output=["test log content"],
         ),
         TestCase(
             name="runtime error when getting logs",
             expected_status=FAILED,
-            config={"name": RUNTIME},
+            config={"name": BASIC_TRAIN_JOB_NAME, "namespace": FAIL_LOGS},
             expected_error=RuntimeError,
         ),
     ],
 )
-def test_get_job_logs(trainer_client, test_case):
-    """Test TrainerClient.get_job_logs with basic success path."""
+def test_get_job_logs(kubernetes_backend, test_case):
+    """Test KubernetesBackend.get_job_logs with basic success path."""
     print("Executing test:", test_case.name)
     try:
-        logs = trainer_client.get_job_logs(test_case.config.get("name"))
+        kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
+        logs = kubernetes_backend.get_job_logs(test_case.config.get("name"))
+        # Convert iterator to list for comparison.
+        logs_list = list(logs)
         assert test_case.expected_status == SUCCESS
-        assert logs == test_case.expected_output
-
+        assert logs_list == test_case.expected_output
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
@@ -1016,11 +1019,11 @@ def test_get_job_logs(trainer_client, test_case):
         ),
     ],
 )
-def test_wait_for_job_status(trainer_client, test_case):
-    """Test TrainerClient.wait_for_job_status with various scenarios."""
+def test_wait_for_job_status(kubernetes_backend, test_case):
+    """Test KubernetesBackend.wait_for_job_status with various scenarios."""
     print("Executing test:", test_case.name)
 
-    original_get_job = trainer_client.get_job
+    original_get_job = kubernetes_backend.get_job
 
     # TrainJob has unexpected failed status.
     def mock_get_job(name):
@@ -1029,17 +1032,15 @@ def test_wait_for_job_status(trainer_client, test_case):
             job.status = constants.TRAINJOB_FAILED
         return job
 
-    trainer_client.get_job = mock_get_job
+    kubernetes_backend.get_job = mock_get_job
 
     try:
-        job = trainer_client.wait_for_job_status(**test_case.config)
+        job = kubernetes_backend.wait_for_job_status(**test_case.config)
 
         assert test_case.expected_status == SUCCESS
         assert isinstance(job, types.TrainJob)
         # Job status should be in the expected set.
-        assert job.status in test_case.config.get(
-            "status", {constants.TRAINJOB_COMPLETE}
-        )
+        assert job.status in test_case.config.get("status", {constants.TRAINJOB_COMPLETE})
 
     except Exception as e:
         assert type(e) is test_case.expected_error
@@ -1070,15 +1071,15 @@ def test_wait_for_job_status(trainer_client, test_case):
         ),
     ],
 )
-def test_delete_job(trainer_client, test_case):
-    """Test TrainerClient.delete_job with basic success path."""
+def test_delete_job(kubernetes_backend, test_case):
+    """Test KubernetesBackend.delete_job with basic success path."""
     print("Executing test:", test_case.name)
     try:
-        trainer_client.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
-        trainer_client.delete_job(test_case.config.get("name"))
+        kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
+        kubernetes_backend.delete_job(test_case.config.get("name"))
         assert test_case.expected_status == SUCCESS
 
-        trainer_client.custom_api.delete_namespaced_custom_object.assert_called_with(
+        kubernetes_backend.custom_api.delete_namespaced_custom_object.assert_called_with(
             constants.GROUP,
             constants.VERSION,
             test_case.config.get("namespace", DEFAULT_NAMESPACE),
