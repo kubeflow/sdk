@@ -13,18 +13,22 @@ For the Kubeflow SDK documentation, please check [the official Kubeflow document
 
 The Kubeflow SDK project includes a Makefile with several helpful commands to streamline your development workflow.
 
-Install uv if not installed [Official Docs](https://docs.astral.sh/uv/getting-started/installation/) or using the following command
+Install uv if not installed [Official Docs](https://docs.astral.sh/uv/getting-started/installation/) or using the following command:
 ```shell
 make uv
 ```
 ### Install SDK & Dependencies
-Use uv to create a virtualenv if not created and install dependencies
+
+Create a virtual environment and install all dependencies (including dev tools):
+
 ```sh
 uv sync
 ```
 
 #### API Models
+
 To install development tools and the latest API modules directly from the master branch:
+
 ```shell
 uv sync --dev
 ```
@@ -44,7 +48,7 @@ pre-commit run --all-files
 The Kubeflow SDK project includes several types of tests to ensure code quality and functionality.
 
 ### Unit Testing
-To run unit tests locally use the following make command
+To run unit tests locally use the following make command:
 
 ```shell
 make test-python
