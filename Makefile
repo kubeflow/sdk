@@ -78,14 +78,8 @@ endif
 
 
 .PHONY: install
-install: uv uv-venv ## Install uv, create .venv, sync deps; DEV=1 to include dev group; EXTRAS=comma,list for extras
+install: uv uv-venv ruff ## Install uv, create .venv, sync deps; DEV=1 to include dev group; EXTRAS=comma,list for extras
 	@echo "Using virtual environment at: $(VENV_DIR)"
 	@echo "Syncing dependencies with uv..."
-	@EX_FLAGS=""; \
-	if [ "$(DEV)" = "1" ]; then \
-	  echo "Including dev dependencies (--group dev)"; \
-	  uv pip install -e ".[dev]"; \
-	else \
-	  uv sync $$EX_FLAGS; \
-	fi
+	@uv sync --group dev
 	@echo "Environment is ready."

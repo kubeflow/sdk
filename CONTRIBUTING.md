@@ -22,7 +22,7 @@ make uv
 Create a virtual environment and install all dependencies (including dev tools):
 
 ```sh
-uv sync
+make install
 ```
 
 #### API Models
