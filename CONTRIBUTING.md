@@ -13,13 +13,10 @@ For the Kubeflow SDK documentation, please check [the official Kubeflow document
 
 The Kubeflow SDK project includes a Makefile with several helpful commands to streamline your development workflow.
 
-Install uv if not installed [Official Docs](https://docs.astral.sh/uv/getting-started/installation/) or using the following command:
-```shell
-make uv
-```
-### Install SDK & Dependencies
+To install all dependencies (including dev tools) and create virtual environment, run
 
-Create a virtual environment and install all dependencies (including dev tools):
+```sh
+make install
 
 ```sh
 make install
