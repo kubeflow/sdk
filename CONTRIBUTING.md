@@ -19,14 +19,6 @@ To install all dependencies (including dev tools) and create virtual environment
 make install
 ```
 
-#### API Models
-
-To install development tools and the latest API modules directly from the master branch:
-
-```shell
-uv sync --dev
-```
-
 ### Pre-commit
 We use pre-commit to ensure consistent code formatting. To enable pre-commit hooks, run:
 ```shell
@@ -64,26 +56,6 @@ To check formatting:
 
 ```shell
 make verify 
-```
-
-### Using Ruff
-
-You can use ruff directly to check the linting issues before commiting your code
-
-```shell
-uv run ruff check --show-fixes
-```
-
-To fix all lint issues automatically using ruff append `--fix` to your ruff check command.
-
-```shell
-uv run ruff check --fix .
-```
-
-To auto-format, lint all files
-
-```shell
-uv run ruff format .
 ```
 
 ## Best Practices
