@@ -17,9 +17,6 @@ To install all dependencies (including dev tools) and create virtual environment
 
 ```sh
 make install
-
-```sh
-make install
 ```
 
 #### API Models
