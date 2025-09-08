@@ -16,7 +16,7 @@ The Kubeflow SDK project includes a Makefile with several helpful commands to st
 To install all dependencies (including dev tools) and create virtual environment, run
 
 ```sh
-make install
+make install-dev
 ```
 
 ### Pre-commit

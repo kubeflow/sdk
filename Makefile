@@ -77,8 +77,8 @@ else
 endif
 
 
-.PHONY: install
-install: uv uv-venv ruff ## Install uv, create .venv, sync deps; DEV=1 to include dev group; EXTRAS=comma,list for extras
+.PHONY: install-dev
+install-dev: uv uv-venv ruff ## Install uv, create .venv, sync deps; DEV=1 to include dev group; EXTRAS=comma,list for extras
 	@echo "Using virtual environment at: $(VENV_DIR)"
 	@echo "Syncing dependencies with uv..."
 	@uv sync --group dev
