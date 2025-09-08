@@ -6,7 +6,7 @@ For the Kubeflow SDK documentation, please check [the official Kubeflow document
 ## Requirements
 - Python 3.9–3.11
 - [pre-commit](https://pre-commit.com/)
-- uv
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
 
 
 ## Development
