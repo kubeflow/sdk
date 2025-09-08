@@ -51,7 +51,7 @@ ruff: ## Install Ruff
 	@uvx ruff --help &> /dev/null || uv tool install ruff
 
 .PHONY: verify
-verify: install  ## install all required tools
+verify: install-dev  ## install all required tools
 	@uv lock --check
 	@uvx ruff check --show-fixes
 
