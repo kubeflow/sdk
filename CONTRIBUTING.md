@@ -4,7 +4,7 @@ This guide explains how to contribute to the Kubeflow SDK project.
 For the Kubeflow SDK documentation, please check [the official Kubeflow documentation](https://www.kubeflow.org/docs/components/).
 
 ## Requirements
-- Python 3.9–3.11
+- [Supported Python version](./pyproject.toml#L4)
 - [pre-commit](https://pre-commit.com/)
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)
 
