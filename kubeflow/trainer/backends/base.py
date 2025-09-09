@@ -34,6 +34,7 @@ class ExecutionBackend(abc.ABC):
         runtime: Optional[types.Runtime] = None,
         initializer: Optional[types.Initializer] = None,
         trainer: Optional[Union[types.CustomTrainer, types.BuiltinTrainer]] = None,
+        name: Optional[str] = None,
     ) -> str:
         raise NotImplementedError()
 

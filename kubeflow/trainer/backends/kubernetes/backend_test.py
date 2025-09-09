@@ -1079,3 +1079,84 @@ def test_delete_job(kubernetes_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+def test_train_with_custom_name(kubernetes_backend):
+    """Test KubernetesBackend.train with custom name."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    runtime = kubernetes_backend.get_runtime(TORCH_RUNTIME)
+
+    custom_name = "my-custom-training-job"
+    trainer = types.CustomTrainer(func=lambda: print("training"))
+
+    train_job_name = kubernetes_backend.train(
+        runtime=runtime, trainer=trainer, name=custom_name
+    )
+
+    assert train_job_name == custom_name
+
+    # Verify the custom object was created with the custom name
+    kubernetes_backend.custom_api.create_namespaced_custom_object.assert_called_once()
+    call_args = kubernetes_backend.custom_api.create_namespaced_custom_object.call_args
+    # The object is passed as the last positional argument
+    created_object = call_args[0][-1]
+    assert created_object['metadata']['name'] == custom_name
+
+
+def test_train_with_auto_generated_name(kubernetes_backend):
+    """Test KubernetesBackend.train with auto-generated name."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    runtime = kubernetes_backend.get_runtime(TORCH_RUNTIME)
+
+    trainer = types.CustomTrainer(func=lambda: print("training"))
+
+    train_job_name = kubernetes_backend.train(runtime=runtime, trainer=trainer)
+
+    # Verify name was auto-generated (12 characters: 1 letter + 11 hex)
+    assert len(train_job_name) == 12
+    assert train_job_name[0].islower() and train_job_name[0].isalpha()
+
+    # Verify the custom object was created with the generated name
+    kubernetes_backend.custom_api.create_namespaced_custom_object.assert_called_once()
+    call_args = kubernetes_backend.custom_api.create_namespaced_custom_object.call_args
+    # The object is passed as the last positional argument
+    created_object = call_args[0][-1]
+    assert created_object['metadata']['name'] == train_job_name
+
+
+@pytest.mark.parametrize("invalid_name,expected_error", [
+    ("", "Train job name cannot be empty"),
+    ("My-Invalid-Name", "must consist of lower case alphanumeric characters"),
+    ("invalid_name", "must consist of lower case alphanumeric characters"),
+    ("invalid-name-", "must start and end with an alphanumeric character"),
+    ("-invalid-name", "must start and end with an alphanumeric character"),
+    ("a" * 64, "must be 63 characters or less"),
+    ("invalid.name", "must consist of lower case alphanumeric characters"),
+])
+def test_train_job_name_validation(kubernetes_backend, invalid_name, expected_error):
+    """Test train job name validation with various invalid names."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    runtime = kubernetes_backend.get_runtime(TORCH_RUNTIME)
+    trainer = types.CustomTrainer(func=lambda: print("training"))
+
+    with pytest.raises(ValueError, match=expected_error):
+        kubernetes_backend.train(runtime=runtime, trainer=trainer, name=invalid_name)
+
+
+@pytest.mark.parametrize("valid_name", [
+    "valid-name",
+    "valid123",
+    "123valid",
+    "a",
+    "valid-name-123",
+    "a" * 63,  # Maximum length
+])
+def test_train_job_name_validation_valid_names(kubernetes_backend, valid_name):
+    """Test train job name validation with valid names."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    runtime = kubernetes_backend.get_runtime(TORCH_RUNTIME)
+    trainer = types.CustomTrainer(func=lambda: print("training"))
+
+    # Should not raise any exception
+    train_job_name = kubernetes_backend.train(runtime=runtime, trainer=trainer, name=valid_name)
+    assert train_job_name == valid_name

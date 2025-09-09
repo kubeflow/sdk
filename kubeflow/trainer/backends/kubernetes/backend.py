@@ -55,6 +55,28 @@ class KubernetesBackend(ExecutionBackend):
 
         self.namespace = cfg.namespace
 
+    def _validate_train_job_name(self, name: str) -> None:
+        """Validate train job name according to Kubernetes naming conventions.
+
+        Args:
+            name: The train job name to validate.
+
+        Raises:
+            ValueError: If the name doesn't meet Kubernetes naming requirements.
+        """
+        if not name:
+            raise ValueError("Train job name cannot be empty")
+
+        if len(name) > 63:
+            raise ValueError("Train job name must be 63 characters or less")
+
+        # Kubernetes DNS-1123 subdomain name validation
+        if not re.match(r'^[a-z0-9]([-a-z0-9]*[a-z0-9])?$', name):
+            raise ValueError(
+                "Train job name must consist of lower case alphanumeric characters "
+                "or '-', and must start and end with an alphanumeric character"
+            )
+
     def list_runtimes(self) -> list[types.Runtime]:
         result = []
         try:
@@ -181,13 +203,18 @@ class KubernetesBackend(ExecutionBackend):
         runtime: Optional[types.Runtime] = None,
         initializer: Optional[types.Initializer] = None,
         trainer: Optional[Union[types.CustomTrainer, types.BuiltinTrainer]] = None,
+        name: Optional[str] = None,
     ) -> str:
         if runtime is None:
             runtime = self.get_runtime(constants.TORCH_RUNTIME)
 
-        # Generate unique name for the TrainJob.
-        # TODO (andreyvelich): Discuss this TrainJob name generation.
-        train_job_name = random.choice(string.ascii_lowercase) + uuid.uuid4().hex[:11]
+        # Use provided name or generate unique name for the TrainJob.
+        if name is not None:
+            self._validate_train_job_name(name)
+            train_job_name = name
+        else:
+            # TODO (andreyvelich): Discuss this TrainJob name generation.
+            train_job_name = random.choice(string.ascii_lowercase) + uuid.uuid4().hex[:11]
 
         # Build the Trainer.
         trainer_crd = models.TrainerV1alpha1Trainer()

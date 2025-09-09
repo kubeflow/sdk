@@ -93,6 +93,7 @@ class TrainerClient:
         runtime: Optional[types.Runtime] = None,
         initializer: Optional[types.Initializer] = None,
         trainer: Optional[Union[types.CustomTrainer, types.BuiltinTrainer]] = None,
+        name: Optional[str] = None,
     ) -> str:
         """Create a TrainJob. You can configure the TrainJob using one of these trainers:
 
@@ -107,6 +108,7 @@ class TrainerClient:
             initializer: Optional configuration for the dataset and model initializers.
             trainer: Optional configuration for a CustomTrainer or BuiltinTrainer. If not specified,
                 the TrainJob will use the runtime's default values.
+            name: Optional name for the TrainJob. If not provided, a unique name will be generated.
 
         Returns:
             The unique name of the TrainJob that has been generated.
@@ -116,7 +118,9 @@ class TrainerClient:
             TimeoutError: Timeout to create TrainJobs.
             RuntimeError: Failed to create TrainJobs.
         """
-        return self.backend.train(runtime=runtime, initializer=initializer, trainer=trainer)
+        return self.backend.train(
+            runtime=runtime, initializer=initializer, trainer=trainer, name=name
+        )
 
     def list_jobs(self, runtime: Optional[types.Runtime] = None) -> list[types.TrainJob]:
         """List of the created TrainJobs. If a runtime is specified, only TrainJobs associated with
