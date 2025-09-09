@@ -32,17 +32,6 @@ To check formatting:
 make verify 
 ```
 
-#### Pre-commit
-We use pre-commit to ensure consistent code formatting. To enable pre-commit hooks, run:
-```shell
-pre-commit install
-```
-To run all hooks manually:
-```sh
-pre-commit run --all-files
-```
-
-
 ## Testing
 
 The Kubeflow SDK project includes several types of tests to ensure code quality and functionality.
