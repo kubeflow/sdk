@@ -19,7 +19,20 @@ To install all dependencies (including dev tools) and create virtual environment
 make install-dev
 ```
 
-### Pre-commit
+### Coding Style
+Make sure to install [pre-commit](https://pre-commit.com/) (`uv pip install pre-commit`) and run `pre-commit install` from the root of the repository at least once before creating git commits.
+
+The pre-commit hooks ensure code quality and consistency. They are executed in CI. PRs that fail to comply with the hooks will not be able to pass the corresponding CI gate. The hooks are only executed against staged files unless you run `pre-commit run --all`, in which case, they'll be executed against every file in the repository.
+
+Specific programmatically generated files listed in the `exclude` field in [.pre-commit-config.yaml](.pre-commit-config.yaml) are deliberately excluded from the hooks.
+
+To check formatting:
+
+```shell
+make verify 
+```
+
+#### Pre-commit
 We use pre-commit to ensure consistent code formatting. To enable pre-commit hooks, run:
 ```shell
 pre-commit install
@@ -28,6 +41,7 @@ To run all hooks manually:
 ```sh
 pre-commit run --all-files
 ```
+
 
 ## Testing
 
@@ -45,18 +59,6 @@ E2E test run in CI on a kind cluster using [Kubeflow Trainer E2E Scripts](https:
 Clone the `Kubeflow Trainer` repo and run the provided commands against `Trainer` Makefile.
 For more details check [the Kubeflow Trainer Contributing Guide](https://github.com/kubeflow/trainer/blob/master/CONTRIBUTING.md#e2e-tests).
 
-## Coding Style
-Make sure to install [pre-commit](https://pre-commit.com/) (`uv pip install pre-commit`) and run `pre-commit install` from the root of the repository at least once before creating git commits.
-
-The pre-commit hooks ensure code quality and consistency. They are executed in CI. PRs that fail to comply with the hooks will not be able to pass the corresponding CI gate. The hooks are only executed against staged files unless you run `pre-commit run --all`, in which case, they'll be executed against every file in the repository.
-
-Specific programmatically generated files listed in the `exclude` field in [.pre-commit-config.yaml](.pre-commit-config.yaml) are deliberately excluded from the hooks.
-
-To check formatting:
-
-```shell
-make verify 
-```
 
 ## Best Practices
 
