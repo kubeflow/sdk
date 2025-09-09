@@ -81,5 +81,5 @@ endif
 install-dev: uv uv-venv ruff ## Install uv, create .venv, sync deps; DEV=1 to include dev group; EXTRAS=comma,list for extras
 	@echo "Using virtual environment at: $(VENV_DIR)"
 	@echo "Syncing dependencies with uv..."
-	@uv sync --group dev
+	@uv sync
 	@echo "Environment is ready."
