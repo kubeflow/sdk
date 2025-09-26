@@ -73,12 +73,13 @@ print("\n".join(TrainerClient().get_job_logs(name=job_id)))
 
 ## Supported Kubeflow Projects
 
-| Project                     | Status           | Version Support | Description                                                |
-| --------------------------- | ---------------- |-----------------| ---------------------------------------------------------- |
-| **Kubeflow Trainer**        | ✅ **Available** | v2.0.0+         | Train and fine-tune AI models with various frameworks      |
-| **Kubeflow Katib**          | 🚧 Planned       | TBD             | Hyperparameter optimization                                |
-| **Kubeflow Pipelines**      | 🚧 Planned       | TBD             | Build, run, and track AI workflows                         |
-| **Kubeflow Model Registry** | 🚧 Planned       | TBD             | Manage model artifacts, versions and ML artifacts metadata |
+| Project                     | Status           | Version Support | Description                                                          |
+| --------------------------- | ---------------- | --------------- | -------------------------------------------------------------------- |
+| **Kubeflow Trainer**        | ✅ **Available** | v2.0.0+         | Train and fine-tune AI models with various frameworks                |
+| **Kubeflow Katib**          | 🚧 Planned       | TBD             | Hyperparameter optimization                                          |
+| **Kubeflow Pipelines**      | 🚧 Planned       | TBD             | Build, run, and track AI workflows                                   |
+| **Kubeflow Model Registry** | 🚧 Planned       | TBD             | Manage model artifacts, versions and ML artifacts metadata           |
+| **Kubeflow Spark Operator** | 🚧 Planned       | TBD             | Mange Spark applications for data processing and feature engineering |
 
 ## Community
 
