@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
+"""Kubeflow SDK logging module.
 
-# Configure NullHandler for the kubeflow package to avoid logging noise
-# when users haven't configured logging. Users can override this by setting
-# their own logging configuration.
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.NullHandler())
+This module provides structured and configurable logging support for the Kubeflow SDK.
+It includes centralized logger configuration, structured log messages, and context-aware logging.
+"""
 
-__version__ = "0.2.1"
+from .config import get_logger, setup_logging
+from .formatters import StructuredFormatter
+
+__all__ = ["get_logger", "setup_logging", "StructuredFormatter"]

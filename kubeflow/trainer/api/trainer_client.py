@@ -51,17 +51,24 @@ class TrainerClient:
             ValueError: Invalid backend configuration.
 
         """
-        # Set the default backend config.
+        logger.debug("Initializing TrainerClient with backend_config=%s", backend_config)
+
+        # initialize training backend
         if not backend_config:
             backend_config = KubernetesBackendConfig()
+            logger.debug("Using default KubernetesBackendConfig")
 
         if isinstance(backend_config, KubernetesBackendConfig):
             self.backend = KubernetesBackend(backend_config)
+            logger.debug("Initialized Kubernetes backend")
         elif isinstance(backend_config, LocalProcessBackendConfig):
             self.backend = LocalProcessBackend(backend_config)
+            logger.debug("Initialized LocalProcess backend")
         elif isinstance(backend_config, ContainerBackendConfig):
             self.backend = ContainerBackend(backend_config)
+            logger.debug("Initialized Container backend")
         else:
+            logger.error("Invalid backend config type: %s", type(backend_config))
             raise ValueError(f"Invalid backend config '{backend_config}'")
 
     def list_runtimes(self) -> list[types.Runtime]:
@@ -136,12 +143,23 @@ class TrainerClient:
             TimeoutError: Timeout to create TrainJobs.
             RuntimeError: Failed to create TrainJobs.
         """
-        return self.backend.train(
+        logger.debug(
+            "Creating TrainJob with runtime=%s, initializer=%s, trainer=%s, options=%s",
+            runtime,
+            initializer,
+            trainer,
+            options,
+        )
+
+        job_id = self.backend.train(
             runtime=runtime,
             initializer=initializer,
             trainer=trainer,
             options=options,
         )
+        logger.debug("Successfully created TrainJob with ID: %s", job_id)
+
+        return job_id
 
     def list_jobs(self, runtime: Optional[types.Runtime] = None) -> list[types.TrainJob]:
         """List of the created TrainJobs. If a runtime is specified, only TrainJobs associated with
