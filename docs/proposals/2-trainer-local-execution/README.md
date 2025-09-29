@@ -27,7 +27,7 @@ The proposed local execution mode will allow engineers to quickly test their mod
 
 ## Proposal
 
-The local execution mode will allow users to run training jobs in container runtime environment on their local machines, mimicking the larger Kubeflow setup but without requiring Kubernetes. 
+The local execution mode will allow users to run training jobs in container runtime environment on their local machines, mimicking the larger Kubeflow setup but without requiring Kubernetes.
 
 ![Architecture Diagram](high-level-arch.svg)
 

@@ -16,7 +16,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Callable, Optional
+from typing import Callable, Optional, Union
 
 from kubeflow.trainer.constants import constants
 
@@ -258,8 +258,56 @@ class TrainJob:
 # TODO (andreyvelich): Discuss how to keep these configurations is sync with pkg.initializers.types
 @dataclass
 class HuggingFaceDatasetInitializer:
+    """Configuration for downloading datasets from HuggingFace Hub."""
+
     storage_uri: str
     access_token: Optional[str] = None
+
+
+@dataclass
+class DataCacheInitializer:
+    """Configuration for distributed data caching system for training workloads.
+
+    Args:
+        storage_uri (`str`): The URI for the cached data in the format
+            'cache://<SCHEMA_NAME>/<TABLE_NAME>'. This specifies the location
+            where the data cache will be stored and accessed.
+        metadata_loc (`str`): The metadata file path of an iceberg table.
+        num_data_nodes (`int`): The number of data nodes in the distributed cache
+            system. Must be greater than 1.
+        head_cpu (`Optional[str]`): The CPU resources to allocate for the cache head node.
+        head_mem (`Optional[str]`): The memory resources to allocate for the cache head node.
+        worker_cpu (`Optional[str]`): The CPU resources to allocate for each cache worker node.
+        worker_mem (`Optional[str]`): The memory resources to allocate for each cache worker node.
+        iam_role (`Optional[str]`): The IAM role to use for accessing metadata_loc file.
+    """
+
+    storage_uri: str
+    metadata_loc: str
+    num_data_nodes: int
+    head_cpu: Optional[str] = None
+    head_mem: Optional[str] = None
+    worker_cpu: Optional[str] = None
+    worker_mem: Optional[str] = None
+    iam_role: Optional[str] = None
+
+    def __post_init__(self):
+        """Validate DataCacheInitializer parameters."""
+        if self.num_data_nodes <= 1:
+            raise ValueError(f"num_data_nodes must be greater than 1, got {self.num_data_nodes}")
+
+        # Validate storage_uri format
+        if not self.storage_uri.startswith("cache://"):
+            raise ValueError(f"storage_uri must start with 'cache://', got {self.storage_uri}")
+
+        uri_path = self.storage_uri[len("cache://") :]
+        parts = uri_path.split("/")
+
+        if len(parts) != 2:
+            raise ValueError(
+                f"storage_uri must be in format "
+                f"'cache://<SCHEMA_NAME>/<TABLE_NAME>', got {self.storage_uri}"
+            )
 
 
 # Configuration for the HuggingFace model initializer.
@@ -274,11 +322,11 @@ class Initializer:
     """Initializer defines configurations for dataset and pre-trained model initialization
 
     Args:
-        dataset (`Optional[HuggingFaceDatasetInitializer]`): The configuration for one of the
-            supported dataset initializers.
+        dataset (`Optional[Union[HuggingFaceDatasetInitializer, DataCacheInitializer]]`):
+            The configuration for one of the supported dataset initializers.
         model (`Optional[HuggingFaceModelInitializer]`): The configuration for one of the
             supported model initializers.
     """
 
-    dataset: Optional[HuggingFaceDatasetInitializer] = None
+    dataset: Optional[Union[HuggingFaceDatasetInitializer, DataCacheInitializer]] = None
     model: Optional[HuggingFaceModelInitializer] = None

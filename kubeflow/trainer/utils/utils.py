@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import fields
 import inspect
 import os
 import textwrap
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Union
 from urllib.parse import urlparse
 
 from kubeflow_trainer_api import models
@@ -563,34 +564,57 @@ def get_args_from_dataset_preprocess_config(
 
 
 def get_dataset_initializer(
-    dataset: Optional[types.HuggingFaceDatasetInitializer] = None,
+    dataset: Optional[
+        Union[types.HuggingFaceDatasetInitializer, types.DataCacheInitializer]
+    ] = None,
 ) -> Optional[models.TrainerV1alpha1DatasetInitializer]:
     """
     Get the TrainJob dataset initializer from the given config.
     """
-    if not isinstance(dataset, types.HuggingFaceDatasetInitializer):
+    if isinstance(dataset, types.HuggingFaceDatasetInitializer):
+        dataset_initializer = models.TrainerV1alpha1DatasetInitializer(
+            storageUri=(
+                dataset.storage_uri
+                if dataset.storage_uri.startswith("hf://")
+                else "hf://" + dataset.storage_uri
+            ),
+            env=(
+                [
+                    models.IoK8sApiCoreV1EnvVar(
+                        name=constants.INITIALIZER_ENV_ACCESS_TOKEN,
+                        value=dataset.access_token,
+                    ),
+                ]
+                if dataset.access_token
+                else None
+            ),
+        )
+        return dataset_initializer
+    elif isinstance(dataset, types.DataCacheInitializer):
+        # Build env vars from optional model fields
+        envs = []
+
+        # Add CLUSTER_SIZE env var from num_data_nodes required field
+        envs.append(
+            models.IoK8sApiCoreV1EnvVar(name="CLUSTER_SIZE", value=str(dataset.num_data_nodes + 1))
+        )
+
+        # Add METADATA_LOC env var from metadata_loc required field
+        envs.append(models.IoK8sApiCoreV1EnvVar(name="METADATA_LOC", value=dataset.metadata_loc))
+
+        # Add env vars from optional fields (skip required fields)
+        required_fields = {"storage_uri", "metadata_loc", "num_data_nodes"}
+        for f in fields(dataset):
+            if f.name not in required_fields:
+                value = getattr(dataset, f.name)
+                if value is not None:
+                    envs.append(models.IoK8sApiCoreV1EnvVar(name=f.name.upper(), value=value))
+
+        return models.TrainerV1alpha1DatasetInitializer(
+            storageUri=dataset.storage_uri, env=envs if envs else None
+        )
+    else:
         return None
-
-    # TODO (andreyvelich): Support more parameters.
-    dataset_initializer = models.TrainerV1alpha1DatasetInitializer(
-        storageUri=(
-            dataset.storage_uri
-            if dataset.storage_uri.startswith("hf://")
-            else "hf://" + dataset.storage_uri
-        ),
-        env=(
-            [
-                models.IoK8sApiCoreV1EnvVar(
-                    name=constants.INITIALIZER_ENV_ACCESS_TOKEN,
-                    value=dataset.access_token,
-                ),
-            ]
-            if dataset.access_token
-            else None
-        ),
-    )
-
-    return dataset_initializer
 
 
 def get_model_initializer(

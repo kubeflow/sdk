@@ -255,3 +255,36 @@ def test_get_command_using_train_func(test_case: TestCase):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+def test_get_dataset_initializer():
+    """Test get_dataset_initializer uses DataCacheInitializer optional fields as env vars."""
+    datacache_initializer = types.DataCacheInitializer(
+        storage_uri="cache://test_schema/test_table",
+        num_data_nodes=3,
+        metadata_loc="s3://bucket/metadata",
+        head_cpu="1",
+        head_mem="1Gi",
+        worker_cpu="2",
+        worker_mem="2Gi",
+        iam_role="arn:aws:iam::123456789012:role/test-role",
+    )
+
+    dataset_initializer = utils.get_dataset_initializer(datacache_initializer)
+
+    assert dataset_initializer is not None
+    assert dataset_initializer.env is not None
+    env_dict = {env_var.name: env_var.value for env_var in dataset_initializer.env}
+
+    # Check CLUSTER_SIZE is present from num_data_nodes
+    assert env_dict["CLUSTER_SIZE"] == "4"
+
+    # Check METADATA_LOC is present from metadata_loc
+    assert env_dict["METADATA_LOC"] == "s3://bucket/metadata"
+
+    # Check all optional fields are present as uppercase env vars
+    assert env_dict["HEAD_CPU"] == "1"
+    assert env_dict["HEAD_MEM"] == "1Gi"
+    assert env_dict["WORKER_CPU"] == "2"
+    assert env_dict["WORKER_MEM"] == "2Gi"
+    assert env_dict["IAM_ROLE"] == "arn:aws:iam::123456789012:role/test-role"

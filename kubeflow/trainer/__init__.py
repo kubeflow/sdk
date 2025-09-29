@@ -27,6 +27,7 @@ from kubeflow.trainer.constants.constants import DATASET_PATH, MODEL_PATH  # noq
 from kubeflow.trainer.types.types import (
     BuiltinTrainer,
     CustomTrainer,
+    DataCacheInitializer,
     DataFormat,
     DataType,
     HuggingFaceDatasetInitializer,
@@ -44,6 +45,7 @@ from kubeflow.trainer.types.types import (
 __all__ = [
     "BuiltinTrainer",
     "CustomTrainer",
+    "DataCacheInitializer",
     "DataFormat",
     "DATASET_PATH",
     "DataType",

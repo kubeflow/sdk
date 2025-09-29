@@ -29,7 +29,7 @@ Specific programmatically generated files listed in the `exclude` field in [.pre
 To check formatting:
 
 ```shell
-make verify 
+make verify
 ```
 
 ## Testing
