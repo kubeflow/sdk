@@ -1,5 +1,3 @@
-AGENTS: Guide for kubeflow/sdk
-
 ## Who This Is For
 
 - **AI agents**: Automate repository tasks with minimal context
