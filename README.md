@@ -79,7 +79,7 @@ print("\n".join(TrainerClient().get_job_logs(name=job_id)))
 | **Kubeflow Katib**          | 🚧 Planned       | TBD             | Hyperparameter optimization                                          |
 | **Kubeflow Pipelines**      | 🚧 Planned       | TBD             | Build, run, and track AI workflows                                   |
 | **Kubeflow Model Registry** | 🚧 Planned       | TBD             | Manage model artifacts, versions and ML artifacts metadata           |
-| **Kubeflow Spark Operator** | 🚧 Planned       | TBD             | Mange Spark applications for data processing and feature engineering |
+| **Kubeflow Spark Operator** | 🚧 Planned       | TBD             | Manage Spark applications for data processing and feature engineering |
 
 ## Community
 
