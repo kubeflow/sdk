@@ -113,14 +113,14 @@ class TorchTuneInstructDataset:
 @dataclass
 class LoraConfig:
     """Configuration for the LoRA/QLoRA/DoRA.
-    REF: https://docs.pytorch.org/torchtune/main/tutorials/memory_optimizations.html#parameter-efficient-fine-tuning-peft
+    REF: https://meta-pytorch.org/torchtune/main/tutorials/memory_optimizations.html
 
     Args:
         apply_lora_to_mlp (`Optional[bool]`):
             Whether to apply LoRA to the MLP in each transformer layer.
         apply_lora_to_output (`Optional[bool]`):
             Whether to apply LoRA to the model's final output projection.
-        lora_attn_modules (`Optional[list[str]]`):
+        lora_attn_modules (`list[str]`):
             A list of strings specifying which layers of the model to apply LoRA,
             default is ["q_proj", "v_proj", "output_proj"]:
             1. "q_proj" applies LoRA to the query projection layer.
@@ -133,13 +133,12 @@ class LoraConfig:
         lora_dropout (`Optional[float]`):
             The probability of applying Dropout to the low rank updates.
         quantize_base (`Optional[bool]`): Whether to enable model quantization.
-            If True, QLoRA is applied. But if `use_dora` is also set to True, DoRA is applied.
         use_dora (`Optional[bool]`): Whether to enable DoRA.
     """
 
     apply_lora_to_mlp: Optional[bool] = None
     apply_lora_to_output: Optional[bool] = None
-    lora_attn_modules: Optional[list[str]] = field(
+    lora_attn_modules: list[str] = field(
         default_factory=lambda: ["q_proj", "v_proj", "output_proj"]
     )
     lora_rank: Optional[int] = None

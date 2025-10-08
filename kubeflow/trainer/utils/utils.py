@@ -478,15 +478,17 @@ def get_args_using_torchtune_config(
             args.append(f"dataset.data_dir={os.path.join(constants.DATASET_PATH, relative_path)}")
 
     if fine_tuning_config.peft_config:
-        args += get_args_in_peft_config(fine_tuning_config.peft_config)
+        args += get_args_from_peft_config(fine_tuning_config.peft_config)
 
     if fine_tuning_config.dataset_preprocess_config:
-        args += get_args_in_dataset_preprocess_config(fine_tuning_config.dataset_preprocess_config)
+        args += get_args_from_dataset_preprocess_config(
+            fine_tuning_config.dataset_preprocess_config
+        )
 
     return args
 
 
-def get_args_in_peft_config(peft_config: types.LoraConfig) -> list[str]:
+def get_args_from_peft_config(peft_config: types.LoraConfig) -> list[str]:
     """
     Get the args from the given PEFT config.
     """
@@ -518,7 +520,7 @@ def get_args_in_peft_config(peft_config: types.LoraConfig) -> list[str]:
     return args
 
 
-def get_args_in_dataset_preprocess_config(
+def get_args_from_dataset_preprocess_config(
     dataset_preprocess_config: types.TorchTuneInstructDataset,
 ) -> list[str]:
     """
