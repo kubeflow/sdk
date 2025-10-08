@@ -167,3 +167,7 @@ TORCH_TUNE_INSTRUCT_DATASET = "torchtune.datasets.instruct_dataset"
 DEFAULT_FRAMEWORK_IMAGES = {
     "torch": "pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime",
 }
+
+# The length of the UUID suffix for auto-generated job names.
+# Total name length = 1 (random letter) + 11 (UUID hex) = 12 characters
+JOB_NAME_UUID_LENGTH = 11

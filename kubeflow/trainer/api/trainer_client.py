@@ -107,6 +107,7 @@ class TrainerClient:
         trainer: Optional[
             Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
         ] = None,
+        options: Optional[list] = None,
     ) -> str:
         """Create a TrainJob. You can configure the TrainJob using one of these trainers:
 
@@ -124,6 +125,8 @@ class TrainerClient:
             trainer: Optional configuration for a CustomTrainer, CustomTrainerContainer, or
                 BuiltinTrainer. If not specified, the TrainJob will use the
                 runtime's default values.
+            options: Optional list of configuration options to apply to the TrainJob.
+                Options can be imported from kubeflow.trainer.options.
 
         Returns:
             The unique name of the TrainJob that has been generated.
@@ -133,7 +136,12 @@ class TrainerClient:
             TimeoutError: Timeout to create TrainJobs.
             RuntimeError: Failed to create TrainJobs.
         """
-        return self.backend.train(runtime=runtime, initializer=initializer, trainer=trainer)
+        return self.backend.train(
+            runtime=runtime,
+            initializer=initializer,
+            trainer=trainer,
+            options=options,
+        )
 
     def list_jobs(self, runtime: Optional[types.Runtime] = None) -> list[types.TrainJob]:
         """List of the created TrainJobs. If a runtime is specified, only TrainJobs associated with

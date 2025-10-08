@@ -238,8 +238,6 @@ def test_get_script_for_python_packages(test_case):
     ],
 )
 def test_get_command_using_train_func(test_case: TestCase):
-    print("Executing test:", test_case.name)
-
     try:
         command = utils.get_command_using_train_func(
             runtime=test_case.config["runtime"],
@@ -254,7 +252,6 @@ def test_get_command_using_train_func(test_case: TestCase):
 
     except Exception as e:
         assert type(e) is test_case.expected_error
-    print("test execution complete")
 
 
 def test_get_dataset_initializer():

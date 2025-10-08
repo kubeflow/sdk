@@ -35,6 +35,12 @@ from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
 import kubeflow.trainer.backends.kubernetes.utils as utils
 from kubeflow.trainer.constants import constants
+from kubeflow.trainer.options import (
+    Annotations,
+    Labels,
+    SpecAnnotations,
+    SpecLabels,
+)
 from kubeflow.trainer.test.common import (
     DEFAULT_NAMESPACE,
     FAILED,
@@ -274,6 +280,10 @@ def get_train_job(
     runtime_name: str,
     train_job_name: str = BASIC_TRAIN_JOB_NAME,
     train_job_trainer: Optional[models.TrainerV1alpha1Trainer] = None,
+    labels: Optional[dict[str, str]] = None,
+    annotations: Optional[dict[str, str]] = None,
+    spec_labels: Optional[dict[str, str]] = None,
+    spec_annotations: Optional[dict[str, str]] = None,
 ) -> models.TrainerV1alpha1TrainJob:
     """
     Create a mock TrainJob object with optional trainer configurations.
@@ -281,10 +291,16 @@ def get_train_job(
     train_job = models.TrainerV1alpha1TrainJob(
         apiVersion=constants.API_VERSION,
         kind=constants.TRAINJOB_KIND,
-        metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(name=train_job_name),
+        metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+            name=train_job_name,
+            labels=labels,
+            annotations=annotations,
+        ),
         spec=models.TrainerV1alpha1TrainJobSpec(
             runtimeRef=models.TrainerV1alpha1RuntimeRef(name=runtime_name),
             trainer=train_job_trainer,
+            labels=spec_labels,
+            annotations=spec_annotations,
         ),
     )
 
@@ -879,6 +895,58 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             },
             expected_error=ValueError,
         ),
+        TestCase(
+            name="train with metadata labels and annotations",
+            expected_status=SUCCESS,
+            config={
+                "options": [
+                    Labels({"team": "ml-platform"}),
+                    Annotations({"created-by": "sdk"}),
+                ],
+            },
+            expected_output=get_train_job(
+                runtime_name=TORCH_RUNTIME,
+                train_job_name=BASIC_TRAIN_JOB_NAME,
+                labels={"team": "ml-platform"},
+                annotations={"created-by": "sdk"},
+            ),
+        ),
+        TestCase(
+            name="train with spec labels and annotations",
+            expected_status=SUCCESS,
+            config={
+                "options": [
+                    SpecLabels({"app": "training", "version": "v1.0"}),
+                    SpecAnnotations({"prometheus.io/scrape": "true"}),
+                ],
+            },
+            expected_output=get_train_job(
+                runtime_name=TORCH_RUNTIME,
+                train_job_name=BASIC_TRAIN_JOB_NAME,
+                spec_labels={"app": "training", "version": "v1.0"},
+                spec_annotations={"prometheus.io/scrape": "true"},
+            ),
+        ),
+        TestCase(
+            name="train with both metadata and spec labels/annotations",
+            expected_status=SUCCESS,
+            config={
+                "options": [
+                    Labels({"owner": "ml-team"}),
+                    Annotations({"description": "Fine-tuning job"}),
+                    SpecLabels({"app": "training", "version": "v1.0"}),
+                    SpecAnnotations({"prometheus.io/scrape": "true"}),
+                ],
+            },
+            expected_output=get_train_job(
+                runtime_name=TORCH_RUNTIME,
+                train_job_name=BASIC_TRAIN_JOB_NAME,
+                labels={"owner": "ml-team"},
+                annotations={"description": "Fine-tuning job"},
+                spec_labels={"app": "training", "version": "v1.0"},
+                spec_annotations={"prometheus.io/scrape": "true"},
+            ),
+        ),
     ],
 )
 def test_train(kubernetes_backend, test_case):
@@ -888,8 +956,12 @@ def test_train(kubernetes_backend, test_case):
         kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
         runtime = kubernetes_backend.get_runtime(test_case.config.get("runtime", TORCH_RUNTIME))
 
+        options = test_case.config.get("options", [])
+
         train_job_name = kubernetes_backend.train(
-            runtime=runtime, trainer=test_case.config.get("trainer", None)
+            runtime=runtime,
+            trainer=test_case.config.get("trainer", None),
+            options=options,
         )
 
         assert test_case.expected_status == SUCCESS

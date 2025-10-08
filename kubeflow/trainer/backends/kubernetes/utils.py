@@ -349,6 +349,10 @@ def get_trainer_cr_from_custom_trainer(
 ) -> models.TrainerV1alpha1Trainer:
     """
     Get the Trainer CR from the custom trainer.
+
+    Args:
+        runtime: The runtime configuration.
+        trainer: The custom trainer or container configuration.
     """
     trainer_cr = models.TrainerV1alpha1Trainer()
 
@@ -361,7 +365,7 @@ def get_trainer_cr_from_custom_trainer(
         trainer_cr.resources_per_node = get_resources_per_node(trainer.resources_per_node)
 
     if isinstance(trainer, types.CustomTrainer):
-        # If CustomTrainer is used, add command to the Trainer.
+        # If CustomTrainer is used, generate command from function.
         trainer_cr.command = get_command_using_train_func(
             runtime,
             trainer.func,

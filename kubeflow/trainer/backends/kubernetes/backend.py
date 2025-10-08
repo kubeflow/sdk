@@ -20,7 +20,7 @@ import random
 import re
 import string
 import time
-from typing import Optional, Union
+from typing import Any, Optional, Union
 import uuid
 
 from kubeflow_trainer_api import models
@@ -87,15 +87,9 @@ class KubernetesBackend(RuntimeBackend):
                 result.append(self.__get_runtime_from_cr(runtime))
 
         except multiprocessing.TimeoutError as e:
-            raise TimeoutError(
-                f"Timeout to list {constants.CLUSTER_TRAINING_RUNTIME_KIND}s "
-                f"in namespace: {self.namespace}"
-            ) from e
+            raise TimeoutError(f"Timeout to list {constants.CLUSTER_TRAINING_RUNTIME_KIND}s") from e
         except Exception as e:
-            raise RuntimeError(
-                f"Failed to list {constants.CLUSTER_TRAINING_RUNTIME_KIND}s "
-                f"in namespace: {self.namespace}"
-            ) from e
+            raise RuntimeError(f"Failed to list {constants.CLUSTER_TRAINING_RUNTIME_KIND}s") from e
 
         return result
 
@@ -184,16 +178,62 @@ class KubernetesBackend(RuntimeBackend):
         trainer: Optional[
             Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
         ] = None,
+        options: Optional[list] = None,
     ) -> str:
-        # Generate unique name for the TrainJob.
-        train_job_name = random.choice(string.ascii_lowercase) + uuid.uuid4().hex[:11]
+        if runtime is None:
+            runtime = self.get_runtime(constants.TORCH_RUNTIME)
+
+        # Process options to extract configuration
+        job_spec = {}
+        labels = None
+        annotations = None
+        name = None
+        spec_labels = None
+        spec_annotations = None
+        trainer_overrides = {}
+        pod_template_overrides = None
+
+        if options:
+            for option in options:
+                option(job_spec, trainer, self)
+
+            metadata_section = job_spec.get("metadata", {})
+            labels = metadata_section.get("labels")
+            annotations = metadata_section.get("annotations")
+            name = metadata_section.get("name")
+
+            # Extract spec-level labels/annotations and other spec configurations
+            spec_section = job_spec.get("spec", {})
+            spec_labels = spec_section.get("labels")
+            spec_annotations = spec_section.get("annotations")
+            trainer_overrides = spec_section.get("trainer", {})
+            pod_template_overrides = spec_section.get("podTemplateOverrides")
+
+        # Generate unique name for the TrainJob if not provided
+        train_job_name = name or (
+            random.choice(string.ascii_lowercase)
+            + uuid.uuid4().hex[: constants.JOB_NAME_UUID_LENGTH]
+        )
+
+        # Build the TrainJob spec using the common _get_trainjob_spec method
+        trainjob_spec = self._get_trainjob_spec(
+            runtime=runtime,
+            initializer=initializer,
+            trainer=trainer,
+            trainer_overrides=trainer_overrides,
+            spec_labels=spec_labels,
+            spec_annotations=spec_annotations,
+            pod_template_overrides=pod_template_overrides,
+        )
 
         # Build the TrainJob.
         train_job = models.TrainerV1alpha1TrainJob(
             apiVersion=constants.API_VERSION,
             kind=constants.TRAINJOB_KIND,
-            metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(name=train_job_name),
-            spec=self._get_trainjob_spec(runtime, initializer, trainer),
+            metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                name=train_job_name, labels=labels, annotations=annotations
+            ),
+            spec=trainjob_spec,
         )
 
         # Create the TrainJob.
@@ -549,6 +589,10 @@ class KubernetesBackend(RuntimeBackend):
         trainer: Optional[
             Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
         ] = None,
+        trainer_overrides: Optional[dict[str, Any]] = None,
+        spec_labels: Optional[dict[str, str]] = None,
+        spec_annotations: Optional[dict[str, str]] = None,
+        pod_template_overrides: Optional[models.IoK8sApiCoreV1PodTemplateSpec] = None,
     ) -> models.TrainerV1alpha1TrainJobSpec:
         """Get TrainJob spec from the given parameters"""
         if runtime is None:
@@ -575,8 +619,15 @@ class KubernetesBackend(RuntimeBackend):
             else:
                 raise ValueError(
                     f"The trainer type {type(trainer)} is not supported. "
-                    "Please use CustomTrainer or BuiltinTrainer."
+                    "Please use CustomTrainer, CustomTrainerContainer, or BuiltinTrainer."
                 )
+
+        # Apply trainer overrides if trainer was not provided but overrides exist
+        if trainer_overrides:
+            if "command" in trainer_overrides:
+                trainer_cr.command = trainer_overrides["command"]
+            if "args" in trainer_overrides:
+                trainer_cr.args = trainer_overrides["args"]
 
         return models.TrainerV1alpha1TrainJobSpec(
             runtimeRef=models.TrainerV1alpha1RuntimeRef(name=runtime.name),
@@ -589,4 +640,7 @@ class KubernetesBackend(RuntimeBackend):
                 if isinstance(initializer, types.Initializer)
                 else None
             ),
+            labels=spec_labels,
+            annotations=spec_annotations,
+            pod_template_overrides=pod_template_overrides,
         )

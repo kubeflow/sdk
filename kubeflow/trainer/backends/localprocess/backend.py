@@ -62,11 +62,11 @@ class LocalProcessBackend(RuntimeBackend):
         return runtime
 
     def get_runtime_packages(self, runtime: types.Runtime):
-        runtime = next((rt for rt in local_runtimes if rt.name == runtime.name), None)
-        if not runtime:
+        local_runtime = next((rt for rt in local_runtimes if rt.name == runtime.name), None)
+        if not local_runtime:
             raise ValueError(f"Runtime '{runtime.name}' not found.")
 
-        return runtime.trainer.packages
+        return local_runtime.trainer.packages
 
     def train(
         self,
@@ -75,9 +75,27 @@ class LocalProcessBackend(RuntimeBackend):
         trainer: Optional[
             Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
         ] = None,
+        options: Optional[list] = None,
     ) -> str:
-        # set train job name
-        train_job_name = random.choice(string.ascii_lowercase) + uuid.uuid4().hex[:11]
+        if runtime is None:
+            raise ValueError("Runtime must be provided for LocalProcessBackend")
+
+        # Process options to extract configuration
+        name = None
+        if options:
+            job_spec = {}
+            for option in options:
+                option(job_spec, trainer, self)
+
+            metadata_section = job_spec.get("metadata", {})
+            name = metadata_section.get("name")
+
+        # Generate train job name if not provided via options
+        train_job_name = name or (
+            random.choice(string.ascii_lowercase)
+            + uuid.uuid4().hex[: constants.JOB_NAME_UUID_LENGTH]
+        )
+
         # localprocess backend only supports CustomTrainer
         if not isinstance(trainer, types.CustomTrainer):
             raise ValueError("CustomTrainer must be set with LocalProcessBackend")
@@ -86,6 +104,7 @@ class LocalProcessBackend(RuntimeBackend):
         venv_dir = tempfile.mkdtemp(prefix=train_job_name)
         logger.debug(f"operating in {venv_dir}")
 
+        # get local runtime trainer
         runtime.trainer = local_utils.get_local_runtime_trainer(
             runtime_name=runtime.name,
             venv_dir=venv_dir,
@@ -156,7 +175,11 @@ class LocalProcessBackend(RuntimeBackend):
             name=_job.name,
             creation_timestamp=_job.created,
             steps=[
-                types.Step(name=_step.step_name, pod_name=_step.step_name, status=_step.job.status)
+                types.Step(
+                    name=_step.step_name,
+                    pod_name=_step.step_name,
+                    status=_step.job.status,
+                )
                 for _step in _job.steps
             ],
             runtime=_job.runtime,
@@ -197,7 +220,10 @@ class LocalProcessBackend(RuntimeBackend):
             raise ValueError(f"No TrainJob with name {name}")
         # find a better implementation for this
         for _step in _job.steps:
-            if _step.job.status in [constants.TRAINJOB_RUNNING, constants.TRAINJOB_CREATED]:
+            if _step.job.status in [
+                constants.TRAINJOB_RUNNING,
+                constants.TRAINJOB_CREATED,
+            ]:
                 _step.job.join(timeout=timeout)
         return self.get_job(name)
 
@@ -233,14 +259,15 @@ class LocalProcessBackend(RuntimeBackend):
         job: LocalJob,
         runtime: types.Runtime = None,
     ):
-        _job = [j for j in self.__local_jobs if j.name == train_job_name]
-        if not _job:
+        existing_jobs = [j for j in self.__local_jobs if j.name == train_job_name]
+        if not existing_jobs:
             _job = LocalBackendJobs(name=train_job_name, runtime=runtime, created=datetime.now())
             self.__local_jobs.append(_job)
         else:
-            _job = _job[0]
-        _step = [s for s in _job.steps if s.step_name == step_name]
-        if not _step:
+            _job = existing_jobs[0]
+
+        existing_steps = [s for s in _job.steps if s.step_name == step_name]
+        if not existing_steps:
             _step = LocalBackendStep(step_name=step_name, job=job)
             _job.steps.append(_step)
         else:
