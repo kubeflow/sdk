@@ -238,12 +238,14 @@ def get_custom_trainer(
     )
 
 
-def get_builtin_trainer() -> models.TrainerV1alpha1Trainer:
+def get_builtin_trainer(
+    args: list[str],
+) -> models.TrainerV1alpha1Trainer:
     """
     Get the builtin trainer for the TrainJob.
     """
     return models.TrainerV1alpha1Trainer(
-        args=["batch_size=2", "epochs=2", "loss=Loss.CEWithChunkedOutputLoss"],
+        args=args,
         command=["tune", "run"],
         numNodes=2,
     )
@@ -707,7 +709,40 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             expected_output=get_train_job(
                 runtime_name=TORCH_TUNE_RUNTIME,
                 train_job_name=TRAIN_JOB_WITH_BUILT_IN_TRAINER,
-                train_job_trainer=get_builtin_trainer(),
+                train_job_trainer=get_builtin_trainer(
+                    args=["batch_size=2", "epochs=2", "loss=Loss.CEWithChunkedOutputLoss"],
+                ),
+            ),
+        ),
+        TestCase(
+            name="valid flow with built in trainer and lora config",
+            expected_status=SUCCESS,
+            config={
+                "trainer": types.BuiltinTrainer(
+                    config=types.TorchTuneConfig(
+                        num_nodes=2,
+                        peft_config=types.LoraConfig(
+                            apply_lora_to_mlp=True,
+                            lora_rank=8,
+                            lora_alpha=16,
+                            lora_dropout=0.1,
+                        ),
+                    ),
+                ),
+                "runtime": TORCH_TUNE_RUNTIME,
+            },
+            expected_output=get_train_job(
+                runtime_name=TORCH_TUNE_RUNTIME,
+                train_job_name=TRAIN_JOB_WITH_BUILT_IN_TRAINER,
+                train_job_trainer=get_builtin_trainer(
+                    args=[
+                        "model.apply_lora_to_mlp=True",
+                        "model.lora_rank=8",
+                        "model.lora_alpha=16",
+                        "model.lora_dropout=0.1",
+                        "model.lora_attn_modules=[q_proj,v_proj,output_proj]",
+                    ],
+                ),
             ),
         ),
         TestCase(
