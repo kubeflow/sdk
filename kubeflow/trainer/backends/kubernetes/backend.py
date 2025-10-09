@@ -26,8 +26,8 @@ import uuid
 from kubeflow_trainer_api import models
 from kubernetes import client, config, watch
 
+from kubeflow.common import types as common_types
 from kubeflow.trainer.backends.base import ExecutionBackend
-from kubeflow.trainer.backends.kubernetes import types as k8s_types
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 from kubeflow.trainer.utils import utils
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 class KubernetesBackend(ExecutionBackend):
     def __init__(
         self,
-        cfg: k8s_types.KubernetesBackendConfig,
+        cfg: common_types.KubernetesBackendConfig,
     ):
         if cfg.namespace is None:
             cfg.namespace = utils.get_default_target_namespace(cfg.context)

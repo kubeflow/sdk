@@ -16,8 +16,8 @@ from collections.abc import Iterator
 import logging
 from typing import Optional, Union
 
+import kubeflow.common.types as common_types
 from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
-from kubeflow.trainer.backends.kubernetes.types import KubernetesBackendConfig
 from kubeflow.trainer.backends.localprocess.backend import (
     LocalProcessBackend,
     LocalProcessBackendConfig,
@@ -31,7 +31,9 @@ logger = logging.getLogger(__name__)
 class TrainerClient:
     def __init__(
         self,
-        backend_config: Union[KubernetesBackendConfig, LocalProcessBackendConfig] = None,
+        backend_config: Optional[
+            Union[common_types.KubernetesBackendConfig, LocalProcessBackendConfig]
+        ] = None,
     ):
         """Initialize a Kubeflow Trainer client.
 
@@ -44,11 +46,11 @@ class TrainerClient:
             ValueError: Invalid backend configuration.
 
         """
-        # initialize training backend
+        # Set the default backend config.
         if not backend_config:
-            backend_config = KubernetesBackendConfig()
+            backend_config = common_types.KubernetesBackendConfig()
 
-        if isinstance(backend_config, KubernetesBackendConfig):
+        if isinstance(backend_config, common_types.KubernetesBackendConfig):
             self.backend = KubernetesBackend(backend_config)
         elif isinstance(backend_config, LocalProcessBackendConfig):
             self.backend = LocalProcessBackend(backend_config)

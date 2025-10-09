@@ -142,7 +142,7 @@ class LocalProcessBackend(ExecutionBackend):
             )
         return result
 
-    def get_job(self, name: str) -> Optional[types.TrainJob]:
+    def get_job(self, name: str) -> types.TrainJob:
         _job = next((j for j in self.__local_jobs if j.name == name), None)
         if _job is None:
             raise ValueError(f"No TrainJob with name {name}")
