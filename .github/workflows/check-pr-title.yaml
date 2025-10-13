@@ -33,6 +33,7 @@ jobs:
             ci
             docs
             examples
+            optimizer
             scripts
             test
             trainer

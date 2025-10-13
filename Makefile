@@ -37,8 +37,6 @@ VENV_DIR := $(PROJECT_DIR)/.venv
 help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
-#UV := $(shell which uv)
-
 .PHONY: uv
 uv: ## Install UV
 	@command -v uv &> /dev/null || { \
@@ -57,7 +55,7 @@ verify: install-dev  ## install all required tools
 	@uv run ruff format --check kubeflow
 
 .PHONY: uv-venv
-uv-venv:
+uv-venv:  ## Create uv virtual environment
 	@if [ ! -d "$(VENV_DIR)" ]; then \
 		echo "Creating uv virtual environment in $(VENV_DIR)..."; \
 		uv venv; \
@@ -75,10 +73,14 @@ release: install-dev
 
  # make test-python will produce html coverage by default. Run with `make test-python report=xml` to produce xml report.
 .PHONY: test-python
-test-python: uv-venv
+test-python: uv-venv  ## Run Python unit tests
 	@uv sync
-	@uv run coverage run --source=kubeflow.trainer.backends.kubernetes.backend,kubeflow.trainer.utils.utils -m pytest ./kubeflow/trainer/backends/kubernetes/backend_test.py ./kubeflow/trainer/utils/utils_test.py
-	@uv run coverage report -m kubeflow/trainer/backends/kubernetes/backend.py kubeflow/trainer/utils/utils.py
+	@uv run coverage run --source=kubeflow.trainer.backends.kubernetes.backend,kubeflow.trainer.utils.utils -m pytest \
+		./kubeflow/trainer/backends/kubernetes/backend_test.py \
+		./kubeflow/trainer/backends/kubernetes/utils_test.py
+	@uv run coverage report -m \
+		kubeflow/trainer/backends/kubernetes/backend.py \
+		kubeflow/trainer/backends/kubernetes/utils.py
 ifeq ($(report),xml)
 	@uv run coverage xml
 else
@@ -87,7 +89,7 @@ endif
 
 
 .PHONY: install-dev
-install-dev: uv uv-venv ruff ## Install uv, create .venv, sync deps; DEV=1 to include dev group; EXTRAS=comma,list for extras
+install-dev: uv uv-venv ruff  ## Install uv, create .venv, sync deps.
 	@echo "Using virtual environment at: $(VENV_DIR)"
 	@echo "Syncing dependencies with uv..."
 	@uv sync
