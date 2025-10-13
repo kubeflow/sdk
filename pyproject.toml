@@ -31,7 +31,7 @@ dependencies = [
   "pydantic>=2.10.0",
   "kubeflow-trainer-api>=2.0.0",
   # TODO (andreyvelich): Switch to kubeflow-katib-api once it is published.
-  "kubeflow_katib_api@git+https://github.com/kramaranya/katib.git@separate-models-from-sdk#subdirectory=api",
+  "kubeflow_katib_api@git+https://github.com/kramaranya/katib.git@separate-models-from-sdk#subdirectory=api/python_api",
 ]
 
 [dependency-groups]

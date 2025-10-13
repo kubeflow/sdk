@@ -106,6 +106,7 @@ class KubernetesBackend(ExecutionBackend):
             spec=models.V1beta1ExperimentSpec(
                 # Trial template and parameters.
                 trialTemplate=models.V1beta1TrialTemplate(
+                    retain=True,
                     primaryContainerName=trainer_constants.NODE,
                     trialParameters=trial_parameters,
                     trialSpec={
