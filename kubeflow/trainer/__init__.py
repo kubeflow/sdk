@@ -13,15 +13,15 @@
 # limitations under the License.
 
 
-# Import the Kubeflow Trainer client.
-from kubeflow.trainer.api.trainer_client import TrainerClient  # noqa: F401
+# Import common types.
+from kubeflow.common.types import KubernetesBackendConfig, TrainJobTemplate
 
-# import backends and its associated configs
-from kubeflow.trainer.backends.kubernetes.types import KubernetesBackendConfig
+# Import the Kubeflow Trainer client.
+from kubeflow.trainer.api.trainer_client import TrainerClient
 from kubeflow.trainer.backends.localprocess.types import LocalProcessBackendConfig
 
 # Import the Kubeflow Trainer constants.
-from kubeflow.trainer.constants.constants import DATASET_PATH, MODEL_PATH  # noqa: F401
+from kubeflow.trainer.constants.constants import DATASET_PATH, MODEL_PATH
 
 # Import the Kubeflow Trainer types.
 from kubeflow.trainer.types.types import (
@@ -59,6 +59,7 @@ __all__ = [
     "TorchTuneConfig",
     "TorchTuneInstructDataset",
     "RuntimeTrainer",
+    "TrainJobTemplate",
     "TrainerClient",
     "TrainerType",
     "LocalProcessBackendConfig",

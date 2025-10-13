@@ -15,16 +15,10 @@
 import os
 import textwrap
 
-# How long to wait in seconds for requests to the Kubernetes API Server.
-DEFAULT_TIMEOUT = 120
-
 # Common constants.
 GROUP = "trainer.kubeflow.org"
 VERSION = "v1alpha1"
 API_VERSION = f"{GROUP}/{VERSION}"
-
-# The default Kubernetes namespace.
-DEFAULT_NAMESPACE = "default"
 
 # The Kind name for the ClusterTrainingRuntime.
 CLUSTER_TRAINING_RUNTIME_KIND = "ClusterTrainingRuntime"
@@ -51,7 +45,7 @@ TRAINJOB_COMPLETE = "Complete"
 # The failed status of the TrainJob, defined when TrainJob CR has failed condition.
 TRAINJOB_FAILED = "Failed"
 
-# The succeeded phase of the Pod.
+# The succeeded phase of the Pods.
 POD_SUCCEEDED = "Succeeded"
 
 # The label key to identify the relationship between TrainJob and Pod template in the runtime.
@@ -88,9 +82,6 @@ LAUNCHER = "launcher"
 # The name of the ReplicatedJob and container of the node. The node usually represents
 # single VM where distributed training code is executed.
 NODE = "node"
-
-# Unknown indicates that the value can't be identified.
-UNKNOWN = "Unknown"
 
 # The label for cpu in the container resources.
 CPU_LABEL = "cpu"

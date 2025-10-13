@@ -18,6 +18,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Callable, Optional, Union
 
+import kubeflow.common.constants as common_constants
 from kubeflow.trainer.constants import constants
 
 
@@ -212,8 +213,8 @@ class RuntimeTrainer:
     trainer_type: TrainerType
     framework: str
     num_nodes: int = 1  # The default value is set in the APIs.
-    device: str = constants.UNKNOWN
-    device_count: str = constants.UNKNOWN
+    device: str = common_constants.UNKNOWN
+    device_count: str = common_constants.UNKNOWN
     __command: tuple[str, ...] = field(init=False, repr=False)
 
     @property
@@ -238,8 +239,8 @@ class Step:
     name: str
     status: Optional[str]
     pod_name: str
-    device: str = constants.UNKNOWN
-    device_count: str = constants.UNKNOWN
+    device: str = common_constants.UNKNOWN
+    device_count: str = common_constants.UNKNOWN
 
 
 # Representation for the TrainJob.
@@ -247,11 +248,11 @@ class Step:
 @dataclass
 class TrainJob:
     name: str
-    creation_timestamp: datetime
     runtime: Runtime
     steps: list[Step]
     num_nodes: int
-    status: str = constants.UNKNOWN
+    creation_timestamp: datetime
+    status: str = common_constants.UNKNOWN
 
 
 # Configuration for the HuggingFace dataset initializer.

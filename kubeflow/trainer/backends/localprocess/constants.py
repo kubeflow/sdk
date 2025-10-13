@@ -15,6 +15,7 @@
 import re
 import textwrap
 
+import kubeflow.common.constants as common_constants
 from kubeflow.trainer.backends.localprocess import types
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types as base_types
@@ -28,8 +29,8 @@ local_runtimes = [
             trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
             framework=TORCH_FRAMEWORK_TYPE,
             num_nodes=1,
-            device_count=constants.UNKNOWN,
-            device=constants.UNKNOWN,
+            device_count=common_constants.UNKNOWN,
+            device=common_constants.UNKNOWN,
             packages=["torch"],
         ),
     )

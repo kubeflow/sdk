@@ -13,10 +13,12 @@
 # limitations under the License.
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
-import kubeflow.common.types as common_types
+from kubeflow.common import types as common_types
 from kubeflow.optimizer.backends.kubernetes.backend import KubernetesBackend
+from kubeflow.optimizer.types.algorithm_types import RandomSearch
+from kubeflow.optimizer.types.optimization_types import Objective, TrialConfig
 
 logger = logging.getLogger(__name__)
 
@@ -47,27 +49,35 @@ class OptimizerClient:
 
     def optimize(
         self,
+        trial_template: common_types.TrainJobTemplate,
+        *,
+        trial_config: Optional[TrialConfig] = None,
+        search_space: dict[str, Any],
+        objectives: Optional[list[Objective]] = None,
+        algorithm: Optional[RandomSearch] = None,
     ) -> str:
-        """Create a OptimizationJob. You can configure the TrainJob using one of these trainers:
-
-        - CustomTrainer: Runs training with a user-defined function that fully encapsulates the
-            training process.
-        - BuiltinTrainer: Uses a predefined trainer with built-in post-training logic, requiring
-            only parameter configuration.
+        """Create an OptimizationJob for hyperparameter tuning.
 
         Args:
-            runtime: Optional reference to one of the existing runtimes. Defaults to the
-                torch-distributed runtime if not provided.
-            initializer: Optional configuration for the dataset and model initializers.
-            trainer: Optional configuration for a CustomTrainer or BuiltinTrainer. If not specified,
-                the TrainJob will use the runtime's default values.
+            trial_template: The TrainJob template defining the training script.
+            trial_config: Optional configuration to run Trials.
+            objectives: List of objectives to optimize.
+            search_space: Dictionary mapping parameter names to Search specifications using
+                Search.uniform(), Search.loguniform(), Search.choice(), etc.
+            algorithm: The optimization algorithm to use. Defaults to RandomSearch.
 
         Returns:
-            The unique name of the TrainJob that has been generated.
+            The unique name of the Experiment that has been generated.
 
         Raises:
             ValueError: Input arguments are invalid.
-            TimeoutError: Timeout to create TrainJobs.
-            RuntimeError: Failed to create TrainJobs.
+            TimeoutError: Timeout to create Experiment.
+            RuntimeError: Failed to create Experiment.
         """
-        return self.backend.optimize()
+        return self.backend.optimize(
+            trial_template=trial_template,
+            trial_config=trial_config,
+            objectives=objectives,
+            search_space=search_space,
+            algorithm=algorithm,
+        )

@@ -16,7 +16,7 @@ from typing import Optional
 
 from kubernetes import config
 
-from kubeflow.trainer.constants import constants
+from kubeflow.common import constants
 
 
 def is_running_in_k8s() -> bool:
