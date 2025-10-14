@@ -17,7 +17,7 @@ from typing import Any, Optional
 
 from kubeflow.common import types as common_types
 from kubeflow.optimizer.types.algorithm_types import RandomSearch
-from kubeflow.optimizer.types.optimization_types import Objective, TrialConfig
+from kubeflow.optimizer.types.optimization_types import Objective, OptimizationJob, TrialConfig
 
 
 class ExecutionBackend(abc.ABC):
@@ -31,4 +31,16 @@ class ExecutionBackend(abc.ABC):
         objectives: Optional[list[Objective]] = None,
         algorithm: Optional[RandomSearch] = None,
     ) -> str:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def list_jobs(self) -> list[OptimizationJob]:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_job(self, name: str) -> OptimizationJob:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def delete_job(self, name: str):
         raise NotImplementedError()

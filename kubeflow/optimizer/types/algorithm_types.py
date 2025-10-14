@@ -12,15 +12,59 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import abc
 from dataclasses import dataclass, fields
-from typing import Optional
+from typing import Any, Optional
 
 from kubeflow_katib_api import models
 
 
-# Algorithm implementation
+def algorithm_to_katib_spec(obj: Any) -> models.V1beta1AlgorithmSpec:
+    """Convert any dataclass-based algorithm to a Katib AlgorithmSpec"""
+
+    settings = []
+    for f in fields(obj):
+        value = getattr(obj, f.name)
+        if value is not None:
+            settings.append(
+                models.V1beta1AlgorithmSetting(
+                    name=f.name,
+                    value=str(value),
+                )
+            )
+
+    return models.V1beta1AlgorithmSpec(
+        algorithmName=obj.algorithm_name,
+        algorithmSettings=settings or None,
+    )
+
+
+# Base implementation for the search algorithm.
+class BaseAlgorithm(abc.ABC):
+    @property
+    @abc.abstractmethod
+    def algorithm_name(self) -> str:
+        pass
+
+    @abc.abstractmethod
+    def _to_katib_spec(self):
+        raise NotImplementedError()
+
+
 @dataclass
-class RandomSearch:
+class GridSearch(BaseAlgorithm):
+    """Grid search algorithm."""
+
+    @property
+    def algorithm_name(self) -> str:
+        return "grid"
+
+    def _to_katib_spec(self):
+        return algorithm_to_katib_spec(self)
+
+
+@dataclass
+class RandomSearch(BaseAlgorithm):
     """Random search algorithm.
 
     Args:
@@ -29,19 +73,16 @@ class RandomSearch:
 
     random_state: Optional[int] = None
 
-    def _to_katib_spec(self):
-        settings = []
-        for field in fields(self):
-            value = getattr(self, field.name)
-            if value is not None:
-                settings.append(
-                    models.V1beta1AlgorithmSetting(
-                        name=field.name,
-                        value=str(value),
-                    )
-                )
+    @property
+    def algorithm_name(self) -> str:
+        return "random"
 
-        return models.V1beta1AlgorithmSpec(
-            algorithmName="random",
-            algorithmSettings=settings or None,
-        )
+    def _to_katib_spec(self):
+        return algorithm_to_katib_spec(self)
+
+
+# Registry of supported search algorithms.
+ALGORITHM_REGISTRY = {
+    GridSearch().algorithm_name: GridSearch,
+    RandomSearch().algorithm_name: RandomSearch,
+}

@@ -22,12 +22,19 @@ import uuid
 from kubeflow_katib_api import models
 from kubernetes import client, config
 
+import kubeflow.common.constants as common_constants
 import kubeflow.common.types as common_types
 import kubeflow.common.utils as common_utils
 from kubeflow.optimizer.backends.base import ExecutionBackend
+from kubeflow.optimizer.backends.kubernetes import utils
 from kubeflow.optimizer.constants import constants
 from kubeflow.optimizer.types.algorithm_types import RandomSearch
-from kubeflow.optimizer.types.optimization_types import Objective, TrialConfig
+from kubeflow.optimizer.types.optimization_types import (
+    Objective,
+    OptimizationJob,
+    Trial,
+    TrialConfig,
+)
 from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend as TrainerBackend
 import kubeflow.trainer.constants.constants as trainer_constants
 
@@ -55,7 +62,7 @@ class KubernetesBackend(ExecutionBackend):
         self.core_api = client.CoreV1Api(k8s_client)
 
         self.namespace = cfg.namespace
-        self.cfg = cfg
+        self.trainer_backend = TrainerBackend(cfg)
 
     def optimize(
         self,
@@ -112,7 +119,7 @@ class KubernetesBackend(ExecutionBackend):
                     trialSpec={
                         "apiVersion": trainer_constants.API_VERSION,
                         "kind": trainer_constants.TRAINJOB_KIND,
-                        "spec": TrainerBackend(cfg=self.cfg)._get_trainjob_spec(
+                        "spec": self.trainer_backend._get_trainjob_spec(
                             runtime=trial_template.runtime,
                             trainer=trial_template.trainer,
                             initializer=trial_template.initializer,
@@ -158,3 +165,163 @@ class KubernetesBackend(ExecutionBackend):
         logger.debug(f"OptimizationJob {self.namespace}/{optimization_job_name} has been created")
 
         return optimization_job_name
+
+    def list_jobs(self) -> list[OptimizationJob]:
+        """List of the created OptimizationJobs"""
+        result = []
+
+        try:
+            thread = self.custom_api.list_namespaced_custom_object(
+                constants.GROUP,
+                constants.VERSION,
+                self.namespace,
+                constants.EXPERIMENT_PLURAL,
+                async_req=True,
+            )
+
+            optimization_job_list = models.V1beta1ExperimentList.from_dict(
+                thread.get(common_constants.DEFAULT_TIMEOUT)
+            )
+
+            if not optimization_job_list:
+                return result
+
+            for optimization_job in optimization_job_list.items:
+                result.append(self.__get_optimization_job_from_crd(optimization_job))
+
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(
+                f"Timeout to list OptimizationJobs in namespace: {self.namespace}"
+            ) from e
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to list OptimizationJobs in namespace: {self.namespace}"
+            ) from e
+
+        return result
+
+    def get_job(self, name: str) -> OptimizationJob:
+        """Get the OptimizationJob object"""
+
+        try:
+            thread = self.custom_api.get_namespaced_custom_object(
+                constants.GROUP,
+                constants.VERSION,
+                self.namespace,
+                constants.EXPERIMENT_PLURAL,
+                name,
+                async_req=True,
+            )
+
+            optimization_job = models.V1beta1Experiment.from_dict(
+                thread.get(common_constants.DEFAULT_TIMEOUT)  # type: ignore
+            )
+
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(f"Timeout to get OptimizationJob: {self.namespace}/{name}") from e
+        except Exception as e:
+            raise RuntimeError(f"Failed to get OptimizationJob: {self.namespace}/{name}") from e
+
+        return self.__get_optimization_job_from_crd(optimization_job)  # type: ignore
+
+    def delete_job(self, name: str):
+        """Delete the OptimizationJob"""
+
+        try:
+            self.custom_api.delete_namespaced_custom_object(
+                constants.GROUP,
+                constants.VERSION,
+                self.namespace,
+                constants.EXPERIMENT_PLURAL,
+                name=name,
+            )
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(f"Timeout to delete OptimizationJob: {self.namespace}/{name}") from e
+        except Exception as e:
+            raise RuntimeError(f"Failed to delete OptimizationJob: {self.namespace}/{name}") from e
+
+        logger.debug(f"OptimizationJob {self.namespace}/{name} has been deleted")
+
+    def __get_optimization_job_from_crd(
+        self,
+        optimization_job_crd: models.V1beta1Experiment,
+    ) -> OptimizationJob:
+        if not (
+            optimization_job_crd.metadata
+            and optimization_job_crd.metadata.name
+            and optimization_job_crd.metadata.namespace
+            and optimization_job_crd.spec
+            and optimization_job_crd.spec.parameters
+            and optimization_job_crd.spec.objective
+            and optimization_job_crd.spec.algorithm
+            and optimization_job_crd.spec.max_trial_count
+            and optimization_job_crd.spec.parallel_trial_count
+            and optimization_job_crd.metadata.creation_timestamp
+        ):
+            raise Exception(f"OptimizationJob CRD is invalid: {optimization_job_crd}")
+
+        optimization_job = OptimizationJob(
+            name=optimization_job_crd.metadata.name,
+            search_space=utils.get_search_space_from_katib_spec(
+                optimization_job_crd.spec.parameters
+            ),
+            objectives=utils.get_objectives_from_katib_spec(optimization_job_crd.spec.objective),
+            algorithm=utils.get_algorithm_from_katib_spec(optimization_job_crd.spec.algorithm),
+            trial_config=TrialConfig(
+                num_trials=optimization_job_crd.spec.max_trial_count,
+                parallel_trials=optimization_job_crd.spec.parallel_trial_count,
+                max_failed_trials=optimization_job_crd.spec.max_failed_trial_count,
+            ),
+            trials=self.__get_trials_from_crd(optimization_job_crd.metadata.name),
+            creation_timestamp=optimization_job_crd.metadata.creation_timestamp,
+            status=constants.OPTIMIZATION_JOB_CREATED,  # The default OptimizationJob status.
+        )
+
+        # Update the OptimizationJob status from Experiment conditions.
+        if optimization_job_crd.status and optimization_job_crd.status.conditions:
+            for c in optimization_job_crd.status.conditions:
+                if c.type == constants.EXPERIMENT_SUCCEEDED and c.status == "True":
+                    optimization_job.status = constants.OPTIMIZATION_JOB_COMPLETE
+                elif c.type == constants.OPTIMIZATION_JOB_FAILED and c.status == "True":
+                    optimization_job.status = constants.OPTIMIZATION_JOB_FAILED
+                else:
+                    for trial in optimization_job.trials:
+                        if trial.trainjob.status == trainer_constants.TRAINJOB_RUNNING:
+                            optimization_job.status = constants.OPTIMIZATION_JOB_RUNNING
+
+        return optimization_job
+
+    def __get_trials_from_crd(self, optimization_job_name: str) -> list[Trial]:
+        result = []
+        try:
+            thread = self.custom_api.list_namespaced_custom_object(
+                constants.GROUP,
+                constants.VERSION,
+                self.namespace,
+                constants.TRIAL_PLURAL,
+                label_selector=f"{constants.EXPERIMENT_LABEL}={optimization_job_name}",
+                async_req=True,
+            )
+
+            trial_list = models.V1beta1TrialList.from_dict(
+                thread.get(common_constants.DEFAULT_TIMEOUT)
+            )
+
+            if not trial_list:
+                return result
+
+            for trial in trial_list.items:
+                if not (trial.metadata and trial.metadata.name):
+                    raise ValueError(f"Trial CRD is invalid: {trial}")
+
+                # Trial name is equal to the TrainJob name.
+                result.append(
+                    Trial(trainjob=self.trainer_backend.get_job(name=trial.metadata.name))
+                )
+
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(f"Timeout to list Trials in namespace: {self.namespace}") from e
+        except Exception as e:
+            raise RuntimeError(f"Failed to list Trials in namespace: {self.namespace}") from e
+
+        return result

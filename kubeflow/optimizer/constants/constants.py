@@ -23,3 +23,31 @@ EXPERIMENT_KIND = "Experiment"
 
 # The plural for the Experiment.
 EXPERIMENT_PLURAL = "experiments"
+
+# The succeeded condition for the Experiment.
+EXPERIMENT_SUCCEEDED = "Succeeded"
+
+# Label to identify Experiment's resources.
+EXPERIMENT_LABEL = "katib.kubeflow.org/experiment"
+
+# The plural for the Trials.
+TRIAL_PLURAL = "trials"
+
+# The Kind name for the Trials.
+TRIAL_KIND = "Trial"
+
+# The default status for the OptimizationJob once users create it.
+OPTIMIZATION_JOB_CREATED = "Created"
+
+# The running status of the OptimizationJob, defined when at least one TrainJob is running.
+OPTIMIZATION_JOB_RUNNING = "Running"
+
+# The complete status of the OptimizationJob, defined when Experiment CR has succeeded condition.
+OPTIMIZATION_JOB_COMPLETE = "Complete"
+
+# The failed status of the OptimizationJob, defined when Experiment CR has failed condition.
+OPTIMIZATION_JOB_FAILED = "Failed"
+
+# Katib search space parameter types.
+DOUBLE_PARAMETER = "double"
+CATEGORICAL_PARAMETERS = "categorical"

@@ -15,10 +15,11 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Optional, Union
 
 import kubeflow.common.constants as common_constants
-from kubeflow.optimizer.types.algorithm_types import RandomSearch
+from kubeflow.optimizer.types.algorithm_types import GridSearch, RandomSearch
+from kubeflow.optimizer.types.search_types import CategoricalSearchSpace, ContinuousSearchSpace
 from kubeflow.trainer.types.types import TrainJob
 
 
@@ -43,6 +44,10 @@ class Objective:
     metric: str = "loss"
     direction: Direction = Direction.MINIMIZE
 
+    def __post_init__(self):
+        if isinstance(self.direction, str):
+            self.direction = Direction(self.direction)
+
 
 # Configuration for trial execution
 @dataclass
@@ -60,6 +65,7 @@ class TrialConfig:
     max_failed_trials: Optional[int] = None
 
 
+# TODO (andreyvelich): Add metrics to the Trial object.
 # Representation of the single trial
 @dataclass
 class Trial:
@@ -88,9 +94,9 @@ class OptimizationJob:
     """
 
     name: str
-    search_space: dict[str, Any]
+    search_space: dict[str, Union[ContinuousSearchSpace, CategoricalSearchSpace]]
     objectives: list[Objective]
-    algorithm: RandomSearch
+    algorithm: Union[GridSearch, RandomSearch]
     trial_config: TrialConfig
     trials: list[Trial]
     creation_timestamp: datetime

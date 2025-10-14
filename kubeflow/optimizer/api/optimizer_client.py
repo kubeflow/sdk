@@ -18,7 +18,7 @@ from typing import Any, Optional
 from kubeflow.common import types as common_types
 from kubeflow.optimizer.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.optimizer.types.algorithm_types import RandomSearch
-from kubeflow.optimizer.types.optimization_types import Objective, TrialConfig
+from kubeflow.optimizer.types.optimization_types import Objective, OptimizationJob, TrialConfig
 
 logger = logging.getLogger(__name__)
 
@@ -81,3 +81,45 @@ class OptimizerClient:
             search_space=search_space,
             algorithm=algorithm,
         )
+
+    def list_jobs(self) -> list[OptimizationJob]:
+        """List of the created OptimizationJobs
+
+        Returns:
+            List of created OptimizationJobs. If no OptimizationJob exist,
+                an empty list is returned.
+
+        Raises:
+            TimeoutError: Timeout to list OptimizationJobs.
+            RuntimeError: Failed to list OptimizationJobs.
+        """
+
+        return self.backend.list_jobs()
+
+    def get_job(self, name: str) -> OptimizationJob:
+        """Get the OptimizationJob object
+
+        Args:
+            name: Name of the OptimizationJob.
+
+        Returns:
+            A OptimizationJob object.
+
+        Raises:
+            TimeoutError: Timeout to get a OptimizationJob.
+            RuntimeError: Failed to get a OptimizationJob.
+        """
+
+        return self.backend.get_job(name=name)
+
+    def delete_job(self, name: str):
+        """Delete the OptimizationJob.
+
+        Args:
+            name: Name of the OptimizationJob.
+
+        Raises:
+            TimeoutError: Timeout to delete OptimizationJob.
+            RuntimeError: Failed to delete OptimizationJob.
+        """
+        return self.backend.delete_job(name=name)

@@ -12,7 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
+from enum import Enum
+from typing import Union
+
 from kubeflow_katib_api import models as katib_models
+
+import kubeflow.optimizer.constants.constants as constants
 
 
 # Search space distribution helpers
@@ -31,14 +37,14 @@ class Search:
             Katib ParameterSpec object.
         """
         return katib_models.V1beta1ParameterSpec(
-            parameterType="double",
+            parameterType=constants.DOUBLE_PARAMETER,
             feasibleSpace=katib_models.V1beta1FeasibleSpace(
-                min=str(min), max=str(max), distribution="uniform"
+                min=str(min), max=str(max), distribution=Distribution.UNIFORM.value
             ),
         )
 
     @staticmethod
-    def loguniform(min: float, max: float) -> katib_models.V1beta1ParameterSpec:
+    def log_uniform(min: float, max: float) -> katib_models.V1beta1ParameterSpec:
         """Sample a float value with log-uniform distribution between `min` and `max`.
 
         Args:
@@ -49,9 +55,9 @@ class Search:
             Katib ParameterSpec object.
         """
         return katib_models.V1beta1ParameterSpec(
-            parameterType="double",
+            parameterType=constants.DOUBLE_PARAMETER,
             feasibleSpace=katib_models.V1beta1FeasibleSpace(
-                min=str(min), max=str(max), distribution="logUniform"
+                min=str(min), max=str(max), distribution=Distribution.LOG_UNIFORM.value
             ),
         )
 
@@ -66,6 +72,24 @@ class Search:
             Katib ParameterSpec object.
         """
         return katib_models.V1beta1ParameterSpec(
-            parameterType="categorical",
+            parameterType=constants.CATEGORICAL_PARAMETERS,
             feasibleSpace=katib_models.V1beta1FeasibleSpace(list=[str(v) for v in values]),
         )
+
+
+# Distribution for the search space.
+class Distribution(Enum):
+    UNIFORM = "uniform"
+    LOG_UNIFORM = "logUniform"
+
+
+@dataclass
+class ContinuousSearchSpace:
+    min: Union[float, int]
+    max: Union[float, int]
+    distribution: Distribution
+
+
+@dataclass
+class CategoricalSearchSpace:
+    choices: list
