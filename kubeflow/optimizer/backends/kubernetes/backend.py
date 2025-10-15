@@ -30,6 +30,7 @@ from kubeflow.optimizer.backends.kubernetes import utils
 from kubeflow.optimizer.constants import constants
 from kubeflow.optimizer.types.algorithm_types import RandomSearch
 from kubeflow.optimizer.types.optimization_types import (
+    Metric,
     Objective,
     OptimizationJob,
     Trial,
@@ -310,14 +311,31 @@ class KubernetesBackend(ExecutionBackend):
             if not trial_list:
                 return result
 
-            for trial in trial_list.items:
-                if not (trial.metadata and trial.metadata.name):
-                    raise ValueError(f"Trial CRD is invalid: {trial}")
+            for t in trial_list.items:
+                if not (t.metadata and t.metadata.name and t.spec and t.spec.parameter_assignments):
+                    raise ValueError(f"Trial CRD is invalid: {t}")
 
                 # Trial name is equal to the TrainJob name.
-                result.append(
-                    Trial(trainjob=self.trainer_backend.get_job(name=trial.metadata.name))
+                trial = Trial(
+                    name=t.metadata.name,
+                    parameters={
+                        pa.name: pa.value
+                        for pa in t.spec.parameter_assignments
+                        if pa.name is not None and pa.value is not None
+                    },
+                    trainjob=self.trainer_backend.get_job(name=t.metadata.name),
                 )
+                if t.status and t.status.observation and t.status.observation.metrics:
+                    trial.metrics = [
+                        Metric(name=m.name, latest=m.latest, max=m.max, min=m.min)
+                        for m in t.status.observation.metrics
+                        if m.name is not None
+                        and m.latest is not None
+                        and m.max is not None
+                        and m.min is not None
+                    ]
+
+                result.append(trial)
 
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(f"Timeout to list Trials in namespace: {self.namespace}") from e

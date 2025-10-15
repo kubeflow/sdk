@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Optional, Union
@@ -65,17 +65,31 @@ class TrialConfig:
     max_failed_trials: Optional[int] = None
 
 
-# TODO (andreyvelich): Add metrics to the Trial object.
+@dataclass
+class Metric:
+    name: str
+    min: str
+    max: str
+    latest: str
+
+
 # Representation of the single trial
 @dataclass
 class Trial:
     """Representation for a trial.
 
     Args:
+        name (`str`): The name of the Trial.
+        parameters (`dict[str, str]`): Hyperparameters assigned to this Trial.
+        metrics (`list[Metric]`): Observed metrics for this Trial. The metrics are collected
+            only for completed Trials.
         trainjob (`TrainJob`): Representation of the TrainJob
     """
 
+    name: str
+    parameters: dict[str, str]
     trainjob: TrainJob
+    metrics: list[Metric] = field(default_factory=list)
 
 
 # Representation for the OptimizationJob

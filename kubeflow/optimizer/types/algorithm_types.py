@@ -21,7 +21,6 @@ from kubeflow_katib_api import models
 
 def algorithm_to_katib_spec(obj: Any) -> models.V1beta1AlgorithmSpec:
     """Convert any dataclass-based algorithm to a Katib AlgorithmSpec"""
-
     settings = []
     for f in fields(obj):
         value = getattr(obj, f.name)

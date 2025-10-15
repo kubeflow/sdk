@@ -44,7 +44,7 @@ class Search:
         )
 
     @staticmethod
-    def log_uniform(min: float, max: float) -> katib_models.V1beta1ParameterSpec:
+    def loguniform(min: float, max: float) -> katib_models.V1beta1ParameterSpec:
         """Sample a float value with log-uniform distribution between `min` and `max`.
 
         Args:

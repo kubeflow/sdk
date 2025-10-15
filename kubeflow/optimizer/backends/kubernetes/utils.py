@@ -90,6 +90,7 @@ def get_search_space_from_katib_spec(
         if p.parameter_type == constants.CATEGORICAL_PARAMETERS:
             if not (p.feasible_space and p.feasible_space.list):
                 raise ValueError(f"Katib categorical parameters are invalid: {parameters}")
+
             search_space[p.name] = CategoricalSearchSpace(
                 choices=[str(v) for v in p.feasible_space.list]
             )
@@ -101,7 +102,7 @@ def get_search_space_from_katib_spec(
                 and p.feasible_space.distribution
             ):
                 raise ValueError(f"Katib continuous parameters are invalid: {parameters}")
-            #  distribution = p.feasible_space.distribution
+
             search_space[p.name] = ContinuousSearchSpace(
                 min=float(p.feasible_space.min),
                 max=float(p.feasible_space.max),
@@ -109,23 +110,3 @@ def get_search_space_from_katib_spec(
             )
 
     return search_space
-
-
-#  """Convert Katib ParameterSpec to ContinuousSearchSpace or CategoricalSearchSpace."""
-# search_space = {}
-# # for p in parameters:
-# #     if parameters.parameterType == "categorical":
-# #         return CategoricalSearchSpace(
-# #             choices=[str(v) for v in param.feasibleSpace.list]
-# #         )
-
-# #     # Numeric parameter
-# #     dist_str = param.feasibleSpace.distribution if param.feasibleSpace else "uniform"
-# #     distribution = Distribution(dist_str.upper())  # map to Enum
-# #     ContinuousSearchSpace(
-# #         min=float(param.feasibleSpace.min),
-# #         max=float(param.feasibleSpace.max),
-# #         distribution=distribution
-# #     )
-
-# return search_space
