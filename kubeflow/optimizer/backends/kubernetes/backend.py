@@ -23,7 +23,7 @@ from kubeflow_katib_api import models
 from kubernetes import client, config
 
 import kubeflow.common.constants as common_constants
-import kubeflow.common.types as common_types
+from kubeflow.common.types import KubernetesBackendConfig
 import kubeflow.common.utils as common_utils
 from kubeflow.optimizer.backends.base import ExecutionBackend
 from kubeflow.optimizer.backends.kubernetes import utils
@@ -38,6 +38,7 @@ from kubeflow.optimizer.types.optimization_types import (
 )
 from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend as TrainerBackend
 import kubeflow.trainer.constants.constants as trainer_constants
+from kubeflow.trainer.types.types import TrainJobTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ logger = logging.getLogger(__name__)
 class KubernetesBackend(ExecutionBackend):
     def __init__(
         self,
-        cfg: common_types.KubernetesBackendConfig,
+        cfg: KubernetesBackendConfig,
     ):
         if cfg.namespace is None:
             cfg.namespace = common_utils.get_default_target_namespace(cfg.context)
@@ -67,7 +68,7 @@ class KubernetesBackend(ExecutionBackend):
 
     def optimize(
         self,
-        trial_template: common_types.TrainJobTemplate,
+        trial_template: TrainJobTemplate,
         *,
         search_space: dict[str, Any],
         trial_config: Optional[TrialConfig] = None,

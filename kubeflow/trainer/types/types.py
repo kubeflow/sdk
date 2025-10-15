@@ -330,3 +330,27 @@ class Initializer:
 
     dataset: Optional[Union[HuggingFaceDatasetInitializer, DataCacheInitializer]] = None
     model: Optional[HuggingFaceModelInitializer] = None
+
+
+# TODO (andreyvelich): Add train() and optimize() methods to this class.
+@dataclass
+class TrainJobTemplate:
+    """TrainJob template configuration.
+
+    Args:
+        trainer (`CustomTrainer`): Configuration for a CustomTrainer.
+        runtime (`Optional[Runtime]`): Optional, reference to one of the existing runtimes. Defaults
+            to the torch-distributed runtime if not provided.
+        initializer (`Optional[Initializer]`): Optional configuration for the dataset and model
+            initializers.
+    """
+
+    trainer: CustomTrainer
+    runtime: Optional[Runtime] = None
+    initializer: Optional[Initializer] = None
+
+    def keys(self):
+        return ["trainer", "runtime", "initializer"]
+
+    def __getitem__(self, key):
+        return getattr(self, key)

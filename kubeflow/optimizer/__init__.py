@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Import common types.
-from kubeflow.common.types import KubernetesBackendConfig, TrainJobTemplate
+from kubeflow.common.types import KubernetesBackendConfig
 
 # Import the Kubeflow Optimizer client.
 from kubeflow.optimizer.api.optimizer_client import OptimizerClient
@@ -22,6 +22,9 @@ from kubeflow.optimizer.api.optimizer_client import OptimizerClient
 from kubeflow.optimizer.types.algorithm_types import RandomSearch
 from kubeflow.optimizer.types.optimization_types import Objective, OptimizationJob, TrialConfig
 from kubeflow.optimizer.types.search_types import Search
+
+# Import the Kubeflow Trainer types.
+from kubeflow.trainer.types.types import TrainJobTemplate
 
 __all__ = [
     "KubernetesBackendConfig",

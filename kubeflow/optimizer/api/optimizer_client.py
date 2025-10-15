@@ -15,10 +15,11 @@
 import logging
 from typing import Any, Optional
 
-from kubeflow.common import types as common_types
+from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.optimizer.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.optimizer.types.algorithm_types import RandomSearch
 from kubeflow.optimizer.types.optimization_types import Objective, OptimizationJob, TrialConfig
+from kubeflow.trainer.types.types import TrainJobTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 class OptimizerClient:
     def __init__(
         self,
-        backend_config: Optional[common_types.KubernetesBackendConfig] = None,
+        backend_config: Optional[KubernetesBackendConfig] = None,
     ):
         """Initialize a Kubeflow Optimizer client.
 
@@ -40,16 +41,16 @@ class OptimizerClient:
         """
         # Set the default backend config.
         if not backend_config:
-            backend_config = common_types.KubernetesBackendConfig()
+            backend_config = KubernetesBackendConfig()
 
-        if isinstance(backend_config, common_types.KubernetesBackendConfig):
+        if isinstance(backend_config, KubernetesBackendConfig):
             self.backend = KubernetesBackend(backend_config)
         else:
             raise ValueError(f"Invalid backend config '{backend_config}'")
 
     def optimize(
         self,
-        trial_template: common_types.TrainJobTemplate,
+        trial_template: TrainJobTemplate,
         *,
         trial_config: Optional[TrialConfig] = None,
         search_space: dict[str, Any],

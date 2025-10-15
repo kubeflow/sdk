@@ -14,7 +14,7 @@
 
 
 # Import common types.
-from kubeflow.common.types import KubernetesBackendConfig, TrainJobTemplate
+from kubeflow.common.types import KubernetesBackendConfig
 
 # Import the Kubeflow Trainer client.
 from kubeflow.trainer.api.trainer_client import TrainerClient
@@ -40,6 +40,7 @@ from kubeflow.trainer.types.types import (
     TorchTuneConfig,
     TorchTuneInstructDataset,
     TrainerType,
+    TrainJobTemplate,
 )
 
 __all__ = [

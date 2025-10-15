@@ -15,16 +15,16 @@
 import abc
 from typing import Any, Optional
 
-from kubeflow.common import types as common_types
 from kubeflow.optimizer.types.algorithm_types import RandomSearch
 from kubeflow.optimizer.types.optimization_types import Objective, OptimizationJob, TrialConfig
+from kubeflow.trainer.types.types import TrainJobTemplate
 
 
 class ExecutionBackend(abc.ABC):
     @abc.abstractmethod
     def optimize(
         self,
-        trial_template: common_types.TrainJobTemplate,
+        trial_template: TrainJobTemplate,
         *,
         search_space: dict[str, Any],
         trial_config: Optional[TrialConfig] = None,
