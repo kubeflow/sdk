@@ -14,7 +14,6 @@ classifiers = [
   "Intended Audience :: Developers",
   "Intended Audience :: Education",
   "Intended Audience :: Science/Research",
-  # TODO (andreyvelich): Check Python version for Kubeflow Trainer.
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",

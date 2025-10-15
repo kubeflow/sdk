@@ -99,7 +99,9 @@ class OptimizationJob:
 
     Args:
         name (`str`): The name of the OptimizationJob.
-        objectives (`list[Objective]`): The objective configurations.
+        objectives (`list[Objective]`): The objective configuration. Currently, only the
+            first metric defined in the objectives list is optimized. Any additional metrics are
+            collected and displayed in the Trial results.
         algorithm (`RandomSearch`): The algorithm configuration.
         trial_config (`TrialConfig`): The trial configuration.
         trials (`list[Trial]`): The list of created Trials.

@@ -244,7 +244,6 @@ class Step:
 
 
 # Representation for the TrainJob.
-# TODO (andreyvelich): Discuss what fields users want to get.
 @dataclass
 class TrainJob:
     name: str
