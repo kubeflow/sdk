@@ -125,7 +125,7 @@ class KubernetesBackend(ExecutionBackend):
                             runtime=trial_template.runtime,
                             trainer=trial_template.trainer,
                             initializer=trial_template.initializer,
-                        ),
+                        ).to_dict(),
                     },
                 ),
                 parameters=parameters_spec,
