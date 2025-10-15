@@ -189,7 +189,7 @@ class KubernetesBackend(ExecutionBackend):
                 return result
 
             for optimization_job in optimization_job_list.items:
-                result.append(self.__get_optimization_job_from_crd(optimization_job))
+                result.append(self.__get_optimization_job_from_custom_resource(optimization_job))
 
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(
@@ -224,7 +224,7 @@ class KubernetesBackend(ExecutionBackend):
         except Exception as e:
             raise RuntimeError(f"Failed to get OptimizationJob: {self.namespace}/{name}") from e
 
-        return self.__get_optimization_job_from_crd(optimization_job)  # type: ignore
+        return self.__get_optimization_job_from_custom_resource(optimization_job)  # type: ignore
 
     def delete_job(self, name: str):
         """Delete the OptimizationJob"""
@@ -244,44 +244,44 @@ class KubernetesBackend(ExecutionBackend):
 
         logger.debug(f"OptimizationJob {self.namespace}/{name} has been deleted")
 
-    def __get_optimization_job_from_crd(
+    def __get_optimization_job_from_custom_resource(
         self,
-        optimization_job_crd: models.V1beta1Experiment,
+        optimization_job_cr: models.V1beta1Experiment,
     ) -> OptimizationJob:
         if not (
-            optimization_job_crd.metadata
-            and optimization_job_crd.metadata.name
-            and optimization_job_crd.metadata.namespace
-            and optimization_job_crd.spec
-            and optimization_job_crd.spec.parameters
-            and optimization_job_crd.spec.objective
-            and optimization_job_crd.spec.algorithm
-            and optimization_job_crd.spec.max_trial_count
-            and optimization_job_crd.spec.parallel_trial_count
-            and optimization_job_crd.metadata.creation_timestamp
+            optimization_job_cr.metadata
+            and optimization_job_cr.metadata.name
+            and optimization_job_cr.metadata.namespace
+            and optimization_job_cr.spec
+            and optimization_job_cr.spec.parameters
+            and optimization_job_cr.spec.objective
+            and optimization_job_cr.spec.algorithm
+            and optimization_job_cr.spec.max_trial_count
+            and optimization_job_cr.spec.parallel_trial_count
+            and optimization_job_cr.metadata.creation_timestamp
         ):
-            raise Exception(f"OptimizationJob CRD is invalid: {optimization_job_crd}")
+            raise Exception(f"OptimizationJob CR is invalid: {optimization_job_cr}")
 
         optimization_job = OptimizationJob(
-            name=optimization_job_crd.metadata.name,
+            name=optimization_job_cr.metadata.name,
             search_space=utils.get_search_space_from_katib_spec(
-                optimization_job_crd.spec.parameters
+                optimization_job_cr.spec.parameters
             ),
-            objectives=utils.get_objectives_from_katib_spec(optimization_job_crd.spec.objective),
-            algorithm=utils.get_algorithm_from_katib_spec(optimization_job_crd.spec.algorithm),
+            objectives=utils.get_objectives_from_katib_spec(optimization_job_cr.spec.objective),
+            algorithm=utils.get_algorithm_from_katib_spec(optimization_job_cr.spec.algorithm),
             trial_config=TrialConfig(
-                num_trials=optimization_job_crd.spec.max_trial_count,
-                parallel_trials=optimization_job_crd.spec.parallel_trial_count,
-                max_failed_trials=optimization_job_crd.spec.max_failed_trial_count,
+                num_trials=optimization_job_cr.spec.max_trial_count,
+                parallel_trials=optimization_job_cr.spec.parallel_trial_count,
+                max_failed_trials=optimization_job_cr.spec.max_failed_trial_count,
             ),
-            trials=self.__get_trials_from_crd(optimization_job_crd.metadata.name),
-            creation_timestamp=optimization_job_crd.metadata.creation_timestamp,
+            trials=self.__get_trials_from_job(optimization_job_cr.metadata.name),
+            creation_timestamp=optimization_job_cr.metadata.creation_timestamp,
             status=constants.OPTIMIZATION_JOB_CREATED,  # The default OptimizationJob status.
         )
 
         # Update the OptimizationJob status from Experiment conditions.
-        if optimization_job_crd.status and optimization_job_crd.status.conditions:
-            for c in optimization_job_crd.status.conditions:
+        if optimization_job_cr.status and optimization_job_cr.status.conditions:
+            for c in optimization_job_cr.status.conditions:
                 if c.type == constants.EXPERIMENT_SUCCEEDED and c.status == "True":
                     optimization_job.status = constants.OPTIMIZATION_JOB_COMPLETE
                 elif c.type == constants.OPTIMIZATION_JOB_FAILED and c.status == "True":
@@ -293,7 +293,7 @@ class KubernetesBackend(ExecutionBackend):
 
         return optimization_job
 
-    def __get_trials_from_crd(self, optimization_job_name: str) -> list[Trial]:
+    def __get_trials_from_job(self, optimization_job_name: str) -> list[Trial]:
         result = []
         try:
             thread = self.custom_api.list_namespaced_custom_object(
@@ -314,7 +314,7 @@ class KubernetesBackend(ExecutionBackend):
 
             for t in trial_list.items:
                 if not (t.metadata and t.metadata.name and t.spec and t.spec.parameter_assignments):
-                    raise ValueError(f"Trial CRD is invalid: {t}")
+                    raise ValueError(f"Trial CR is invalid: {t}")
 
                 # Trial name is equal to the TrainJob name.
                 trial = Trial(

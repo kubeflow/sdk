@@ -344,26 +344,26 @@ def get_command_using_train_func(
     return command
 
 
-def get_trainer_crd_from_custom_trainer(
+def get_trainer_cr_from_custom_trainer(
     runtime: types.Runtime,
     trainer: types.CustomTrainer,
 ) -> models.TrainerV1alpha1Trainer:
     """
-    Get the Trainer CRD from the custom trainer.
+    Get the Trainer CR from the custom trainer.
     """
-    trainer_crd = models.TrainerV1alpha1Trainer()
+    trainer_cr = models.TrainerV1alpha1Trainer()
 
     # Add number of nodes to the Trainer.
     if trainer.num_nodes:
-        trainer_crd.num_nodes = trainer.num_nodes
+        trainer_cr.num_nodes = trainer.num_nodes
 
     # Add resources per node to the Trainer.
     if trainer.resources_per_node:
-        trainer_crd.resources_per_node = get_resources_per_node(trainer.resources_per_node)
+        trainer_cr.resources_per_node = get_resources_per_node(trainer.resources_per_node)
 
     # Add command to the Trainer.
     # TODO: Support train function parameters.
-    trainer_crd.command = get_command_using_train_func(
+    trainer_cr.command = get_command_using_train_func(
         runtime,
         trainer.func,
         trainer.func_args,
@@ -373,41 +373,41 @@ def get_trainer_crd_from_custom_trainer(
 
     # Add environment variables to the Trainer.
     if trainer.env:
-        trainer_crd.env = [
+        trainer_cr.env = [
             models.IoK8sApiCoreV1EnvVar(name=key, value=value) for key, value in trainer.env.items()
         ]
 
-    return trainer_crd
+    return trainer_cr
 
 
-def get_trainer_crd_from_builtin_trainer(
+def get_trainer_cr_from_builtin_trainer(
     runtime: types.Runtime,
     trainer: types.BuiltinTrainer,
     initializer: Optional[types.Initializer] = None,
 ) -> models.TrainerV1alpha1Trainer:
     """
-    Get the Trainer CRD from the builtin trainer.
+    Get the Trainer CR from the builtin trainer.
     """
     if not isinstance(trainer.config, types.TorchTuneConfig):
         raise ValueError(f"The BuiltinTrainer config is invalid: {trainer.config}")
 
-    trainer_crd = models.TrainerV1alpha1Trainer()
+    trainer_cr = models.TrainerV1alpha1Trainer()
 
     # Add number of nodes to the Trainer.
     if trainer.config.num_nodes:
-        trainer_crd.num_nodes = trainer.config.num_nodes
+        trainer_cr.num_nodes = trainer.config.num_nodes
 
     # Add resources per node to the Trainer.
     if trainer.config.resources_per_node:
-        trainer_crd.resources_per_node = get_resources_per_node(trainer.config.resources_per_node)
+        trainer_cr.resources_per_node = get_resources_per_node(trainer.config.resources_per_node)
 
-    trainer_crd.command = list(runtime.trainer.command)
+    trainer_cr.command = list(runtime.trainer.command)
     # Parse args in the TorchTuneConfig to the Trainer, preparing for the mutation of
     # the torchtune config in the runtime plugin.
     # Ref:https://github.com/kubeflow/trainer/tree/master/docs/proposals/2401-llm-trainer-v2
-    trainer_crd.args = get_args_using_torchtune_config(trainer.config, initializer)
+    trainer_cr.args = get_args_using_torchtune_config(trainer.config, initializer)
 
-    return trainer_crd
+    return trainer_cr
 
 
 def get_args_using_torchtune_config(
