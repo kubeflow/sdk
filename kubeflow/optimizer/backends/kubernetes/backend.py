@@ -25,7 +25,7 @@ from kubernetes import client, config
 import kubeflow.common.constants as common_constants
 from kubeflow.common.types import KubernetesBackendConfig
 import kubeflow.common.utils as common_utils
-from kubeflow.optimizer.backends.base import ExecutionBackend
+from kubeflow.optimizer.backends.base import RuntimeBackend
 from kubeflow.optimizer.backends.kubernetes import utils
 from kubeflow.optimizer.constants import constants
 from kubeflow.optimizer.types.algorithm_types import RandomSearch
@@ -43,7 +43,7 @@ from kubeflow.trainer.types.types import TrainJobTemplate
 logger = logging.getLogger(__name__)
 
 
-class KubernetesBackend(ExecutionBackend):
+class KubernetesBackend(RuntimeBackend):
     def __init__(
         self,
         cfg: KubernetesBackendConfig,

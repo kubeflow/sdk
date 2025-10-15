@@ -20,7 +20,7 @@ from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 
 
-class ExecutionBackend(abc.ABC):
+class RuntimeBackend(abc.ABC):
     @abc.abstractmethod
     def list_runtimes(self) -> list[types.Runtime]:
         raise NotImplementedError()

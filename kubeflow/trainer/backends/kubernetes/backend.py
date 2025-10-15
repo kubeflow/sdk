@@ -29,7 +29,7 @@ from kubernetes import client, config, watch
 import kubeflow.common.constants as common_constants
 import kubeflow.common.types as common_types
 import kubeflow.common.utils as common_utils
-from kubeflow.trainer.backends.base import ExecutionBackend
+from kubeflow.trainer.backends.base import RuntimeBackend
 import kubeflow.trainer.backends.kubernetes.utils as utils
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
@@ -37,7 +37,7 @@ from kubeflow.trainer.types import types
 logger = logging.getLogger(__name__)
 
 
-class KubernetesBackend(ExecutionBackend):
+class KubernetesBackend(RuntimeBackend):
     def __init__(
         self,
         cfg: common_types.KubernetesBackendConfig,

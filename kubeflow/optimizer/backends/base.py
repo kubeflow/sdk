@@ -20,7 +20,7 @@ from kubeflow.optimizer.types.optimization_types import Objective, OptimizationJ
 from kubeflow.trainer.types.types import TrainJobTemplate
 
 
-class ExecutionBackend(abc.ABC):
+class RuntimeBackend(abc.ABC):
     @abc.abstractmethod
     def optimize(
         self,

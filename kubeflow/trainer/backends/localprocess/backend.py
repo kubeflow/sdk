@@ -20,7 +20,7 @@ import tempfile
 from typing import Optional, Union
 import uuid
 
-from kubeflow.trainer.backends.base import ExecutionBackend
+from kubeflow.trainer.backends.base import RuntimeBackend
 from kubeflow.trainer.backends.localprocess import utils as local_utils
 from kubeflow.trainer.backends.localprocess.constants import local_runtimes
 from kubeflow.trainer.backends.localprocess.job import LocalJob
@@ -35,7 +35,7 @@ from kubeflow.trainer.types import types
 logger = logging.getLogger(__name__)
 
 
-class LocalProcessBackend(ExecutionBackend):
+class LocalProcessBackend(RuntimeBackend):
     def __init__(
         self,
         cfg: LocalProcessBackendConfig,
