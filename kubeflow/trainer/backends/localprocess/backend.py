@@ -72,7 +72,9 @@ class LocalProcessBackend(RuntimeBackend):
         self,
         runtime: Optional[types.Runtime] = None,
         initializer: Optional[types.Initializer] = None,
-        trainer: Optional[Union[types.CustomTrainer, types.BuiltinTrainer]] = None,
+        trainer: Optional[
+            Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
+        ] = None,
     ) -> str:
         # set train job name
         train_job_name = random.choice(string.ascii_lowercase) + uuid.uuid4().hex[:11]

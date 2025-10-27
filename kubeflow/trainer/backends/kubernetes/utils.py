@@ -346,7 +346,7 @@ def get_command_using_train_func(
 
 def get_trainer_cr_from_custom_trainer(
     runtime: types.Runtime,
-    trainer: types.CustomTrainer,
+    trainer: Union[types.CustomTrainer, types.CustomTrainerContainer],
 ) -> models.TrainerV1alpha1Trainer:
     """
     Get the Trainer CR from the custom trainer.
@@ -361,15 +361,18 @@ def get_trainer_cr_from_custom_trainer(
     if trainer.resources_per_node:
         trainer_cr.resources_per_node = get_resources_per_node(trainer.resources_per_node)
 
-    # Add command to the Trainer.
-    # TODO: Support train function parameters.
-    trainer_cr.command = get_command_using_train_func(
-        runtime,
-        trainer.func,
-        trainer.func_args,
-        trainer.pip_index_urls,
-        trainer.packages_to_install,
-    )
+    if isinstance(trainer, types.CustomTrainer):
+        # If CustomTrainer is used, add command to the Trainer.
+        trainer_cr.command = get_command_using_train_func(
+            runtime,
+            trainer.func,
+            trainer.func_args,
+            trainer.pip_index_urls,
+            trainer.packages_to_install,
+        )
+    else:
+        # Alternatively, set the Trainer image.
+        trainer_cr.image = trainer.image
 
     # Add environment variables to the Trainer.
     if trainer.env:

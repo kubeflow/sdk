@@ -52,6 +52,25 @@ class CustomTrainer:
     env: Optional[dict[str, str]] = None
 
 
+# Configuration for the Custom Trainer Container.
+@dataclass
+class CustomTrainerContainer:
+    """Custom Trainer configuration. Configure the container image
+        that encapsulates the entire model training process.
+
+    Args:
+        image (`str`): The container image that encapsulates the entire model training process.
+        num_nodes (`Optional[int]`): The number of nodes to use for training.
+        resources_per_node (`Optional[dict]`): The computing resources to allocate per node.
+        env (`Optional[dict[str, str]]`): The environment variables to set in the training nodes.
+    """
+
+    image: str
+    num_nodes: Optional[int] = None
+    resources_per_node: Optional[dict] = None
+    env: Optional[dict[str, str]] = None
+
+
 # TODO(Electronic-Waste): Add more loss functions.
 # Loss function for the TorchTune LLM Trainer.
 class Loss(Enum):

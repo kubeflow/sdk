@@ -181,7 +181,9 @@ class KubernetesBackend(RuntimeBackend):
         self,
         runtime: Optional[types.Runtime] = None,
         initializer: Optional[types.Initializer] = None,
-        trainer: Optional[Union[types.CustomTrainer, types.BuiltinTrainer]] = None,
+        trainer: Optional[
+            Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
+        ] = None,
     ) -> str:
         # Generate unique name for the TrainJob.
         train_job_name = random.choice(string.ascii_lowercase) + uuid.uuid4().hex[:11]
@@ -544,7 +546,9 @@ class KubernetesBackend(RuntimeBackend):
         self,
         runtime: Optional[types.Runtime] = None,
         initializer: Optional[types.Initializer] = None,
-        trainer: Optional[Union[types.CustomTrainer, types.BuiltinTrainer]] = None,
+        trainer: Optional[
+            Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
+        ] = None,
     ) -> models.TrainerV1alpha1TrainJobSpec:
         """Get TrainJob spec from the given parameters"""
         if runtime is None:
@@ -554,8 +558,8 @@ class KubernetesBackend(RuntimeBackend):
         trainer_cr = models.TrainerV1alpha1Trainer()
 
         if trainer:
-            # If users choose to use a custom training function.
-            if isinstance(trainer, types.CustomTrainer):
+            # If users choose to use a custom training script.
+            if isinstance(trainer, (types.CustomTrainer, types.CustomTrainerContainer)):
                 if runtime.trainer.trainer_type != types.TrainerType.CUSTOM_TRAINER:
                     raise ValueError(f"CustomTrainer can't be used with {runtime} runtime")
                 trainer_cr = utils.get_trainer_cr_from_custom_trainer(runtime, trainer)
