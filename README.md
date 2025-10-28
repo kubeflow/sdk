@@ -2,6 +2,7 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/kubeflow?color=%2334D058&label=pypi%20package)](https://pypi.org/project/kubeflow/)
 [![PyPI Downloads](https://static.pepy.tech/badge/kubeflow)](https://pepy.tech/projects/kubeflow)
+[![Documentation Status](https://readthedocs.org/projects/kubeflow-sdk/badge/?version=latest)](https://kubeflow-sdk.readthedocs.io/en/latest/?badge=latest)
 [![Join Slack](https://img.shields.io/badge/Join_Slack-blue?logo=slack)](https://www.kubeflow.org/docs/about/community/#kubeflow-slack-channels)
 [![Coverage Status](https://coveralls.io/repos/github/kubeflow/sdk/badge.svg?branch=main)](https://coveralls.io/github/kubeflow/sdk?branch=main)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/kubeflow/sdk)
@@ -96,7 +97,17 @@ Kubeflow SDK is a community project and is still under active development. We we
 
 ## Documentation
 
-<!-- TODO(kramaranya): add kubeflow sdk docs -->
+📚 **[Official Documentation](https://kubeflow-sdk.readthedocs.io/)** - Comprehensive guides and API reference
+
+### Quick Links
+
+- **[Installation Guide](https://kubeflow-sdk.readthedocs.io/en/latest/source/installation.html)**: Get started with Kubeflow SDK
+- **[Getting Started](https://kubeflow-sdk.readthedocs.io/en/latest/source/getting-started.html)**: Run your first training job
+- **[API Reference](https://kubeflow-sdk.readthedocs.io/en/latest/source/api-reference/index.html)**: Complete API documentation
+- **[User Guides](https://kubeflow-sdk.readthedocs.io/en/latest/index.html#user-guides)**: In-depth usage guides
+- **[Examples](https://kubeflow-sdk.readthedocs.io/en/latest/index.html#examples)**: Real-world code examples
+
+### Additional Resources
 
 - **[Design Document](https://docs.google.com/document/d/1rX7ELAHRb_lvh0Y7BK1HBYAbA0zi9enB0F_358ZC58w/edit)**: Kubeflow SDK design proposal
 - **[Component Guides](https://www.kubeflow.org/docs/components/)**: Individual component documentation

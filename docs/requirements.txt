@@ -1,5 +1,10 @@
+# Sphinx and extensions
 sphinx>=7.2.6
 furo>=2023.9.10
 sphinx-autobuild>=2021.3.14
 myst-parser[linkify]>=2.0.0
 autodocsumm>=0.2.9
+
+# Additional tools for CI/CD
+sphinx-lint>=0.9.0        # Linting for RST files
+doc8>=1.1.0               # Style checker for documentation

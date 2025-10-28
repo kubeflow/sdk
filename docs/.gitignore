@@ -1,0 +1,32 @@
+# Sphinx build outputs
+_build/
+_static/
+_templates/
+
+# Auto-generated files
+*.pyc
+__pycache__/
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Logs
+*.log
+build-warnings.log
+
+# Temporary files
+*.tmp
+.cache/
