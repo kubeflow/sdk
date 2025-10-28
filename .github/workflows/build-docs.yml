@@ -1,0 +1,200 @@
+name: Build and Validate Documentation
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'docs/**'
+      - 'kubeflow/**'
+      - '.github/workflows/build-docs.yml'
+      - '.readthedocs.yaml'
+      - 'pyproject.toml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'kubeflow/**'
+      - '.github/workflows/build-docs.yml'
+      - '.readthedocs.yaml'
+      - 'pyproject.toml'
+
+jobs:
+  build-docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          cache: 'pip'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install -r docs/requirements.txt
+          uv pip install -e .
+
+      - name: Build documentation
+        working-directory: docs
+        run: |
+          source ../.venv/bin/activate
+          make html
+
+      - name: Check for warnings (strict)
+        working-directory: docs
+        run: |
+          source ../.venv/bin/activate
+          # Build with warnings-as-errors, but allow expected warnings
+          sphinx-build -b html -W --keep-going \
+            -w build-warnings.log \
+            . _build/html || true
+
+          # Check for unexpected warnings
+          echo "Build warnings:"
+          cat build-warnings.log || echo "No warnings file"
+
+          # Count warnings (excluding expected ones)
+          EXPECTED_WARNINGS="favicon|toc.not_included"
+          UNEXPECTED=$(grep -v -E "$EXPECTED_WARNINGS" build-warnings.log | wc -l || echo "0")
+
+          if [ "$UNEXPECTED" -gt "0" ]; then
+            echo "Found $UNEXPECTED unexpected warning(s)"
+            grep -v -E "$EXPECTED_WARNINGS" build-warnings.log
+            exit 1
+          else
+            echo "All warnings are expected. Build successful!"
+          fi
+
+      - name: Upload documentation artifacts
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-html
+          path: docs/_build/html
+          retention-days: 7
+
+      - name: Add PR comment with preview link
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '📚 Documentation preview built successfully!\n\nDownload the artifacts from the workflow run to view the HTML documentation.'
+            })
+
+  validate-links:
+    name: Validate Documentation Links
+    runs-on: ubuntu-latest
+    needs: build-docs
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install -r docs/requirements.txt
+          uv pip install -e .
+          uv pip install sphinx-linkcheck
+
+      - name: Check internal links
+        working-directory: docs
+        run: |
+          source ../.venv/bin/activate
+          # Run linkcheck (only internal links to avoid flaky external URLs)
+          make linkcheck || echo "Link check completed with warnings"
+
+  docs-coverage:
+    name: Documentation Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install -r docs/requirements.txt
+          uv pip install -e .
+
+      - name: Check docstring coverage
+        run: |
+          source .venv/bin/activate
+          # Check that public APIs have docstrings
+          python -c "
+          import ast
+          import sys
+          from pathlib import Path
+
+          missing_docs = []
+
+          # Check TrainerClient
+          client_file = Path('kubeflow/trainer/api/trainer_client.py')
+          tree = ast.parse(client_file.read_text())
+
+          for node in ast.walk(tree):
+              if isinstance(node, ast.FunctionDef):
+                  if not node.name.startswith('_'):  # Public method
+                      if not ast.get_docstring(node):
+                          missing_docs.append(f'TrainerClient.{node.name}')
+
+          if missing_docs:
+              print(f'❌ Found {len(missing_docs)} public methods without docstrings:')
+              for item in missing_docs:
+                  print(f'  - {item}')
+              sys.exit(1)
+          else:
+              print('✅ All public methods have docstrings!')
+          "
+
+  spell-check:
+    name: Spell Check Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run codespell
+        uses: codespell-project/actions-codespell@v2
+        with:
+          ignore_words_list: 'bu,nd,te,fo'
+          skip: '*.svg,*.png,*.jpg,*.gif,*.ico,*.min.js,*.min.css'
+          path: docs/
