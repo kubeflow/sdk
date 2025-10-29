@@ -326,7 +326,7 @@ class KubernetesBackend(RuntimeBackend):
 
             for t in trial_list.items:
                 if not (t.metadata and t.metadata.name and t.spec and t.spec.parameter_assignments):
-                    raise ValueError(f"Trial CR is invalid: {t}")
+                    raise ValueError(f"{constants.TRIAL_KIND} CR is invalid: {t}")
 
                 # Trial name is equal to the TrainJob name.
                 trial = Trial(
@@ -351,8 +351,12 @@ class KubernetesBackend(RuntimeBackend):
                 result.append(trial)
 
         except multiprocessing.TimeoutError as e:
-            raise TimeoutError(f"Timeout to list Trials in namespace: {self.namespace}") from e
+            raise TimeoutError(
+                f"Timeout to list {constants.TRIAL_KIND}s in namespace: {self.namespace}"
+            ) from e
         except Exception as e:
-            raise RuntimeError(f"Failed to list Trials in namespace: {self.namespace}") from e
+            raise RuntimeError(
+                f"Failed to list {constants.TRIAL_KIND}s in namespace: {self.namespace}"
+            ) from e
 
         return result

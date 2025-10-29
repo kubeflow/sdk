@@ -17,7 +17,7 @@ from typing import Any, Optional
 
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.optimizer.backends.kubernetes.backend import KubernetesBackend
-from kubeflow.optimizer.types.algorithm_types import RandomSearch
+from kubeflow.optimizer.types.algorithm_types import BaseAlgorithm
 from kubeflow.optimizer.types.optimization_types import Objective, OptimizationJob, TrialConfig
 from kubeflow.trainer.types.types import TrainJobTemplate
 
@@ -55,7 +55,7 @@ class OptimizerClient:
         trial_config: Optional[TrialConfig] = None,
         search_space: dict[str, Any],
         objectives: Optional[list[Objective]] = None,
-        algorithm: Optional[RandomSearch] = None,
+        algorithm: Optional[BaseAlgorithm] = None,
     ) -> str:
         """Create an OptimizationJob for hyperparameter tuning.
 
