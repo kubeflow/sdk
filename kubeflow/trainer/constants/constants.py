@@ -27,7 +27,7 @@ CLUSTER_TRAINING_RUNTIME_KIND = "ClusterTrainingRuntime"
 CLUSTER_TRAINING_RUNTIME_PLURAL = "clustertrainingruntimes"
 
 # The Kind name for the TrainingRuntime.
-TRAINING_RUNTIME_KIND = "ClusterTrainingRuntime"
+TRAINING_RUNTIME_KIND = "TrainingRuntime"
 
 # The plural for the ClusterTrainingRuntime.
 TRAINING_RUNTIME_PLURAL = "trainingruntimes"

@@ -357,6 +357,16 @@ def list_namespaced_custom_object_response(*args, **kwargs):
             models.TrainerV1alpha1TrainJobList(items=items),
             models.TrainerV1alpha1TrainJobList,
         )
+    elif args[3] == constants.TRAINING_RUNTIME_PLURAL:
+        # TODO: add test case for namespace scoped runtimes
+        # items = [
+        #     create_training_runtime(name="runtime-1"),
+        #     create_training_runtime(name="runtime-2"),
+        # ]
+        mock_thread.get.return_value = normalize_model(
+            models.TrainerV1alpha1TrainingRuntimeList(items=[]),
+            models.TrainerV1alpha1TrainingRuntimeList,
+        )
 
     return mock_thread
 
@@ -467,6 +477,37 @@ def create_cluster_training_runtime(
     return models.TrainerV1alpha1ClusterTrainingRuntime(
         apiVersion=constants.API_VERSION,
         kind="ClusterTrainingRuntime",
+        metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+            name=name,
+            namespace=namespace,
+            labels={constants.RUNTIME_FRAMEWORK_LABEL: name},
+        ),
+        spec=models.TrainerV1alpha1TrainingRuntimeSpec(
+            mlPolicy=models.TrainerV1alpha1MLPolicy(
+                torch=models.TrainerV1alpha1TorchMLPolicySource(
+                    numProcPerNode=models.IoK8sApimachineryPkgUtilIntstrIntOrString(2)
+                ),
+                numNodes=2,
+            ),
+            template=models.TrainerV1alpha1JobSetTemplateSpec(
+                metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                    name=name,
+                    namespace=namespace,
+                ),
+                spec=models.JobsetV1alpha2JobSetSpec(replicatedJobs=[get_replicated_job()]),
+            ),
+        ),
+    )
+
+
+def create_training_runtime(
+    name: str,
+    namespace: str = "default",
+) -> models.TrainerV1alpha1TrainingRuntime:
+    """Create a mock namespaced TrainingRuntime object (not cluster-scoped)."""
+    return models.TrainerV1alpha1TrainingRuntime(
+        apiVersion=constants.API_VERSION,
+        kind="TrainingRuntime",
         metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
             name=name,
             namespace=namespace,

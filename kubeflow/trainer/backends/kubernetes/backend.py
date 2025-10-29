@@ -82,7 +82,7 @@ class KubernetesBackend(RuntimeBackend):
                 namespace_thread.get(constants.DEFAULT_TIMEOUT)
             )
 
-            if not (cluster_runtime_list and namespace_runtime_list):
+            if not (cluster_runtime_list or namespace_runtime_list):
                 return result
 
             for runtime in namespace_runtime_list.items + cluster_runtime_list.items:
