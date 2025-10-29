@@ -154,14 +154,19 @@ class KubernetesBackend(RuntimeBackend):
             )
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(
-                f"Timeout to create OptimizationJob: {self.namespace}/{optimization_job_name}"
+                f"Timeout to create {constants.OPTIMIZATION_JOB_KIND}: "
+                f"{self.namespace}/{optimization_job_name}"
             ) from e
         except Exception as e:
             raise RuntimeError(
-                f"Failed to create OptimizationJob: {self.namespace}/{optimization_job_name}"
+                f"Failed to create {constants.OPTIMIZATION_JOB_KIND}: "
+                f"{self.namespace}/{optimization_job_name}"
             ) from e
 
-        logger.debug(f"OptimizationJob {self.namespace}/{optimization_job_name} has been created")
+        logger.debug(
+            f"{constants.OPTIMIZATION_JOB_KIND} {self.namespace}/{optimization_job_name} "
+            "has been created"
+        )
 
         return optimization_job_name
 
@@ -190,11 +195,11 @@ class KubernetesBackend(RuntimeBackend):
 
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(
-                f"Timeout to list OptimizationJobs in namespace: {self.namespace}"
+                f"Timeout to list {constants.OPTIMIZATION_JOB_KIND}s in namespace: {self.namespace}"
             ) from e
         except Exception as e:
             raise RuntimeError(
-                f"Failed to list OptimizationJobs in namespace: {self.namespace}"
+                f"Failed to list {constants.OPTIMIZATION_JOB_KIND}s in namespace: {self.namespace}"
             ) from e
 
         return result
@@ -217,9 +222,13 @@ class KubernetesBackend(RuntimeBackend):
             )
 
         except multiprocessing.TimeoutError as e:
-            raise TimeoutError(f"Timeout to get OptimizationJob: {self.namespace}/{name}") from e
+            raise TimeoutError(
+                f"Timeout to get {constants.OPTIMIZATION_JOB_KIND}: {self.namespace}/{name}"
+            ) from e
         except Exception as e:
-            raise RuntimeError(f"Failed to get OptimizationJob: {self.namespace}/{name}") from e
+            raise RuntimeError(
+                f"Failed to get {constants.OPTIMIZATION_JOB_KIND}: {self.namespace}/{name}"
+            ) from e
 
         return self.__get_optimization_job_from_cr(optimization_job)  # type: ignore
 
@@ -235,11 +244,15 @@ class KubernetesBackend(RuntimeBackend):
                 name=name,
             )
         except multiprocessing.TimeoutError as e:
-            raise TimeoutError(f"Timeout to delete OptimizationJob: {self.namespace}/{name}") from e
+            raise TimeoutError(
+                f"Timeout to delete {constants.OPTIMIZATION_JOB_KIND}: {self.namespace}/{name}"
+            ) from e
         except Exception as e:
-            raise RuntimeError(f"Failed to delete OptimizationJob: {self.namespace}/{name}") from e
+            raise RuntimeError(
+                f"Failed to delete {constants.OPTIMIZATION_JOB_KIND}: {self.namespace}/{name}"
+            ) from e
 
-        logger.debug(f"OptimizationJob {self.namespace}/{name} has been deleted")
+        logger.debug(f"{constants.OPTIMIZATION_JOB_KIND} {self.namespace}/{name} has been deleted")
 
     def __get_optimization_job_from_cr(
         self,
@@ -257,7 +270,9 @@ class KubernetesBackend(RuntimeBackend):
             and optimization_job_cr.spec.parallel_trial_count
             and optimization_job_cr.metadata.creation_timestamp
         ):
-            raise Exception(f"OptimizationJob CR is invalid: {optimization_job_cr}")
+            raise Exception(
+                f"{constants.OPTIMIZATION_JOB_KIND} CR is invalid: {optimization_job_cr}"
+            )
 
         optimization_job = OptimizationJob(
             name=optimization_job_cr.metadata.name,

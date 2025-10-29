@@ -36,6 +36,9 @@ TRIAL_PLURAL = "trials"
 # The Kind name for the Trials.
 TRIAL_KIND = "Trial"
 
+# The Kind name for the OptimizationJob.
+OPTIMIZATION_JOB_KIND = "OptimizationJob"
+
 # The default status for the OptimizationJob once users create it.
 OPTIMIZATION_JOB_CREATED = "Created"
 
