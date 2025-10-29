@@ -31,7 +31,7 @@ import uuid
 from kubeflow_trainer_api import models
 import pytest
 
-from kubeflow.common import types as common_types
+from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
 import kubeflow.trainer.backends.kubernetes.utils as utils
 from kubeflow.trainer.constants import constants
@@ -94,7 +94,7 @@ def kubernetes_backend(request):
             ),
         ),
     ):
-        yield KubernetesBackend(common_types.KubernetesBackendConfig())
+        yield KubernetesBackend(KubernetesBackendConfig())
 
 
 # --------------------------

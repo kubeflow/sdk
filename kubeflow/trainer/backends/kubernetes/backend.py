@@ -27,7 +27,7 @@ from kubeflow_trainer_api import models
 from kubernetes import client, config, watch
 
 import kubeflow.common.constants as common_constants
-import kubeflow.common.types as common_types
+from kubeflow.common.types import KubernetesBackendConfig
 import kubeflow.common.utils as common_utils
 from kubeflow.trainer.backends.base import RuntimeBackend
 import kubeflow.trainer.backends.kubernetes.utils as utils
@@ -38,10 +38,7 @@ logger = logging.getLogger(__name__)
 
 
 class KubernetesBackend(RuntimeBackend):
-    def __init__(
-        self,
-        cfg: common_types.KubernetesBackendConfig,
-    ):
+    def __init__(self, cfg: KubernetesBackendConfig):
         if cfg.namespace is None:
             cfg.namespace = common_utils.get_default_target_namespace(cfg.context)
 

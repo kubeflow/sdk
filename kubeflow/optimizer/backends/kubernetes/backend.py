@@ -44,10 +44,7 @@ logger = logging.getLogger(__name__)
 
 
 class KubernetesBackend(RuntimeBackend):
-    def __init__(
-        self,
-        cfg: KubernetesBackendConfig,
-    ):
+    def __init__(self, cfg: KubernetesBackendConfig):
         if cfg.namespace is None:
             cfg.namespace = common_utils.get_default_target_namespace(cfg.context)
 
@@ -189,7 +186,7 @@ class KubernetesBackend(RuntimeBackend):
                 return result
 
             for optimization_job in optimization_job_list.items:
-                result.append(self.__get_optimization_job_from_custom_resource(optimization_job))
+                result.append(self.__get_optimization_job_from_cr(optimization_job))
 
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(
@@ -224,7 +221,7 @@ class KubernetesBackend(RuntimeBackend):
         except Exception as e:
             raise RuntimeError(f"Failed to get OptimizationJob: {self.namespace}/{name}") from e
 
-        return self.__get_optimization_job_from_custom_resource(optimization_job)  # type: ignore
+        return self.__get_optimization_job_from_cr(optimization_job)  # type: ignore
 
     def delete_job(self, name: str):
         """Delete the OptimizationJob"""
@@ -244,7 +241,7 @@ class KubernetesBackend(RuntimeBackend):
 
         logger.debug(f"OptimizationJob {self.namespace}/{name} has been deleted")
 
-    def __get_optimization_job_from_custom_resource(
+    def __get_optimization_job_from_cr(
         self,
         optimization_job_cr: models.V1beta1Experiment,
     ) -> OptimizationJob:
