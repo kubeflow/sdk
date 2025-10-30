@@ -90,7 +90,9 @@ class KubernetesBackend(RuntimeBackend):
         # Trainer function arguments for the appropriate substitution.
         parameters_spec = []
         trial_parameters = []
-        trial_template.trainer.func_args = {}
+        if trial_template.trainer.func_args is None:
+            trial_template.trainer.func_args = {}
+
         for param_name, param_spec in search_space.items():
             param_spec.name = param_name
             parameters_spec.append(param_spec)
