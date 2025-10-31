@@ -112,8 +112,9 @@ class TrainerClient:
             runtime: Optional reference to one of the existing runtimes. Defaults to the
                 torch-distributed runtime if not provided.
             initializer: Optional configuration for the dataset and model initializers.
-            trainer: Optional configuration for a CustomTrainer or BuiltinTrainer. If not specified,
-                the TrainJob will use the runtime's default values.
+            trainer: Optional configuration for a CustomTrainer, CustomTrainerContainer, or
+                BuiltinTrainer. If not specified, the TrainJob will use the
+                runtime's default values.
 
         Returns:
             The unique name of the TrainJob that has been generated.
