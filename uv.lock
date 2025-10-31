@@ -425,6 +425,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "coverage" },
+    { name = "kubeflow-katib-api" },
     { name = "kubeflow-trainer-api" },
     { name = "pre-commit" },
     { name = "pygithub" },
@@ -435,7 +436,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "kubeflow-katib-api", git = "https://github.com/kramaranya/katib.git?subdirectory=api%2Fpython_api&rev=separate-models-from-sdk" },
+    { name = "kubeflow-katib-api", specifier = ">=0.19.0" },
     { name = "kubeflow-trainer-api", specifier = ">=2.0.0" },
     { name = "kubernetes", specifier = ">=27.2.0" },
     { name = "pydantic", specifier = ">=2.10.0" },
@@ -444,6 +445,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "coverage", specifier = ">=7.0" },
+    { name = "kubeflow-katib-api", git = "https://github.com/kubeflow/katib.git?subdirectory=api%2Fpython_api&rev=master" },
     { name = "kubeflow-trainer-api", git = "https://github.com/kubeflow/trainer.git?subdirectory=api%2Fpython_api&rev=master" },
     { name = "pre-commit", specifier = ">=4.2.0" },
     { name = "pygithub", specifier = ">=2.7.0" },
@@ -454,8 +456,8 @@ dev = [
 
 [[package]]
 name = "kubeflow-katib-api"
-version = "0.18.0"
-source = { git = "https://github.com/kramaranya/katib.git?subdirectory=api%2Fpython_api&rev=separate-models-from-sdk#97265fe9175114ef0293285e1a6e3deee7b727f4" }
+version = "0.19.0"
+source = { git = "https://github.com/kubeflow/katib.git?subdirectory=api%2Fpython_api&rev=master#38982e298d9c8d003d8964eaa067b71cb432fb7e" }
 dependencies = [
     { name = "pydantic" },
 ]
