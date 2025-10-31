@@ -55,7 +55,7 @@ class CustomTrainer:
 # Configuration for the Custom Trainer Container.
 @dataclass
 class CustomTrainerContainer:
-    """Custom Trainer configuration. Configure the container image
+    """Custom Trainer Container configuration. Configure the container image
         that encapsulates the entire model training process.
 
     Args:
