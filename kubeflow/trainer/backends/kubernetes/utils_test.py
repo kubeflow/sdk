@@ -20,7 +20,6 @@ from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.types import types
 
 
-
 def _build_runtime() -> types.Runtime:
     runtime_trainer = types.RuntimeTrainer(
         trainer_type=types.TrainerType.CUSTOM_TRAINER,
