@@ -78,7 +78,7 @@ Kubeflow Trainer client supports local development without needing a Kubernetes 
 ### Available Backends
 
 - **KubernetesBackend** (default) - Production training on Kubernetes
-- **ContainerBackend** - Local development with Docker/Podman isolation  
+- **ContainerBackend** - Local development with Docker/Podman isolation
 - **LocalProcessBackend** - Quick prototyping with Python subprocesses
 
 **Quick Start:**

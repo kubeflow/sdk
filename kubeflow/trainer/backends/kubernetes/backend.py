@@ -430,12 +430,12 @@ class KubernetesBackend(RuntimeBackend):
 
     def __get_runtime_from_cr(
         self,
-        runtime_crd: Union[
+        runtime_cr: Union[
             models.TrainerV1alpha1ClusterTrainingRuntime, models.TrainerV1alpha1TrainingRuntime
         ],
     ) -> types.Runtime:
-        crd_kind = getattr(runtime_crd, "kind", "UnknownKind")
-        crd_name = getattr(runtime_crd.metadata, "name", "UnknownName")
+        crd_kind = getattr(runtime_cr, "kind", "UnknownKind")
+        crd_name = getattr(runtime_cr.metadata, "name", "UnknownName")
 
         if not (
             runtime_cr.metadata
@@ -448,7 +448,7 @@ class KubernetesBackend(RuntimeBackend):
             raise Exception(
                 f"{crd_kind} '{crd_name}' is invalid — missing one or more required fields: "
                 f"metadata.name, spec.mlPolicy, spec.template.spec.replicatedJobs.\n"
-                f"Full object: {runtime_crd}"
+                f"Full object: {runtime_cr}"
             )
 
         if not (
