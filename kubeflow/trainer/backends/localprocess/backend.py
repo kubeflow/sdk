@@ -282,6 +282,6 @@ class LocalProcessBackend(RuntimeBackend):
                 num_nodes=local_runtime.trainer.num_nodes,
                 device_count=local_runtime.trainer.device_count,
                 device=local_runtime.trainer.device,
+                image=local_runtime.trainer.image,
             ),
-            pretrained_model=local_runtime.pretrained_model,
         )

@@ -132,6 +132,7 @@ def get_local_runtime_trainer(
         trainer_type=types.TrainerType.CUSTOM_TRAINER,
         framework=framework,
         packages=local_runtime.trainer.packages,
+        image=local_exec_constants.LOCAL_RUNTIME_IMAGE,
     )
 
     # set command to run from venv

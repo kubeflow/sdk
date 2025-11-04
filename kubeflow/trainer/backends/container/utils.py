@@ -126,7 +126,7 @@ def container_status_to_trainjob_status(status: str, exit_code: int) -> str:
     if status == "exited":
         # Exit code 0 -> complete, else failed
         return constants.TRAINJOB_COMPLETE if exit_code == 0 else constants.TRAINJOB_FAILED
-    return constants.UNKNOWN
+    return UNKNOWN
 
 
 def aggregate_status_from_containers(container_statuses: list[str]) -> str:
@@ -148,38 +148,6 @@ def aggregate_status_from_containers(container_statuses: list[str]) -> str:
     if any(s == constants.TRAINJOB_CREATED for s in container_statuses):
         return constants.TRAINJOB_CREATED
     return UNKNOWN
-
-
-def resolve_image(runtime: types.Runtime) -> str:
-    """
-    Resolve the container image for a runtime.
-
-    Priority:
-    1. Use runtime.image if specified in the ClusterTrainingRuntime
-    2. Fall back to DEFAULT_FRAMEWORK_IMAGES based on framework
-
-    Args:
-        runtime: Runtime object.
-
-    Returns:
-        Container image name.
-
-    Raises:
-        ValueError: If no image is found for the runtime's framework.
-    """
-    # Use image from runtime if specified
-    if runtime.image:
-        return runtime.image
-
-    # Fall back to default framework images
-    framework = runtime.trainer.framework
-    if framework in constants.DEFAULT_FRAMEWORK_IMAGES:
-        return constants.DEFAULT_FRAMEWORK_IMAGES[framework]
-
-    raise ValueError(
-        f"No default image found for framework '{framework}'. "
-        f"Supported frameworks: {list(constants.DEFAULT_FRAMEWORK_IMAGES.keys())}"
-    )
 
 
 def maybe_pull_image(adapter, image: str, pull_policy: str):
@@ -227,7 +195,7 @@ def get_container_status(adapter, container_id: str) -> str:
         status, exit_code = adapter.container_status(container_id)
         return container_status_to_trainjob_status(status, exit_code)
     except Exception:
-        return constants.UNKNOWN
+        return UNKNOWN
 
 
 def aggregate_container_statuses(adapter, containers: list[dict]) -> str:

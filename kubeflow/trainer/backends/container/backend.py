@@ -209,8 +209,7 @@ class ContainerBackend(RuntimeBackend):
         """
         Spawn a short-lived container to report Python version, pip list, and nvidia-smi.
         """
-        image = container_utils.resolve_image(runtime)
-        container_utils.maybe_pull_image(self._adapter, image, self.cfg.pull_policy)
+        container_utils.maybe_pull_image(self._adapter, runtime.trainer.image, self.cfg.pull_policy)
 
         command = [
             "bash",
@@ -220,14 +219,16 @@ class ContainerBackend(RuntimeBackend):
             "(nvidia-smi || echo 'nvidia-smi not found')",
         ]
 
-        logs = self._adapter.run_oneoff_container(image=image, command=command)
+        logs = self._adapter.run_oneoff_container(image=runtime.trainer.image, command=command)
         print(logs)
 
     def train(
         self,
         runtime: Optional[types.Runtime] = None,
         initializer: Optional[types.Initializer] = None,
-        trainer: Optional[Union[types.CustomTrainer, types.BuiltinTrainer]] = None,
+        trainer: Optional[
+            Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
+        ] = None,
     ) -> str:
         if runtime is None:
             runtime = self.get_runtime("torch-distributed")
@@ -249,11 +250,12 @@ class ContainerBackend(RuntimeBackend):
             logger.debug("Generated training script code")
 
             # Resolve image and pull if needed
-            image = container_utils.resolve_image(runtime)
-            logger.debug(f"Using image: {image}")
+            logger.debug(f"Using image: {runtime.trainer.image}")
 
-            container_utils.maybe_pull_image(self._adapter, image, self.cfg.pull_policy)
-            logger.debug(f"Image ready: {image}")
+            container_utils.maybe_pull_image(
+                self._adapter, runtime.trainer.image, self.cfg.pull_policy
+            )
+            logger.debug(f"Image ready: {runtime.trainer.image}")
 
             # Build base environment
             env = container_utils.build_environment(trainer)
@@ -368,7 +370,7 @@ class ContainerBackend(RuntimeBackend):
                 logger.debug(f"Creating container {rank}/{num_nodes}: {container_name}")
 
                 container_id = self._adapter.create_and_start_container(
-                    image=image,
+                    image=runtime.trainer.image,
                     command=full_cmd,
                     name=container_name,
                     network_id=network_id,

@@ -327,9 +327,8 @@ def _create_default_runtimes() -> list[base_types.Runtime]:
                 trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
                 framework=framework,
                 num_nodes=1,
+                image=image,
             ),
-            pretrained_model=None,
-            image=image,
         )
         default_runtimes.append(runtime)
         logger.debug(f"Created default runtime: {runtime.name} with image {image}")
@@ -414,9 +413,8 @@ def _parse_runtime_yaml(data: dict[str, Any], source: str = "unknown") -> base_t
             trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
             framework=framework,
             num_nodes=num_nodes,
+            image=image,
         ),
-        pretrained_model=None,
-        image=image,
     )
 
 

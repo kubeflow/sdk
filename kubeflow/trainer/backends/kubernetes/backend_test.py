@@ -527,7 +527,7 @@ def get_replicated_job() -> models.JobsetV1alpha2ReplicatedJob:
 def get_container() -> models.IoK8sApiCoreV1Container:
     return models.IoK8sApiCoreV1Container(
         name="node",
-        image="image",
+        image="example.com/test-runtime",
         command=["echo", "Hello World"],
         resources=get_resource_requirements(),
     )
@@ -543,11 +543,11 @@ def create_runtime_type(
         num_nodes=2,
         device="gpu",
         device_count=RUNTIME_DEVICES,
+        image="example.com/test-runtime",
     )
     trainer.set_command(constants.TORCH_COMMAND)
     return types.Runtime(
         name=name,
-        pretrained_model=None,
         trainer=trainer,
     )
 
@@ -564,6 +564,7 @@ def get_train_job_data_type(
         device="gpu",
         device_count=RUNTIME_DEVICES,
         num_nodes=2,
+        image="example.com/test-runtime",
     )
     trainer.set_command(constants.TORCH_COMMAND)
     return types.TrainJob(
@@ -571,7 +572,6 @@ def get_train_job_data_type(
         creation_timestamp=datetime.datetime(2025, 6, 1, 10, 30, 0),
         runtime=types.Runtime(
             name=runtime_name,
-            pretrained_model=None,
             trainer=trainer,
         ),
         steps=[
@@ -696,6 +696,7 @@ def test_list_runtimes(kubernetes_backend, test_case):
                         num_nodes=1,
                         device="cpu",
                         device_count="1",
+                        image="example.com/image",
                     ),
                 )
             },

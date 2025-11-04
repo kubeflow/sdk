@@ -283,6 +283,7 @@ def test_list_training_runtimes_from_sources(test_case):
                         trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
                         num_nodes=1,
+                        image="example.com/container",
                     ),
                 )
                 deepspeed_runtime = base_types.Runtime(
@@ -291,6 +292,7 @@ def test_list_training_runtimes_from_sources(test_case):
                         trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
                         framework="deepspeed",
                         num_nodes=1,
+                        image="example.com/container",
                     ),
                 )
                 mock_github.side_effect = [[torch_runtime], [deepspeed_runtime]]
@@ -303,6 +305,7 @@ def test_list_training_runtimes_from_sources(test_case):
                         trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
                         num_nodes=1,
+                        image="example.com/container",
                     ),
                 )
                 torch_runtime_2 = base_types.Runtime(
@@ -311,6 +314,7 @@ def test_list_training_runtimes_from_sources(test_case):
                         trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
                         num_nodes=2,
+                        image="example.com/container",
                     ),
                 )
                 mock_github.side_effect = [[torch_runtime_1], [torch_runtime_2]]
@@ -324,6 +328,7 @@ def test_list_training_runtimes_from_sources(test_case):
                         trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
                         num_nodes=1,
+                        image="example.com/container",
                     ),
                 )
                 mock_defaults.return_value = [default_runtime]
@@ -358,7 +363,7 @@ def test_create_default_runtimes():
     assert torch_runtimes[0].trainer.trainer_type == base_types.TrainerType.CUSTOM_TRAINER
     assert torch_runtimes[0].trainer.num_nodes == 1
     # Verify default image is set
-    assert torch_runtimes[0].image == constants.DEFAULT_FRAMEWORK_IMAGES["torch"]
+    assert torch_runtimes[0].trainer.image == constants.DEFAULT_FRAMEWORK_IMAGES["torch"]
     print("test execution complete")
 
 
@@ -620,72 +625,10 @@ def test_parse_runtime_yaml_extracts_image(test_case):
         runtime = runtime_loader._parse_runtime_yaml(runtime_yaml, "test")
 
         # Verify image is extracted and stored
-        assert runtime.image == test_case.config["custom_image"]
         assert runtime.name == test_case.config["runtime_name"]
         assert runtime.trainer.framework == test_case.config["framework"]
         assert runtime.trainer.num_nodes == test_case.config["num_nodes"]
-
-        assert test_case.expected_status == SUCCESS
-
-    except Exception as e:
-        assert type(e) is test_case.expected_error
-    print("test execution complete")
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TestCase(
-            name="resolve image uses custom image",
-            expected_status=SUCCESS,
-            config={
-                "custom_image": "my-registry.io/pytorch-custom:arm64",
-                "framework": "torch",
-                "expect_custom": True,
-            },
-        ),
-        TestCase(
-            name="resolve image falls back to default when no custom image",
-            expected_status=SUCCESS,
-            config={
-                "custom_image": None,
-                "framework": "torch",
-                "expect_custom": False,
-            },
-        ),
-    ],
-)
-def test_resolve_image_uses_custom_image(test_case):
-    """
-    Test that resolve_image prioritizes runtime.image over default framework images.
-    This ensures custom images from ClusterTrainingRuntimes are actually used.
-    """
-    print("Executing test:", test_case.name)
-    try:
-        from kubeflow.trainer.backends.container import utils
-
-        # Create runtime with or without custom image
-        runtime = base_types.Runtime(
-            name="test-runtime",
-            trainer=base_types.RuntimeTrainer(
-                trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
-                framework=test_case.config["framework"],
-                num_nodes=1,
-            ),
-            image=test_case.config["custom_image"],
-        )
-
-        resolved_image = utils.resolve_image(runtime)
-
-        if test_case.config["expect_custom"]:
-            # Should use custom image
-            assert resolved_image == test_case.config["custom_image"]
-        else:
-            # Should fall back to default
-            assert (
-                resolved_image == constants.DEFAULT_FRAMEWORK_IMAGES[test_case.config["framework"]]
-            )
-            assert "pytorch/pytorch" in resolved_image
+        assert runtime.trainer.image == test_case.config["custom_image"]
 
         assert test_case.expected_status == SUCCESS
 

@@ -232,6 +232,7 @@ class TrainerType(Enum):
 class RuntimeTrainer:
     trainer_type: TrainerType
     framework: str
+    image: str
     num_nodes: int = 1  # The default value is set in the APIs.
     device: str = common_constants.UNKNOWN
     device_count: str = common_constants.UNKNOWN
@@ -251,7 +252,6 @@ class Runtime:
     name: str
     trainer: RuntimeTrainer
     pretrained_model: Optional[str] = None
-    image: Optional[str] = None
 
 
 # Representation for the TrainJob steps.

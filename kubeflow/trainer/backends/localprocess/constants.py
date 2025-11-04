@@ -22,6 +22,9 @@ from kubeflow.trainer.types import types as base_types
 
 TORCH_FRAMEWORK_TYPE = "torch"
 
+# Image name for the local runtime.
+LOCAL_RUNTIME_IMAGE = "local"
+
 local_runtimes = [
     base_types.Runtime(
         name=constants.TORCH_RUNTIME,
@@ -32,6 +35,7 @@ local_runtimes = [
             device_count=common_constants.UNKNOWN,
             device=common_constants.UNKNOWN,
             packages=["torch"],
+            image=LOCAL_RUNTIME_IMAGE,
         ),
     )
 ]

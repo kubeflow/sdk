@@ -103,6 +103,7 @@ def get_runtime_trainer(
             else types.TrainerType.CUSTOM_TRAINER
         ),
         framework=framework,
+        image=trainer_container.image,
     )
 
     # Get the container devices.

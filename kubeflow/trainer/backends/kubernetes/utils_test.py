@@ -26,6 +26,7 @@ def _build_runtime() -> types.Runtime:
         framework="torch",
         device="cpu",
         device_count="1",
+        image="example.com/image",
     )
     runtime_trainer.set_command(constants.DEFAULT_COMMAND)
     return types.Runtime(name="test-runtime", trainer=runtime_trainer)
