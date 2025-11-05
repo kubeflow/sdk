@@ -229,6 +229,7 @@ class ContainerBackend(RuntimeBackend):
         trainer: Optional[
             Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
         ] = None,
+        options: Optional[list] = None,
     ) -> str:
         if runtime is None:
             runtime = self.get_runtime("torch-distributed")
