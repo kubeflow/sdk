@@ -91,7 +91,7 @@ class LocalProcessBackend(RuntimeBackend):
             name = metadata_section.get("name")
 
         # Generate train job name if not provided via options
-        train_job_name = name or (
+        trainjob_name = name or (
             random.choice(string.ascii_lowercase)
             + uuid.uuid4().hex[: constants.JOB_NAME_UUID_LENGTH]
         )
@@ -101,7 +101,7 @@ class LocalProcessBackend(RuntimeBackend):
             raise ValueError("CustomTrainer must be set with LocalProcessBackend")
 
         # create temp dir
-        venv_dir = tempfile.mkdtemp(prefix=train_job_name)
+        venv_dir = tempfile.mkdtemp(prefix=trainjob_name)
         logger.debug(f"operating in {venv_dir}")
 
         # get local runtime trainer
@@ -115,7 +115,7 @@ class LocalProcessBackend(RuntimeBackend):
         training_command = local_utils.get_local_train_job_script(
             trainer=trainer,
             runtime=runtime,
-            train_job_name=train_job_name,
+            train_job_name=trainjob_name,
             venv_dir=venv_dir,
             cleanup_venv=self.cfg.cleanup_venv,
         )
@@ -125,7 +125,7 @@ class LocalProcessBackend(RuntimeBackend):
 
         # create subprocess object
         train_job = LocalJob(
-            name=f"{train_job_name}-train",
+            name=f"{trainjob_name}-train",
             command=training_command,
             execution_dir=venv_dir,
             env=trainer.env,
@@ -133,7 +133,7 @@ class LocalProcessBackend(RuntimeBackend):
         )
 
         self.__register_job(
-            train_job_name=train_job_name,
+            train_job_name=trainjob_name,
             step_name="train",
             job=train_job,
             runtime=runtime,
@@ -141,7 +141,7 @@ class LocalProcessBackend(RuntimeBackend):
         # start the job.
         train_job.start()
 
-        return train_job_name
+        return trainjob_name
 
     def list_jobs(self, runtime: Optional[types.Runtime] = None) -> list[types.TrainJob]:
         result = []
@@ -190,8 +190,8 @@ class LocalProcessBackend(RuntimeBackend):
     def get_job_logs(
         self,
         name: str,
-        step: str = constants.NODE + "-0",
         follow: Optional[bool] = False,
+        step: str = constants.NODE + "-0",
     ) -> Iterator[str]:
         _job = [j for j in self.__local_jobs if j.name == name]
         if not _job:
@@ -257,7 +257,7 @@ class LocalProcessBackend(RuntimeBackend):
         train_job_name: str,
         step_name: str,
         job: LocalJob,
-        runtime: types.Runtime = None,
+        runtime: types.Runtime,
     ):
         existing_jobs = [j for j in self.__local_jobs if j.name == train_job_name]
         if not existing_jobs:
