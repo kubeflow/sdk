@@ -190,7 +190,7 @@ class LocalProcessBackend(RuntimeBackend):
     def get_job_logs(
         self,
         name: str,
-        follow: Optional[bool] = False,
+        follow: bool = False,
         step: str = constants.NODE + "-0",
     ) -> Iterator[str]:
         _job = [j for j in self.__local_jobs if j.name == name]

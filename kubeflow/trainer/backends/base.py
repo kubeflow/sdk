@@ -62,7 +62,7 @@ class RuntimeBackend(abc.ABC):
     def get_job_logs(
         self,
         name: str,
-        follow: Optional[bool] = False,
+        follow: bool = False,
         step: str = constants.NODE + "-0",
     ) -> Iterator[str]:
         raise NotImplementedError()
