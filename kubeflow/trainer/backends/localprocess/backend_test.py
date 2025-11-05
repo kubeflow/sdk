@@ -21,6 +21,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from kubeflow.trainer.backends.localprocess.backend import LocalProcessBackend
+from kubeflow.trainer.backends.localprocess.constants import LOCAL_RUNTIME_IMAGE
 from kubeflow.trainer.backends.localprocess.types import (
     LocalProcessBackendConfig,
     LocalRuntimeTrainer,
@@ -78,9 +79,10 @@ def mock_train_environment():
             trainer_type=types.TrainerType.CUSTOM_TRAINER,
             framework="torch",
             num_nodes=1,
-            device_count=1,
+            device_count="1",
             device="cpu",
             packages=["torch"],
+            image=LOCAL_RUNTIME_IMAGE,
         )
         mock_trainer.set_command = Mock()
         mock_get_trainer.return_value = mock_trainer
@@ -152,6 +154,7 @@ def test_get_runtime(local_backend, test_case):
                         trainer_type=types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
                         num_nodes=1,
+                        image=LOCAL_RUNTIME_IMAGE,
                     ),
                 ),
             },
@@ -166,6 +169,7 @@ def test_get_runtime(local_backend, test_case):
                         trainer_type=types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
                         num_nodes=1,
+                        image=LOCAL_RUNTIME_IMAGE,
                     ),
                 ),
             },
@@ -199,6 +203,7 @@ def test_get_runtime_packages(local_backend, test_case):
                         trainer_type=types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
                         num_nodes=1,
+                        image=LOCAL_RUNTIME_IMAGE,
                     ),
                 ),
                 "trainer": types.CustomTrainer(
@@ -218,6 +223,7 @@ def test_get_runtime_packages(local_backend, test_case):
                         trainer_type=types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
                         num_nodes=1,
+                        image=LOCAL_RUNTIME_IMAGE,
                     ),
                 ),
                 "trainer": types.CustomTrainer(
@@ -238,6 +244,7 @@ def test_get_runtime_packages(local_backend, test_case):
                         trainer_type=types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
                         num_nodes=1,
+                        image=LOCAL_RUNTIME_IMAGE,
                     ),
                 ),
                 "trainer": types.CustomTrainer(
@@ -257,6 +264,7 @@ def test_get_runtime_packages(local_backend, test_case):
                         trainer_type=types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
                         num_nodes=1,
+                        image=LOCAL_RUNTIME_IMAGE,
                     ),
                 ),
                 "trainer": types.CustomTrainer(
@@ -276,6 +284,7 @@ def test_get_runtime_packages(local_backend, test_case):
                         trainer_type=types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
                         num_nodes=1,
+                        image=LOCAL_RUNTIME_IMAGE,
                     ),
                 ),
                 "trainer": types.CustomTrainer(
@@ -313,6 +322,7 @@ def test_get_runtime_packages(local_backend, test_case):
                         trainer_type=types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
                         num_nodes=1,
+                        image=LOCAL_RUNTIME_IMAGE,
                     ),
                 ),
                 "trainer": None,
@@ -473,6 +483,7 @@ def test_name_option_sets_job_name(local_backend, mock_train_environment):
         trainer=types.RuntimeTrainer(
             trainer_type=types.TrainerType.CUSTOM_TRAINER,
             framework="torch",
+            image=LOCAL_RUNTIME_IMAGE,
         ),
     )
 
