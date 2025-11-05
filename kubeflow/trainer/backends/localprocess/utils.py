@@ -150,7 +150,7 @@ def get_local_runtime_trainer(
 
 def get_dependencies_command(
     runtime_packages: list[str],
-    pip_index_urls: str,
+    pip_index_urls: list[str],
     trainer_packages: list[str],
     quiet: bool = True,
 ) -> str:

@@ -47,7 +47,7 @@ local_runtimes = [
 # The exec script to embed training function into container command.
 DEPENDENCIES_SCRIPT = textwrap.dedent(
     """
-        PIP_DISABLE_PIP_VERSION_CHECK=1 pip install $QUIET --user \
+        PIP_DISABLE_PIP_VERSION_CHECK=1 pip install $QUIET \
     --no-warn-script-location $PIP_INDEX $PACKAGE_STR
     """
 )
