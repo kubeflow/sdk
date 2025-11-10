@@ -6,20 +6,38 @@
 [![Coverage Status](https://coveralls.io/repos/github/kubeflow/sdk/badge.svg?branch=main)](https://coveralls.io/github/kubeflow/sdk?branch=main)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/kubeflow/sdk)
 
+Latest News 🔥
+
+- [2025/11] Please fill [this survey](https://docs.google.com/forms/d/e/1FAIpQLSet_IAFQzMMDWolzFt5LI9lhzqOOStjIGHxgYqKBnVcRtDfrw/viewform)
+  to shape the future of Kubeflow SDK.
+- [2025/11] The Kubeflow SDK v0.2 is officially released. Check out
+  [the announcement blog post](https://blog.kubeflow.org/sdk/intro/).
+
 ## Overview
 
-Kubeflow SDK is a unified Python SDK that streamlines the user experience for AI Practitioners to interact with various
-Kubeflow projects. It provides simple, consistent APIs across the Kubeflow ecosystem, enabling users to focus on building
-ML applications rather than managing complex infrastrutcure.
+The Kubeflow SDK is a set of unified Pythonic APIs that let you run any AI workload at any scale –
+without the need to learn Kubernetes. It provides simple and consistent APIs across the Kubeflow
+ecosystem, enabling users to focus on building AI applications rather than managing complex
+infrastructure.
 
 ### Kubeflow SDK Benefits
 
 - **Unified Experience**: Single SDK to interact with multiple Kubeflow projects through consistent Python APIs
-- **Simplified AI Workflows**: Abstract away Kubernetes complexity, allowing AI practitioners to work in familiar Python environments
-- **Seamless Integration**: Designed to work together with all Kubeflow projects for end-to-end ML pipelines
-- **Local Development**: First-class support for local development requiring only `pip` installation
+- **Simplified AI Workloads**: Abstract away Kubernetes complexity and work effortlessly across all
+  Kubeflow projects using familiar Python APIs
+- **Built for Scale**: Seamlessly scale any AI workload — from local laptop to large-scale production
+  cluster with thousands of GPUs using the same APIs.
+- **Rapid Iteration**: Reduced friction between development and production environments
+- **Local Development**: First-class support for local development without a Kubernetes cluster
+  requiring only `pip` installation
 
-![Kubeflow SDK Diagram](https://raw.githubusercontent.com/kubeflow/sdk/main/docs/images/kubeflow-sdk.drawio.svg)
+<div style="text-align: center;">
+  <img
+    src="https://raw.githubusercontent.com/kubeflow/sdk/main/docs/images/kubeflow-sdk.drawio.svg"
+    title="Kubeflow SDK Diagram"
+    alt="Kubeflow SDK Diagram"
+  />
+</div>
 
 ## Get Started
 
@@ -116,12 +134,12 @@ job_id = client.train(trainer=CustomTrainer(func=train_fn))
 
 ## Supported Kubeflow Projects
 
-| Project                     | Status           | Version Support | Description                                                          |
-| --------------------------- | ---------------- | --------------- | -------------------------------------------------------------------- |
-| **Kubeflow Trainer**        | ✅ **Available** | v2.0.0+         | Train and fine-tune AI models with various frameworks                |
-| **Kubeflow Katib**          | ✅ **Available** | v0.19.0+        | Hyperparameter optimization                                          |
-| **Kubeflow Pipelines**      | 🚧 Planned       | TBD             | Build, run, and track AI workflows                                   |
-| **Kubeflow Model Registry** | 🚧 Planned       | TBD             | Manage model artifacts, versions and ML artifacts metadata           |
+| Project                     | Status           | Version Support | Description                                                           |
+| --------------------------- | ---------------- | --------------- | --------------------------------------------------------------------- |
+| **Kubeflow Trainer**        | ✅ **Available** | v2.0.0+         | Train and fine-tune AI models with various frameworks                 |
+| **Kubeflow Katib**          | ✅ **Available** | v0.19.0+        | Hyperparameter optimization                                           |
+| **Kubeflow Pipelines**      | 🚧 Planned       | TBD             | Build, run, and track AI workflows                                    |
+| **Kubeflow Model Registry** | 🚧 Planned       | TBD             | Manage model artifacts, versions and ML artifacts metadata            |
 | **Kubeflow Spark Operator** | 🚧 Planned       | TBD             | Manage Spark applications for data processing and feature engineering |
 
 ## Community
@@ -141,6 +159,8 @@ Kubeflow SDK is a community project and is still under active development. We we
 
 <!-- TODO(kramaranya): add kubeflow sdk docs -->
 
+- **[Blog Post Announcement](https://blog.kubeflow.org/sdk/intro/)**: Introducing the Kubeflow SDK:
+  A Pythonic API to Run AI Workloads at Scale
 - **[Design Document](https://docs.google.com/document/d/1rX7ELAHRb_lvh0Y7BK1HBYAbA0zi9enB0F_358ZC58w/edit)**: Kubeflow SDK design proposal
 - **[Component Guides](https://www.kubeflow.org/docs/components/)**: Individual component documentation
 - **[DeepWiki](https://deepwiki.com/kubeflow/sdk)**: AI-powered repository documentation
