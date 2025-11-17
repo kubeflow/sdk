@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+from unittest.mock import patch
+
 import pytest
 
 import kubeflow.trainer.backends.kubernetes.utils as utils
@@ -119,12 +122,19 @@ def _build_runtime() -> types.Runtime:
 )
 def test_get_script_for_python_packages(test_case):
     """Test get_script_for_python_packages with various configurations."""
-
-    script = utils.get_script_for_python_packages(
-        packages_to_install=test_case.config["packages_to_install"],
-        pip_index_urls=test_case.config["pip_index_urls"],
-        is_mpi=test_case.config["is_mpi"],
-    )
+    # Simulate a non-virtualenv, non-root environment so append_user returns True for non-MPI.
+    with (
+        patch.dict(os.environ, {}, clear=False),
+        patch("os.geteuid", return_value=1000),
+        patch("kubeflow.trainer.backends.kubernetes.utils.sys.prefix", "base"),
+        patch("kubeflow.trainer.backends.kubernetes.utils.sys.base_prefix", "base"),
+    ):
+        os.environ.pop("VIRTUAL_ENV", None)
+        script = utils.get_script_for_python_packages(
+            packages_to_install=test_case.config["packages_to_install"],
+            pip_index_urls=test_case.config["pip_index_urls"],
+            is_mpi=test_case.config["is_mpi"],
+        )
 
     assert test_case.expected_output == script
 

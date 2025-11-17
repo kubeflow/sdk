@@ -22,6 +22,7 @@ It tests KubernetesBackend's behavior across job listing, resource creation etc
 from dataclasses import asdict
 import datetime
 import multiprocessing
+import os
 import random
 import string
 from typing import Optional
@@ -217,13 +218,15 @@ def get_custom_trainer(
     env: Optional[list[models.IoK8sApiCoreV1EnvVar]] = None,
     pip_index_urls: Optional[list[str]] = constants.DEFAULT_PIP_INDEX_URLS,
     packages_to_install: list[str] = ["torch", "numpy"],
+    add_user: bool = False,
 ) -> models.TrainerV1alpha1Trainer:
     """
     Get the custom trainer for the TrainJob.
     """
     pip_command = [f"--index-url {pip_index_urls[0]}"]
     pip_command.extend([f"--extra-index-url {repo}" for repo in pip_index_urls[1:]])
-    pip_command.append("--user")
+    if add_user:
+        pip_command.append("--user")
     pip_command = " ".join(pip_command)
 
     packages_command = " ".join(packages_to_install)
@@ -799,6 +802,31 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                 train_job_trainer=get_custom_trainer(
                     pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
                     packages_to_install=["torch", "numpy"],
+                    add_user=False,
+                ),
+            ),
+        ),
+        TestCase(
+            name="valid flow with custom trainer (append --user)",
+            expected_status=SUCCESS,
+            config={
+                "trainer": types.CustomTrainer(
+                    func=lambda: print("Hello World"),
+                    func_args={"learning_rate": 0.001, "batch_size": 32},
+                    packages_to_install=["torch", "numpy"],
+                    pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
+                    num_nodes=2,
+                ),
+                "virt_env": False,
+                "euid": 1000,
+            },
+            expected_output=get_train_job(
+                runtime_name=TORCH_RUNTIME,
+                train_job_name=TRAIN_JOB_WITH_CUSTOM_TRAINER,
+                train_job_trainer=get_custom_trainer(
+                    pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
+                    packages_to_install=["torch", "numpy"],
+                    add_user=True,
                 ),
             ),
         ),
@@ -828,6 +856,7 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                     ],
                     pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
                     packages_to_install=["torch", "numpy"],
+                    add_user=False,
                 ),
             ),
         ),
@@ -959,11 +988,39 @@ def test_train(kubernetes_backend, test_case):
 
         options = test_case.config.get("options", [])
 
-        train_job_name = kubernetes_backend.train(
-            runtime=runtime,
-            trainer=test_case.config.get("trainer", None),
-            options=options,
-        )
+        # Exercise real logic: control VIRTUAL_ENV and euid to trigger append_user behavior
+        virt_env = test_case.config.get("virt_env", None)
+        euid = test_case.config.get("euid", None)
+        if virt_env is not None or euid is not None:
+            if virt_env:
+                with (
+                    patch.dict(os.environ, {"VIRTUAL_ENV": "1"}, clear=False),
+                    patch("os.geteuid", return_value=(euid if euid is not None else 0)),
+                ):
+                    train_job_name = kubernetes_backend.train(
+                        runtime=runtime,
+                        trainer=test_case.config.get("trainer", None),
+                        options=options,
+                    )
+            else:
+                with (
+                    patch.dict(os.environ, {}, clear=False),
+                    patch("os.geteuid", return_value=(euid if euid is not None else 0)),
+                    patch("kubeflow.trainer.backends.kubernetes.utils.sys.prefix", "base"),
+                    patch("kubeflow.trainer.backends.kubernetes.utils.sys.base_prefix", "base"),
+                ):
+                    os.environ.pop("VIRTUAL_ENV", None)
+                    train_job_name = kubernetes_backend.train(
+                        runtime=runtime,
+                        trainer=test_case.config.get("trainer", None),
+                        options=options,
+                    )
+        else:
+            train_job_name = kubernetes_backend.train(
+                runtime=runtime,
+                trainer=test_case.config.get("trainer", None),
+                options=options,
+            )
 
         assert test_case.expected_status == SUCCESS
 

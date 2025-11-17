@@ -15,6 +15,7 @@
 from dataclasses import fields
 import inspect
 import os
+import sys
 import textwrap
 from typing import Any, Callable, Optional, Union
 from urllib.parse import urlparse
@@ -248,8 +249,9 @@ def get_script_for_python_packages(
     # first url will be the index-url.
     options = [f"--index-url {pip_index_urls[0]}"]
     options.extend(f"--extra-index-url {extra_index_url}" for extra_index_url in pip_index_urls[1:])
-    # Always install for the user to avoid permission issues across environments.
-    options.append("--user")
+    # Add --user when appropriate.
+    if append_user(is_mpi):
+        options.append("--user")
 
     header_script = textwrap.dedent(
         """
@@ -270,6 +272,37 @@ def get_script_for_python_packages(
     )
 
     return script_for_python_packages
+
+
+def append_user(is_mpi: bool) -> bool:
+    """
+    Decide whether to append '--user' to pip install options.
+    - Always true for MPI (containers often run as non-root users like 'mpiuser').
+    - Also true when running as non-root AND not inside a virtual environment.
+    """
+    return is_mpi or (not is_root_user() and not is_running_in_venv())
+
+
+def is_root_user() -> bool:
+    try:
+        return os.geteuid() == 0  # type: ignore[attr-defined]
+    except AttributeError:
+        # Platforms without geteuid (e.g., Windows). Treat as non-root.
+        return False
+
+
+def is_running_in_venv() -> bool:
+    return (
+        # In a venv, sys.prefix points to the venv path and differs from the interpreter's
+        # installation prefix (sys.base_prefix). This is the canonical CPython signal.
+        sys.prefix != sys.base_prefix
+        # Older virtualenvs (and some tooling) set sys.real_prefix to the original
+        # interpreter prefix; its presence implies we're inside a virtual environment.
+        or hasattr(sys, "real_prefix")
+        # Activation scripts commonly export the VIRTUAL_ENV environment variable.
+        # If present, it's a strong indicator that a venv/virtualenv is active.
+        or ("VIRTUAL_ENV" in os.environ)
+    )
 
 
 def get_command_using_train_func(
