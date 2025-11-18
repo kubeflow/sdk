@@ -12,9 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-from unittest.mock import patch
-
 import pytest
 
 import kubeflow.trainer.backends.kubernetes.utils as utils
@@ -58,7 +55,12 @@ def _build_runtime() -> types.Runtime:
                 "--no-warn-script-location --index-url https://pypi.org/simple "
                 "--extra-index-url https://private.repo.com/simple "
                 "--extra-index-url https://internal.company.com/simple "
-                "--user torch numpy custom-package\n"
+                "--user torch numpy custom-package ||\n"
+                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
+                "--no-warn-script-location --index-url https://pypi.org/simple "
+                "--extra-index-url https://private.repo.com/simple "
+                "--extra-index-url https://internal.company.com/simple "
+                "torch numpy custom-package\n"
             ),
         ),
         TestCase(
@@ -75,7 +77,10 @@ def _build_runtime() -> types.Runtime:
                 "fi\n\n"
                 "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
                 "--no-warn-script-location --index-url https://pypi.org/simple "
-                "--user torch numpy custom-package\n"
+                "--user torch numpy custom-package ||\n"
+                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
+                "--no-warn-script-location --index-url https://pypi.org/simple "
+                "torch numpy custom-package\n"
             ),
         ),
         TestCase(
@@ -98,7 +103,12 @@ def _build_runtime() -> types.Runtime:
                 "--no-warn-script-location --index-url https://pypi.org/simple "
                 "--extra-index-url https://private.repo.com/simple "
                 "--extra-index-url https://internal.company.com/simple "
-                "--user torch numpy custom-package\n"
+                "--user torch numpy custom-package ||\n"
+                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
+                "--no-warn-script-location --index-url https://pypi.org/simple "
+                "--extra-index-url https://private.repo.com/simple "
+                "--extra-index-url https://internal.company.com/simple "
+                "torch numpy custom-package\n"
             ),
         ),
         TestCase(
@@ -115,26 +125,20 @@ def _build_runtime() -> types.Runtime:
                 "fi\n\n"
                 "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
                 f"--no-warn-script-location --index-url "
-                f"{constants.DEFAULT_PIP_INDEX_URLS[0]} --user torch numpy\n"
+                f"{constants.DEFAULT_PIP_INDEX_URLS[0]} --user torch numpy ||\n"
+                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
+                f"--no-warn-script-location --index-url "
+                f"{constants.DEFAULT_PIP_INDEX_URLS[0]} torch numpy\n"
             ),
         ),
     ],
 )
 def test_get_script_for_python_packages(test_case):
     """Test get_script_for_python_packages with various configurations."""
-    # Simulate a non-virtualenv, non-root environment so append_user returns True for non-MPI.
-    with (
-        patch.dict(os.environ, {}, clear=False),
-        patch("os.geteuid", return_value=1000),
-        patch("kubeflow.trainer.backends.kubernetes.utils.sys.prefix", "base"),
-        patch("kubeflow.trainer.backends.kubernetes.utils.sys.base_prefix", "base"),
-    ):
-        os.environ.pop("VIRTUAL_ENV", None)
-        script = utils.get_script_for_python_packages(
-            packages_to_install=test_case.config["packages_to_install"],
-            pip_index_urls=test_case.config["pip_index_urls"],
-            is_mpi=test_case.config["is_mpi"],
-        )
+    script = utils.get_script_for_python_packages(
+        packages_to_install=test_case.config["packages_to_install"],
+        pip_index_urls=test_case.config["pip_index_urls"],
+    )
 
     assert test_case.expected_output == script
 

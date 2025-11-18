@@ -15,7 +15,6 @@
 from dataclasses import fields
 import inspect
 import os
-import sys
 import textwrap
 from typing import Any, Callable, Optional, Union
 from urllib.parse import urlparse
@@ -239,7 +238,6 @@ def get_resources_per_node(
 def get_script_for_python_packages(
     packages_to_install: list[str],
     pip_index_urls: list[str],
-    is_mpi: bool,
 ) -> str:
     """
     Get init script to install Python packages from the given pip index URLs.
@@ -249,9 +247,6 @@ def get_script_for_python_packages(
     # first url will be the index-url.
     options = [f"--index-url {pip_index_urls[0]}"]
     options.extend(f"--extra-index-url {extra_index_url}" for extra_index_url in pip_index_urls[1:])
-    # Add --user when appropriate.
-    if append_user(is_mpi):
-        options.append("--user")
 
     header_script = textwrap.dedent(
         """
@@ -265,6 +260,11 @@ def get_script_for_python_packages(
     script_for_python_packages = (
         header_script
         + "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
+        + "--no-warn-script-location {} --user {}".format(
+            " ".join(options),
+            packages_str,
+        )
+        + " ||\nPIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
         + "--no-warn-script-location {} {}\n".format(
             " ".join(options),
             packages_str,
@@ -272,37 +272,6 @@ def get_script_for_python_packages(
     )
 
     return script_for_python_packages
-
-
-def append_user(is_mpi: bool) -> bool:
-    """
-    Decide whether to append '--user' to pip install options.
-    - Always true for MPI (containers often run as non-root users like 'mpiuser').
-    - Also true when running as non-root AND not inside a virtual environment.
-    """
-    return is_mpi or (not is_root_user() and not is_running_in_venv())
-
-
-def is_root_user() -> bool:
-    try:
-        return os.geteuid() == 0  # type: ignore[attr-defined]
-    except AttributeError:
-        # Platforms without geteuid (e.g., Windows). Treat as non-root.
-        return False
-
-
-def is_running_in_venv() -> bool:
-    return (
-        # In a venv, sys.prefix points to the venv path and differs from the interpreter's
-        # installation prefix (sys.base_prefix). This is the canonical CPython signal.
-        sys.prefix != sys.base_prefix
-        # Older virtualenvs (and some tooling) set sys.real_prefix to the original
-        # interpreter prefix; its presence implies we're inside a virtual environment.
-        or hasattr(sys, "real_prefix")
-        # Activation scripts commonly export the VIRTUAL_ENV environment variable.
-        # If present, it's a strong indicator that a venv/virtualenv is active.
-        or ("VIRTUAL_ENV" in os.environ)
-    )
 
 
 def get_command_using_train_func(
@@ -360,7 +329,6 @@ def get_command_using_train_func(
         install_packages = get_script_for_python_packages(
             packages_to_install,
             pip_index_urls,
-            is_mpi,
         )
 
     # Add function code to the Trainer command.
