@@ -356,7 +356,7 @@ class ContainerBackend(RuntimeBackend):
                     f"TRAINING_SCRIPT_EOF\n"
                     "if command -v torchrun >/dev/null 2>&1; then "
                     f"  torchrun --nproc_per_node={nproc_per_node} --nnodes={num_nodes} "
-                    f"  --node-rank={rank} --rdzv-backend=c10d "
+                    f"  --node-rank={rank} --rdzv-backend=static "
                     f"  --rdzv-endpoint={master_addr}:{master_port} "
                     f"  /tmp/train.py; "
                     "else "
