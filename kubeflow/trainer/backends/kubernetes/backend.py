@@ -94,7 +94,7 @@ class KubernetesBackend(RuntimeBackend):
         return result
 
     def get_runtime(self, name: str) -> types.Runtime:
-        """Get the the Runtime object"""
+        """Get the Runtime object"""
 
         try:
             thread = self.custom_api.get_cluster_custom_object(
@@ -111,13 +111,11 @@ class KubernetesBackend(RuntimeBackend):
 
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(
-                f"Timeout to get {constants.CLUSTER_TRAINING_RUNTIME_PLURAL}: "
-                f"{self.namespace}/{name}"
+                f"Timeout to get {constants.CLUSTER_TRAINING_RUNTIME_PLURAL}: {name}"
             ) from e
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get {constants.CLUSTER_TRAINING_RUNTIME_PLURAL}: "
-                f"{self.namespace}/{name}"
+                f"Failed to get {constants.CLUSTER_TRAINING_RUNTIME_PLURAL}: {name}"
             ) from e
 
         return self.__get_runtime_from_cr(runtime)  # type: ignore
