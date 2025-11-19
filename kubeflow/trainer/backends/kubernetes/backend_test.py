@@ -375,13 +375,13 @@ def list_namespaced_custom_object_response(*args, **kwargs):
             models.TrainerV1alpha1TrainJobList,
         )
     elif args[3] == constants.TRAINING_RUNTIME_PLURAL:
-        # TODO: add test case for namespace scoped runtimes
-        # items = [
-        #     create_training_runtime(name="runtime-1"),
-        #     create_training_runtime(name="runtime-2"),
-        # ]
+        # Added namespace-scoped runtimes for testing.
+        items = [
+            create_training_runtime(name="ns-runtime-1"),
+            create_training_runtime(name="ns-runtime-2"),
+        ]
         mock_thread.get.return_value = normalize_model(
-            models.TrainerV1alpha1TrainingRuntimeList(items=[]),
+            models.TrainerV1alpha1TrainingRuntimeList(items=items),
             models.TrainerV1alpha1TrainingRuntimeList,
         )
 
@@ -694,6 +694,8 @@ def test_get_runtime(kubernetes_backend, test_case):
             expected_status=SUCCESS,
             config={"name": LIST_RUNTIMES},
             expected_output=[
+                create_runtime_type(name="ns-runtime-1"),
+                create_runtime_type(name="ns-runtime-2"),
                 create_runtime_type(name="runtime-1"),
                 create_runtime_type(name="runtime-2"),
             ],
