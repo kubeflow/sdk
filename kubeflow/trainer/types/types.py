@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import abc
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Callable, Optional, Union
+from urllib.parse import urlparse
 
 import kubeflow.common.constants as common_constants
 from kubeflow.trainer.constants import constants
@@ -231,6 +232,7 @@ class TrainerType(Enum):
 class RuntimeTrainer:
     trainer_type: TrainerType
     framework: str
+    image: str
     num_nodes: int = 1  # The default value is set in the APIs.
     device: str = common_constants.UNKNOWN
     device_count: str = common_constants.UNKNOWN
@@ -273,10 +275,15 @@ class TrainJob:
     status: str = common_constants.UNKNOWN
 
 
-# Configuration for the HuggingFace dataset initializer.
-# TODO (andreyvelich): Discuss how to keep these configurations is sync with pkg.initializers.types
 @dataclass
-class HuggingFaceDatasetInitializer:
+class BaseInitializer(abc.ABC):
+    """Base class for all initializers"""
+
+    storage_uri: str
+
+
+@dataclass
+class HuggingFaceDatasetInitializer(BaseInitializer):
     """Configuration for downloading datasets from HuggingFace Hub.
 
     Args:
@@ -285,13 +292,24 @@ class HuggingFaceDatasetInitializer:
         access_token (`Optional[str]`): HuggingFace Hub access token for private datasets.
     """
 
-    storage_uri: str
     ignore_patterns: Optional[list[str]] = None
     access_token: Optional[str] = None
 
+    def __post_init__(self):
+        """Validate HuggingFaceDatasetInitializer parameters."""
+
+        if not self.storage_uri.startswith("hf://"):
+            raise ValueError(f"storage_uri must start with 'hf://', got {self.storage_uri}")
+
+        if urlparse(self.storage_uri).path == "":
+            raise ValueError(
+                "storage_uri: must have absolute path with 'hf://<user_name>/<dataset_name>', got "
+                f"{self.storage_uri}"
+            )
+
 
 @dataclass
-class S3DatasetInitializer:
+class S3DatasetInitializer(BaseInitializer):
     """Configuration for downloading datasets from S3-compatible storage.
 
     Args:
@@ -304,7 +322,6 @@ class S3DatasetInitializer:
         role_arn (`Optional[str]`): The ARN of the role you want to assume.
     """
 
-    storage_uri: str
     ignore_patterns: Optional[list[str]] = None
     endpoint: Optional[str] = None
     access_key_id: Optional[str] = None
@@ -312,9 +329,15 @@ class S3DatasetInitializer:
     region: Optional[str] = None
     role_arn: Optional[str] = None
 
+    def __post_init__(self):
+        """Validate S3DatasetInitializer parameters."""
+
+        if not self.storage_uri.startswith("s3://"):
+            raise ValueError(f"storage_uri must start with 's3://', got {self.storage_uri}")
+
 
 @dataclass
-class DataCacheInitializer:
+class DataCacheInitializer(BaseInitializer):
     """Configuration for distributed data caching system for training workloads.
 
     Args:
@@ -331,7 +354,6 @@ class DataCacheInitializer:
         iam_role (`Optional[str]`): The IAM role to use for accessing metadata_loc file.
     """
 
-    storage_uri: str
     metadata_loc: str
     num_data_nodes: int
     head_cpu: Optional[str] = None
@@ -342,6 +364,7 @@ class DataCacheInitializer:
 
     def __post_init__(self):
         """Validate DataCacheInitializer parameters."""
+
         if self.num_data_nodes <= 1:
             raise ValueError(f"num_data_nodes must be greater than 1, got {self.num_data_nodes}")
 
@@ -359,9 +382,8 @@ class DataCacheInitializer:
             )
 
 
-# Configuration for the HuggingFace model initializer.
 @dataclass
-class HuggingFaceModelInitializer:
+class HuggingFaceModelInitializer(BaseInitializer):
     """Configuration for downloading models from HuggingFace Hub.
 
     Args:
@@ -370,13 +392,20 @@ class HuggingFaceModelInitializer:
         access_token (`Optional[str]`): HuggingFace Hub access token.
     """
 
-    storage_uri: str
-    ignore_patterns: Optional[list[str]] = None
+    ignore_patterns: Optional[list[str]] = field(
+        default_factory=lambda: constants.INITIALIZER_DEFAULT_IGNORE_PATTERNS
+    )
     access_token: Optional[str] = None
+
+    def __post_init__(self):
+        """Validate HuggingFaceModelInitializer parameters."""
+
+        if not self.storage_uri.startswith("hf://"):
+            raise ValueError(f"storage_uri must start with 'hf://', got {self.storage_uri}")
 
 
 @dataclass
-class S3ModelInitializer:
+class S3ModelInitializer(BaseInitializer):
     """Configuration for downloading models from S3-compatible storage.
 
     Args:
@@ -390,15 +419,20 @@ class S3ModelInitializer:
         role_arn (`Optional[str]`): The ARN of the role you want to assume.
     """
 
-    storage_uri: str
     ignore_patterns: Optional[list[str]] = field(
-        default_factory=lambda: ["*.msgpack", "*.h5", "*.bin", ".pt", ".pth"]
+        default_factory=lambda: constants.INITIALIZER_DEFAULT_IGNORE_PATTERNS
     )
     endpoint: Optional[str] = None
     access_key_id: Optional[str] = None
     secret_access_key: Optional[str] = None
     region: Optional[str] = None
     role_arn: Optional[str] = None
+
+    def __post_init__(self):
+        """Validate S3ModelInitializer parameters."""
+
+        if not self.storage_uri.startswith("s3://"):
+            raise ValueError(f"storage_uri must start with 's3://', got {self.storage_uri}")
 
 
 @dataclass

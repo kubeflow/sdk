@@ -20,7 +20,12 @@ from kubeflow.optimizer.api.optimizer_client import OptimizerClient
 
 # Import the Kubeflow Optimizer types.
 from kubeflow.optimizer.types.algorithm_types import GridSearch, RandomSearch
-from kubeflow.optimizer.types.optimization_types import Objective, OptimizationJob, TrialConfig
+from kubeflow.optimizer.types.optimization_types import (
+    Objective,
+    OptimizationJob,
+    Result,
+    TrialConfig,
+)
 from kubeflow.optimizer.types.search_types import Search
 
 # Import the Kubeflow Trainer types.
@@ -33,6 +38,7 @@ __all__ = [
     "OptimizationJob",
     "OptimizerClient",
     "RandomSearch",
+    "Result",
     "Search",
     "TrainJobTemplate",
     "TrialConfig",

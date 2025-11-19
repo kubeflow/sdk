@@ -122,7 +122,8 @@ def get_local_runtime_trainer(
     Get the LocalRuntimeTrainer object.
     """
     local_runtime = next(
-        (rt for rt in local_exec_constants.local_runtimes if rt.name == runtime_name), None
+        (rt for rt in local_exec_constants.local_runtimes if rt.name == runtime_name),
+        None,
     )
     if not local_runtime:
         raise ValueError(f"Runtime {runtime_name} not found")
@@ -131,6 +132,7 @@ def get_local_runtime_trainer(
         trainer_type=types.TrainerType.CUSTOM_TRAINER,
         framework=framework,
         packages=local_runtime.trainer.packages,
+        image=local_exec_constants.LOCAL_RUNTIME_IMAGE,
     )
 
     # set command to run from venv
@@ -148,7 +150,7 @@ def get_local_runtime_trainer(
 
 def get_dependencies_command(
     runtime_packages: list[str],
-    pip_index_urls: str,
+    pip_index_urls: list[str],
     trainer_packages: list[str],
     quiet: bool = True,
 ) -> str:
@@ -267,9 +269,11 @@ def get_local_train_job_script(
     dependency_script = "\n"
     if trainer.packages_to_install:
         dependency_script = get_dependencies_command(
-            pip_index_urls=trainer.pip_index_urls
-            if trainer.pip_index_urls
-            else constants.DEFAULT_PIP_INDEX_URLS,
+            pip_index_urls=(
+                trainer.pip_index_urls
+                if trainer.pip_index_urls
+                else constants.DEFAULT_PIP_INDEX_URLS
+            ),
             runtime_packages=runtime_trainer.packages,
             trainer_packages=trainer.packages_to_install,
             quiet=False,

@@ -75,12 +75,8 @@ release: install-dev
 .PHONY: test-python
 test-python: uv-venv  ## Run Python unit tests
 	@uv sync
-	@uv run coverage run --source=kubeflow.trainer.backends.kubernetes.backend,kubeflow.trainer.utils.utils -m pytest \
-		./kubeflow/trainer/backends/kubernetes/backend_test.py \
-		./kubeflow/trainer/backends/kubernetes/utils_test.py
-	@uv run coverage report -m \
-		kubeflow/trainer/backends/kubernetes/backend.py \
-		kubeflow/trainer/backends/kubernetes/utils.py
+	@uv run coverage run --source=kubeflow -m pytest ./kubeflow/
+	@uv run coverage report --omit='*_test.py' --skip-covered --skip-empty
 ifeq ($(report),xml)
 	@uv run coverage xml
 else

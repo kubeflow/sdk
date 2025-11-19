@@ -51,6 +51,9 @@ OPTIMIZATION_JOB_COMPLETE = "Complete"
 # The failed status of the OptimizationJob, defined when Experiment CR has failed condition.
 OPTIMIZATION_JOB_FAILED = "Failed"
 
+# The name of the Katib metrics collector sidecar container.
+METRICS_COLLECTOR_CONTAINER = "metrics-logger-and-collector"
+
 # Katib search space parameter types.
 DOUBLE_PARAMETER = "double"
 CATEGORICAL_PARAMETERS = "categorical"

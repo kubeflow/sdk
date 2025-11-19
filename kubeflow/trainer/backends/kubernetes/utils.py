@@ -103,6 +103,7 @@ def get_runtime_trainer(
             else types.TrainerType.CUSTOM_TRAINER
         ),
         framework=framework,
+        image=trainer_container.image,
     )
 
     # Get the container devices.
@@ -247,9 +248,8 @@ def get_script_for_python_packages(
     # first url will be the index-url.
     options = [f"--index-url {pip_index_urls[0]}"]
     options.extend(f"--extra-index-url {extra_index_url}" for extra_index_url in pip_index_urls[1:])
-    # For the OpenMPI, the packages must be installed for the mpiuser.
-    if is_mpi:
-        options.append("--user")
+    # Always install for the user to avoid permission issues across environments.
+    options.append("--user")
 
     header_script = textwrap.dedent(
         """
@@ -350,6 +350,10 @@ def get_trainer_cr_from_custom_trainer(
 ) -> models.TrainerV1alpha1Trainer:
     """
     Get the Trainer CR from the custom trainer.
+
+    Args:
+        runtime: The runtime configuration.
+        trainer: The custom trainer or container configuration.
     """
     trainer_cr = models.TrainerV1alpha1Trainer()
 
@@ -362,7 +366,7 @@ def get_trainer_cr_from_custom_trainer(
         trainer_cr.resources_per_node = get_resources_per_node(trainer.resources_per_node)
 
     if isinstance(trainer, types.CustomTrainer):
-        # If CustomTrainer is used, add command to the Trainer.
+        # If CustomTrainer is used, generate command from function.
         trainer_cr.command = get_command_using_train_func(
             runtime,
             trainer.func,
@@ -544,86 +548,66 @@ def get_args_from_dataset_preprocess_config(
     return args
 
 
+def get_optional_initializer_envs(
+    initializer: types.BaseInitializer, required_fields: set
+) -> list[models.IoK8sApiCoreV1EnvVar]:
+    """Get the optional envs from the initializer config"""
+    envs = []
+    for f in fields(initializer):
+        if f.name not in required_fields:
+            value = getattr(initializer, f.name)
+            if value is not None:
+                # Convert list values (like ignore_patterns) to comma-separated strings
+                if isinstance(value, list):
+                    value = ",".join(str(item) for item in value)
+                envs.append(models.IoK8sApiCoreV1EnvVar(name=f.name.upper(), value=value))
+    return envs
+
+
 def get_dataset_initializer(
-    dataset: Optional[
-        Union[types.HuggingFaceDatasetInitializer, types.DataCacheInitializer]
-    ] = None,
-) -> Optional[models.TrainerV1alpha1DatasetInitializer]:
+    dataset: Union[
+        types.HuggingFaceDatasetInitializer,
+        types.S3DatasetInitializer,
+        types.DataCacheInitializer,
+    ],
+) -> models.TrainerV1alpha1DatasetInitializer:
     """
     Get the TrainJob dataset initializer from the given config.
     """
-    if isinstance(dataset, types.HuggingFaceDatasetInitializer):
-        dataset_initializer = models.TrainerV1alpha1DatasetInitializer(
-            storageUri=(
-                dataset.storage_uri
-                if dataset.storage_uri.startswith("hf://")
-                else "hf://" + dataset.storage_uri
-            ),
-            env=(
-                [
-                    models.IoK8sApiCoreV1EnvVar(
-                        name=constants.INITIALIZER_ENV_ACCESS_TOKEN,
-                        value=dataset.access_token,
-                    ),
-                ]
-                if dataset.access_token
-                else None
-            ),
+    if isinstance(dataset, (types.HuggingFaceDatasetInitializer, types.S3DatasetInitializer)):
+        return models.TrainerV1alpha1DatasetInitializer(
+            storageUri=dataset.storage_uri,
+            env=get_optional_initializer_envs(dataset, required_fields={"storage_uri"}),
         )
-        return dataset_initializer
+
     elif isinstance(dataset, types.DataCacheInitializer):
-        # Build env vars from optional model fields
-        envs = []
-
-        # Add CLUSTER_SIZE env var from num_data_nodes required field
-        envs.append(
-            models.IoK8sApiCoreV1EnvVar(name="CLUSTER_SIZE", value=str(dataset.num_data_nodes + 1))
-        )
-
-        # Add METADATA_LOC env var from metadata_loc required field
-        envs.append(models.IoK8sApiCoreV1EnvVar(name="METADATA_LOC", value=dataset.metadata_loc))
+        envs = [
+            models.IoK8sApiCoreV1EnvVar(name="CLUSTER_SIZE", value=str(dataset.num_data_nodes + 1)),
+            models.IoK8sApiCoreV1EnvVar(name="METADATA_LOC", value=dataset.metadata_loc),
+        ]
 
         # Add env vars from optional fields (skip required fields)
-        required_fields = {"storage_uri", "metadata_loc", "num_data_nodes"}
-        for f in fields(dataset):
-            if f.name not in required_fields:
-                value = getattr(dataset, f.name)
-                if value is not None:
-                    envs.append(models.IoK8sApiCoreV1EnvVar(name=f.name.upper(), value=value))
+        envs += get_optional_initializer_envs(
+            dataset, {"storage_uri", "metadata_loc", "num_data_nodes"}
+        )
 
         return models.TrainerV1alpha1DatasetInitializer(
             storageUri=dataset.storage_uri, env=envs if envs else None
         )
-    else:
-        return None
+
+    raise ValueError(f"Dataset initializer type is invalid: {type(dataset)}")
 
 
 def get_model_initializer(
-    model: Optional[types.HuggingFaceModelInitializer] = None,
-) -> Optional[models.TrainerV1alpha1ModelInitializer]:
+    model: Union[types.HuggingFaceModelInitializer, types.S3ModelInitializer],
+) -> models.TrainerV1alpha1ModelInitializer:
     """
     Get the TrainJob model initializer from the given config.
     """
-    if not isinstance(model, types.HuggingFaceModelInitializer):
-        return None
+    if isinstance(model, (types.HuggingFaceModelInitializer, types.S3ModelInitializer)):
+        return models.TrainerV1alpha1ModelInitializer(
+            storageUri=model.storage_uri,
+            env=get_optional_initializer_envs(model, required_fields={"storage_uri"}),
+        )
 
-    # TODO (andreyvelich): Support more parameters.
-    model_initializer = models.TrainerV1alpha1ModelInitializer(
-        storageUri=(
-            model.storage_uri
-            if model.storage_uri.startswith("hf://")
-            else "hf://" + model.storage_uri
-        ),
-        env=(
-            [
-                models.IoK8sApiCoreV1EnvVar(
-                    name=constants.INITIALIZER_ENV_ACCESS_TOKEN,
-                    value=model.access_token,
-                ),
-            ]
-            if model.access_token
-            else None
-        ),
-    )
-
-    return model_initializer
+    raise ValueError(f"Model initializer type is invalid: {type(model)}")

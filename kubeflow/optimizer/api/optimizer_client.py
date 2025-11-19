@@ -12,13 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Iterator
 import logging
 from typing import Any, Optional
 
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.optimizer.backends.kubernetes.backend import KubernetesBackend
+from kubeflow.optimizer.constants import constants
 from kubeflow.optimizer.types.algorithm_types import BaseAlgorithm
-from kubeflow.optimizer.types.optimization_types import Objective, OptimizationJob, TrialConfig
+from kubeflow.optimizer.types.optimization_types import (
+    Objective,
+    OptimizationJob,
+    Result,
+    TrialConfig,
+)
 from kubeflow.trainer.types.types import TrainJobTemplate
 
 logger = logging.getLogger(__name__)
@@ -112,6 +119,98 @@ class OptimizerClient:
         """
 
         return self.backend.get_job(name=name)
+
+    def get_job_logs(
+        self,
+        name: str,
+        trial_name: Optional[str] = None,
+        follow: bool = False,
+    ) -> Iterator[str]:
+        """Get logs from a specific trial of an OptimizationJob.
+
+        You can watch for the logs in realtime as follows:
+        ```python
+        from kubeflow.optimizer import OptimizerClient
+
+        # Get logs from the best current trial
+        for logline in OptimizerClient().get_job_logs(name="n7fb28dbee94"):
+            print(logline)
+
+        # Get logs from a specific trial
+        for logline in OptimizerClient().get_job_logs(
+            name="n7fb28dbee94", trial_name="n7fb28dbee94-abc123", follow=True
+        ):
+            print(logline)
+        ```
+
+        Args:
+            name: Name of the OptimizationJob.
+            trial_name: Optional name of a specific Trial. If not provided, logs from the
+                current best trial are returned. If no best trial is available yet, logs
+                from the first trial are returned.
+            follow: Whether to stream logs in realtime as they are produced.
+
+        Returns:
+            Iterator of log lines.
+
+
+        Raises:
+            TimeoutError: Timeout to get an OptimizationJob.
+            RuntimeError: Failed to get an OptimizationJob.
+        """
+        return self.backend.get_job_logs(name=name, trial_name=trial_name, follow=follow)
+
+    def get_best_results(self, name: str) -> Optional[Result]:
+        """Get the best hyperparameters and metrics from an OptimizationJob.
+
+        This method retrieves the optimal hyperparameters and their corresponding metrics
+        from the best trial found during the optimization process.
+
+        Args:
+            name: Name of the OptimizationJob.
+
+        Returns:
+            A Result object containing the best hyperparameters and metrics, or None if
+            no best trial is available yet.
+
+        Raises:
+            TimeoutError: Timeout to get an OptimizationJob.
+            RuntimeError: Failed to get an OptimizationJob.
+        """
+        return self.backend.get_best_results(name=name)
+
+    def wait_for_job_status(
+        self,
+        name: str,
+        status: set[str] = {constants.OPTIMIZATION_JOB_COMPLETE},
+        timeout: int = 3600,
+        polling_interval: int = 2,
+    ) -> OptimizationJob:
+        """Wait for an OptimizationJob to reach a desired status.
+
+        Args:
+            name: Name of the OptimizationJob.
+            status: Expected statuses. Must be a subset of Created, Running, Complete, and
+                Failed statuses.
+            timeout: Maximum number of seconds to wait for the OptimizationJob to reach one of the
+                expected statuses.
+            polling_interval: The polling interval in seconds to check OptimizationJob status.
+
+        Returns:
+            An OptimizationJob object that reaches the desired status.
+
+        Raises:
+            ValueError: The input values are incorrect.
+            RuntimeError: Failed to get OptimizationJob or OptimizationJob reaches unexpected
+                Failed status.
+            TimeoutError: Timeout to wait for OptimizationJob status.
+        """
+        return self.backend.wait_for_job_status(
+            name=name,
+            status=status,
+            timeout=timeout,
+            polling_interval=polling_interval,
+        )
 
     def delete_job(self, name: str):
         """Delete the OptimizationJob.

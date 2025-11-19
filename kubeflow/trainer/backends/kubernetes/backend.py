@@ -20,7 +20,7 @@ import random
 import re
 import string
 import time
-from typing import Optional, Union
+from typing import Any, Optional, Union
 import uuid
 
 from kubeflow_trainer_api import models
@@ -151,13 +151,11 @@ class KubernetesBackend(RuntimeBackend):
 
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(
-                f"Timeout to get {constants.CLUSTER_TRAINING_RUNTIME_PLURAL}: "
-                f"{self.namespace}/{name}"
+                f"Timeout to get {constants.CLUSTER_TRAINING_RUNTIME_PLURAL}: {name}"
             ) from e
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get {constants.CLUSTER_TRAINING_RUNTIME_PLURAL}: "
-                f"{self.namespace}/{name}"
+                f"Failed to get {constants.CLUSTER_TRAINING_RUNTIME_PLURAL}: {name}"
             ) from e
 
         return self.__get_runtime_from_cr(runtime)  # type: ignore
@@ -218,16 +216,62 @@ class KubernetesBackend(RuntimeBackend):
         trainer: Optional[
             Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
         ] = None,
+        options: Optional[list] = None,
     ) -> str:
-        # Generate unique name for the TrainJob.
-        train_job_name = random.choice(string.ascii_lowercase) + uuid.uuid4().hex[:11]
+        if runtime is None:
+            runtime = self.get_runtime(constants.TORCH_RUNTIME)
+
+        # Process options to extract configuration
+        job_spec = {}
+        labels = None
+        annotations = None
+        name = None
+        spec_labels = None
+        spec_annotations = None
+        trainer_overrides = {}
+        pod_template_overrides = None
+
+        if options:
+            for option in options:
+                option(job_spec, trainer, self)
+
+            metadata_section = job_spec.get("metadata", {})
+            labels = metadata_section.get("labels")
+            annotations = metadata_section.get("annotations")
+            name = metadata_section.get("name")
+
+            # Extract spec-level labels/annotations and other spec configurations
+            spec_section = job_spec.get("spec", {})
+            spec_labels = spec_section.get("labels")
+            spec_annotations = spec_section.get("annotations")
+            trainer_overrides = spec_section.get("trainer", {})
+            pod_template_overrides = spec_section.get("podTemplateOverrides")
+
+        # Generate unique name for the TrainJob if not provided
+        train_job_name = name or (
+            random.choice(string.ascii_lowercase)
+            + uuid.uuid4().hex[: constants.JOB_NAME_UUID_LENGTH]
+        )
+
+        # Build the TrainJob spec using the common _get_trainjob_spec method
+        trainjob_spec = self._get_trainjob_spec(
+            runtime=runtime,
+            initializer=initializer,
+            trainer=trainer,
+            trainer_overrides=trainer_overrides,
+            spec_labels=spec_labels,
+            spec_annotations=spec_annotations,
+            pod_template_overrides=pod_template_overrides,
+        )
 
         # Build the TrainJob.
         train_job = models.TrainerV1alpha1TrainJob(
             apiVersion=constants.API_VERSION,
             kind=constants.TRAINJOB_KIND,
-            metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(name=train_job_name),
-            spec=self._get_trainjob_spec(runtime, initializer, trainer),
+            metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                name=train_job_name, labels=labels, annotations=annotations
+            ),
+            spec=trainjob_spec,
         )
 
         # Create the TrainJob.
@@ -326,7 +370,7 @@ class KubernetesBackend(RuntimeBackend):
     def get_job_logs(
         self,
         name: str,
-        follow: Optional[bool] = False,
+        follow: bool = False,
         step: str = constants.NODE + "-0",
     ) -> Iterator[str]:
         """Get the TrainJob logs"""
@@ -341,31 +385,9 @@ class KubernetesBackend(RuntimeBackend):
 
         # Remove the number for the node step.
         container_name = re.sub(r"-\d+$", "", step)
-        try:
-            if follow:
-                log_stream = watch.Watch().stream(
-                    self.core_api.read_namespaced_pod_log,
-                    name=pod_name,
-                    namespace=self.namespace,
-                    container=container_name,
-                    follow=True,
-                )
-
-                # Stream logs incrementally.
-                yield from log_stream  # type: ignore
-            else:
-                logs = self.core_api.read_namespaced_pod_log(
-                    name=pod_name,
-                    namespace=self.namespace,
-                    container=container_name,
-                )
-
-                yield from logs.splitlines()
-
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to read logs for the pod {self.namespace}/{pod_name}"
-            ) from e
+        yield from self._read_pod_logs(
+            pod_name=pod_name, container_name=container_name, follow=follow
+        )
 
     def wait_for_job_status(
         self,
@@ -468,6 +490,34 @@ class KubernetesBackend(RuntimeBackend):
                 runtime_cr.spec.ml_policy,
             ),
         )
+
+    def _read_pod_logs(self, pod_name: str, container_name: str, follow: bool) -> Iterator[str]:
+        """Read logs from a pod container."""
+        try:
+            if follow:
+                log_stream = watch.Watch().stream(
+                    self.core_api.read_namespaced_pod_log,
+                    name=pod_name,
+                    namespace=self.namespace,
+                    container=container_name,
+                    follow=True,
+                )
+
+                # Stream logs incrementally.
+                yield from log_stream  # type: ignore
+            else:
+                logs = self.core_api.read_namespaced_pod_log(
+                    name=pod_name,
+                    namespace=self.namespace,
+                    container=container_name,
+                )
+
+                yield from logs.splitlines()
+
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to read logs for the pod {self.namespace}/{pod_name}"
+            ) from e
 
     def __get_trainjob_from_cr(
         self,
@@ -592,6 +642,10 @@ class KubernetesBackend(RuntimeBackend):
         trainer: Optional[
             Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
         ] = None,
+        trainer_overrides: Optional[dict[str, Any]] = None,
+        spec_labels: Optional[dict[str, str]] = None,
+        spec_annotations: Optional[dict[str, str]] = None,
+        pod_template_overrides: Optional[models.IoK8sApiCoreV1PodTemplateSpec] = None,
     ) -> models.TrainerV1alpha1TrainJobSpec:
         """Get TrainJob spec from the given parameters"""
         if runtime is None:
@@ -618,18 +672,31 @@ class KubernetesBackend(RuntimeBackend):
             else:
                 raise ValueError(
                     f"The trainer type {type(trainer)} is not supported. "
-                    "Please use CustomTrainer or BuiltinTrainer."
+                    "Please use CustomTrainer, CustomTrainerContainer, or BuiltinTrainer."
                 )
 
-        return models.TrainerV1alpha1TrainJobSpec(
+        # Apply trainer overrides if trainer was not provided but overrides exist
+        if trainer_overrides:
+            if "command" in trainer_overrides:
+                trainer_cr.command = trainer_overrides["command"]
+            if "args" in trainer_overrides:
+                trainer_cr.args = trainer_overrides["args"]
+
+        trainjob_spec = models.TrainerV1alpha1TrainJobSpec(
             runtimeRef=models.TrainerV1alpha1RuntimeRef(name=runtime.name),
-            trainer=(trainer_cr if trainer_cr != models.TrainerV1alpha1Trainer() else None),
-            initializer=(
-                models.TrainerV1alpha1Initializer(
-                    dataset=utils.get_dataset_initializer(initializer.dataset),
-                    model=utils.get_model_initializer(initializer.model),
-                )
-                if isinstance(initializer, types.Initializer)
-                else None
-            ),
+            trainer=trainer_cr if trainer_cr != models.TrainerV1alpha1Trainer() else None,
+            labels=spec_labels,
+            annotations=spec_annotations,
+            pod_template_overrides=pod_template_overrides,
         )
+
+        # Add initializer if users define it.
+        if initializer and (initializer.dataset or initializer.model):
+            trainjob_spec.initializer = models.TrainerV1alpha1Initializer(
+                dataset=utils.get_dataset_initializer(initializer.dataset)
+                if initializer.dataset
+                else None,
+                model=utils.get_model_initializer(initializer.model) if initializer.model else None,
+            )
+
+        return trainjob_spec

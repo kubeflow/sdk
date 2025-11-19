@@ -72,6 +72,9 @@ MODEL_INITIALIZER = "model-initializer"
 # The env name for the access token of dataset/model initializer.
 INITIALIZER_ENV_ACCESS_TOKEN = "ACCESS_TOKEN"
 
+# The default value for initializer to ignore files.
+INITIALIZER_DEFAULT_IGNORE_PATTERNS = ["*.msgpack", "*.h5", "*.bin", ".pt", ".pth"]
+
 # The default path to the users' workspace.
 # TODO (andreyvelich): Discuss how to keep this path is sync with pkg.initializers.constants
 WORKSPACE_PATH = "/workspace"
@@ -173,3 +176,7 @@ TORCH_TUNE_INSTRUCT_DATASET = "torchtune.datasets.instruct_dataset"
 DEFAULT_FRAMEWORK_IMAGES = {
     "torch": "pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime",
 }
+
+# The length of the UUID suffix for auto-generated job names.
+# Total name length = 1 (random letter) + 11 (UUID hex) = 12 characters
+JOB_NAME_UUID_LENGTH = 11

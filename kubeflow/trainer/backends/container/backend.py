@@ -37,8 +37,6 @@ Key behaviors:
   Docker/Podman backends, but with automatic runtime detection.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 from datetime import datetime
 import logging
@@ -209,8 +207,7 @@ class ContainerBackend(RuntimeBackend):
         """
         Spawn a short-lived container to report Python version, pip list, and nvidia-smi.
         """
-        image = container_utils.resolve_image(runtime)
-        container_utils.maybe_pull_image(self._adapter, image, self.cfg.pull_policy)
+        container_utils.maybe_pull_image(self._adapter, runtime.trainer.image, self.cfg.pull_policy)
 
         command = [
             "bash",
@@ -220,28 +217,44 @@ class ContainerBackend(RuntimeBackend):
             "(nvidia-smi || echo 'nvidia-smi not found')",
         ]
 
-        logs = self._adapter.run_oneoff_container(image=image, command=command)
+        logs = self._adapter.run_oneoff_container(image=runtime.trainer.image, command=command)
         print(logs)
 
     def train(
         self,
         runtime: Optional[types.Runtime] = None,
         initializer: Optional[types.Initializer] = None,
-        trainer: Optional[Union[types.CustomTrainer, types.BuiltinTrainer]] = None,
+        trainer: Optional[
+            Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
+        ] = None,
+        options: Optional[list] = None,
     ) -> str:
         if runtime is None:
             runtime = self.get_runtime("torch-distributed")
 
+        # Process options to extract configuration
+        name = None
+        if options:
+            job_spec = {}
+            for option in options:
+                option(job_spec, trainer, self)
+
+            metadata_section = job_spec.get("metadata", {})
+            name = metadata_section.get("name")
+
         if not isinstance(trainer, types.CustomTrainer):
             raise ValueError(f"{self.__class__.__name__} supports only CustomTrainer in v1")
 
-        # Generate job name
-        job_name = random.choice(string.ascii_lowercase) + uuid.uuid4().hex[:11]
-        logger.debug(f"Starting training job: {job_name}")
+        # Generate train job name if not provided via options
+        trainjob_name = name or (
+            random.choice(string.ascii_lowercase)
+            + uuid.uuid4().hex[: constants.JOB_NAME_UUID_LENGTH]
+        )
 
+        logger.debug(f"Starting training job: {trainjob_name}")
         try:
             # Create per-job working directory on host (for outputs, checkpoints, etc.)
-            workdir = container_utils.create_workdir(job_name)
+            workdir = container_utils.create_workdir(trainjob_name)
             logger.debug(f"Created working directory: {workdir}")
 
             # Generate training script code (inline, not written to disk)
@@ -249,11 +262,12 @@ class ContainerBackend(RuntimeBackend):
             logger.debug("Generated training script code")
 
             # Resolve image and pull if needed
-            image = container_utils.resolve_image(runtime)
-            logger.debug(f"Using image: {image}")
+            logger.debug(f"Using image: {runtime.trainer.image}")
 
-            container_utils.maybe_pull_image(self._adapter, image, self.cfg.pull_policy)
-            logger.debug(f"Image ready: {image}")
+            container_utils.maybe_pull_image(
+                self._adapter, runtime.trainer.image, self.cfg.pull_policy
+            )
+            logger.debug(f"Image ready: {runtime.trainer.image}")
 
             # Build base environment
             env = container_utils.build_environment(trainer)
@@ -282,9 +296,9 @@ class ContainerBackend(RuntimeBackend):
                 logger.debug("No GPU specified, using 1 process per node")
 
             network_id = self._adapter.create_network(
-                name=f"{job_name}-net",
+                name=f"{trainjob_name}-net",
                 labels={
-                    f"{self.label_prefix}/trainjob-name": job_name,
+                    f"{self.label_prefix}/trainjob-name": trainjob_name,
                     f"{self.label_prefix}/runtime-name": runtime.name,
                     f"{self.label_prefix}/workdir": workdir,
                 },
@@ -297,7 +311,7 @@ class ContainerBackend(RuntimeBackend):
             master_ip = None
 
             for rank in range(num_nodes):
-                container_name = f"{job_name}-node-{rank}"
+                container_name = f"{trainjob_name}-node-{rank}"
 
                 # Get master address and port for torchrun
                 master_port = 29500
@@ -306,14 +320,14 @@ class ContainerBackend(RuntimeBackend):
                 # For Docker: use hostname (DNS is reliable)
                 if rank == 0:
                     # Master node - will be created first
-                    master_addr = f"{job_name}-node-0"
+                    master_addr = f"{trainjob_name}-node-0"
                 else:
                     # Worker nodes - determine master address based on runtime
                     if self._runtime_type == "podman" and master_ip:
                         master_addr = master_ip
                         logger.debug(f"Using master IP address for Podman: {master_ip}")
                     else:
-                        master_addr = f"{job_name}-node-0"
+                        master_addr = f"{trainjob_name}-node-0"
                         logger.debug(f"Using master hostname: {master_addr}")
 
                 # Prefer torchrun; fall back to python if torchrun is unavailable
@@ -342,7 +356,7 @@ class ContainerBackend(RuntimeBackend):
                     f"TRAINING_SCRIPT_EOF\n"
                     "if command -v torchrun >/dev/null 2>&1; then "
                     f"  torchrun --nproc_per_node={nproc_per_node} --nnodes={num_nodes} "
-                    f"  --node-rank={rank} --rdzv-backend=c10d "
+                    f"  --node-rank={rank} --rdzv-backend=static "
                     f"  --rdzv-endpoint={master_addr}:{master_port} "
                     f"  /tmp/train.py; "
                     "else "
@@ -353,7 +367,7 @@ class ContainerBackend(RuntimeBackend):
                 full_cmd = ["bash", "-lc", entry_cmd]
 
                 labels = {
-                    f"{self.label_prefix}/trainjob-name": job_name,
+                    f"{self.label_prefix}/trainjob-name": trainjob_name,
                     f"{self.label_prefix}/step": f"node-{rank}",
                     f"{self.label_prefix}/network-id": network_id,
                 }
@@ -368,7 +382,7 @@ class ContainerBackend(RuntimeBackend):
                 logger.debug(f"Creating container {rank}/{num_nodes}: {container_name}")
 
                 container_id = self._adapter.create_and_start_container(
-                    image=image,
+                    image=runtime.trainer.image,
                     command=full_cmd,
                     name=container_name,
                     network_id=network_id,
@@ -396,14 +410,14 @@ class ContainerBackend(RuntimeBackend):
                             )
 
             logger.debug(
-                f"Training job {job_name} created successfully with "
+                f"Training job {trainjob_name} created successfully with "
                 f"{len(container_ids)} container(s)"
             )
-            return job_name
+            return trainjob_name
 
         except Exception as e:
             # Clean up on failure
-            logger.error(f"Failed to create training job {job_name}: {e}")
+            logger.error(f"Failed to create training job {trainjob_name}: {e}")
             logger.exception("Full traceback:")
 
             # Try to clean up any resources that were created

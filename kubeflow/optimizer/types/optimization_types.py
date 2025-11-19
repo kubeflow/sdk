@@ -73,6 +73,19 @@ class Metric:
     latest: str
 
 
+@dataclass
+class Result:
+    """Result containing the best hyperparameters and metrics.
+
+    Args:
+        parameters (`dict[str, str]`): The best hyperparameters found during optimization.
+        metrics (`list[Metric]`): The metrics achieved with these hyperparameters.
+    """
+
+    parameters: dict[str, str]
+    metrics: list[Metric]
+
+
 # Representation of the single trial
 @dataclass
 class Trial:

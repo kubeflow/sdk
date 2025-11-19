@@ -197,7 +197,7 @@ class DockerClientAdapter(BaseContainerClientAdapter):
         except Exception:
             return None
 
-    def list_containers(self, filters: Optional[dict[str, str]] = None) -> list[dict]:
+    def list_containers(self, filters: Optional[dict[str, list[str]]] = None) -> list[dict]:
         """List Docker containers with optional filters."""
         try:
             containers = self.client.containers.list(all=True, filters=filters)

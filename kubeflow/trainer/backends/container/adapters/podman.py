@@ -208,12 +208,20 @@ class PodmanClientAdapter(BaseContainerClientAdapter):
         except Exception:
             return None
 
-    def list_containers(self, filters: Optional[dict[str, str]] = None) -> list[dict]:
+    def list_containers(self, filters: Optional[dict[str, list[str]]] = None) -> list[dict]:
         """List Podman containers with optional filters."""
+        # Work-around for https://github.com/containers/podman-py/issues/542
+        for k, v in filters.items():
+            if len(v) == 1:
+                filters[k] = v[0]
         try:
             containers = self.client.containers.list(all=True, filters=filters)
             result = []
             for c in containers:
+                # The container status needs to be reloaded when the container
+                # is retrieved from a list.
+                # See: https://github.com/containers/podman-py/issues/446
+                c.reload()
                 inspect = c.attrs if hasattr(c, "attrs") else c.inspect()
                 labels = (
                     c.labels
@@ -241,7 +249,8 @@ class PodmanClientAdapter(BaseContainerClientAdapter):
             return {
                 "id": inspect.get("ID", network_id),
                 "name": inspect.get("Name", network_id),
-                "labels": inspect.get("Labels", {}),
+                # The case is important for labels
+                "labels": inspect.get("labels", {}),
             }
         except Exception:
             return None

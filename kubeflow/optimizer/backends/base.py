@@ -13,10 +13,17 @@
 # limitations under the License.
 
 import abc
+from collections.abc import Iterator
 from typing import Any, Optional
 
+from kubeflow.optimizer.constants import constants
 from kubeflow.optimizer.types.algorithm_types import RandomSearch
-from kubeflow.optimizer.types.optimization_types import Objective, OptimizationJob, TrialConfig
+from kubeflow.optimizer.types.optimization_types import (
+    Objective,
+    OptimizationJob,
+    Result,
+    TrialConfig,
+)
 from kubeflow.trainer.types.types import TrainJobTemplate
 
 
@@ -39,6 +46,29 @@ class RuntimeBackend(abc.ABC):
 
     @abc.abstractmethod
     def get_job(self, name: str) -> OptimizationJob:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_job_logs(
+        self,
+        name: str,
+        trial_name: Optional[str],
+        follow: bool,
+    ) -> Iterator[str]:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_best_results(self, name: str) -> Optional[Result]:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def wait_for_job_status(
+        self,
+        name: str,
+        status: set[str] = {constants.OPTIMIZATION_JOB_COMPLETE},
+        timeout: int = 3600,
+        polling_interval: int = 2,
+    ) -> OptimizationJob:
         raise NotImplementedError()
 
     @abc.abstractmethod

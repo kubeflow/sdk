@@ -26,6 +26,7 @@ def _build_runtime() -> types.Runtime:
         framework="torch",
         device="cpu",
         device_count="1",
+        image="example.com/image",
     )
     runtime_trainer.set_command(constants.DEFAULT_COMMAND)
     return types.Runtime(name="test-runtime", trainer=runtime_trainer)
@@ -54,7 +55,7 @@ def _build_runtime() -> types.Runtime:
                 "--no-warn-script-location --index-url https://pypi.org/simple "
                 "--extra-index-url https://private.repo.com/simple "
                 "--extra-index-url https://internal.company.com/simple "
-                "torch numpy custom-package\n"
+                "--user torch numpy custom-package\n"
             ),
         ),
         TestCase(
@@ -71,7 +72,7 @@ def _build_runtime() -> types.Runtime:
                 "fi\n\n"
                 "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
                 "--no-warn-script-location --index-url https://pypi.org/simple "
-                "torch numpy custom-package\n"
+                "--user torch numpy custom-package\n"
             ),
         ),
         TestCase(
@@ -111,7 +112,7 @@ def _build_runtime() -> types.Runtime:
                 "fi\n\n"
                 "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
                 f"--no-warn-script-location --index-url "
-                f"{constants.DEFAULT_PIP_INDEX_URLS[0]} torch numpy\n"
+                f"{constants.DEFAULT_PIP_INDEX_URLS[0]} --user torch numpy\n"
             ),
         ),
     ],
@@ -238,8 +239,6 @@ def test_get_script_for_python_packages(test_case):
     ],
 )
 def test_get_command_using_train_func(test_case: TestCase):
-    print("Executing test:", test_case.name)
-
     try:
         command = utils.get_command_using_train_func(
             runtime=test_case.config["runtime"],
@@ -254,37 +253,215 @@ def test_get_command_using_train_func(test_case: TestCase):
 
     except Exception as e:
         assert type(e) is test_case.expected_error
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="DataCacheInitializer with all optional fields",
+            expected_status=SUCCESS,
+            config={
+                "initializer": types.DataCacheInitializer(
+                    storage_uri="cache://test_schema/test_table",
+                    num_data_nodes=3,
+                    metadata_loc="s3://bucket/metadata",
+                    head_cpu="1",
+                    head_mem="1Gi",
+                    worker_cpu="2",
+                    worker_mem="2Gi",
+                    iam_role="arn:aws:iam::123456789012:role/test-role",
+                ),
+            },
+            expected_output={
+                "storage_uri": "cache://test_schema/test_table",
+                "env": {
+                    "CLUSTER_SIZE": "4",
+                    "METADATA_LOC": "s3://bucket/metadata",
+                    "HEAD_CPU": "1",
+                    "HEAD_MEM": "1Gi",
+                    "WORKER_CPU": "2",
+                    "WORKER_MEM": "2Gi",
+                    "IAM_ROLE": "arn:aws:iam::123456789012:role/test-role",
+                },
+            },
+        ),
+        TestCase(
+            name="DataCacheInitializer with only required fields",
+            expected_status=SUCCESS,
+            config={
+                "initializer": types.DataCacheInitializer(
+                    storage_uri="cache://schema/table",
+                    num_data_nodes=2,
+                    metadata_loc="s3://bucket/metadata.json",
+                ),
+            },
+            expected_output={
+                "storage_uri": "cache://schema/table",
+                "env": {
+                    "CLUSTER_SIZE": "3",
+                    "METADATA_LOC": "s3://bucket/metadata.json",
+                },
+            },
+        ),
+        TestCase(
+            name="HuggingFaceDatasetInitializer without access token",
+            expected_status=SUCCESS,
+            config={
+                "initializer": types.HuggingFaceDatasetInitializer(
+                    storage_uri="hf://datasets/public-dataset",
+                ),
+            },
+            expected_output={
+                "storage_uri": "hf://datasets/public-dataset",
+                "env": {},
+            },
+        ),
+        TestCase(
+            name="S3DatasetInitializer with all optional fields",
+            expected_status=SUCCESS,
+            config={
+                "initializer": types.S3DatasetInitializer(
+                    storage_uri="s3://my-bucket/datasets/train",
+                    endpoint="https://s3.custom.com",
+                    access_key_id="test-access-key",
+                    secret_access_key="test-secret-key",
+                    region="us-west-2",
+                    role_arn="arn:aws:iam::123456789012:role/test-role",
+                ),
+            },
+            expected_output={
+                "storage_uri": "s3://my-bucket/datasets/train",
+                "env": {
+                    "ENDPOINT": "https://s3.custom.com",
+                    "ACCESS_KEY_ID": "test-access-key",
+                    "SECRET_ACCESS_KEY": "test-secret-key",
+                    "REGION": "us-west-2",
+                    "ROLE_ARN": "arn:aws:iam::123456789012:role/test-role",
+                },
+            },
+        ),
+        TestCase(
+            name="Invalid dataset type",
+            expected_status=FAILED,
+            config={
+                "initializer": "invalid_type",
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_get_dataset_initializer(test_case):
+    """Test get_dataset_initializer with various dataset initializer types."""
+    print("Executing test:", test_case.name)
+    try:
+        dataset_initializer = utils.get_dataset_initializer(test_case.config["initializer"])
+
+        assert test_case.expected_status == SUCCESS
+        assert dataset_initializer is not None
+        assert dataset_initializer.storage_uri == test_case.expected_output["storage_uri"]
+
+        # Check env vars if expected
+        expected_env = test_case.expected_output.get("env", {})
+        env_dict = {
+            env_var.name: env_var.value for env_var in getattr(dataset_initializer, "env", [])
+        }
+        assert env_dict == expected_env, f"Expected env {expected_env}, got {env_dict}"
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
     print("test execution complete")
 
 
-def test_get_dataset_initializer():
-    """Test get_dataset_initializer uses DataCacheInitializer optional fields as env vars."""
-    datacache_initializer = types.DataCacheInitializer(
-        storage_uri="cache://test_schema/test_table",
-        num_data_nodes=3,
-        metadata_loc="s3://bucket/metadata",
-        head_cpu="1",
-        head_mem="1Gi",
-        worker_cpu="2",
-        worker_mem="2Gi",
-        iam_role="arn:aws:iam::123456789012:role/test-role",
-    )
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="HuggingFaceModelInitializer with access token and ignore patterns",
+            expected_status=SUCCESS,
+            config={
+                "initializer": types.HuggingFaceModelInitializer(
+                    storage_uri="hf://username/my-model",
+                    access_token="hf_test_token_789",
+                    ignore_patterns=["*.bin", "*.safetensors"],
+                ),
+            },
+            expected_output={
+                "storage_uri": "hf://username/my-model",
+                "env": {
+                    "ACCESS_TOKEN": "hf_test_token_789",
+                    "IGNORE_PATTERNS": "*.bin,*.safetensors",
+                },
+            },
+        ),
+        TestCase(
+            name="HuggingFaceModelInitializer without access token",
+            expected_status=SUCCESS,
+            config={
+                "initializer": types.HuggingFaceModelInitializer(
+                    storage_uri="hf://username/public-model",
+                ),
+            },
+            expected_output={
+                "storage_uri": "hf://username/public-model",
+                "env": {
+                    "IGNORE_PATTERNS": ",".join(constants.INITIALIZER_DEFAULT_IGNORE_PATTERNS),
+                },
+            },
+        ),
+        TestCase(
+            name="S3ModelInitializer with all optional fields",
+            expected_status=SUCCESS,
+            config={
+                "initializer": types.S3ModelInitializer(
+                    storage_uri="s3://my-bucket/models/trained-model",
+                    endpoint="https://s3.custom.com",
+                    access_key_id="test-access-key",
+                    secret_access_key="test-secret-key",
+                    region="us-east-1",
+                    role_arn="arn:aws:iam::123456789012:role/test-role",
+                    ignore_patterns=["*.txt", "*.log"],
+                ),
+            },
+            expected_output={
+                "storage_uri": "s3://my-bucket/models/trained-model",
+                "env": {
+                    "ENDPOINT": "https://s3.custom.com",
+                    "ACCESS_KEY_ID": "test-access-key",
+                    "SECRET_ACCESS_KEY": "test-secret-key",
+                    "REGION": "us-east-1",
+                    "ROLE_ARN": "arn:aws:iam::123456789012:role/test-role",
+                    "IGNORE_PATTERNS": "*.txt,*.log",
+                },
+            },
+        ),
+        TestCase(
+            name="Invalid model type",
+            expected_status=FAILED,
+            config={
+                "initializer": "invalid_type",
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_get_model_initializer(test_case):
+    """Test get_model_initializer with various model initializer types."""
+    print("Executing test:", test_case.name)
+    try:
+        model_initializer = utils.get_model_initializer(test_case.config["initializer"])
 
-    dataset_initializer = utils.get_dataset_initializer(datacache_initializer)
+        assert test_case.expected_status == SUCCESS
+        assert model_initializer is not None
+        assert model_initializer.storage_uri == test_case.expected_output["storage_uri"]
 
-    assert dataset_initializer is not None
-    assert dataset_initializer.env is not None
-    env_dict = {env_var.name: env_var.value for env_var in dataset_initializer.env}
+        # Check env vars if expected
+        expected_env = test_case.expected_output.get("env", {})
+        env_dict = {
+            env_var.name: env_var.value for env_var in getattr(model_initializer, "env", [])
+        }
+        assert env_dict == expected_env, f"Expected env {expected_env}, got {env_dict}"
 
-    # Check CLUSTER_SIZE is present from num_data_nodes
-    assert env_dict["CLUSTER_SIZE"] == "4"
-
-    # Check METADATA_LOC is present from metadata_loc
-    assert env_dict["METADATA_LOC"] == "s3://bucket/metadata"
-
-    # Check all optional fields are present as uppercase env vars
-    assert env_dict["HEAD_CPU"] == "1"
-    assert env_dict["HEAD_MEM"] == "1Gi"
-    assert env_dict["WORKER_CPU"] == "2"
-    assert env_dict["WORKER_MEM"] == "2Gi"
-    assert env_dict["IAM_ROLE"] == "arn:aws:iam::123456789012:role/test-role"
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+    print("test execution complete")

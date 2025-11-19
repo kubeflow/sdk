@@ -283,6 +283,7 @@ def test_list_training_runtimes_from_sources(test_case):
                         trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
                         num_nodes=1,
+                        image="example.com/container",
                     ),
                 )
                 deepspeed_runtime = base_types.Runtime(
@@ -291,6 +292,7 @@ def test_list_training_runtimes_from_sources(test_case):
                         trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
                         framework="deepspeed",
                         num_nodes=1,
+                        image="example.com/container",
                     ),
                 )
                 mock_github.side_effect = [[torch_runtime], [deepspeed_runtime]]
@@ -303,6 +305,7 @@ def test_list_training_runtimes_from_sources(test_case):
                         trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
                         num_nodes=1,
+                        image="example.com/container",
                     ),
                 )
                 torch_runtime_2 = base_types.Runtime(
@@ -311,6 +314,7 @@ def test_list_training_runtimes_from_sources(test_case):
                         trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
                         num_nodes=2,
+                        image="example.com/container",
                     ),
                 )
                 mock_github.side_effect = [[torch_runtime_1], [torch_runtime_2]]
@@ -324,6 +328,7 @@ def test_list_training_runtimes_from_sources(test_case):
                         trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
                         num_nodes=1,
+                        image="example.com/container",
                     ),
                 )
                 mock_defaults.return_value = [default_runtime]
@@ -357,6 +362,8 @@ def test_create_default_runtimes():
     assert torch_runtimes[0].name == "torch-distributed"
     assert torch_runtimes[0].trainer.trainer_type == base_types.TrainerType.CUSTOM_TRAINER
     assert torch_runtimes[0].trainer.num_nodes == 1
+    # Verify default image is set
+    assert torch_runtimes[0].trainer.image == constants.DEFAULT_FRAMEWORK_IMAGES["torch"]
     print("test execution complete")
 
 
@@ -518,6 +525,110 @@ def test_fetch_runtime_from_github(test_case):
                     assert "raw.githubusercontent.com" in called_url
                     assert f"{kwargs['owner']}/{kwargs['repo']}" in called_url
                     assert f"{kwargs['path']}/{kwargs['runtime_file']}" in called_url
+
+        assert test_case.expected_status == SUCCESS
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="parse runtime yaml with custom image",
+            expected_status=SUCCESS,
+            config={
+                "custom_image": "quay.io/custom/pytorch-arm:v1.0",
+                "runtime_name": "torch-arm",
+                "framework": "torch",
+                "num_nodes": 2,
+            },
+        ),
+        TestCase(
+            name="parse runtime yaml with different custom image",
+            expected_status=SUCCESS,
+            config={
+                "custom_image": "my-registry.io/pytorch:gpu-arm64",
+                "runtime_name": "torch-gpu-arm",
+                "framework": "torch",
+                "num_nodes": 4,
+            },
+        ),
+        TestCase(
+            name="parse runtime yaml prefers container named node",
+            expected_status=SUCCESS,
+            config={
+                "custom_image": "correct-node-image:v1.0",
+                "runtime_name": "multi-container-runtime",
+                "framework": "torch",
+                "num_nodes": 1,
+                "multiple_containers": True,
+            },
+        ),
+    ],
+)
+def test_parse_runtime_yaml_extracts_image(test_case):
+    """
+    Test that _parse_runtime_yaml correctly extracts and stores the container image.
+    This prevents regression of bugs where custom images are ignored.
+    """
+    print("Executing test:", test_case.name)
+    try:
+        # Create container list based on test case
+        if test_case.config.get("multiple_containers"):
+            # Test case with multiple containers - should prefer 'node' container
+            containers = [
+                {
+                    "name": "sidecar",
+                    "image": "wrong-sidecar-image:v1.0",
+                },
+                {
+                    "name": "node",
+                    "image": test_case.config["custom_image"],
+                },
+            ]
+        else:
+            # Single container test case
+            containers = [
+                {
+                    "name": "trainer",
+                    "image": test_case.config["custom_image"],
+                }
+            ]
+
+        # Create runtime YAML with custom image
+        runtime_yaml = {
+            "kind": "ClusterTrainingRuntime",
+            "metadata": {
+                "name": test_case.config["runtime_name"],
+                "labels": {"trainer.kubeflow.org/framework": test_case.config["framework"]},
+            },
+            "spec": {
+                "mlPolicy": {"numNodes": test_case.config["num_nodes"]},
+                "template": {
+                    "spec": {
+                        "replicatedJobs": [
+                            {
+                                "name": "node",
+                                "template": {
+                                    "spec": {"template": {"spec": {"containers": containers}}}
+                                },
+                            }
+                        ]
+                    }
+                },
+            },
+        }
+
+        runtime = runtime_loader._parse_runtime_yaml(runtime_yaml, "test")
+
+        # Verify image is extracted and stored
+        assert runtime.name == test_case.config["runtime_name"]
+        assert runtime.trainer.framework == test_case.config["framework"]
+        assert runtime.trainer.num_nodes == test_case.config["num_nodes"]
+        assert runtime.trainer.image == test_case.config["custom_image"]
 
         assert test_case.expected_status == SUCCESS
 
