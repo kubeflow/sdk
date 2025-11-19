@@ -75,7 +75,7 @@ class KubernetesBackend(RuntimeBackend):
             )
 
             cluster_runtime_list = models.TrainerV1alpha1ClusterTrainingRuntimeList.from_dict(
-                cluster_thread.get(constants.DEFAULT_TIMEOUT)
+                cluster_thread.get(common_constants.DEFAULT_TIMEOUT)
             )
 
             namespace_runtime_list = models.TrainerV1alpha1TrainingRuntimeList.from_dict(
@@ -114,7 +114,7 @@ class KubernetesBackend(RuntimeBackend):
         return result
 
     def get_runtime(self, name: str) -> types.Runtime:
-        """Get the the Runtime object prefer namespaced, fall-back to cluster-scoped"""
+        """Get the Runtime object prefer namespaced, fall-back to cluster-scoped"""
 
         try:
             cluster_thread = self.custom_api.get_cluster_custom_object(
