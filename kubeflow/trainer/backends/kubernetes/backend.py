@@ -79,7 +79,7 @@ class KubernetesBackend(RuntimeBackend):
             )
 
             namespace_runtime_list = models.TrainerV1alpha1TrainingRuntimeList.from_dict(
-                namespace_thread.get(constants.DEFAULT_TIMEOUT)
+                namespace_thread.get(common_constants.DEFAULT_TIMEOUT)
             )
 
             if not (cluster_runtime_list or namespace_runtime_list):
@@ -137,7 +137,7 @@ class KubernetesBackend(RuntimeBackend):
             # Try namespaced runtime first, fall back to cluster-scoped one
             try:
                 runtime = models.TrainerV1alpha1TrainingRuntime.from_dict(
-                    namespace_thread.get(constants.DEFAULT_TIMEOUT)  # type: ignore
+                    namespace_thread.get(common_constants.DEFAULT_TIMEOUT)  # type: ignore
                 )
             except Exception as e:
                 logger.warning(
@@ -146,7 +146,7 @@ class KubernetesBackend(RuntimeBackend):
                 )
 
                 runtime = models.TrainerV1alpha1ClusterTrainingRuntime.from_dict(
-                    cluster_thread.get(constants.DEFAULT_TIMEOUT)  # type: ignore
+                    cluster_thread.get(common_constants.DEFAULT_TIMEOUT)  # type: ignore
                 )
 
         except multiprocessing.TimeoutError as e:
