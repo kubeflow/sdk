@@ -41,7 +41,7 @@ from kubeflow.spark import (  # noqa: E402
     OperatorBackendConfig,
     RestartPolicy,
     RestartPolicyType,
-    SparkClient,
+    BatchSparkClient,
 )
 
 
@@ -241,7 +241,8 @@ print(f"  - Date range check: {out_of_range} out of range (expecting 0)")
 
 # Overall quality score
 quality_passed = (null_check == 0) and (negative_amount_check == 0) and (out_of_range == 0)
-print(f"\\n  {'ALL QUALITY CHECKS PASSED' if quality_passed else 'WARNING: QUALITY ISSUES DETECTED'}")
+quality_status = 'ALL QUALITY CHECKS PASSED' if quality_passed else 'WARNING: QUALITY ISSUES DETECTED'
+print(f"\\n  {quality_status}")
 
 # ============================================================================
 # STEP 7: SIMULATE WRITE TO PARTITIONED STORAGE
@@ -335,7 +336,7 @@ def main():
         enable_monitoring=False,
         enable_ui=False,
     )
-    client = SparkClient(backend_config=config)
+    client = BatchSparkClient(backend_config=config)
     print("  Client created successfully")
     print()
 
@@ -367,7 +368,8 @@ def main():
         response = client.submit_application(
             # Application metadata
             app_name=app_name,
-            main_application_file="local:///opt/spark/examples/src/main/python/pi.py",  # Placeholder
+            # Placeholder
+            main_application_file=("local:///opt/spark/examples/src/main/python/pi.py"),
             # Spark configuration
             spark_version="4.0.0",
             app_type="Python",

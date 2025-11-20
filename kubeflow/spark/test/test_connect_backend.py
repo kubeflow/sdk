@@ -77,9 +77,7 @@ class TestConnectBackendConfig:
 
     def test_url_with_parameters(self):
         """Test URL with embedded parameters."""
-        config = ConnectBackendConfig(
-            connect_url="sc://cluster:15002/;use_ssl=true;token=abc123"
-        )
+        config = ConnectBackendConfig(connect_url="sc://cluster:15002/;use_ssl=true;token=abc123")
 
         assert config.connect_url == "sc://cluster:15002/;use_ssl=true;token=abc123"
 
@@ -89,17 +87,13 @@ class TestConnectBackendConfig:
             connect_url="sc://spark-connect.spark-ns.svc.cluster.local:15002"
         )
 
-        assert (
-            config.connect_url == "sc://spark-connect.spark-ns.svc.cluster.local:15002"
-        )
+        assert config.connect_url == "sc://spark-connect.spark-ns.svc.cluster.local:15002"
 
 
 class TestConnectBackendValidation:
     """Tests for ConnectBackend URL validation."""
 
-    @pytest.mark.skipif(
-        not _is_pyspark_available(), reason="PySpark Connect not installed"
-    )
+    @pytest.mark.skipif(not _is_pyspark_available(), reason="PySpark Connect not installed")
     def test_invalid_url_missing_scheme(self):
         """Test that invalid URL (missing sc://) is rejected."""
         from kubeflow.spark.backends.connect import ConnectBackend
@@ -109,9 +103,7 @@ class TestConnectBackendValidation:
         with pytest.raises(ValueError, match="Invalid Spark Connect URL"):
             ConnectBackend(config)
 
-    @pytest.mark.skipif(
-        not _is_pyspark_available(), reason="PySpark Connect not installed"
-    )
+    @pytest.mark.skipif(not _is_pyspark_available(), reason="PySpark Connect not installed")
     def test_invalid_url_missing_port(self):
         """Test that URL without port is rejected."""
         from kubeflow.spark.backends.connect import ConnectBackend
@@ -121,9 +113,7 @@ class TestConnectBackendValidation:
         with pytest.raises(ValueError, match="Invalid Spark Connect URL"):
             ConnectBackend(config)
 
-    @pytest.mark.skipif(
-        not _is_pyspark_available(), reason="PySpark Connect not installed"
-    )
+    @pytest.mark.skipif(not _is_pyspark_available(), reason="PySpark Connect not installed")
     def test_empty_url(self):
         """Test that empty URL is rejected."""
         from kubeflow.spark.backends.connect import ConnectBackend
@@ -137,9 +127,7 @@ class TestConnectBackendValidation:
 class TestConnectBackendURLBuilding:
     """Tests for connection URL building logic."""
 
-    @pytest.mark.skipif(
-        not _is_pyspark_available(), reason="PySpark Connect not installed"
-    )
+    @pytest.mark.skipif(not _is_pyspark_available(), reason="PySpark Connect not installed")
     def test_url_building_with_ssl(self):
         """Test URL building with SSL enabled."""
         from kubeflow.spark.backends.connect import ConnectBackend
@@ -150,39 +138,29 @@ class TestConnectBackendURLBuilding:
         url = backend._build_connection_url()
         assert "use_ssl=true" in url
 
-    @pytest.mark.skipif(
-        not _is_pyspark_available(), reason="PySpark Connect not installed"
-    )
+    @pytest.mark.skipif(not _is_pyspark_available(), reason="PySpark Connect not installed")
     def test_url_building_with_token(self):
         """Test URL building with authentication token."""
         from kubeflow.spark.backends.connect import ConnectBackend
 
-        config = ConnectBackendConfig(
-            connect_url="sc://localhost:15002", token="test-token"
-        )
+        config = ConnectBackendConfig(connect_url="sc://localhost:15002", token="test-token")
         backend = ConnectBackend(config)
 
         url = backend._build_connection_url()
         assert "token=test-token" in url
 
-    @pytest.mark.skipif(
-        not _is_pyspark_available(), reason="PySpark Connect not installed"
-    )
+    @pytest.mark.skipif(not _is_pyspark_available(), reason="PySpark Connect not installed")
     def test_url_building_preserves_existing_params(self):
         """Test that existing URL parameters are preserved."""
         from kubeflow.spark.backends.connect import ConnectBackend
 
-        config = ConnectBackendConfig(
-            connect_url="sc://localhost:15002/;custom_param=value"
-        )
+        config = ConnectBackendConfig(connect_url="sc://localhost:15002/;custom_param=value")
         backend = ConnectBackend(config)
 
         url = backend._build_connection_url()
         assert "custom_param=value" in url
 
-    @pytest.mark.skipif(
-        not _is_pyspark_available(), reason="PySpark Connect not installed"
-    )
+    @pytest.mark.skipif(not _is_pyspark_available(), reason="PySpark Connect not installed")
     def test_url_building_config_overrides_url_params(self):
         """Test that config parameters override URL parameters."""
         from kubeflow.spark.backends.connect import ConnectBackend
@@ -280,9 +258,7 @@ class TestSessionInfo:
 class TestConnectBackendBatchMethodsRaiseErrors:
     """Test that batch-oriented methods raise NotImplementedError."""
 
-    @pytest.mark.skipif(
-        not _is_pyspark_available(), reason="PySpark Connect not installed"
-    )
+    @pytest.mark.skipif(not _is_pyspark_available(), reason="PySpark Connect not installed")
     def test_submit_application_raises_error(self):
         """Test that submit_application raises NotImplementedError."""
         from kubeflow.spark.backends.connect import ConnectBackend
@@ -310,9 +286,7 @@ class TestConnectBackendBatchMethodsRaiseErrors:
                 deps=None,
             )
 
-    @pytest.mark.skipif(
-        not _is_pyspark_available(), reason="PySpark Connect not installed"
-    )
+    @pytest.mark.skipif(not _is_pyspark_available(), reason="PySpark Connect not installed")
     def test_get_status_raises_error(self):
         """Test that get_status raises NotImplementedError."""
         from kubeflow.spark.backends.connect import ConnectBackend
@@ -323,9 +297,7 @@ class TestConnectBackendBatchMethodsRaiseErrors:
         with pytest.raises(NotImplementedError, match="batch application status"):
             backend.get_status("test-id")
 
-    @pytest.mark.skipif(
-        not _is_pyspark_available(), reason="PySpark Connect not installed"
-    )
+    @pytest.mark.skipif(not _is_pyspark_available(), reason="PySpark Connect not installed")
     def test_delete_application_raises_error(self):
         """Test that delete_application raises NotImplementedError."""
         from kubeflow.spark.backends.connect import ConnectBackend
@@ -336,9 +308,7 @@ class TestConnectBackendBatchMethodsRaiseErrors:
         with pytest.raises(NotImplementedError, match="batch application deletion"):
             backend.delete_application("test-id")
 
-    @pytest.mark.skipif(
-        not _is_pyspark_available(), reason="PySpark Connect not installed"
-    )
+    @pytest.mark.skipif(not _is_pyspark_available(), reason="PySpark Connect not installed")
     def test_get_logs_raises_error(self):
         """Test that get_logs raises NotImplementedError."""
         from kubeflow.spark.backends.connect import ConnectBackend
@@ -349,9 +319,7 @@ class TestConnectBackendBatchMethodsRaiseErrors:
         with pytest.raises(NotImplementedError, match="logs retrieval"):
             list(backend.get_logs("test-id"))
 
-    @pytest.mark.skipif(
-        not _is_pyspark_available(), reason="PySpark Connect not installed"
-    )
+    @pytest.mark.skipif(not _is_pyspark_available(), reason="PySpark Connect not installed")
     def test_list_applications_raises_error(self):
         """Test that list_applications raises NotImplementedError."""
         from kubeflow.spark.backends.connect import ConnectBackend
@@ -362,9 +330,7 @@ class TestConnectBackendBatchMethodsRaiseErrors:
         with pytest.raises(NotImplementedError, match="listing applications"):
             backend.list_applications()
 
-    @pytest.mark.skipif(
-        not _is_pyspark_available(), reason="PySpark Connect not installed"
-    )
+    @pytest.mark.skipif(not _is_pyspark_available(), reason="PySpark Connect not installed")
     def test_wait_for_completion_raises_error(self):
         """Test that wait_for_completion raises NotImplementedError."""
         from kubeflow.spark.backends.connect import ConnectBackend

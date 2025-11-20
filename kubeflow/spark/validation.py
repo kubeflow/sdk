@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 import logging
 import re
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 from kubeflow.spark.models import SparkApplicationRequest
 
@@ -64,8 +64,8 @@ class ValidationResult:
     """
 
     valid: bool
-    errors: List[ValidationError] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
+    errors: list[ValidationError] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
     def add_error(self, error: ValidationError):
         """Add an error and mark result as invalid."""
@@ -130,24 +130,24 @@ class SparkVersionValidator:
         result = ValidationResult(valid=True)
 
         # Check pod template requirement (from operator)
-        if request.driver_pod_template or request.executor_pod_template:
-            if self.compare_version(request.spark_version, "3.0.0") < 0:
-                result.add_error(
-                    ValidationError(
-                        type=ValidationErrorType.SPARK_VERSION,
-                        field="spark_version",
-                        message="Pod template feature requires Spark version 3.0.0 or higher",
-                        value=request.spark_version,
-                    )
+        if (request.driver_pod_template or request.executor_pod_template) and \
+                self.compare_version(request.spark_version, "3.0.0") < 0:
+            result.add_error(
+                ValidationError(
+                    type=ValidationErrorType.SPARK_VERSION,
+                    field="spark_version",
+                    message="Pod template feature requires Spark version 3.0.0 or higher",
+                    value=request.spark_version,
                 )
+            )
 
         # Check dynamic allocation (Spark 3.0+)
-        if request.dynamic_allocation and request.dynamic_allocation.enabled:
-            if self.compare_version(request.spark_version, "3.0.0") < 0:
-                result.add_warning(
-                    "Dynamic allocation on Kubernetes requires Spark 3.0.0+. "
-                    f"Your version: {request.spark_version}"
-                )
+        if request.dynamic_allocation and request.dynamic_allocation.enabled and \
+                self.compare_version(request.spark_version, "3.0.0") < 0:
+            result.add_warning(
+                "Dynamic allocation on Kubernetes requires Spark 3.0.0+. "
+                f"Your version: {request.spark_version}"
+            )
 
         return result
 
@@ -174,7 +174,10 @@ class ResourceValidator:
             return ValidationError(
                 type=ValidationErrorType.RESOURCE_FORMAT,
                 field=field_name,
-                message=f"Invalid memory format: {memory}. Expected format: <number><unit> where unit is m, g, k, or b (e.g., '4g', '512m')",
+                message=(
+                    f"Invalid memory format: {memory}. Expected format: "
+                    "<number><unit> where unit is m, g, k, or b (e.g., '4g', '512m')"
+                ),
                 value=memory,
             )
         return None
@@ -236,7 +239,7 @@ class ResourceValidator:
                 ValidationError(
                     type=ValidationErrorType.INVALID_VALUE,
                     field="num_executors",
-                    message="num_executors must be >= 1 (unless dynamic allocation is enabled)",
+                    message=("num_executors must be >= 1 (unless dynamic allocation is enabled)"),
                     value=request.num_executors,
                 )
             )
@@ -298,16 +301,19 @@ class DynamicAllocationValidator:
         dyn_alloc = request.dynamic_allocation
 
         # Validate executor bounds
-        if dyn_alloc.min_executors is not None and dyn_alloc.max_executors is not None:
-            if dyn_alloc.min_executors > dyn_alloc.max_executors:
-                result.add_error(
-                    ValidationError(
-                        type=ValidationErrorType.DYNAMIC_ALLOCATION,
-                        field="dynamic_allocation",
-                        message=f"min_executors ({dyn_alloc.min_executors}) must be <= max_executors ({dyn_alloc.max_executors})",
-                        value=f"min={dyn_alloc.min_executors}, max={dyn_alloc.max_executors}",
-                    )
+        if dyn_alloc.min_executors is not None and dyn_alloc.max_executors is not None and \
+                dyn_alloc.min_executors > dyn_alloc.max_executors:
+            result.add_error(
+                ValidationError(
+                    type=ValidationErrorType.DYNAMIC_ALLOCATION,
+                    field="dynamic_allocation",
+                    message=(
+                        f"min_executors ({dyn_alloc.min_executors}) must be <= "
+                        f"max_executors ({dyn_alloc.max_executors})"
+                    ),
+                    value=(f"min={dyn_alloc.min_executors}, max={dyn_alloc.max_executors}"),
                 )
+            )
 
         if dyn_alloc.initial_executors is not None:
             if (
@@ -318,7 +324,10 @@ class DynamicAllocationValidator:
                     ValidationError(
                         type=ValidationErrorType.DYNAMIC_ALLOCATION,
                         field="dynamic_allocation.initial_executors",
-                        message=f"initial_executors ({dyn_alloc.initial_executors}) must be >= min_executors ({dyn_alloc.min_executors})",
+                        message=(
+                            f"initial_executors ({dyn_alloc.initial_executors}) "
+                            f"must be >= min_executors ({dyn_alloc.min_executors})"
+                        ),
                         value=dyn_alloc.initial_executors,
                     )
                 )
@@ -331,7 +340,10 @@ class DynamicAllocationValidator:
                     ValidationError(
                         type=ValidationErrorType.DYNAMIC_ALLOCATION,
                         field="dynamic_allocation.initial_executors",
-                        message=f"initial_executors ({dyn_alloc.initial_executors}) must be <= max_executors ({dyn_alloc.max_executors})",
+                        message=(
+                            f"initial_executors ({dyn_alloc.initial_executors}) "
+                            f"must be <= max_executors ({dyn_alloc.max_executors})"
+                        ),
                         value=dyn_alloc.initial_executors,
                     )
                 )
@@ -340,7 +352,8 @@ class DynamicAllocationValidator:
         if dyn_alloc.shuffle_tracking_enabled is False:
             result.add_warning(
                 "Shuffle tracking is disabled. You may need an external shuffle service. "
-                "See: https://spark.apache.org/docs/latest/running-on-kubernetes.html#dynamic-resource-allocation"
+                "See: https://spark.apache.org/docs/latest/running-on-kubernetes.html"
+                "#dynamic-resource-allocation"
             )
 
         return result

@@ -12,6 +12,7 @@ print("=" * 80)
 print("\n[1] Checking grpcio installation...")
 try:
     import grpc
+
     print(f"✓ grpcio version: {grpc.__version__}")
 except ImportError as e:
     print(f"✗ grpcio not installed: {e}")
@@ -21,10 +22,11 @@ except ImportError as e:
 # Test 2: Try to connect to the port
 print("\n[2] Testing TCP connection to localhost:30000...")
 import socket
+
 try:
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(5)
-    result = sock.connect_ex(('localhost', 30000))
+    result = sock.connect_ex(("localhost", 30000))
     sock.close()
 
     if result == 0:
@@ -39,7 +41,7 @@ except Exception as e:
 # Test 3: Try gRPC channel
 print("\n[3] Creating gRPC channel to localhost:30000...")
 try:
-    channel = grpc.insecure_channel('localhost:30000')
+    channel = grpc.insecure_channel("localhost:30000")
     print("✓ gRPC channel created")
 
     # Test if channel is ready
@@ -59,12 +61,14 @@ try:
 except Exception as e:
     print(f"✗ gRPC error: {e}")
     import traceback
+
     traceback.print_exc()
 
 # Test 4: Try with PySpark directly
 print("\n[4] Testing PySpark Spark Connect...")
 try:
     from pyspark.sql import SparkSession
+
     print("✓ PySpark imported")
 
     print("   Creating SparkSession with remote connection...")
@@ -79,10 +83,9 @@ try:
     signal.alarm(20)
 
     try:
-        spark = SparkSession.builder \
-            .remote("sc://localhost:30000") \
-            .appName("grpc-test") \
-            .getOrCreate()
+        spark = (
+            SparkSession.builder.remote("sc://localhost:30000").appName("grpc-test").getOrCreate()
+        )
 
         signal.alarm(0)
         print("✓ SparkSession created!")
@@ -114,6 +117,7 @@ except KeyboardInterrupt:
 except Exception as e:
     print(f"✗ PySpark connection failed: {e}")
     import traceback
+
     traceback.print_exc()
 
 print("\n" + "=" * 80)

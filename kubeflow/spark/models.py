@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 
 class ApplicationState(Enum):
@@ -162,10 +162,10 @@ class SparkUIConfiguration:
     service_port: Optional[int] = None
     service_port_name: str = "spark-driver-ui-port"
     service_type: str = "ClusterIP"
-    service_annotations: Dict[str, str] = field(default_factory=dict)
-    service_labels: Dict[str, str] = field(default_factory=dict)
-    ingress_annotations: Dict[str, str] = field(default_factory=dict)
-    ingress_tls: Optional[List[Dict[str, Any]]] = None
+    service_annotations: dict[str, str] = field(default_factory=dict)
+    service_labels: dict[str, str] = field(default_factory=dict)
+    ingress_annotations: dict[str, str] = field(default_factory=dict)
+    ingress_tls: Optional[list[dict[str, Any]]] = None
 
 
 @dataclass
@@ -270,18 +270,18 @@ class SparkApplicationRequest:
     num_executors: int = 2
 
     # === Application Configuration ===
-    arguments: List[str] = field(default_factory=list)
+    arguments: list[str] = field(default_factory=list)
     main_class: Optional[str] = None
     python_version: str = "3"
-    spark_conf: Dict[str, str] = field(default_factory=dict)
-    hadoop_conf: Dict[str, str] = field(default_factory=dict)
-    env_vars: Dict[str, str] = field(default_factory=dict)
-    deps: Optional[Dict[str, List[str]]] = None
+    spark_conf: dict[str, str] = field(default_factory=dict)
+    hadoop_conf: dict[str, str] = field(default_factory=dict)
+    env_vars: dict[str, str] = field(default_factory=dict)
+    deps: Optional[dict[str, list[str]]] = None
 
     # === Image Configuration ===
     image: Optional[str] = None
     image_pull_policy: str = "IfNotPresent"
-    image_pull_secrets: List[str] = field(default_factory=list)
+    image_pull_secrets: list[str] = field(default_factory=list)
 
     # === Lifecycle & Resilience ===
     suspend: Optional[bool] = None
@@ -305,40 +305,40 @@ class SparkApplicationRequest:
 
     # === Networking & Security ===
     service_account: str = "spark-operator-spark"
-    node_selector: Dict[str, str] = field(default_factory=dict)
-    tolerations: List[Dict[str, Any]] = field(default_factory=list)
-    affinity: Optional[Dict[str, Any]] = None
+    node_selector: dict[str, str] = field(default_factory=dict)
+    tolerations: list[dict[str, Any]] = field(default_factory=list)
+    affinity: Optional[dict[str, Any]] = None
     host_network: Optional[bool] = None
-    pod_security_context: Optional[Dict[str, Any]] = None
-    security_context: Optional[Dict[str, Any]] = None
+    pod_security_context: Optional[dict[str, Any]] = None
+    security_context: Optional[dict[str, Any]] = None
 
     # === Pod Templates (Spark 3.0+) ===
-    driver_pod_template: Optional[Dict[str, Any]] = None
-    executor_pod_template: Optional[Dict[str, Any]] = None
+    driver_pod_template: Optional[dict[str, Any]] = None
+    executor_pod_template: Optional[dict[str, Any]] = None
 
     # === Volumes ===
-    volumes: List[Dict[str, Any]] = field(default_factory=list)
-    driver_volume_mounts: List[Dict[str, Any]] = field(default_factory=list)
-    executor_volume_mounts: List[Dict[str, Any]] = field(default_factory=list)
+    volumes: list[dict[str, Any]] = field(default_factory=list)
+    driver_volume_mounts: list[dict[str, Any]] = field(default_factory=list)
+    executor_volume_mounts: list[dict[str, Any]] = field(default_factory=list)
 
     # === Sidecars & Init Containers ===
-    driver_sidecars: List[Dict[str, Any]] = field(default_factory=list)
-    executor_sidecars: List[Dict[str, Any]] = field(default_factory=list)
-    driver_init_containers: List[Dict[str, Any]] = field(default_factory=list)
-    executor_init_containers: List[Dict[str, Any]] = field(default_factory=list)
+    driver_sidecars: list[dict[str, Any]] = field(default_factory=list)
+    executor_sidecars: list[dict[str, Any]] = field(default_factory=list)
+    driver_init_containers: list[dict[str, Any]] = field(default_factory=list)
+    executor_init_containers: list[dict[str, Any]] = field(default_factory=list)
 
     # === Labels & Annotations ===
-    labels: Dict[str, str] = field(default_factory=dict)
-    driver_labels: Dict[str, str] = field(default_factory=dict)
-    executor_labels: Dict[str, str] = field(default_factory=dict)
-    annotations: Dict[str, str] = field(default_factory=dict)
-    driver_annotations: Dict[str, str] = field(default_factory=dict)
-    executor_annotations: Dict[str, str] = field(default_factory=dict)
+    labels: dict[str, str] = field(default_factory=dict)
+    driver_labels: dict[str, str] = field(default_factory=dict)
+    executor_labels: dict[str, str] = field(default_factory=dict)
+    annotations: dict[str, str] = field(default_factory=dict)
+    driver_annotations: dict[str, str] = field(default_factory=dict)
+    executor_annotations: dict[str, str] = field(default_factory=dict)
 
     # === Legacy ===
     queue: str = "poc"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert request to dictionary for operator-compliant SparkApplication CRD.
 
         Returns:
@@ -353,7 +353,7 @@ class SparkApplicationRequest:
             metadata["annotations"] = self.annotations.copy()
 
         # === Build spec ===
-        spec: Dict[str, Any] = {
+        spec: dict[str, Any] = {
             "type": self.app_type,
             "mode": self.mode.value if isinstance(self.mode, DeployMode) else self.mode,
             "mainApplicationFile": self.main_application_file,
@@ -639,7 +639,7 @@ class SparkApplicationResponse:
     message: str = ""
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "SparkApplicationResponse":
+    def from_dict(cls, data: dict[str, Any]) -> "SparkApplicationResponse":
         """Create response from API response dictionary.
 
         Args:
@@ -769,11 +769,11 @@ class ApplicationStatus:
     submission_time: Optional[str] = None
     start_time: Optional[str] = None
     completion_time: Optional[str] = None
-    driver_info: Optional[Dict[str, Any]] = None
-    executor_state: Optional[Dict[str, Any]] = None
+    driver_info: Optional[dict[str, Any]] = None
+    executor_state: Optional[dict[str, Any]] = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ApplicationStatus":
+    def from_dict(cls, data: dict[str, Any]) -> "ApplicationStatus":
         """Create status from API response dictionary.
 
         Args:

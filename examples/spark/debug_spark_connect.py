@@ -5,14 +5,15 @@ Debug script for Spark Connect connection issues.
 This script tests the connection step-by-step with verbose logging.
 """
 
-import sys
-import os
 import logging
+import os
+import signal
+import sys
+import time
 
 # Setup logging
 logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
 # Add SDK to path
@@ -27,6 +28,7 @@ print("=" * 80)
 print("\n[Test 1] Checking PySpark installation...")
 try:
     import pyspark
+
     print(f"✓ PySpark version: {pyspark.__version__}")
 except ImportError as e:
     print(f"✗ PySpark not installed: {e}")
@@ -36,10 +38,11 @@ except ImportError as e:
 print("\n[Test 2] Checking Spark Connect support...")
 try:
     from pyspark.sql import SparkSession
+
     print("✓ SparkSession imported")
 
     # Check if remote() method exists
-    if hasattr(SparkSession.builder, 'remote'):
+    if hasattr(SparkSession.builder, "remote"):
         print("✓ Spark Connect (remote) support available")
     else:
         print("✗ Spark Connect support not available - upgrade PySpark")
@@ -52,13 +55,15 @@ except Exception as e:
 print("\n[Test 3] Testing gRPC connectivity to localhost:30000...")
 try:
     import grpc
+
     print("✓ grpc module available")
 
     # Try to create a channel
-    channel = grpc.insecure_channel('localhost:30000')
+    channel = grpc.insecure_channel("localhost:30000")
 
     # Set a short timeout for connection test
     import grpc
+
     try:
         grpc.channel_ready_future(channel).result(timeout=5)
         print("✓ gRPC channel ready")
@@ -78,7 +83,8 @@ except Exception as e:
 # Test 4: Test Kubeflow SDK import
 print("\n[Test 4] Testing Kubeflow SDK imports...")
 try:
-    from kubeflow.spark import ConnectBackendConfig, SparkClient
+    from kubeflow.spark import ConnectBackendConfig, SparkSessionClient
+
     print("✓ Kubeflow Spark imports successful")
 except Exception as e:
     print(f"✗ Import error: {e}")
@@ -90,7 +96,7 @@ try:
     config = ConnectBackendConfig(
         connect_url="sc://localhost:30000",
         use_ssl=False,
-        timeout=10  # Short timeout for testing
+        timeout=10,  # Short timeout for testing
     )
     print(f"✓ Config created: {config.connect_url}")
 except Exception as e:
@@ -98,9 +104,9 @@ except Exception as e:
     sys.exit(1)
 
 # Test 6: Create client (doesn't connect yet)
-print("\n[Test 6] Creating SparkClient...")
+print("\n[Test 6] Creating SparkSessionClient...")
 try:
-    client = SparkClient(backend_config=config)
+    client = SparkSessionClient(backend_config=config)
     print("✓ Client created")
 except Exception as e:
     print(f"✗ Client creation error: {e}")
@@ -111,8 +117,6 @@ print("\n[Test 7] Creating Spark session (this may hang)...")
 print("  If this hangs for more than 30 seconds, press Ctrl+C")
 print("  Attempting connection to sc://localhost:30000...")
 
-import signal
-import time
 
 def timeout_handler(signum, frame):
     print("\n✗ Session creation timed out after 30 seconds")
@@ -124,8 +128,11 @@ def timeout_handler(signum, frame):
     print("  - Check server logs: kubectl logs -l app=spark-connect -n default -f")
     print("  - Verify port forward: lsof -i :30000")
     print("  - Test connectivity: nc -zv localhost 30000")
-    print("  - Check server is listening: kubectl exec -it <pod-name> -- netstat -tlnp | grep 15002")
+    print(
+        "  - Check server is listening: kubectl exec -it <pod-name> -- netstat -tlnp | grep 15002"
+    )
     sys.exit(1)
+
 
 # Set timeout
 signal.signal(signal.SIGALRM, timeout_handler)
@@ -171,6 +178,7 @@ except Exception as e:
     print(f"\n✗ Session creation failed: {e}")
     print(f"\nError type: {type(e).__name__}")
     import traceback
+
     print("\nFull traceback:")
     traceback.print_exc()
     sys.exit(1)

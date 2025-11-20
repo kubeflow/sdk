@@ -36,7 +36,7 @@ if sdk_path not in sys.path:
 from kubeflow.spark import (  # noqa: E402
     ApplicationState,
     OperatorBackendConfig,
-    SparkClient,
+    BatchSparkClient,
 )
 
 
@@ -315,7 +315,8 @@ print("="*80)
 print("\\nKey Findings:")
 num_cities = df.select('city').distinct().count()
 print(f"  - Dataset has {df.count()} customers across {num_cities} cities")
-print(f"  - Average customer: {mean_age:.0f} years old, {df.agg(avg('purchases')).collect()[0][0]:.1f} purchases")
+avg_purchases = df.agg(avg('purchases')).collect()[0][0]
+print(f"  - Average customer: {mean_age:.0f} years old, {avg_purchases:.1f} purchases")
 print(f"  - Data completeness: {completeness_pct:.1f}%")
 print(f"  - Quality issues: {incomplete_rows} incomplete records, {outliers.count()} outliers")
 
@@ -348,7 +349,7 @@ def main():
         enable_monitoring=False,
         enable_ui=False,
     )
-    client = SparkClient(backend_config=config)
+    client = BatchSparkClient(backend_config=config)
     print("  Client created successfully")
     print()
 
@@ -369,7 +370,8 @@ def main():
         response = client.submit_application(
             # Application metadata
             app_name=app_name,
-            main_application_file="local:///opt/spark/examples/src/main/python/pi.py",  # Placeholder
+            # Placeholder
+            main_application_file=("local:///opt/spark/examples/src/main/python/pi.py"),
             # Spark configuration
             spark_version="4.0.0",
             app_type="Python",
@@ -414,7 +416,7 @@ def main():
         if final_status.state != ApplicationState.COMPLETED:
             print(
                 f"  WARNING: Application did not complete successfully: {final_status.state.value}"
-            )  # noqa: E501
+            )
             print("  Check logs below for details.")
 
     except TimeoutError:

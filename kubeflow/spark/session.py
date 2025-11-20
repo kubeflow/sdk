@@ -15,7 +15,7 @@
 """Managed Spark Connect session wrapper."""
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from kubeflow.spark.models import SessionInfo, SessionMetrics
 
@@ -180,7 +180,13 @@ class ManagedSparkSession:
             raise RuntimeError(f"Session {self._session_id} is closed")
         return self._session.table(tableName)
 
-    def range(self, start: int, end: Optional[int] = None, step: int = 1, numPartitions: Optional[int] = None) -> "DataFrame":
+    def range(
+        self,
+        start: int,
+        end: Optional[int] = None,
+        step: int = 1,
+        numPartitions: Optional[int] = None,
+    ) -> "DataFrame":
         """Create DataFrame with range of numbers.
 
         Args:
@@ -254,7 +260,9 @@ class ManagedSparkSession:
             metrics=self._metrics,
         )
 
-    def export_to_pipeline_artifact(self, df: "DataFrame", path: str, format: str = "parquet", **options: Any) -> None:
+    def export_to_pipeline_artifact(
+        self, df: "DataFrame", path: str, format: str = "parquet", **options: Any
+    ) -> None:
         """Export DataFrame to Kubeflow Pipeline artifact.
 
         Args:

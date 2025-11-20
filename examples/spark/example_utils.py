@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 import logging
 import os
 import sys
-from typing import Dict, List, Optional
+from typing import Optional
 
 # Add SDK to path for development mode
 sdk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
@@ -38,7 +38,7 @@ from kubeflow.spark import (  # noqa: E402
     OperatorBackendConfig,
     RestartPolicy,
     RestartPolicyType,
-    SparkClient,
+    BatchBatchSparkClient,
 )
 
 # ============================================================================
@@ -77,8 +77,8 @@ def create_client(
     enable_monitoring: bool = False,
     enable_ui: bool = False,
     default_spark_image: str = "docker.io/library/spark",
-) -> SparkClient:
-    """Create a SparkClient with sensible defaults for examples.
+) -> BatchSparkClient:
+    """Create a BatchSparkClient with sensible defaults for examples.
 
     Args:
         namespace: Kubernetes namespace (default: from SPARK_NAMESPACE env or 'default')
@@ -89,7 +89,7 @@ def create_client(
         default_spark_image: Default Spark image to use
 
     Returns:
-        Configured SparkClient instance
+        Configured BatchSparkClient instance
 
     Example:
         >>> client = create_client()
@@ -104,8 +104,8 @@ def create_client(
         enable_ui=enable_ui,
     )
 
-    logger.info(f"Creating SparkClient for namespace: {config.namespace}")
-    return SparkClient(backend_config=config)
+    logger.info(f"Creating BatchSparkClient for namespace: {config.namespace}")
+    return BatchSparkClient(backend_config=config)
 
 
 # ============================================================================
@@ -152,7 +152,7 @@ def get_dynamic_allocation_config(
     )
 
 
-def get_spark_conf_defaults(spark_version: str = "4.0.0") -> Dict[str, str]:
+def get_spark_conf_defaults(spark_version: str = "4.0.0") -> dict[str, str]:
     """Get default Spark configuration suitable for examples.
 
     Args:
@@ -182,7 +182,7 @@ def get_spark_conf_defaults(spark_version: str = "4.0.0") -> Dict[str, str]:
 # ============================================================================
 
 
-def generate_customer_data(num_records: int = 100) -> List[tuple]:
+def generate_customer_data(num_records: int = 100) -> list[tuple]:
     """Generate sample customer data.
 
     Args:
@@ -229,7 +229,7 @@ def generate_transaction_data(
     num_transactions: int = 1000,
     num_customers: int = 100,
     days_back: int = 30,
-) -> List[tuple]:
+) -> list[tuple]:
     """Generate sample transaction data.
 
     Args:
@@ -250,7 +250,8 @@ def generate_transaction_data(
         tx_date = (base_date - timedelta(days=random.randint(0, days_back))).strftime("%Y-%m-%d")
         customer_id = random.randint(1, num_customers)
         amount = round(random.uniform(10.0, 1000.0), 2)
-        status = random.choice(statuses) if i % 10 != 0 else "completed"  # 90% completed
+        # 90% completed
+        status = random.choice(statuses) if i % 10 != 0 else "completed"
 
         transactions.append((i, tx_date, customer_id, amount, status))
 
@@ -259,9 +260,9 @@ def generate_transaction_data(
 
 def generate_sales_data(
     num_records: int = 100,
-    products: Optional[List[str]] = None,
-    categories: Optional[List[str]] = None,
-) -> List[tuple]:
+    products: Optional[list[str]] = None,
+    categories: Optional[list[str]] = None,
+) -> list[tuple]:
     """Generate sample sales data.
 
     Args:
@@ -303,7 +304,7 @@ def generate_sales_data(
 
 
 def wait_for_job(
-    client: SparkClient,
+    client: BatchBatchSparkClient,
     app_name: str,
     timeout: int = 300,
     polling_interval: int = 5,
@@ -311,7 +312,7 @@ def wait_for_job(
     """Wait for a Spark job to complete with proper error handling.
 
     Args:
-        client: SparkClient instance
+        client: BatchSparkClient instance
         app_name: Application name
         timeout: Maximum time to wait in seconds
         polling_interval: Polling interval in seconds
@@ -350,11 +351,11 @@ def wait_for_job(
         raise
 
 
-def print_job_status(client: SparkClient, app_name: str):
+def print_job_status(client: BatchBatchSparkClient, app_name: str):
     """Print current job status in a formatted way.
 
     Args:
-        client: SparkClient instance
+        client: BatchSparkClient instance
         app_name: Application name
     """
     try:
@@ -379,11 +380,11 @@ def print_job_status(client: SparkClient, app_name: str):
         logger.error(f"Error getting status for '{app_name}': {e}")
 
 
-def cleanup_job(client: SparkClient, app_name: str):
+def cleanup_job(client: BatchBatchSparkClient, app_name: str):
     """Clean up a Spark application with proper error handling.
 
     Args:
-        client: SparkClient instance
+        client: BatchSparkClient instance
         app_name: Application name
     """
     try:
@@ -438,7 +439,7 @@ def format_duration(seconds: int) -> str:
     return " ".join(parts)
 
 
-def get_sample_spark_conf_for_use_case(use_case: str) -> Dict[str, str]:
+def get_sample_spark_conf_for_use_case(use_case: str) -> dict[str, str]:
     """Get recommended Spark configuration for common use cases.
 
     Args:
@@ -456,7 +457,8 @@ def get_sample_spark_conf_for_use_case(use_case: str) -> Dict[str, str]:
             "spark.sql.shuffle.partitions": "200",
         },
         "ml": {
-            "spark.sql.adaptive.enabled": "false",  # Some ML libs prefer this off
+            # Some ML libs prefer this off
+            "spark.sql.adaptive.enabled": "false",
             "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
             "spark.kryoserializer.buffer.max": "512m",
         },
@@ -544,7 +546,10 @@ def print_examples_catalog():
             by_level[level] = []
         by_level[level].append((name, metadata))
 
-    level_names = {1: "Level 1: Getting Started", 2: "Level 2: Data Engineering Basics"}
+    level_names = {
+        1: "Level 1: Getting Started",
+        2: "Level 2: Data Engineering Basics",
+    }
 
     for level in sorted(by_level.keys()):
         print(f"\n{level_names.get(level, f'Level {level}')}")

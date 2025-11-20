@@ -1,6 +1,7 @@
 # ./ipython_shell.py
 # then run /paste this python code .
 
+import os
 
 from kubeflow.spark import OperatorBackendConfig, SparkClient
 
@@ -12,7 +13,7 @@ config = OperatorBackendConfig(
     enable_ui=False,
     context=os.getenv("KUBE_CONTEXT", "kind-spark-test"),  # Explicitly set context
 )
-client = SparkClient(backend_config=config)
+client = BatchSparkClient(backend_config=config)
 
 app_name = "test-spark-pi"
 

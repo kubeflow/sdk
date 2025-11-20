@@ -46,7 +46,10 @@ def get_s3_spark_conf(additional_conf=None, enable_history=False):
         "spark.kubernetes.file.upload.path": "/tmp",
         # Download Hadoop AWS libraries at runtime (includes S3A filesystem)
         # Compatible with Spark 4.0.0 and Hadoop 3.4.0
-        "spark.jars.packages": "org.apache.hadoop:hadoop-aws:3.4.0,com.amazonaws:aws-java-sdk-bundle:1.12.262",
+        "spark.jars.packages": (
+            "org.apache.hadoop:hadoop-aws:3.4.0,"
+            "com.amazonaws:aws-java-sdk-bundle:1.12.262"
+        ),
         # Ivy cache location - use /tmp which is always writable
         # Fixes: java.io.FileNotFoundException: /home/spark/.ivy2.5.2/cache/...
         "spark.jars.ivy": "/tmp/.ivy2",

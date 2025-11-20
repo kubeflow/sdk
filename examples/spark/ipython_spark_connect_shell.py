@@ -16,7 +16,6 @@ sdk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.insert(0, sdk_path)
 
 # Pre-import for convenience
-from kubeflow.spark import ConnectBackendConfig, SparkClient
 
 # Banner with instructions
 banner = f"""
@@ -29,7 +28,7 @@ Spark Connect URL: sc://localhost:30000
 
 Pre-imported modules:
   - ConnectBackendConfig
-  - SparkClient
+  - SparkSessionClient
 
 {"=" * 80}
 Step-by-Step Guide
@@ -43,7 +42,7 @@ Step-by-Step Guide
    )
 
 2. Create Client and Session:
-   client = SparkClient(backend_config=config)
+   client = SparkSessionClient(backend_config=config)
    session = client.create_session(app_name="my-demo")
 
 3. Run Simple SQL:
@@ -104,10 +103,12 @@ Ready! Start by copying and pasting the commands above.
 if __name__ == "__main__":
     try:
         import IPython
+
         IPython.embed(banner1=banner, colors="Linux")
     except ImportError:
         print("IPython not installed. Install with: pip install ipython")
         print("Falling back to regular Python shell...\n")
         import code
+
         print(banner)
         code.interact(local=locals())

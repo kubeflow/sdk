@@ -33,12 +33,12 @@ if sdk_path not in sys.path:
 from kubeflow.spark import (  # noqa: E402
     ApplicationState,
     OperatorBackendConfig,
-    SparkClient,
+    BatchSparkClient,
 )
 
 # Import MinIO configuration
 try:
-    from minio_config import S3_PATHS, get_s3_spark_conf, print_minio_info
+    from minio_config import get_s3_spark_conf, print_minio_info
 except ImportError:
     print("ERROR: minio_config.py not found!")
     print("Please ensure you're running from the examples/spark directory")
@@ -91,7 +91,7 @@ def print_ui_instructions(app_name: str):
     print()
 
 
-def monitor_job_progress(client: SparkClient, app_name: str):
+def monitor_job_progress(client: BatchSparkClient, app_name: str):
     """Monitor and display job progress."""
     print("=" * 80)
     print("MONITORING JOB PROGRESS")
@@ -169,7 +169,7 @@ def main():
         enable_monitoring=False,
         enable_ui=True,  # Enable Spark UI
     )
-    client = SparkClient(backend_config=config)
+    client = BatchSparkClient(backend_config=config)
     print("  Client created successfully")
     print("  Spark UI enabled")
     print()

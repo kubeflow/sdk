@@ -15,7 +15,7 @@
 
 """Spark Connect Interactive Session Example.
 
-This example demonstrates how to use Kubeflow SparkClient with Spark Connect
+This example demonstrates how to use Kubeflow SparkSessionClient with Spark Connect
 to create interactive data analysis sessions. Unlike batch job submission,
 Spark Connect enables long-lived sessions for exploratory data analysis,
 iterative development, and notebook-style workflows.
@@ -39,7 +39,6 @@ Usage:
 import argparse
 import logging
 import sys
-from typing import List
 
 # Configure logging
 logging.basicConfig(
@@ -154,9 +153,7 @@ def run_dataframe_operations(session) -> None:
         (5, "eve@example.com", "premium", 180),
     ]
 
-    df = session.createDataFrame(
-        user_data, ["user_id", "email", "subscription", "activity_score"]
-    )
+    df = session.createDataFrame(user_data, ["user_id", "email", "subscription", "activity_score"])
 
     # Apply transformations
     logger.info("Applying DataFrame transformations...")
@@ -222,8 +219,7 @@ def run_aggregation_analysis(session) -> None:
     results = agg_df.collect()
     for row in results:
         logger.info(
-            f"  {row.platform}/{row.event_type}: "
-            f"Total={row.total_events}, Days={row.num_days}"
+            f"  {row.platform}/{row.event_type}: Total={row.total_events}, Days={row.num_days}"
         )
 
 
@@ -245,7 +241,7 @@ def demonstrate_session_features(session) -> None:
 
     # Get metrics
     metrics = session.get_metrics()
-    logger.info(f"\nSession Metrics:")
+    logger.info("\nSession Metrics:")
     logger.info(f"  Queries Executed: {metrics.queries_executed}")
     logger.info(f"  Active Queries: {metrics.active_queries}")
     logger.info(f"  Artifacts Uploaded: {metrics.artifacts_uploaded}")
@@ -264,7 +260,7 @@ def main():
 
     try:
         # Import Kubeflow Spark client
-        from kubeflow.spark import ConnectBackendConfig, SparkClient
+        from kubeflow.spark import ConnectBackendConfig, SparkSessionClient
 
         # Configure ConnectBackend
         logger.info("\nInitializing Spark Connect backend...")
@@ -275,9 +271,9 @@ def main():
             timeout=300,
         )
 
-        # Create SparkClient
-        with SparkClient(backend_config=config) as client:
-            logger.info("SparkClient initialized successfully")
+        # Create SparkSessionClient
+        with SparkSessionClient(backend_config=config) as client:
+            logger.info("SparkSessionClient initialized successfully")
 
             # Create interactive session
             logger.info(f"\nCreating Spark Connect session: {args.app_name}")

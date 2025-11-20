@@ -34,7 +34,7 @@ config = OperatorBackendConfig(
     enable_ui=True,  # Enable UI!
 )
 
-client = SparkClient(backend_config=config)
+client = BatchSparkClient(backend_config=config)
 print("Client created with enable_ui=True")
 print()
 
