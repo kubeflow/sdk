@@ -14,14 +14,12 @@
 
 """Spark Connect backend for remote Spark cluster connectivity."""
 
-import logging
-import uuid
 from collections.abc import Iterator
-from datetime import datetime
-from typing import Any, Dict, List, Optional
-from urllib.parse import parse_qs, urlparse
+import logging
+from typing import Any, Optional
+import uuid
 
-from kubeflow.spark.backends.base import SparkBackend
+from kubeflow.spark.backends.base import SessionSparkBackend
 from kubeflow.spark.models import (
     ApplicationStatus,
     ConnectBackendConfig,
@@ -33,7 +31,7 @@ from kubeflow.spark.session import ManagedSparkSession
 logger = logging.getLogger(__name__)
 
 
-class ConnectBackend(SparkBackend):
+class ConnectBackend(SessionSparkBackend):
     """Spark Connect backend for remote connectivity to Spark clusters.
 
     This backend enables connection to existing Spark clusters via the Spark Connect
@@ -54,9 +52,7 @@ class ConnectBackend(SparkBackend):
         from kubeflow.spark import SparkClient, ConnectBackendConfig
 
         config = ConnectBackendConfig(
-            connect_url="sc://spark-cluster.default.svc:15002",
-            token="my-auth-token",
-            use_ssl=True
+            connect_url="sc://spark-cluster.default.svc:15002", token="my-auth-token", use_ssl=True
         )
         client = SparkClient(backend_config=config)
 
@@ -83,7 +79,7 @@ class ConnectBackend(SparkBackend):
             ValueError: If config is invalid
         """
         self.config = config
-        self._sessions: Dict[str, ManagedSparkSession] = {}
+        self._sessions: dict[str, ManagedSparkSession] = {}
 
         # Validate and parse connection URL
         self._validate_config()
@@ -258,7 +254,7 @@ class ConnectBackend(SparkBackend):
         session = self._sessions[session_id]
         return session.get_info()
 
-    def list_sessions(self) -> List[SessionInfo]:
+    def list_sessions(self) -> list[SessionInfo]:
         """List all active Spark Connect sessions.
 
         Returns:
@@ -266,7 +262,7 @@ class ConnectBackend(SparkBackend):
         """
         return [session.get_info() for session in self._sessions.values()]
 
-    def close_session(self, session_id: str, release: bool = True) -> Dict[str, Any]:
+    def close_session(self, session_id: str, release: bool = True) -> dict[str, Any]:
         """Close a Spark Connect session.
 
         Args:
@@ -333,115 +329,6 @@ class ConnectBackend(SparkBackend):
         except Exception as e:
             logger.error(f"Failed to clone session: {e}")
             raise RuntimeError(f"Failed to clone session: {e}") from e
-
-    # =========================================================================
-    # Batch-Oriented Methods (Not Supported)
-    # =========================================================================
-    # ConnectBackend is session-oriented and does not support traditional
-    # batch job submission. These methods raise NotImplementedError.
-
-    def submit_application(
-        self,
-        app_name: str,
-        main_application_file: str,
-        spark_version: str,
-        app_type: str,
-        driver_cores: int,
-        driver_memory: str,
-        executor_cores: int,
-        executor_memory: str,
-        num_executors: int,
-        queue: Optional[str],
-        arguments: Optional[List[str]],
-        python_version: str,
-        spark_conf: Optional[Dict[str, str]],
-        hadoop_conf: Optional[Dict[str, str]],
-        env_vars: Optional[Dict[str, str]],
-        deps: Optional[Dict[str, List[str]]],
-        **kwargs: Any,
-    ) -> SparkApplicationResponse:
-        """Not supported - ConnectBackend is session-oriented.
-
-        Use create_session() instead for interactive workloads.
-
-        Raises:
-            NotImplementedError: Always
-        """
-        raise NotImplementedError(
-            "ConnectBackend does not support batch application submission. "
-            "Use create_session() for interactive Spark Connect sessions, or "
-            "use OperatorBackend/GatewayBackend for batch jobs."
-        )
-
-    def get_status(self, submission_id: str) -> ApplicationStatus:
-        """Not supported - ConnectBackend is session-oriented.
-
-        Raises:
-            NotImplementedError: Always
-        """
-        raise NotImplementedError(
-            "ConnectBackend does not support batch application status. "
-            "Use get_session_status() for session information."
-        )
-
-    def delete_application(self, submission_id: str) -> Dict[str, Any]:
-        """Not supported - ConnectBackend is session-oriented.
-
-        Raises:
-            NotImplementedError: Always
-        """
-        raise NotImplementedError(
-            "ConnectBackend does not support batch application deletion. "
-            "Use close_session() to close Spark Connect sessions."
-        )
-
-    def get_logs(
-        self,
-        submission_id: str,
-        executor_id: Optional[str] = None,
-        follow: bool = False,
-    ) -> Iterator[str]:
-        """Not supported - ConnectBackend is session-oriented.
-
-        Raises:
-            NotImplementedError: Always
-        """
-        raise NotImplementedError(
-            "ConnectBackend does not support application logs retrieval. "
-            "For Spark Connect, logs are typically accessed via Spark UI or "
-            "server-side logging infrastructure."
-        )
-
-    def list_applications(
-        self,
-        namespace: Optional[str] = None,
-        labels: Optional[Dict[str, str]] = None,
-    ) -> List[ApplicationStatus]:
-        """Not supported - ConnectBackend is session-oriented.
-
-        Raises:
-            NotImplementedError: Always
-        """
-        raise NotImplementedError(
-            "ConnectBackend does not support listing applications. "
-            "Use list_sessions() to list active Spark Connect sessions."
-        )
-
-    def wait_for_completion(
-        self,
-        submission_id: str,
-        timeout: int = 3600,
-        polling_interval: int = 10,
-    ) -> ApplicationStatus:
-        """Not supported - ConnectBackend is session-oriented.
-
-        Raises:
-            NotImplementedError: Always
-        """
-        raise NotImplementedError(
-            "ConnectBackend does not support waiting for application completion. "
-            "Spark Connect sessions are long-lived and interactive."
-        )
 
     def close(self):
         """Close all sessions and cleanup resources."""

@@ -1,18 +1,19 @@
 # Spark Connect Integration Design
 
-**Version:** 1.0
+**Version:** 2.0
 **Status:** Implementation Complete
-**Last Updated:** 2025-11-20
+**Last Updated:** 2025-11-23
 
 ## Overview
 
-This document describes the architecture and design of Spark Connect support in Kubeflow Spark SDK, enabling interactive, session-based Spark workloads alongside traditional batch jobs.
+This document describes the architecture and design of Spark Connect support in Kubeflow Spark SDK, enabling interactive, session-based Spark workloads through a dedicated client class.
 
 **Key Features:**
 - Remote connectivity to Spark clusters via gRPC (Spark Connect protocol)
-- Unified API supporting both batch and interactive workloads
+- Specialized clients for batch jobs and interactive sessions
 - Native PySpark API compatibility with Kubeflow enhancements
 - Kubernetes-native integration with automatic secret/config injection
+- Type-safe API following Interface Segregation Principle
 
 ---
 
@@ -21,45 +22,58 @@ This document describes the architecture and design of Spark Connect support in 
 ### System Components
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     User Code (Python)                      │
-│                                                             │
-│  from kubeflow.spark import SparkClient, ConnectBackendConfig│
-│  client = SparkClient(backend_config=config)                │
-│  session = client.create_session(app_name="demo")          │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    SparkClient (Unified API)                │
-│                                                             │
-│  • create_session()   - Interactive sessions                │
-│  • submit_application() - Batch jobs                        │
-│  • list_sessions()    - Session management                  │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-        ┌─────────────┼─────────────┐
-        ▼             ▼             ▼
-┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│  Operator    │ │  Gateway     │ │  Connect     │
-│  Backend     │ │  Backend     │ │  Backend     │
-│              │ │              │ │              │
-│  (Batch)     │ │  (Batch)     │ │ (Interactive)│
-└──────┬───────┘ └──────┬───────┘ └──────┬───────┘
-       │                │                │
-       ▼                ▼                ▼
-┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│ Spark        │ │ Livy/        │ │ Spark        │
-│ Operator     │ │ Gateway      │ │ Connect      │
-│ (K8s CRDs)   │ │ (HTTP)       │ │ (gRPC)       │
-└──────────────┘ └──────────────┘ └──────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                   User Code (Python)                         │
+│                                                              │
+│  Batch Jobs:                  Interactive Sessions:          │
+│  from kubeflow.spark import   from kubeflow.spark import    │
+│    BatchSparkClient             SparkSessionClient          │
+│  client = BatchSparkClient()  client = SparkSessionClient() │
+│  client.submit_application()  session = client.create_session()│
+└──────────────┬────────────────────────────┬──────────────────┘
+               │                            │
+               ▼                            ▼
+┌──────────────────────────┐  ┌──────────────────────────┐
+│   BatchSparkClient       │  │  SparkSessionClient      │
+│                          │  │                          │
+│  • submit_application()  │  │  • create_session()      │
+│  • get_status()          │  │  • list_sessions()       │
+│  • wait_for_completion() │  │  • close_session()       │
+│  • delete_application()  │  │  • get_session_status()  │
+└──────────┬───────────────┘  └──────────┬───────────────┘
+           │                             │
+     ┌─────┴─────┐                       │
+     ▼           ▼                       ▼
+┌──────────┐ ┌──────────┐      ┌──────────────┐
+│ Operator │ │ Gateway  │      │  Connect     │
+│ Backend  │ │ Backend  │      │  Backend     │
+│          │ │          │      │              │
+│ (Batch)  │ │ (Batch)  │      │ (Session)    │
+└────┬─────┘ └────┬─────┘      └──────┬───────┘
+     │            │                   │
+     ▼            ▼                   ▼
+┌──────────┐ ┌──────────┐      ┌──────────────┐
+│  Spark   │ │  Livy/   │      │    Spark     │
+│ Operator │ │ Gateway  │      │   Connect    │
+│(K8s CRDs)│ │ (HTTP)   │      │   (gRPC)     │
+└──────────┘ └──────────┘      └──────────────┘
 ```
 
 ### ConnectBackend Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────┐
+│           SparkSessionClient                            │
+│                                                         │
+│  create_session(app_name)                               │
+│    ↓                                                     │
+│  Delegates to ConnectBackend                            │
+└─────────────────────────┬───────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
 │              ConnectBackend                             │
+│              (SessionSparkBackend)                      │
 │                                                         │
 │  ┌─────────────────────────────────────────────────┐  │
 │  │  create_session(app_name, **config)             │  │
@@ -94,11 +108,11 @@ This document describes the architecture and design of Spark Connect support in 
 ### Data Flow
 
 ```
-User Code → SparkClient → ConnectBackend → gRPC → Spark Connect Server
-                                                         ↓
-                                                   Spark Cluster
-                                                   (Driver + Executors)
-                                                         ↓
+User Code → SparkSessionClient → ConnectBackend → gRPC → Spark Connect Server
+                                                              ↓
+                                                        Spark Cluster
+                                                        (Driver + Executors)
+                                                              ↓
 Results ← ManagedSparkSession ← gRPC Stream ← Spark Connect Server
 ```
 
@@ -106,25 +120,31 @@ Results ← ManagedSparkSession ← gRPC Stream ← Spark Connect Server
 
 ## Design Principles
 
-### 1. Unified Client API
+### 1. Specialized Client Classes
 
-Single `SparkClient` interface supports multiple backends:
+Separate clients for different workloads:
 
 ```python
-# Batch job via Operator
-from kubeflow.spark import SparkClient, OperatorBackendConfig
+# Batch jobs
+from kubeflow.spark import BatchSparkClient, OperatorBackendConfig
 
 config = OperatorBackendConfig(namespace="spark-jobs")
-client = SparkClient(backend_config=config)
+client = BatchSparkClient(backend_config=config)
 response = client.submit_application(app_name="batch-job", ...)
 
-# Interactive session via Connect
-from kubeflow.spark import SparkClient, ConnectBackendConfig
+# Interactive sessions
+from kubeflow.spark import SparkSessionClient, ConnectBackendConfig
 
 config = ConnectBackendConfig(connect_url="sc://spark-connect:15002")
-client = SparkClient(backend_config=config)
+client = SparkSessionClient(backend_config=config)
 session = client.create_session(app_name="analysis")
 ```
+
+Benefits:
+- Type safety: Clients only expose relevant methods
+- No runtime errors from unsupported operations
+- Clear API boundaries
+- Follows Interface Segregation Principle
 
 ### 2. Native PySpark Delegation
 
@@ -146,21 +166,34 @@ Benefits:
 
 ### 3. Backend Abstraction
 
-All backends implement `SparkBackend` abstract base class:
+Backends implement specialized abstract base classes:
 
 ```python
+# Base interface (minimal shared functionality)
 class SparkBackend(abc.ABC):
-    # Batch methods (OperatorBackend, GatewayBackend)
+    def close(self): pass
+
+# Batch workloads
+class BatchSparkBackend(SparkBackend):
     def submit_application(...) -> SparkApplicationResponse
     def get_status(app_id) -> ApplicationStatus
+    def delete_application(app_id) -> Dict
+    def get_logs(...) -> Iterator[str]
+    def list_applications(...) -> List[ApplicationStatus]
+    def wait_for_completion(...) -> ApplicationStatus
 
-    # Session methods (ConnectBackend)
+# Session workloads
+class SessionSparkBackend(SparkBackend):
     def create_session(app_name, **kwargs) -> ManagedSparkSession
     def list_sessions() -> List[SessionInfo]
     def close_session(session_id) -> Dict[str, Any]
+    def get_session_status(session_id) -> SessionInfo
 ```
 
-Backends raise `NotImplementedError` for unsupported operations.
+Implementation hierarchy:
+- OperatorBackend extends BatchSparkBackend
+- GatewayBackend extends BatchSparkBackend
+- ConnectBackend extends SessionSparkBackend
 
 ---
 
@@ -237,7 +270,7 @@ class SessionMetrics:
 ### Basic Connection
 
 ```python
-from kubeflow.spark import SparkClient, ConnectBackendConfig
+from kubeflow.spark import SparkSessionClient, ConnectBackendConfig
 
 # Configure connection
 config = ConnectBackendConfig(
@@ -246,7 +279,7 @@ config = ConnectBackendConfig(
 )
 
 # Create client and session
-client = SparkClient(backend_config=config)
+client = SparkSessionClient(backend_config=config)
 session = client.create_session(app_name="demo")
 
 # Use standard PySpark API
@@ -261,11 +294,11 @@ client.close()
 ### Context Manager Pattern
 
 ```python
-from kubeflow.spark import SparkClient, ConnectBackendConfig
+from kubeflow.spark import SparkSessionClient, ConnectBackendConfig
 
 config = ConnectBackendConfig(connect_url="sc://spark-server:15002")
 
-with SparkClient(backend_config=config) as client:
+with SparkSessionClient(backend_config=config) as client:
     with client.create_session(app_name="analysis") as session:
         # Session auto-closes on exit
         df = session.sql("SELECT * FROM sales")
@@ -372,7 +405,7 @@ print(f"App: {info.app_name}, State: {info.state}")
 ### Multiple Concurrent Sessions
 
 ```python
-with SparkClient(backend_config=config) as client:
+with SparkSessionClient(backend_config=config) as client:
     # Create multiple sessions
     session1 = client.create_session(app_name="analysis-1")
     session2 = client.create_session(app_name="analysis-2")
@@ -426,7 +459,7 @@ config = ConnectBackendConfig(
     use_ssl=False,
 )
 
-client = SparkClient(backend_config=config)
+client = SparkSessionClient(backend_config=config)
 session = client.create_session(app_name="my-app")
 ```
 
@@ -470,7 +503,7 @@ config = ConnectBackendConfig(
     connect_url="sc://localhost:30000",
     use_ssl=False,
 )
-client = SparkClient(backend_config=config)
+client = SparkSessionClient(backend_config=config)
 
 # 2. Create session
 session = client.create_session(app_name="tutorial")
@@ -500,15 +533,22 @@ client.close()
 
 ## Key Design Decisions
 
-### 1. Session-Based vs Batch API Separation
+### 1. Separate Client Classes (Interface Segregation)
 
-**Decision:** Keep batch and session APIs separate but in same client
+**Decision:** Use BatchSparkClient and SparkSessionClient instead of unified client
 
 **Rationale:**
-- Different use cases require different abstractions
-- Batch: One-shot job submission (fire and forget)
-- Session: Long-lived interactive workflows
-- Unified client reduces API surface area
+- Different use cases have distinct method requirements
+- Batch: submit_application, wait_for_completion, delete_application
+- Session: create_session, list_sessions, close_session
+- Prevents runtime NotImplementedError exceptions
+- Type-safe: clients only expose relevant methods
+
+**Benefits:**
+- Compile-time type checking
+- Clear API boundaries
+- No confusion about which methods work with which backend
+- IDE autocomplete shows only valid methods
 
 ### 2. Delegation to Native PySpark
 
@@ -593,10 +633,11 @@ env:
 
 Spark Connect integration provides:
 
-- **Unified API** - Single client for batch jobs and interactive sessions
+- **Specialized Clients** - BatchSparkClient for batch jobs, SparkSessionClient for interactive sessions
+- **Type Safety** - Interface Segregation Principle prevents runtime errors
 - **Native PySpark** - Full DataFrame API with zero overhead
 - **Kubernetes-Native** - Automatic config/secret injection
 - **Production-Ready** - Session management, metrics, error handling
 - **Developer-Friendly** - Context managers, IPython integration, examples
 
-The implementation follows Kubeflow design patterns while providing the full power of PySpark Connect for interactive data analysis and ML workloads.
+The implementation follows SOLID design principles while providing the full power of PySpark Connect for interactive data analysis and ML workloads.

@@ -37,7 +37,7 @@ if sdk_path not in sys.path:
 from kubeflow.spark import (  # noqa: E402
     ApplicationState,
     OperatorBackendConfig,
-    SparkClient,
+    BatchSparkClient,
 )
 
 # Import MinIO configuration
@@ -76,7 +76,7 @@ def main():
         enable_monitoring=False,
         enable_ui=True,  # Enable Spark UI
     )
-    client = SparkClient(backend_config=config)
+    client = BatchSparkClient(backend_config=config)
     print("  Client created successfully")
     print("  Spark UI enabled")
     print()

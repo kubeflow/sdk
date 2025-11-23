@@ -19,12 +19,16 @@ from dataclasses import dataclass, field
 import logging
 import multiprocessing
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from kubernetes import client, config as k8s_config, watch
 
-from kubeflow.spark.backends.base import SparkBackend
-from kubeflow.spark.models import ApplicationState, ApplicationStatus, SparkApplicationResponse
+from kubeflow.spark.backends.base import BatchSparkBackend
+from kubeflow.spark.models import (
+    ApplicationState,
+    ApplicationStatus,
+    SparkApplicationResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,11 +68,11 @@ class OperatorBackendConfig:
     timeout: int = DEFAULT_TIMEOUT
     enable_monitoring: bool = True
     enable_ui: bool = True
-    extra_labels: Dict[str, str] = field(default_factory=dict)
-    extra_annotations: Dict[str, str] = field(default_factory=dict)
+    extra_labels: dict[str, str] = field(default_factory=dict)
+    extra_annotations: dict[str, str] = field(default_factory=dict)
 
 
-class OperatorBackend(SparkBackend):
+class OperatorBackend(BatchSparkBackend):
     """Kubernetes Spark Operator backend.
 
     This backend uses the Kubeflow Spark Operator to manage Spark applications
@@ -101,7 +105,8 @@ class OperatorBackend(SparkBackend):
         if self.config.client_configuration is None:
             if self.config.config_file or not self._is_running_in_k8s():
                 k8s_config.load_kube_config(
-                    config_file=self.config.config_file, context=self.config.context
+                    config_file=self.config.config_file,
+                    context=self.config.context,
                 )
             else:
                 k8s_config.load_incluster_config()
@@ -125,12 +130,12 @@ class OperatorBackend(SparkBackend):
         executor_memory: str = "1g",
         num_executors: int = 2,
         queue: Optional[str] = None,
-        arguments: Optional[List[str]] = None,
+        arguments: Optional[list[str]] = None,
         python_version: str = "3",
-        spark_conf: Optional[Dict[str, str]] = None,
-        hadoop_conf: Optional[Dict[str, str]] = None,
-        env_vars: Optional[Dict[str, str]] = None,
-        deps: Optional[Dict[str, List[str]]] = None,
+        spark_conf: Optional[dict[str, str]] = None,
+        hadoop_conf: Optional[dict[str, str]] = None,
+        env_vars: Optional[dict[str, str]] = None,
+        deps: Optional[dict[str, list[str]]] = None,
         **kwargs: Any,
     ) -> SparkApplicationResponse:
         """Submit a Spark application using Spark Operator.
@@ -260,7 +265,7 @@ class OperatorBackend(SparkBackend):
                 f"Failed to get SparkApplication {self.config.namespace}/{submission_id}: {e}"
             ) from e
 
-    def delete_application(self, submission_id: str) -> Dict[str, Any]:
+    def delete_application(self, submission_id: str) -> dict[str, Any]:
         """Delete a Spark application.
 
         Args:
@@ -286,7 +291,10 @@ class OperatorBackend(SparkBackend):
 
             logger.info(f"SparkApplication {self.config.namespace}/{submission_id} deleted")
 
-            return {"status": "deleted", "message": f"Application {submission_id} deleted"}
+            return {
+                "status": "deleted",
+                "message": f"Application {submission_id} deleted",
+            }
 
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(
@@ -350,15 +358,17 @@ class OperatorBackend(SparkBackend):
             if e.status == 404:
                 logger.warning(f"Pod {pod_name} not found in namespace {self.config.namespace}")
                 return
-            elif e.status == 400:
+            elif e.status == 400 and (
+                "waiting to start" in str(e.body) or "ContainerCreating" in str(e.body)
+            ):
                 # Pod exists but container is not ready yet
                 # Check if it's a "waiting to start" error
-                if "waiting to start" in str(e.body) or "ContainerCreating" in str(e.body):
-                    logger.warning(
-                        f"Pod {pod_name} is not ready yet (ContainerCreating). "
-                        "Wait for pod to be running before fetching logs."
-                    )
-                    return
+                logger.warning(
+                    f"Pod {pod_name} is not ready yet (ContainerCreating). "
+                    "Wait for pod to be running before fetching logs."
+                )
+                return
+            elif e.status == 400:
                 # Otherwise, it's a different 400 error
                 raise RuntimeError(
                     f"Failed to read logs for pod {self.config.namespace}/{pod_name}: {e}"
@@ -374,8 +384,8 @@ class OperatorBackend(SparkBackend):
     def list_applications(
         self,
         namespace: Optional[str] = None,
-        labels: Optional[Dict[str, str]] = None,
-    ) -> List[ApplicationStatus]:
+        labels: Optional[dict[str, str]] = None,
+    ) -> list[ApplicationStatus]:
         """List Spark applications.
 
         Args:
@@ -476,14 +486,14 @@ class OperatorBackend(SparkBackend):
         executor_cores: int,
         executor_memory: str,
         num_executors: int,
-        arguments: List[str],
+        arguments: list[str],
         python_version: str,
-        spark_conf: Dict[str, str],
-        hadoop_conf: Dict[str, str],
-        env_vars: Dict[str, str],
-        deps: Optional[Dict[str, List[str]]],
+        spark_conf: dict[str, str],
+        hadoop_conf: dict[str, str],
+        env_vars: dict[str, str],
+        deps: Optional[dict[str, list[str]]],
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Build SparkApplication CRD specification.
 
         Args:
@@ -494,7 +504,7 @@ class OperatorBackend(SparkBackend):
             SparkApplication CRD dictionary
         """
         # Build base CRD structure
-        spark_app: Dict[str, Any] = {
+        spark_app: dict[str, Any] = {
             "apiVersion": f"{SPARK_OPERATOR_API_GROUP}/{SPARK_OPERATOR_API_VERSION}",
             "kind": SPARK_APPLICATION_KIND,
             "metadata": {
@@ -623,7 +633,7 @@ class OperatorBackend(SparkBackend):
 
         return spark_app
 
-    def _build_restart_policy(self, restart_policy: Optional[Any]) -> Dict[str, Any]:
+    def _build_restart_policy(self, restart_policy: Optional[Any]) -> dict[str, Any]:
         """Build restart policy dict from RestartPolicy object or default.
 
         Args:
@@ -665,7 +675,7 @@ class OperatorBackend(SparkBackend):
         # Default
         return {"type": "Never"}
 
-    def _parse_application_status(self, spark_app: Dict[str, Any]) -> ApplicationStatus:
+    def _parse_application_status(self, spark_app: dict[str, Any]) -> ApplicationStatus:
         """Parse SparkApplication CRD status into ApplicationStatus.
 
         Args:
@@ -781,13 +791,12 @@ class OperatorBackend(SparkBackend):
                 )
 
                 # Check if pod is running and container is ready
-                if pod.status.phase == "Running":
+                if pod.status.phase == "Running" and pod.status.container_statuses:
                     # Check if containers are ready
-                    if pod.status.container_statuses:
-                        for container_status in pod.status.container_statuses:
-                            if container_status.ready:
-                                logger.info(f"Pod {pod_name} is ready")
-                                return True
+                    for container_status in pod.status.container_statuses:
+                        if container_status.ready:
+                            logger.info(f"Pod {pod_name} is ready")
+                            return True
 
                 # Check if pod failed
                 if pod.status.phase in ["Failed", "Unknown"]:

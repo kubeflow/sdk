@@ -12,11 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Base backend interface for Spark applications."""
+"""Base backend interfaces for Spark applications.
+
+This module defines the backend interface hierarchy for the Kubeflow Spark SDK:
+
+- SparkBackend: Minimal base class with common functionality
+- BatchSparkBackend: Interface for batch job submission (OperatorBackend, GatewayBackend)
+- SessionSparkBackend: Interface for interactive sessions (ConnectBackend)
+
+This design follows the Interface Segregation Principle (ISP), ensuring that
+backends only implement methods relevant to their use case.
+"""
 
 import abc
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from kubeflow.spark.models import ApplicationStatus, SessionInfo, SparkApplicationResponse
 
@@ -25,11 +35,44 @@ if TYPE_CHECKING:
 
 
 class SparkBackend(abc.ABC):
-    """Base class for Spark backends.
+    """Minimal base class for all Spark backends.
 
-    This abstract base class defines the interface that all Spark backends
-    must implement. Different backends can execute Spark applications in
-    different environments (Kubernetes with Spark Operator, Gateway, local, etc).
+    This class provides only the essential functionality common to all backends.
+    Specific backend types (batch or session) inherit from BatchSparkBackend or
+    SessionSparkBackend respectively.
+
+    All backends should implement the close() method to clean up resources.
+    """
+
+    def close(self):
+        """Close any open connections or resources.
+
+        Subclasses should override this to clean up resources like:
+        - Kubernetes API clients
+        - HTTP connections
+        - gRPC channels
+        - File handles
+
+        This method is called when the client is closed or when used as a context manager.
+        """
+        pass
+
+
+class BatchSparkBackend(SparkBackend):
+    """Abstract base class for batch-oriented Spark backends.
+
+    This interface defines the contract for backends that support traditional
+    batch Spark application submission, monitoring, and management.
+
+    Backends implementing this interface:
+    - OperatorBackend: Submits SparkApplication CRDs to Kubernetes
+    - GatewayBackend: Submits jobs via REST API to Spark gateways
+
+    Typical workflow:
+        1. submit_application() -> Returns submission_id
+        2. wait_for_completion() or poll get_status()
+        3. get_logs() to retrieve output
+        4. delete_application() for cleanup
     """
 
     @abc.abstractmethod
@@ -45,73 +88,78 @@ class SparkBackend(abc.ABC):
         executor_memory: str,
         num_executors: int,
         queue: Optional[str],
-        arguments: Optional[List[str]],
+        arguments: Optional[list[str]],
         python_version: str,
-        spark_conf: Optional[Dict[str, str]],
-        hadoop_conf: Optional[Dict[str, str]],
-        env_vars: Optional[Dict[str, str]],
-        deps: Optional[Dict[str, List[str]]],
+        spark_conf: Optional[dict[str, str]],
+        hadoop_conf: Optional[dict[str, str]],
+        env_vars: Optional[dict[str, str]],
+        deps: Optional[dict[str, list[str]]],
         **kwargs: Any,
     ) -> SparkApplicationResponse:
-        """Submit a Spark application.
+        """Submit a Spark application for batch execution.
 
         Args:
             app_name: Name of the application
-            main_application_file: Path to main application file
-            spark_version: Spark version to use
-            app_type: Application type (Python, Scala, Java, R)
+            main_application_file: Path to main application file (local://, s3a://, etc.)
+            spark_version: Spark version to use (e.g., "4.0.0")
+            app_type: Application type ("Python", "Scala", "Java", "R")
             driver_cores: Number of cores for driver
-            driver_memory: Memory for driver (e.g., "4g")
+            driver_memory: Memory for driver (e.g., "4g", "512m")
             executor_cores: Number of cores per executor
-            executor_memory: Memory per executor (e.g., "8g")
-            num_executors: Number of executors
-            queue: Queue/namespace to submit to
-            arguments: Application arguments
-            python_version: Python version for PySpark apps
-            spark_conf: Spark configuration properties
+            executor_memory: Memory per executor (e.g., "8g", "2g")
+            num_executors: Number of executors to provision
+            queue: Queue/namespace to submit to (backend-specific)
+            arguments: Application arguments passed to main file
+            python_version: Python version for PySpark apps (e.g., "3")
+            spark_conf: Spark configuration properties (spark.*)
             hadoop_conf: Hadoop configuration properties
-            env_vars: Environment variables
-            deps: Dependencies (jars, py files, files)
+            env_vars: Environment variables for driver and executors
+            deps: Dependencies dict with keys: "jars", "pyFiles", "files"
             **kwargs: Additional backend-specific parameters
 
         Returns:
-            SparkApplicationResponse with submission details
+            SparkApplicationResponse with submission_id and initial status
 
         Raises:
             RuntimeError: If submission fails
             TimeoutError: If submission times out
+            ValueError: If invalid parameters provided
         """
         raise NotImplementedError()
 
     @abc.abstractmethod
     def get_status(self, submission_id: str) -> ApplicationStatus:
-        """Get status of a Spark application.
+        """Get current status of a Spark application.
 
         Args:
-            submission_id: Submission ID returned from submit_application
+            submission_id: Submission ID returned from submit_application()
 
         Returns:
-            ApplicationStatus with current status
+            ApplicationStatus with current state and metadata
 
         Raises:
             RuntimeError: If request fails
             TimeoutError: If request times out
+            ValueError: If submission_id not found
         """
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def delete_application(self, submission_id: str) -> Dict[str, Any]:
+    def delete_application(self, submission_id: str) -> dict[str, Any]:
         """Delete a Spark application.
+
+        This terminates a running application or removes a completed application.
 
         Args:
             submission_id: Submission ID to delete
 
         Returns:
-            Dictionary with deletion response
+            Dictionary with deletion response and status
 
         Raises:
             RuntimeError: If deletion fails
             TimeoutError: If deletion times out
+            ValueError: If submission_id not found
         """
         raise NotImplementedError()
 
@@ -127,13 +175,14 @@ class SparkBackend(abc.ABC):
         Args:
             submission_id: Submission ID
             executor_id: Optional executor ID (if not provided, returns driver logs)
-            follow: Whether to stream logs in real-time
+            follow: Whether to stream logs in real-time (tail -f behavior)
 
         Yields:
             Log lines as strings
 
         Raises:
             RuntimeError: If request fails
+            ValueError: If submission_id or executor_id not found
         """
         raise NotImplementedError()
 
@@ -141,13 +190,13 @@ class SparkBackend(abc.ABC):
     def list_applications(
         self,
         namespace: Optional[str] = None,
-        labels: Optional[Dict[str, str]] = None,
-    ) -> List[ApplicationStatus]:
-        """List Spark applications.
+        labels: Optional[dict[str, str]] = None,
+    ) -> list[ApplicationStatus]:
+        """List Spark applications with optional filtering.
 
         Args:
-            namespace: Optional namespace filter
-            labels: Optional label filters
+            namespace: Optional namespace/queue filter
+            labels: Optional label filters (key-value pairs)
 
         Returns:
             List of ApplicationStatus objects
@@ -167,10 +216,13 @@ class SparkBackend(abc.ABC):
     ) -> ApplicationStatus:
         """Wait for Spark application to complete.
 
+        This method blocks until the application reaches a terminal state
+        (COMPLETED, FAILED, SUBMISSION_FAILED, KILLED) or timeout is reached.
+
         Args:
             submission_id: Submission ID to monitor
-            timeout: Maximum time to wait in seconds
-            polling_interval: Polling interval in seconds
+            timeout: Maximum time to wait in seconds (default: 1 hour)
+            polling_interval: Polling interval in seconds (default: 10)
 
         Returns:
             Final ApplicationStatus
@@ -178,24 +230,29 @@ class SparkBackend(abc.ABC):
         Raises:
             TimeoutError: If application doesn't complete within timeout
             RuntimeError: If monitoring fails
+            ValueError: If submission_id not found
         """
         raise NotImplementedError()
 
-    def close(self):
-        """Close any open connections or resources.
 
-        Subclasses can override this to clean up resources.
-        """
-        pass
+class SessionSparkBackend(SparkBackend):
+    """Abstract base class for session-oriented Spark backends.
 
-    # =========================================================================
-    # Session-Oriented Methods (for Spark Connect backends)
-    # =========================================================================
-    # These methods are optional and only need to be implemented by backends
-    # that support interactive session management (e.g., ConnectBackend).
-    # Batch-oriented backends (OperatorBackend, GatewayBackend) can leave
-    # these as default implementations that raise NotImplementedError.
+    This interface defines the contract for backends that support interactive,
+    long-lived Spark sessions for exploratory data analysis and notebook workflows.
 
+    Backends implementing this interface:
+    - ConnectBackend: Connects to Spark clusters via Spark Connect protocol (gRPC)
+
+    Typical workflow:
+        1. create_session() -> Returns ManagedSparkSession
+        2. Use session.sql(), session.read(), etc. for interactive queries
+        3. close_session() to release resources
+
+    Unlike batch backends, sessions maintain state and support iterative development.
+    """
+
+    @abc.abstractmethod
     def create_session(
         self,
         app_name: str,
@@ -203,58 +260,53 @@ class SparkBackend(abc.ABC):
     ) -> "ManagedSparkSession":
         """Create a new Spark Connect session.
 
-        This method is for backends that support interactive, session-based
-        workloads (e.g., Spark Connect). Batch-oriented backends should raise
-        NotImplementedError.
+        This establishes a connection to a Spark Connect server and returns
+        a managed session wrapper that provides the full PySpark DataFrame API.
 
         Args:
             app_name: Name for the session/application
-            **kwargs: Backend-specific configuration
+            **kwargs: Backend-specific configuration (e.g., Spark configs)
 
         Returns:
-            ManagedSparkSession instance
+            ManagedSparkSession instance for interactive operations
 
         Raises:
-            NotImplementedError: If backend doesn't support sessions
             RuntimeError: If session creation fails
+            ConnectionError: If cannot connect to Spark Connect server
+            TimeoutError: If connection times out
         """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not support session-based operations. "
-            "Use ConnectBackend for interactive Spark sessions."
-        )
+        raise NotImplementedError()
 
+    @abc.abstractmethod
     def get_session_status(self, session_id: str) -> SessionInfo:
-        """Get status of a Spark Connect session.
+        """Get status and metadata of a Spark Connect session.
 
         Args:
-            session_id: Session UUID
+            session_id: Session UUID returned by create_session()
 
         Returns:
-            SessionInfo with session metadata and metrics
+            SessionInfo with session metadata, state, and metrics
 
         Raises:
-            NotImplementedError: If backend doesn't support sessions
             RuntimeError: If request fails
+            ValueError: If session_id not found
         """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not support session-based operations."
-        )
+        raise NotImplementedError()
 
-    def list_sessions(self) -> List[SessionInfo]:
+    @abc.abstractmethod
+    def list_sessions(self) -> list[SessionInfo]:
         """List all active Spark Connect sessions.
 
         Returns:
-            List of SessionInfo objects
+            List of SessionInfo objects for active sessions
 
         Raises:
-            NotImplementedError: If backend doesn't support sessions
             RuntimeError: If request fails
         """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not support session-based operations."
-        )
+        raise NotImplementedError()
 
-    def close_session(self, session_id: str, release: bool = True) -> Dict[str, Any]:
+    @abc.abstractmethod
+    def close_session(self, session_id: str, release: bool = True) -> dict[str, Any]:
         """Close a Spark Connect session.
 
         Args:
@@ -265,9 +317,7 @@ class SparkBackend(abc.ABC):
             Dictionary with closure response
 
         Raises:
-            NotImplementedError: If backend doesn't support sessions
             RuntimeError: If closure fails
+            ValueError: If session_id not found
         """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not support session-based operations."
-        )
+        raise NotImplementedError()

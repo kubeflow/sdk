@@ -198,7 +198,7 @@ def main():
         enable_monitoring=False,
         enable_ui=False,
     )
-    client = SparkClient(backend_config=config)
+    client = BatchSparkClient(backend_config=config)
     print("  Client created successfully")
     print()
 

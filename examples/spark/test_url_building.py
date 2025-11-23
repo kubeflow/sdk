@@ -30,11 +30,14 @@ print(f"SDK would build URL: {final_url}")
 # Test 2: Try this URL with PySpark
 print("\nTesting this URL with PySpark...")
 
-from pyspark.sql import SparkSession
 import signal
+
+from pyspark.sql import SparkSession
+
 
 def timeout_handler(signum, frame):
     raise TimeoutError("Timed out")
+
 
 signal.signal(signal.SIGALRM, timeout_handler)
 signal.alarm(15)
@@ -55,9 +58,10 @@ try:
 
 except TimeoutError:
     print("✗ Timed out - the URL format might be wrong")
-    print(f"\nTry this instead:")
+    print("\nTry this instead:")
     print(f"  SparkSession.builder.remote('{connect_url}').appName('test').getOrCreate()")
 except Exception as e:
     print(f"✗ Error: {e}")
     import traceback
+
     traceback.print_exc()

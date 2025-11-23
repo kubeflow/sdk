@@ -1,7 +1,7 @@
 """Utility functions for Spark client."""
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ def parse_memory(memory_str: str) -> int:
         return int(memory_str) // (1024 * 1024)
 
 
-def validate_spark_config(config: Dict[str, Any]) -> bool:
+def validate_spark_config(config: dict[str, Any]) -> bool:
     """Validate Spark configuration.
 
     Args:
@@ -77,13 +77,13 @@ def validate_spark_config(config: Dict[str, Any]) -> bool:
         try:
             parse_memory(config["driver_memory"])
         except Exception as e:
-            raise ValueError(f"Invalid driver_memory format: {e}")
+            raise ValueError(f"Invalid driver_memory format: {e}") from e
 
     if "executor_memory" in config:
         try:
             parse_memory(config["executor_memory"])
         except Exception as e:
-            raise ValueError(f"Invalid executor_memory format: {e}")
+            raise ValueError(f"Invalid executor_memory format: {e}") from e
 
     return True
 
@@ -110,7 +110,10 @@ def build_s3_path(bucket: str, prefix: str, filename: str) -> str:
 
 
 def wait_for_completion(
-    client: "SparkClient", submission_id: str, timeout: int = 3600, poll_interval: int = 10
+    client: "SparkClient",
+    submission_id: str,
+    timeout: int = 3600,
+    poll_interval: int = 10,
 ) -> "ApplicationStatus":
     """Wait for Spark application to complete.
 

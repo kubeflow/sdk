@@ -36,7 +36,7 @@ def demo_basic_connection():
     """Demonstrate basic connection to Spark Connect server."""
     print_section("1. Connect to Spark Connect Server")
 
-    from kubeflow.spark import ConnectBackendConfig, SparkClient
+    from kubeflow.spark import ConnectBackendConfig, SparkSessionClient
 
     # Configuration for Kubernetes Spark Connect server
     # The server is exposed via NodePort on port 30000
@@ -49,8 +49,8 @@ def demo_basic_connection():
     print(f"Connecting to: {config.connect_url}")
 
     # Create client
-    client = SparkClient(backend_config=config)
-    print("✓ SparkClient created")
+    client = SparkSessionClient(backend_config=config)
+    print("✓ SparkSessionClient created")
 
     return client
 
@@ -132,7 +132,7 @@ def demo_groupby_aggregations(session, df):
 
     # Group by category and calculate statistics
     print("Aggregation: Total revenue by category")
-    from pyspark.sql import functions as F
+    from pyspark.sql import functions as F  # noqa: N812
 
     revenue_df = df.withColumn("revenue", F.col("price") * F.col("quantity"))
 
@@ -149,7 +149,8 @@ def demo_groupby_aggregations(session, df):
     # Group by product and sort
     print("\nTop Products by Revenue:")
     product_revenue = revenue_df.groupBy("product").agg(
-        F.sum("revenue").alias("total_revenue"), F.sum("quantity").alias("total_sold")
+        F.sum("revenue").alias("total_revenue"),
+        F.sum("quantity").alias("total_sold"),
     )
 
     product_revenue.orderBy(F.desc("total_revenue")).show(5)
@@ -161,7 +162,7 @@ def demo_advanced_aggregations(session, df):
     """Demonstrate advanced aggregations and window functions."""
     print_section("7. Advanced Aggregations")
 
-    from pyspark.sql import functions as F
+    from pyspark.sql import functions as F  # noqa: N812
     from pyspark.sql.window import Window
 
     # Add computed column
@@ -169,9 +170,7 @@ def demo_advanced_aggregations(session, df):
 
     # Window function: Running total by date
     print("Running Total Revenue by Date:")
-    window_spec = Window.orderBy("date").rowsBetween(
-        Window.unboundedPreceding, Window.currentRow
-    )
+    window_spec = Window.orderBy("date").rowsBetween(Window.unboundedPreceding, Window.currentRow)
 
     daily_revenue = (
         df_with_revenue.groupBy("date")
@@ -184,9 +183,7 @@ def demo_advanced_aggregations(session, df):
     # Pivot: Revenue by category and date
     print("\nPivot: Revenue by Category and Date:")
     pivot_df = (
-        df_with_revenue.groupBy("date")
-        .pivot("category")
-        .agg(F.sum("revenue").alias("revenue"))
+        df_with_revenue.groupBy("date").pivot("category").agg(F.sum("revenue").alias("revenue"))
     )
 
     pivot_df.orderBy("date").show()
@@ -231,7 +228,7 @@ def demo_multiple_operations(session):
     df.show()
 
     # Chain multiple operations
-    from pyspark.sql import functions as F
+    from pyspark.sql import functions as F  # noqa: N812
 
     result = (
         df.filter(F.col("age") < 40)
@@ -300,7 +297,9 @@ def run_complete_demo():
         print("\nTroubleshooting:")
         print("  1. Is Kubernetes cluster running? (kubectl get nodes)")
         print("  2. Is Spark Connect deployed? (kubectl get pods -l app=spark-connect)")
-        print("  3. Is port forwarding active? (kubectl port-forward svc/spark-connect 30000:15002)")
+        print(
+            "  3. Is port forwarding active? (kubectl port-forward svc/spark-connect 30000:15002)"
+        )
         print("  4. Is PySpark installed? (pip install 'pyspark[connect]>=3.4.0')")
         return None, None
 
@@ -313,7 +312,7 @@ def print_manual_steps():
     print("=" * 80)
     print("""
 # Step 1: Import and configure
-from kubeflow.spark import ConnectBackendConfig, SparkClient
+from kubeflow.spark import ConnectBackendConfig, SparkSessionClient
 
 config = ConnectBackendConfig(
     connect_url="sc://localhost:30000",
@@ -322,7 +321,7 @@ config = ConnectBackendConfig(
 )
 
 # Step 2: Create client and session
-client = SparkClient(backend_config=config)
+client = SparkSessionClient(backend_config=config)
 session = client.create_session(app_name="my-analysis")
 
 # Step 3: Create sample data
@@ -367,7 +366,7 @@ if __name__ == "__main__":
         # Keep objects available for interactive use
         if client and session:
             print("\nObjects available for continued use:")
-            print("  - client: SparkClient instance")
+            print("  - client: SparkSessionClient instance")
             print("  - session: ManagedSparkSession instance")
             print("\nEntering interactive mode... (Ctrl+D to exit)")
 
@@ -376,9 +375,7 @@ if __name__ == "__main__":
 
                 IPython.embed()
             except ImportError:
-                print(
-                    "\nIPython not installed. Install with: pip install ipython"
-                )
+                print("\nIPython not installed. Install with: pip install ipython")
                 print("Keeping session open for manual cleanup...")
                 input("\nPress Enter to close session and exit...")
 

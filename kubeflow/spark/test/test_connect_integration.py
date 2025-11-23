@@ -22,7 +22,8 @@ Setup:
    pip install 'pyspark[connect]>=3.4.0'
 
 2. Start local Spark Connect server:
-   $SPARK_HOME/sbin/start-connect-server.sh --packages org.apache.spark:spark-connect_2.12:3.5.0
+   $SPARK_HOME/sbin/start-connect-server.sh \
+       --packages org.apache.spark:spark-connect_2.12:3.5.0
 
    Or using Docker:
    docker run -p 15002:15002 apache/spark:3.5.0 \
@@ -73,13 +74,11 @@ class TestConnectBackendIntegration:
 
     def test_create_and_close_session(self):
         """Test creating and closing a session."""
-        from kubeflow.spark import ConnectBackendConfig, SparkClient
+        from kubeflow.spark import ConnectBackendConfig, SparkSessionClient
 
-        config = ConnectBackendConfig(
-            connect_url=_get_connect_url(), use_ssl=False, timeout=30
-        )
+        config = ConnectBackendConfig(connect_url=_get_connect_url(), use_ssl=False, timeout=30)
 
-        client = SparkClient(backend_config=config)
+        client = SparkSessionClient(backend_config=config)
 
         try:
             session = client.create_session(app_name="test-session")
@@ -95,11 +94,11 @@ class TestConnectBackendIntegration:
 
     def test_simple_sql_query(self):
         """Test executing a simple SQL query."""
-        from kubeflow.spark import ConnectBackendConfig, SparkClient
+        from kubeflow.spark import ConnectBackendConfig, SparkSessionClient
 
         config = ConnectBackendConfig(connect_url=_get_connect_url(), use_ssl=False)
 
-        with SparkClient(backend_config=config) as client:
+        with SparkSessionClient(backend_config=config) as client:
             session = client.create_session(app_name="sql-test")
 
             try:
@@ -114,11 +113,11 @@ class TestConnectBackendIntegration:
 
     def test_create_dataframe_and_show(self):
         """Test creating a DataFrame and showing data."""
-        from kubeflow.spark import ConnectBackendConfig, SparkClient
+        from kubeflow.spark import ConnectBackendConfig, SparkSessionClient
 
         config = ConnectBackendConfig(connect_url=_get_connect_url(), use_ssl=False)
 
-        with SparkClient(backend_config=config) as client:
+        with SparkSessionClient(backend_config=config) as client:
             session = client.create_session(app_name="dataframe-test")
 
             try:
@@ -143,11 +142,11 @@ class TestConnectBackendIntegration:
 
     def test_dataframe_transformations(self):
         """Test DataFrame transformations (filter, select, groupBy)."""
-        from kubeflow.spark import ConnectBackendConfig, SparkClient
+        from kubeflow.spark import ConnectBackendConfig, SparkSessionClient
 
         config = ConnectBackendConfig(connect_url=_get_connect_url(), use_ssl=False)
 
-        with SparkClient(backend_config=config) as client:
+        with SparkSessionClient(backend_config=config) as client:
             session = client.create_session(app_name="transform-test")
 
             try:
@@ -177,11 +176,11 @@ class TestConnectBackendIntegration:
 
     def test_session_metrics(self):
         """Test session metrics collection."""
-        from kubeflow.spark import ConnectBackendConfig, SparkClient
+        from kubeflow.spark import ConnectBackendConfig, SparkSessionClient
 
         config = ConnectBackendConfig(connect_url=_get_connect_url(), use_ssl=False)
 
-        with SparkClient(backend_config=config) as client:
+        with SparkSessionClient(backend_config=config) as client:
             session = client.create_session(app_name="metrics-test")
 
             try:
@@ -198,11 +197,11 @@ class TestConnectBackendIntegration:
 
     def test_multiple_sessions(self):
         """Test creating multiple concurrent sessions."""
-        from kubeflow.spark import ConnectBackendConfig, SparkClient
+        from kubeflow.spark import ConnectBackendConfig, SparkSessionClient
 
         config = ConnectBackendConfig(connect_url=_get_connect_url(), use_ssl=False)
 
-        with SparkClient(backend_config=config) as client:
+        with SparkSessionClient(backend_config=config) as client:
             session1 = client.create_session(app_name="session-1")
             session2 = client.create_session(app_name="session-2")
 
@@ -223,11 +222,11 @@ class TestConnectBackendIntegration:
 
     def test_range_dataframe(self):
         """Test creating range DataFrame."""
-        from kubeflow.spark import ConnectBackendConfig, SparkClient
+        from kubeflow.spark import ConnectBackendConfig, SparkSessionClient
 
         config = ConnectBackendConfig(connect_url=_get_connect_url(), use_ssl=False)
 
-        with SparkClient(backend_config=config) as client:
+        with SparkSessionClient(backend_config=config) as client:
             session = client.create_session(app_name="range-test")
 
             try:
@@ -246,10 +245,10 @@ class TestConnectBackendIntegration:
 
     def test_context_manager(self):
         """Test session context manager."""
-        from kubeflow.spark import ConnectBackendConfig, SparkClient
+        from kubeflow.spark import ConnectBackendConfig, SparkSessionClient
 
         config = ConnectBackendConfig(connect_url=_get_connect_url(), use_ssl=False)
-        client = SparkClient(backend_config=config)
+        client = SparkSessionClient(backend_config=config)
 
         with client.create_session(app_name="context-test") as session:
             df = session.sql("SELECT 42 AS answer")
@@ -260,11 +259,11 @@ class TestConnectBackendIntegration:
 
     def test_get_session_info(self):
         """Test getting session information."""
-        from kubeflow.spark import ConnectBackendConfig, SparkClient
+        from kubeflow.spark import ConnectBackendConfig, SparkSessionClient
 
         config = ConnectBackendConfig(connect_url=_get_connect_url(), use_ssl=False)
 
-        with SparkClient(backend_config=config) as client:
+        with SparkSessionClient(backend_config=config) as client:
             session = client.create_session(app_name="info-test")
 
             try:
@@ -286,23 +285,23 @@ class TestConnectBackendErrorHandling:
 
     def test_connection_to_invalid_server(self):
         """Test connection to non-existent server."""
-        from kubeflow.spark import ConnectBackendConfig, SparkClient
+        from kubeflow.spark import ConnectBackendConfig, SparkSessionClient
 
         config = ConnectBackendConfig(
             connect_url="sc://nonexistent-host:99999", use_ssl=False, timeout=5
         )
 
-        with SparkClient(backend_config=config) as client:
+        with SparkSessionClient(backend_config=config) as client:
             with pytest.raises(Exception):
-                session = client.create_session(app_name="fail-test")
+                client.create_session(app_name="fail-test")
 
     def test_query_on_closed_session(self):
         """Test querying after session is closed."""
-        from kubeflow.spark import ConnectBackendConfig, SparkClient
+        from kubeflow.spark import ConnectBackendConfig, SparkSessionClient
 
         config = ConnectBackendConfig(connect_url=_get_connect_url(), use_ssl=False)
 
-        with SparkClient(backend_config=config) as client:
+        with SparkSessionClient(backend_config=config) as client:
             session = client.create_session(app_name="closed-test")
             session.close()
 
@@ -333,13 +332,13 @@ def main():
     print("=" * 80)
 
     try:
-        from kubeflow.spark import ConnectBackendConfig, SparkClient
+        from kubeflow.spark import ConnectBackendConfig, SparkSessionClient
 
         config = ConnectBackendConfig(connect_url=_get_connect_url(), use_ssl=False)
 
         print(f"\nConnecting to: {_get_connect_url()}")
 
-        with SparkClient(backend_config=config) as client:
+        with SparkSessionClient(backend_config=config) as client:
             print("✓ Client created successfully")
 
             session = client.create_session(app_name="manual-test")

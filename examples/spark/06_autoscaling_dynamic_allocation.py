@@ -39,7 +39,7 @@ from kubeflow.spark import (  # noqa: E402
     ApplicationState,
     DynamicAllocation,
     OperatorBackendConfig,
-    SparkClient,
+    BatchSparkClient,
 )
 
 
@@ -77,7 +77,8 @@ print(f"  - Enabled: {dyn_enabled}")
 print(f"  - Min Executors: {min_executors}")
 print(f"  - Max Executors: {max_executors}")
 print(f"  - Initial Executors: {initial_executors}")
-print(f"  - Shuffle Tracking: {spark.conf.get('spark.dynamicAllocation.shuffleTracking.enabled', 'N/A')}")
+shuffle_tracking = spark.conf.get('spark.dynamicAllocation.shuffleTracking.enabled', 'N/A')
+print(f"  - Shuffle Tracking: {shuffle_tracking}")
 
 # ============================================================================
 # PHASE 1: LIGHT WORKLOAD (should use minimal executors)
@@ -281,7 +282,7 @@ def main():
         enable_monitoring=False,
         enable_ui=False,
     )
-    client = SparkClient(backend_config=config)
+    client = BatchSparkClient(backend_config=config)
     print("  Client created successfully")
     print()
 
@@ -320,25 +321,31 @@ def main():
         response = client.submit_application(
             # Application metadata
             app_name=app_name,
-            main_application_file="local:///opt/spark/examples/src/main/python/pi.py",  # Placeholder
+            # Placeholder
+            main_application_file=("local:///opt/spark/examples/src/main/python/pi.py"),
             # Spark configuration
-            spark_version="4.0.0",  # Spark 3.0+ required for dynamic allocation on K8s
+            # Spark 3.0+ required for dynamic allocation on K8s
+            spark_version="4.0.0",
             app_type="Python",
             # Resource allocation per executor
             driver_cores=1,
             driver_memory="1g",
             executor_cores=1,
             executor_memory="1g",
-            num_executors=1,  # This will be overridden by dynamic allocation
+            # This will be overridden by dynamic allocation
+            num_executors=1,
             # Dynamic Allocation Configuration
             dynamic_allocation=dyn_alloc,
             # Spark configuration
             spark_conf={
                 "spark.kubernetes.file.upload.path": "/tmp",
                 # Additional tuning for dynamic allocation
-                "spark.dynamicAllocation.executorIdleTimeout": "30s",  # Release idle executors after 30s
-                "spark.dynamicAllocation.cachedExecutorIdleTimeout": "60s",  # Keep cached executors longer
-                "spark.dynamicAllocation.schedulerBacklogTimeout": "5s",  # Request executors quickly
+                # Release idle executors after 30s
+                "spark.dynamicAllocation.executorIdleTimeout": "30s",
+                # Keep cached executors longer
+                "spark.dynamicAllocation.cachedExecutorIdleTimeout": "60s",
+                # Request executors quickly
+                "spark.dynamicAllocation.schedulerBacklogTimeout": "5s",
             },
             # Labels for tracking
             labels={
@@ -386,7 +393,7 @@ def main():
         if final_status.state != ApplicationState.COMPLETED:
             print(
                 f"  WARNING: Application did not complete successfully: {final_status.state.value}"
-            )  # noqa: E501
+            )
             print("  Check logs below for details.")
 
     except TimeoutError:
@@ -423,7 +430,17 @@ def main():
 
         for line in logs:
             if any(keyword in line for keyword in important_keywords) or any(
-                emoji in line for emoji in ["Done", "WARNING", "📊", "📈", "📉", "💡", "🎯", "🔧"]
+                emoji in line
+                for emoji in [
+                    "Done",
+                    "WARNING",
+                    "📊",
+                    "📈",
+                    "📉",
+                    "💡",
+                    "🎯",
+                    "🔧",
+                ]
             ):
                 print(line)
 

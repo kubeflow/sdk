@@ -37,11 +37,14 @@ class TestSparkClientIntegration(unittest.TestCase):
             namespace=os.getenv("SPARK_NAMESPACE", "default"),
             service_account="spark-operator-spark",
             default_spark_image="docker.io/library/spark",
-            context=os.getenv("KUBE_CONTEXT", "kind-spark-test"),  # Explicitly set context
-            enable_monitoring=False,  # Disable to avoid JMX agent issue with Spark 4.0
-            enable_ui=False,  # Disable UI for simpler testing
+            # Explicitly set context
+            context=os.getenv("KUBE_CONTEXT", "kind-spark-test"),
+            # Disable to avoid JMX agent issue with Spark 4.0
+            enable_monitoring=False,
+            # Disable UI for simpler testing
+            enable_ui=False,
         )
-        cls.client = SparkClient(backend_config=config)
+        cls.client = BatchSparkClient(backend_config=config)
         cls.submitted_apps = []
 
     @classmethod
@@ -65,7 +68,9 @@ class TestSparkClientIntegration(unittest.TestCase):
 
         response = self.client.submit_application(
             app_name=app_name,
-            main_application_file="local:///opt/spark/examples/jars/spark-examples_2.13-4.0.0.jar",
+            main_application_file=(
+                "local:///opt/spark/examples/jars/spark-examples_2.13-4.0.0.jar"
+            ),
             main_class="org.apache.spark.examples.SparkPi",
             spark_version="4.0.0",
             app_type="Scala",
@@ -76,7 +81,8 @@ class TestSparkClientIntegration(unittest.TestCase):
             num_executors=1,
             arguments=["100"],
             spark_conf={
-                "spark.kubernetes.file.upload.path": "/tmp",  # Required for Spark 4.0
+                # Required for Spark 4.0
+                "spark.kubernetes.file.upload.path": "/tmp",
             },
         )
 
@@ -161,7 +167,9 @@ class TestSparkClientIntegration(unittest.TestCase):
 
         response = self.client.submit_application(
             app_name=app_name,
-            main_application_file="local:///opt/spark/examples/jars/spark-examples_2.13-4.0.0.jar",
+            main_application_file=(
+                "local:///opt/spark/examples/jars/spark-examples_2.13-4.0.0.jar"
+            ),
             main_class="org.apache.spark.examples.SparkPi",
             spark_version="4.0.0",
             app_type="Scala",
@@ -186,7 +194,10 @@ class TestSparkClientIntegration(unittest.TestCase):
         print("Application completed")
         print(f"  Final state: {final_status.state.value}")
 
-        self.assertIn(final_status.state, [ApplicationState.COMPLETED, ApplicationState.FAILED])
+        self.assertIn(
+            final_status.state,
+            [ApplicationState.COMPLETED, ApplicationState.FAILED],
+        )
 
     def test_06_delete_application(self):
         """Test deleting an application."""
@@ -199,7 +210,9 @@ class TestSparkClientIntegration(unittest.TestCase):
 
         response = self.client.submit_application(
             app_name=app_name,
-            main_application_file="local:///opt/spark/examples/jars/spark-examples_2.13-4.0.0.jar",
+            main_application_file=(
+                "local:///opt/spark/examples/jars/spark-examples_2.13-4.0.0.jar"
+            ),
             main_class="org.apache.spark.examples.SparkPi",
             spark_version="4.0.0",
             app_type="Scala",
@@ -232,7 +245,9 @@ class TestSparkClientIntegration(unittest.TestCase):
 
         response = self.client.submit_application(
             app_name=app_name,
-            main_application_file="local:///opt/spark/examples/jars/spark-examples_2.13-4.0.0.jar",
+            main_application_file=(
+                "local:///opt/spark/examples/jars/spark-examples_2.13-4.0.0.jar"
+            ),
             main_class="org.apache.spark.examples.SparkPi",
             spark_version="4.0.0",
             app_type="Scala",

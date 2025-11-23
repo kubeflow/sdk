@@ -131,7 +131,7 @@ try:
                     print(f"\nERROR: FAILED: {error_msg}")
                     print("\nCheck logs:")
                     print(f"  kubectl logs {app_name}-driver")
-                break
+                    break
 
         except Exception:
             continue

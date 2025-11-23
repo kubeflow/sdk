@@ -37,7 +37,7 @@ if sdk_path not in sys.path:
 from kubeflow.spark import (  # noqa: E402
     ApplicationState,
     OperatorBackendConfig,
-    SparkClient,
+    BatchSparkClient,
 )
 
 
@@ -364,7 +364,7 @@ def main():
         enable_monitoring=False,
         enable_ui=False,
     )
-    client = SparkClient(backend_config=config)
+    client = BatchSparkClient(backend_config=config)
     print("  Client created successfully")
     print()
 
@@ -385,7 +385,8 @@ def main():
         response = client.submit_application(
             # Application metadata
             app_name=app_name,
-            main_application_file="local:///opt/spark/examples/src/main/python/pi.py",  # Placeholder
+            # Placeholder
+            main_application_file=("local:///opt/spark/examples/src/main/python/pi.py"),
             # Spark configuration
             spark_version="4.0.0",
             app_type="Python",

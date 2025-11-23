@@ -37,7 +37,7 @@ if sdk_path not in sys.path:
 from kubeflow.spark import (  # noqa: E402
     ApplicationState,
     OperatorBackendConfig,
-    SparkClient,
+    BatchSparkClient,
 )
 
 
@@ -65,7 +65,7 @@ def main():
         enable_monitoring=False,  # Keep it simple for beginners
         enable_ui=False,  # We'll enable this in later examples
     )
-    client = SparkClient(backend_config=config)
+    client = BatchSparkClient(backend_config=config)
     print("  Client created successfully")
     print()
 
@@ -202,7 +202,7 @@ def main():
     print("  - How to clean up resources")
     print()
     print("Key SDK Methods:")
-    print("  - SparkClient(backend_config=config) - Create client")
+    print("  - BatchSparkClient(backend_config=config) - Create client")
     print("  - client.submit_application(...) - Submit Spark job")
     print("  - client.wait_for_completion(...) - Monitor job")
     print("  - client.get_logs(...) - Retrieve logs")

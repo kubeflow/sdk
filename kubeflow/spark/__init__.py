@@ -1,18 +1,23 @@
 """Kubeflow Spark Client for managing Spark applications on Kubernetes.
 
-This module provides a unified Python client for managing Apache Spark applications
+This module provides specialized Python clients for managing Apache Spark applications
 on Kubernetes using different backends:
 
-- **OperatorBackend**: Cloud-native backend using Kubeflow Spark Operator (recommended for batch jobs)
-- **GatewayBackend**: REST API backend for managed Spark gateways
-- **ConnectBackend**: Spark Connect backend for remote interactive sessions
+**Batch Jobs:**
+- **BatchSparkClient**: For batch Spark application submission and management
+  - OperatorBackend: Cloud-native using Kubeflow Spark Operator (recommended)
+  - GatewayBackend: REST API for managed Spark gateways
+
+**Interactive Sessions:**
+- **SparkSessionClient**: For interactive Spark Connect sessions
+  - ConnectBackend: gRPC-based remote connectivity for notebooks and exploration
 
 Quick Start (Batch Jobs):
     ```python
-    from kubeflow.spark import SparkClient
+    from kubeflow.spark import BatchSparkClient, OperatorBackendConfig
 
-    # Create client (uses Operator backend by default)
-    client = SparkClient()
+    # Create batch client (uses Operator backend by default)
+    client = BatchSparkClient()
 
     # Submit a Spark application
     response = client.submit_application(
@@ -30,13 +35,13 @@ Quick Start (Batch Jobs):
     print(f"Application state: {status.state}")
     ```
 
-Quick Start (Interactive Sessions with Spark Connect):
+Quick Start (Interactive Sessions):
     ```python
-    from kubeflow.spark import SparkClient, ConnectBackendConfig
+    from kubeflow.spark import SparkSessionClient, ConnectBackendConfig
 
     # Connect to existing Spark cluster
     config = ConnectBackendConfig(connect_url="sc://spark-cluster:15002")
-    client = SparkClient(backend_config=config)
+    client = SparkSessionClient(backend_config=config)
 
     # Create interactive session
     session = client.create_session(app_name="data-analysis")
@@ -52,29 +57,31 @@ Quick Start (Interactive Sessions with Spark Connect):
 For more examples, see the examples/ directory.
 """
 
-# Import the new backend-based implementation
-# Export backend configs for advanced usage
+# Import client classes
+from kubeflow.spark.base_client import BaseSparkClient
+from kubeflow.spark.batch_client import BatchSparkClient
+from kubeflow.spark.session_client import SparkSessionClient
+
+# Import backends and configs
 from kubeflow.spark.backends import (
+    BatchSparkBackend,
     ConnectBackend,
     ConnectBackendConfig,
     GatewayBackend,
     GatewayBackendConfig,
     OperatorBackend,
     OperatorBackendConfig,
+    SessionSparkBackend,
     SparkBackend,
 )
-from kubeflow.spark.client import (
-    SparkClient,
-    create_gateway_client,
-    create_operator_client,
-)
+
+# Import models
 from kubeflow.spark.models import (
     # States & Enums
     ApplicationState,
     # Status Models
     ApplicationStatus,
     BatchSchedulerConfig,
-    ConnectBackendConfig,
     DeployMode,
     DynamicAllocation,
     GPUSpec,
@@ -91,9 +98,11 @@ from kubeflow.spark.models import (
     SparkApplicationResponse,
     SparkUIConfiguration,
 )
+
+# Import session management
 from kubeflow.spark.session import ManagedSparkSession
 
-# Export validation
+# Import validation
 from kubeflow.spark.validation import (
     SparkApplicationValidator,
     ValidationError,
@@ -103,12 +112,15 @@ from kubeflow.spark.validation import (
 )
 
 __all__ = [
-    # Main client
-    "SparkClient",
-    "create_operator_client",
-    "create_gateway_client",
-    # Backends
+    # Client classes
+    "BaseSparkClient",
+    "BatchSparkClient",
+    "SparkSessionClient",
+    # Backends (base classes)
     "SparkBackend",
+    "BatchSparkBackend",
+    "SessionSparkBackend",
+    # Backend implementations
     "OperatorBackend",
     "OperatorBackendConfig",
     "GatewayBackend",

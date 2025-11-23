@@ -17,17 +17,17 @@
 from collections.abc import Iterator
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from urllib.parse import urljoin
 
-from kubeflow.spark.backends.base import SparkBackend
+from kubeflow.spark.backends.base import BatchSparkBackend
 from kubeflow.spark.config import AuthMethod
 from kubeflow.spark.models import ApplicationStatus, SparkApplicationResponse
 
 logger = logging.getLogger(__name__)
 
 
-class GatewayBackend(SparkBackend):
+class GatewayBackend(BatchSparkBackend):
     """Gateway backend for Spark applications.
 
     This backend communicates with a Batch Processing Gateway via REST API.
@@ -73,9 +73,8 @@ class GatewayBackend(SparkBackend):
         if self.config.auth_method == AuthMethod.BASIC:
             if self.config.user and self.config.password:
                 self._session.auth = HTTPBasicAuth(self.config.user, self.config.password)
-        elif self.config.auth_method == AuthMethod.HEADER:
-            if self.config.user:
-                self._session.headers[self.config.auth_header_key] = self.config.user
+        elif self.config.auth_method == AuthMethod.HEADER and self.config.user:
+            self._session.headers[self.config.auth_header_key] = self.config.user
 
         # Add extra headers
         self._session.headers.update(self.config.extra_headers)
@@ -92,12 +91,12 @@ class GatewayBackend(SparkBackend):
         executor_memory: str = "1g",
         num_executors: int = 2,
         queue: Optional[str] = None,
-        arguments: Optional[List[str]] = None,
+        arguments: Optional[list[str]] = None,
         python_version: str = "3",
-        spark_conf: Optional[Dict[str, str]] = None,
-        hadoop_conf: Optional[Dict[str, str]] = None,
-        env_vars: Optional[Dict[str, str]] = None,
-        deps: Optional[Dict[str, List[str]]] = None,
+        spark_conf: Optional[dict[str, str]] = None,
+        hadoop_conf: Optional[dict[str, str]] = None,
+        env_vars: Optional[dict[str, str]] = None,
+        deps: Optional[dict[str, list[str]]] = None,
         **kwargs: Any,
     ) -> SparkApplicationResponse:
         """Submit a Spark application through the gateway.
@@ -167,7 +166,7 @@ class GatewayBackend(SparkBackend):
         except Exception as e:
             raise RuntimeError(f"Failed to get status from gateway: {e}") from e
 
-    def delete_application(self, submission_id: str) -> Dict[str, Any]:
+    def delete_application(self, submission_id: str) -> dict[str, Any]:
         """Delete a Spark application through gateway.
 
         Args:
@@ -228,8 +227,8 @@ class GatewayBackend(SparkBackend):
     def list_applications(
         self,
         namespace: Optional[str] = None,
-        labels: Optional[Dict[str, str]] = None,
-    ) -> List[ApplicationStatus]:
+        labels: Optional[dict[str, str]] = None,
+    ) -> list[ApplicationStatus]:
         """List Spark applications from gateway.
 
         Note: Gateway backend may not support listing applications.
@@ -327,7 +326,7 @@ class GatewayBackendConfig:
         verify_ssl: bool = True,
         default_queue: str = "poc",
         default_spark_version: str = "3.5.0",
-        extra_headers: Optional[Dict[str, str]] = None,
+        extra_headers: Optional[dict[str, str]] = None,
     ):
         """Initialize Gateway backend configuration.
 

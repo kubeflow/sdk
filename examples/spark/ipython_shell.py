@@ -24,7 +24,7 @@ Kubeflow Spark Client - IPython Development Shell
 SDK Path: {sdk_path}
 
 Pre-imported:
-  SparkClient, OperatorBackendConfig, GatewayBackendConfig,
+  BatchSparkClient, OperatorBackendConfig, GatewayBackendConfig,
   ApplicationState, ApplicationStatus, SparkApplicationResponse
 
 Quick Examples:
