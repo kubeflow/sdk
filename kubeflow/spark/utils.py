@@ -110,7 +110,7 @@ def build_s3_path(bucket: str, prefix: str, filename: str) -> str:
 
 
 def wait_for_completion(
-    client: "SparkClient",
+    client: "BatchSparkClient",
     submission_id: str,
     timeout: int = 3600,
     poll_interval: int = 10,
@@ -118,7 +118,7 @@ def wait_for_completion(
     """Wait for Spark application to complete.
 
     Args:
-        client: SparkClient instance
+        client: BatchSparkClient instance
         submission_id: Submission ID to monitor
         timeout: Maximum time to wait in seconds
         poll_interval: Polling interval in seconds

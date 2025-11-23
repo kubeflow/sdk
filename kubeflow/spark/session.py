@@ -47,10 +47,10 @@ class ManagedSparkSession:
 
     Example:
         ```python
-        from kubeflow.spark import SparkClient, ConnectBackendConfig
+        from kubeflow.spark import SparkSessionClient, ConnectBackendConfig
 
         config = ConnectBackendConfig(connect_url="sc://spark-cluster:15002")
-        client = SparkClient(backend_config=config)
+        client = SparkSessionClient(backend_config=config)
 
         # Create session
         session = client.create_session(app_name="data-analysis")
