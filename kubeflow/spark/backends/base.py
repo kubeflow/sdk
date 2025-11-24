@@ -70,9 +70,9 @@ class BatchSparkBackend(SparkBackend):
 
     Typical workflow:
         1. submit_application() -> Returns submission_id
-        2. wait_for_completion() or poll get_status()
-        3. get_logs() to retrieve output
-        4. delete_application() for cleanup
+        2. wait_for_job_status() or poll get_job()
+        3. get_job_logs() to retrieve output
+        4. delete_job() for cleanup
     """
 
     @abc.abstractmethod
@@ -128,7 +128,7 @@ class BatchSparkBackend(SparkBackend):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_status(self, submission_id: str) -> ApplicationStatus:
+    def get_job(self, submission_id: str) -> ApplicationStatus:
         """Get current status of a Spark application.
 
         Args:
@@ -145,7 +145,7 @@ class BatchSparkBackend(SparkBackend):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def delete_application(self, submission_id: str) -> dict[str, Any]:
+    def delete_job(self, submission_id: str) -> dict[str, Any]:
         """Delete a Spark application.
 
         This terminates a running application or removes a completed application.
@@ -164,7 +164,7 @@ class BatchSparkBackend(SparkBackend):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_logs(
+    def get_job_logs(
         self,
         submission_id: str,
         executor_id: Optional[str] = None,
@@ -187,7 +187,7 @@ class BatchSparkBackend(SparkBackend):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def list_applications(
+    def list_jobs(
         self,
         namespace: Optional[str] = None,
         labels: Optional[dict[str, str]] = None,
@@ -208,7 +208,7 @@ class BatchSparkBackend(SparkBackend):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def wait_for_completion(
+    def wait_for_job_status(
         self,
         submission_id: str,
         timeout: int = 3600,

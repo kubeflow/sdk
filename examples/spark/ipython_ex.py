@@ -33,7 +33,7 @@ response = client.submit_application(
         "spark.kubernetes.file.upload.path": "/tmp",  # Required for Spark 4.0
     },
 )
-client.get_status(app_name)
+client.get_job(app_name)
 
 
 response = client.submit_application(
@@ -49,9 +49,9 @@ response = client.submit_application(
     arguments=["100"],
     spark_conf={"spark.kubernetes.file.upload.path": "/tmp"},
 )
-final_status = client.wait_for_completion("my-python-pi5", timeout=300)
-client.get_status("my-python-pi5")
-logs = list(client.get_logs("my-python-pi5"))
+final_status = client.wait_for_job_status("my-python-pi5", timeout=300)
+client.get_job("my-python-pi5")
+logs = list(client.get_job_logs("my-python-pi5"))
 for line in logs:
     if "Pi is roughly" in line:
         print(f"RESULT: {line}")
@@ -77,9 +77,9 @@ response = client.submit_application(
     driver_volume_mounts=[{"name": "spark-events", "mountPath": "/tmp/spark-events"}],
     executor_volume_mounts=[{"name": "spark-events", "mountPath": "/tmp/spark-events"}],
 )
-final_status = client.wait_for_completion("my-python-pi6", timeout=300)
-client.get_status("my-python-pi6")
-logs = list(client.get_logs("my-python-pi6"))
+final_status = client.wait_for_job_status("my-python-pi6", timeout=300)
+client.get_job("my-python-pi6")
+logs = list(client.get_job_logs("my-python-pi6"))
 for line in logs:
     if "Pi is roughly" in line:
         print(f"RESULT: {line}")

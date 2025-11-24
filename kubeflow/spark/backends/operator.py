@@ -230,7 +230,7 @@ class OperatorBackend(BatchSparkBackend):
                 f"Failed to create SparkApplication {target_namespace}/{app_name}: {e}"
             ) from e
 
-    def get_status(self, submission_id: str) -> ApplicationStatus:
+    def get_job(self, submission_id: str) -> ApplicationStatus:
         """Get status of a Spark application.
 
         Args:
@@ -265,7 +265,7 @@ class OperatorBackend(BatchSparkBackend):
                 f"Failed to get SparkApplication {self.config.namespace}/{submission_id}: {e}"
             ) from e
 
-    def delete_application(self, submission_id: str) -> dict[str, Any]:
+    def delete_job(self, submission_id: str) -> dict[str, Any]:
         """Delete a Spark application.
 
         Args:
@@ -305,7 +305,7 @@ class OperatorBackend(BatchSparkBackend):
                 f"Failed to delete SparkApplication {self.config.namespace}/{submission_id}: {e}"
             ) from e
 
-    def get_logs(
+    def get_job_logs(
         self,
         submission_id: str,
         executor_id: Optional[str] = None,
@@ -381,7 +381,7 @@ class OperatorBackend(BatchSparkBackend):
                 f"Failed to read logs for pod {self.config.namespace}/{pod_name}: {e}"
             ) from e
 
-    def list_applications(
+    def list_jobs(
         self,
         namespace: Optional[str] = None,
         labels: Optional[dict[str, str]] = None,
@@ -432,7 +432,7 @@ class OperatorBackend(BatchSparkBackend):
                 f"Failed to list SparkApplications in namespace {target_namespace}: {e}"
             ) from e
 
-    def wait_for_completion(
+    def wait_for_job_status(
         self,
         submission_id: str,
         timeout: int = 3600,
@@ -455,7 +455,7 @@ class OperatorBackend(BatchSparkBackend):
         start_time = time.time()
 
         while True:
-            status = self.get_status(submission_id)
+            status = self.get_job(submission_id)
 
             # Check if application reached terminal state
             if status.state in [ApplicationState.COMPLETED, ApplicationState.FAILED]:

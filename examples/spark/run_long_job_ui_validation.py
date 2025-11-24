@@ -107,7 +107,7 @@ def monitor_job_progress(client: BatchSparkClient, app_name: str):
     try:
         while True:
             try:
-                status = client.get_status(app_name)
+                status = client.get_job(app_name)
                 elapsed = int(time.time() - start_time)
 
                 if status.state != last_state:
@@ -268,7 +268,7 @@ def main():
         print()
         print("Retrieving job logs...")
         try:
-            logs = list(client.get_logs(app_name))
+            logs = list(client.get_job_logs(app_name))
             print()
             print("=" * 80)
             print("JOB OUTPUT (Last 50 lines)")

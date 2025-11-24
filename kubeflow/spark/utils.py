@@ -136,7 +136,7 @@ def wait_for_completion(
     start_time = time.time()
 
     while True:
-        status = client.get_status(submission_id)
+        status = client.get_job(submission_id)
 
         if status.state in [
             ApplicationState.COMPLETED,

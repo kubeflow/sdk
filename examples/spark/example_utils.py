@@ -327,7 +327,7 @@ def wait_for_job(
     logger.info(f"Waiting for job '{app_name}' to complete (timeout: {timeout}s)...")
 
     try:
-        status = client.wait_for_completion(
+        status = client.wait_for_job_status(
             submission_id=app_name,
             timeout=timeout,
             polling_interval=polling_interval,
@@ -359,7 +359,7 @@ def print_job_status(client: BatchBatchSparkClient, app_name: str):
         app_name: Application name
     """
     try:
-        status = client.get_status(app_name)
+        status = client.get_job(app_name)
 
         print("\n" + "=" * 60)
         print(f"JOB STATUS: {app_name}")
@@ -388,7 +388,7 @@ def cleanup_job(client: BatchBatchSparkClient, app_name: str):
         app_name: Application name
     """
     try:
-        client.delete_application(app_name)
+        client.delete_job(app_name)
         logger.info(f"Successfully deleted application '{app_name}'")
     except Exception as e:
         logger.warning(f"Failed to delete application '{app_name}': {e}")

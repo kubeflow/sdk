@@ -53,7 +53,7 @@ class TestSparkClientIntegration(unittest.TestCase):
         print("\nCleaning up test applications...")
         for app_name in cls.submitted_apps:
             try:
-                cls.client.delete_application(app_name)
+                cls.client.delete_job(app_name)
                 print(f"  Deleted {app_name}")
             except Exception as e:
                 print(f"  ✗ Failed to delete {app_name}: {e}")
@@ -104,7 +104,7 @@ class TestSparkClientIntegration(unittest.TestCase):
             self.skipTest("No applications to check status")
 
         app_name = self.submitted_apps[0]
-        status = self.client.get_status(app_name)
+        status = self.client.get_job(app_name)
 
         self.assertIsNotNone(status)
         self.assertEqual(status.submission_id, app_name)
@@ -120,7 +120,7 @@ class TestSparkClientIntegration(unittest.TestCase):
         print("TEST: List Applications")
         print("=" * 80)
 
-        apps = self.client.list_applications()
+        apps = self.client.list_jobs()
 
         self.assertIsInstance(apps, list)
         print(f"Listed {len(apps)} applications")
@@ -146,7 +146,7 @@ class TestSparkClientIntegration(unittest.TestCase):
         if not is_ready:
             print("WARNING: Driver pod not ready within timeout, logs may be empty")
 
-        logs = list(self.client.get_logs(app_name))
+        logs = list(self.client.get_job_logs(app_name))
 
         # Logs might be empty if pod not started yet
         print(f"Retrieved {len(logs)} log lines from {app_name}")
@@ -189,7 +189,7 @@ class TestSparkClientIntegration(unittest.TestCase):
         print(f"Submitted {app_name}")
         print("  Waiting for completion (timeout: 300s)...")
 
-        final_status = self.client.wait_for_completion(app_name, timeout=300, polling_interval=5)
+        final_status = self.client.wait_for_job_status(app_name, timeout=300, polling_interval=5)
 
         print("Application completed")
         print(f"  Final state: {final_status.state.value}")
@@ -229,7 +229,7 @@ class TestSparkClientIntegration(unittest.TestCase):
         print(f"Submitted {app_name}")
 
         # Delete immediately
-        result = self.client.delete_application(app_name)
+        result = self.client.delete_job(app_name)
 
         self.assertIsInstance(result, dict)
         print(f"Deleted {app_name}")
@@ -273,7 +273,7 @@ class TestSparkClientIntegration(unittest.TestCase):
 
         # Check status after a bit
         time.sleep(10)
-        status = self.client.get_status(app_name)
+        status = self.client.get_job(app_name)
 
         print(f"  Current state: {status.state.value}")
         if status.executor_state:
