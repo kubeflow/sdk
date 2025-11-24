@@ -144,7 +144,7 @@ class GatewayBackend(BatchSparkBackend):
         except Exception as e:
             raise RuntimeError(f"Failed to submit application to gateway: {e}") from e
 
-    def get_status(self, submission_id: str) -> ApplicationStatus:
+    def get_job(self, submission_id: str) -> ApplicationStatus:
         """Get status of a Spark application from gateway.
 
         Args:
@@ -166,7 +166,7 @@ class GatewayBackend(BatchSparkBackend):
         except Exception as e:
             raise RuntimeError(f"Failed to get status from gateway: {e}") from e
 
-    def delete_application(self, submission_id: str) -> dict[str, Any]:
+    def delete_job(self, submission_id: str) -> dict[str, Any]:
         """Delete a Spark application through gateway.
 
         Args:
@@ -188,7 +188,7 @@ class GatewayBackend(BatchSparkBackend):
         except Exception as e:
             raise RuntimeError(f"Failed to delete application from gateway: {e}") from e
 
-    def get_logs(
+    def get_job_logs(
         self,
         submission_id: str,
         executor_id: Optional[str] = None,
@@ -224,7 +224,7 @@ class GatewayBackend(BatchSparkBackend):
         except Exception as e:
             raise RuntimeError(f"Failed to get logs from gateway: {e}") from e
 
-    def list_applications(
+    def list_jobs(
         self,
         namespace: Optional[str] = None,
         labels: Optional[dict[str, str]] = None,
@@ -248,7 +248,7 @@ class GatewayBackend(BatchSparkBackend):
             "This feature is only available with OperatorBackend."
         )
 
-    def wait_for_completion(
+    def wait_for_job_status(
         self,
         submission_id: str,
         timeout: int = 3600,
@@ -274,7 +274,7 @@ class GatewayBackend(BatchSparkBackend):
         start_time = time.time()
 
         while True:
-            status = self.get_status(submission_id)
+            status = self.get_job(submission_id)
 
             # Check if application reached terminal state
             if status.state in [ApplicationState.COMPLETED, ApplicationState.FAILED]:

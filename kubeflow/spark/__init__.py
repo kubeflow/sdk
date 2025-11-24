@@ -31,7 +31,7 @@ Quick Start (Batch Jobs):
     )
 
     # Wait for completion
-    status = client.wait_for_completion(response.submission_id)
+    status = client.wait_for_job_status(response.submission_id)
     print(f"Application state: {status.state}")
     ```
 

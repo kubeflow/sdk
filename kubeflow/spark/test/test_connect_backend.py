@@ -295,7 +295,7 @@ class TestConnectBackendBatchMethodsRaiseErrors:
         backend = ConnectBackend(config)
 
         with pytest.raises(NotImplementedError, match="batch application status"):
-            backend.get_status("test-id")
+            backend.get_job("test-id")
 
     @pytest.mark.skipif(not _is_pyspark_available(), reason="PySpark Connect not installed")
     def test_delete_application_raises_error(self):
@@ -306,7 +306,7 @@ class TestConnectBackendBatchMethodsRaiseErrors:
         backend = ConnectBackend(config)
 
         with pytest.raises(NotImplementedError, match="batch application deletion"):
-            backend.delete_application("test-id")
+            backend.delete_job("test-id")
 
     @pytest.mark.skipif(not _is_pyspark_available(), reason="PySpark Connect not installed")
     def test_get_logs_raises_error(self):
@@ -317,7 +317,7 @@ class TestConnectBackendBatchMethodsRaiseErrors:
         backend = ConnectBackend(config)
 
         with pytest.raises(NotImplementedError, match="logs retrieval"):
-            list(backend.get_logs("test-id"))
+            list(backend.get_job_logs("test-id"))
 
     @pytest.mark.skipif(not _is_pyspark_available(), reason="PySpark Connect not installed")
     def test_list_applications_raises_error(self):
@@ -328,7 +328,7 @@ class TestConnectBackendBatchMethodsRaiseErrors:
         backend = ConnectBackend(config)
 
         with pytest.raises(NotImplementedError, match="listing applications"):
-            backend.list_applications()
+            backend.list_jobs()
 
     @pytest.mark.skipif(not _is_pyspark_available(), reason="PySpark Connect not installed")
     def test_wait_for_completion_raises_error(self):
@@ -339,4 +339,4 @@ class TestConnectBackendBatchMethodsRaiseErrors:
         backend = ConnectBackend(config)
 
         with pytest.raises(NotImplementedError, match="application completion"):
-            backend.wait_for_completion("test-id")
+            backend.wait_for_job_status("test-id")

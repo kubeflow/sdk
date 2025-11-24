@@ -63,11 +63,11 @@ class BatchSparkClient(BaseSparkClient):
         )
 
         # Wait for completion
-        status = client.wait_for_completion(response.submission_id)
+        status = client.wait_for_job_status(response.submission_id)
         print(f"Job completed with state: {status.state}")
 
         # Get logs
-        for line in client.get_logs(response.submission_id):
+        for line in client.get_job_logs(response.submission_id):
             print(line)
         ```
 
@@ -124,8 +124,8 @@ class BatchSparkClient(BaseSparkClient):
 
     def submit_application(
         self,
-        app_name: str,
-        main_application_file: str,
+        app_name: Optional[str] = None,
+        main_application_file: str = "",
         spark_version: str = "3.5.0",
         app_type: str = "Python",
         driver_cores: int = 1,
@@ -145,7 +145,8 @@ class BatchSparkClient(BaseSparkClient):
         """Submit a Spark application for batch execution.
 
         Args:
-            app_name: Name of the application (must be unique)
+            app_name: Name of the application. If not provided, a unique name will be
+                     auto-generated. Must be unique within the namespace. (optional)
             main_application_file: Path to main application file
                                   Supported formats: local://, s3a://, http://, etc.
             spark_version: Spark version (default: "3.5.0")
@@ -174,23 +175,33 @@ class BatchSparkClient(BaseSparkClient):
 
         Example:
             ```python
+            # With explicit name
             response = client.submit_application(
                 app_name="data-processing",
                 main_application_file="s3a://my-bucket/jobs/process.py",
                 driver_cores=2,
                 driver_memory="4g",
-                executor_cores=4,
-                executor_memory="8g",
-                num_executors=10,
-                spark_conf={
-                    "spark.sql.shuffle.partitions": "200",
-                    "spark.hadoop.fs.s3a.endpoint": "s3.amazonaws.com",
-                },
-                arguments=["--input", "s3a://data/input", "--output", "s3a://data/output"],
+            )
+
+            # With auto-generated name (recommended)
+            response = client.submit_application(
+                main_application_file="s3a://my-bucket/jobs/process.py",
+                driver_cores=2,
+                driver_memory="4g",
             )
             print(f"Submitted: {response.submission_id}")
             ```
         """
+        # Auto-generate name if not provided (similar to TrainerClient)
+        if app_name is None:
+            import secrets
+            import string
+            # Generate a random 12-character alphanumeric name
+            app_name = "spark-" + "".join(
+                secrets.choice(string.ascii_lowercase + string.digits) for _ in range(12)
+            )
+            self._logger.info(f"Auto-generated application name: {app_name}")
+
         return self._backend.submit_application(
             app_name=app_name,
             main_application_file=main_application_file,
@@ -211,14 +222,14 @@ class BatchSparkClient(BaseSparkClient):
             **kwargs,
         )
 
-    def get_status(self, submission_id: str) -> ApplicationStatus:
-        """Get current status of a Spark application.
+    def get_job(self, submission_id: str) -> ApplicationStatus:
+        """Get the Spark job object of a Spark application.
 
         Args:
             submission_id: Submission ID returned from submit_application()
 
         Returns:
-            ApplicationStatus with current state, timestamps, and metadata
+            ApplicationStatus object with current state, timestamps, and metadata
 
         Raises:
             RuntimeError: If request fails
@@ -226,15 +237,15 @@ class BatchSparkClient(BaseSparkClient):
 
         Example:
             ```python
-            status = client.get_status("spark-pi-12345")
+            status = client.get_job("spark-pi-12345")
             print(f"State: {status.state}")
             print(f"App ID: {status.app_id}")
             ```
         """
         return self._backend.get_status(submission_id)
 
-    def delete_application(self, submission_id: str) -> dict[str, Any]:
-        """Delete a Spark application.
+    def delete_job(self, submission_id: str) -> dict[str, Any]:
+        """Delete the Spark job.
 
         This terminates a running application or removes a completed one.
 
@@ -250,13 +261,13 @@ class BatchSparkClient(BaseSparkClient):
 
         Example:
             ```python
-            response = client.delete_application("spark-pi-12345")
+            response = client.delete_job("spark-pi-12345")
             print(f"Deleted: {response}")
             ```
         """
         return self._backend.delete_application(submission_id)
 
-    def get_logs(
+    def get_job_logs(
         self,
         submission_id: str,
         executor_id: Optional[str] = None,
@@ -279,52 +290,52 @@ class BatchSparkClient(BaseSparkClient):
         Example:
             ```python
             # Get driver logs
-            for line in client.get_logs("spark-pi-12345"):
+            for line in client.get_job_logs("spark-pi-12345"):
                 print(line)
 
             # Get specific executor logs
-            for line in client.get_logs("spark-pi-12345", executor_id="1"):
+            for line in client.get_job_logs("spark-pi-12345", executor_id="1"):
                 print(line)
 
             # Stream logs in real-time
-            for line in client.get_logs("spark-pi-12345", follow=True):
+            for line in client.get_job_logs("spark-pi-12345", follow=True):
                 print(line)
             ```
         """
         return self._backend.get_logs(submission_id, executor_id, follow)
 
-    def list_applications(
+    def list_jobs(
         self,
         namespace: Optional[str] = None,
         labels: Optional[dict[str, str]] = None,
     ) -> list[ApplicationStatus]:
-        """List Spark applications with optional filtering.
+        """List Spark jobs with optional filtering.
 
         Args:
             namespace: Optional namespace/queue filter
             labels: Optional label filters (key-value pairs)
 
         Returns:
-            List of ApplicationStatus objects
+            List of Spark jobs
 
         Raises:
             RuntimeError: If request fails
 
         Example:
             ```python
-            # List all applications
-            apps = client.list_applications()
+            # List all jobs
+            apps = client.list_jobs()
 
             # List in specific namespace
-            apps = client.list_applications(namespace="production")
+            apps = client.list_jobs(namespace="production")
 
             # Filter by labels
-            apps = client.list_applications(labels={"team": "data-eng"})
+            apps = client.list_jobs(labels={"team": "data-eng"})
             ```
         """
         return self._backend.list_applications(namespace, labels)
 
-    def wait_for_completion(
+    def wait_for_job_status(
         self,
         submission_id: str,
         timeout: int = 3600,
@@ -351,10 +362,10 @@ class BatchSparkClient(BaseSparkClient):
         Example:
             ```python
             # Wait with defaults (1 hour timeout)
-            status = client.wait_for_completion("spark-pi-12345")
+            status = client.wait_for_job_status("spark-pi-12345")
 
             # Custom timeout and polling
-            status = client.wait_for_completion(
+            status = client.wait_for_job_status(
                 "spark-pi-12345",
                 timeout=1800,  # 30 minutes
                 polling_interval=5,  # Poll every 5 seconds

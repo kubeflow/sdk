@@ -379,7 +379,7 @@ def main():
 
     try:
         # Wait for completion with longer timeout for demo phases
-        final_status = client.wait_for_completion(
+        final_status = client.wait_for_job_status(
             submission_id=app_name,
             timeout=360,  # 6 minutes for all phases
             polling_interval=5,  # Check every 5 seconds
@@ -398,7 +398,7 @@ def main():
 
     except TimeoutError:
         print("  ERROR: Application did not complete within 6 minutes")
-        print(f"  You can check status later with: client.get_status('{app_name}')")
+        print(f"  You can check status later with: client.get_job('{app_name}')")
         sys.exit(1)
     except Exception as e:
         print(f"  ERROR: Error monitoring application: {e}")
@@ -409,7 +409,7 @@ def main():
     print()
 
     try:
-        logs = list(client.get_logs(app_name))
+        logs = list(client.get_job_logs(app_name))
 
         print("=" * 80)
         print("DYNAMIC ALLOCATION RESULTS")
@@ -455,7 +455,7 @@ def main():
     print()
     print("Step 6: Cleaning up resources...")
     try:
-        client.delete_application(app_name)
+        client.delete_job(app_name)
         print(f"  Application '{app_name}' deleted")
         print("  All executors released back to cluster")
     except Exception as e:

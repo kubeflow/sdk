@@ -122,7 +122,7 @@ def main():
 
     try:
         # Wait for completion with timeout
-        final_status = client.wait_for_completion(
+        final_status = client.wait_for_job_status(
             submission_id=app_name,
             timeout=300,  # 5 minutes max
             polling_interval=5,  # Check every 5 seconds
@@ -141,7 +141,7 @@ def main():
 
     except TimeoutError:
         print("  ERROR: Application did not complete within 5 minutes")
-        print("  You can check status later with: client.get_status('{app_name}')")
+        print("  You can check status later with: client.get_job('{app_name}')")
         sys.exit(1)
     except Exception as e:
         print(f"  ERROR: Error monitoring application: {e}")
@@ -152,7 +152,7 @@ def main():
     print()
 
     try:
-        logs = list(client.get_logs(app_name))
+        logs = list(client.get_job_logs(app_name))
 
         # Parse and display results
         print("=" * 80)
@@ -183,7 +183,7 @@ def main():
     print()
     print("Step 6: Cleaning up resources...")
     try:
-        client.delete_application(app_name)
+        client.delete_job(app_name)
         print(f"  Application '{app_name}' deleted")
     except Exception as e:
         print(f"  WARNING: Cleanup warning: {e}")
@@ -204,9 +204,9 @@ def main():
     print("Key SDK Methods:")
     print("  - BatchSparkClient(backend_config=config) - Create client")
     print("  - client.submit_application(...) - Submit Spark job")
-    print("  - client.wait_for_completion(...) - Monitor job")
-    print("  - client.get_logs(...) - Retrieve logs")
-    print("  - client.delete_application(...) - Cleanup")
+    print("  - client.wait_for_job_status(...) - Monitor job")
+    print("  - client.get_job_logs(...) - Retrieve logs")
+    print("  - client.delete_job(...) - Cleanup")
     print()
     print("Next steps:")
     print("  - Try example 02: CSV data analysis")
