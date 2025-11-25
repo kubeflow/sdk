@@ -238,7 +238,6 @@ def get_resources_per_node(
 def get_script_for_python_packages(
     packages_to_install: list[str],
     pip_index_urls: list[str],
-    is_mpi: bool,
 ) -> str:
     """
     Get init script to install Python packages from the given pip index URLs.
@@ -248,8 +247,6 @@ def get_script_for_python_packages(
     # first url will be the index-url.
     options = [f"--index-url {pip_index_urls[0]}"]
     options.extend(f"--extra-index-url {extra_index_url}" for extra_index_url in pip_index_urls[1:])
-    # Always install for the user to avoid permission issues across environments.
-    options.append("--user")
 
     header_script = textwrap.dedent(
         """
@@ -263,6 +260,11 @@ def get_script_for_python_packages(
     script_for_python_packages = (
         header_script
         + "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
+        + "--no-warn-script-location {} --user {}".format(
+            " ".join(options),
+            packages_str,
+        )
+        + " ||\nPIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
         + "--no-warn-script-location {} {}\n".format(
             " ".join(options),
             packages_str,
@@ -327,7 +329,6 @@ def get_command_using_train_func(
         install_packages = get_script_for_python_packages(
             packages_to_install,
             pip_index_urls,
-            is_mpi,
         )
 
     # Add function code to the Trainer command.

@@ -223,7 +223,6 @@ def get_custom_trainer(
     """
     pip_command = [f"--index-url {pip_index_urls[0]}"]
     pip_command.extend([f"--extra-index-url {repo}" for repo in pip_index_urls[1:]])
-    pip_command.append("--user")
     pip_command = " ".join(pip_command)
 
     packages_command = " ".join(packages_to_install)
@@ -233,7 +232,10 @@ def get_custom_trainer(
             "-c",
             '\nif ! [ -x "$(command -v pip)" ]; then\n    python -m ensurepip '
             "|| python -m ensurepip --user || apt-get install python-pip"
-            "\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet"
+            "\nfi\n\n"
+            "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet"
+            f" --no-warn-script-location {pip_command} --user {packages_command}"
+            " ||\nPIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet"
             f" --no-warn-script-location {pip_command} {packages_command}"
             "\n\nread -r -d '' SCRIPT << EOM\n\nfunc=lambda: "
             'print("Hello World"),\n\n<lambda>(**'
