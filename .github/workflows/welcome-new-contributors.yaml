@@ -8,12 +8,13 @@ on:
     types:
       - opened
 
+permissions:
+  issues: write
+  pull-requests: write
+
 jobs:
   welcome:
     runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-      issues: write
     steps:
       - uses: actions/first-interaction@v3
         with:
