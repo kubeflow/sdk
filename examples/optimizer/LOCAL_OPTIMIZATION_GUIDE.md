@@ -123,4 +123,3 @@ optimizer.optimize(
 | Cost | Free | Cloud costs |
 | Scalability | Local resources | Cluster capacity |
 | Use Case | Dev/testing | Production |
-

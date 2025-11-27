@@ -61,7 +61,7 @@ class ContainerBackendConfig(BaseModel):
             pull_policy="Always",
             container_runtime="podman",
             storage_path="/tmp/optimizer-jobs",
-            max_parallel_trials=3
+            max_parallel_trials=3,
         )
         client = OptimizerClient(backend_config=config)
         ```
@@ -125,9 +125,7 @@ class ContainerBackendConfig(BaseModel):
         """Validate pull_policy is one of the allowed values."""
         allowed = {"IfNotPresent", "Always", "Never"}
         if v not in allowed:
-            raise ValueError(
-                f"pull_policy must be one of {allowed}, got '{v}'"
-            )
+            raise ValueError(f"pull_policy must be one of {allowed}, got '{v}'")
         return v
 
     @field_validator("max_parallel_trials")
@@ -135,9 +133,7 @@ class ContainerBackendConfig(BaseModel):
     def validate_max_parallel_trials(cls, v: int) -> int:
         """Validate max_parallel_trials is positive."""
         if v < 1:
-            raise ValueError(
-                f"max_parallel_trials must be >= 1, got {v}"
-            )
+            raise ValueError(f"max_parallel_trials must be >= 1, got {v}")
         return v
 
     @field_validator("storage_path")
@@ -150,5 +146,6 @@ class ContainerBackendConfig(BaseModel):
 
     class Config:
         """Pydantic model configuration."""
+
         validate_assignment = True
         extra = "forbid"

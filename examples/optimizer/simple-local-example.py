@@ -6,7 +6,7 @@ with sequential (non-parallel) trial execution for easier debugging and understa
 
 Prerequisites:
     Since you're developing locally, install in development mode:
-    
+
     cd sdk-narayanasabari
     pip install -e '.[docker]' optuna
 
@@ -22,12 +22,12 @@ Note:
 
 try:
     from kubeflow.optimizer import (
-        OptimizerClient,
         ContainerBackendConfig,
-        Search,
         Objective,
-        TrialConfig,
+        OptimizerClient,
+        Search,
         TrainJobTemplate,
+        TrialConfig,
     )
     from kubeflow.trainer import CustomTrainer
 except ImportError as e:
@@ -51,6 +51,7 @@ def main():
     print("📋 Checking prerequisites...")
     try:
         import docker
+
         docker_client = docker.from_env()
         docker_client.ping()
         print("✅ Docker runtime is accessible")
@@ -76,21 +77,21 @@ def main():
 
     print("\n📝 Step 3: Define Training Function")
     print("-" * 60)
-    
+
     def train_fn(learning_rate: float, batch_size: int):
         """Simple training function that returns a metric based on hyperparameters.
-        
+
         Args:
             learning_rate: Learning rate hyperparameter
             batch_size: Batch size hyperparameter
         """
         import time
-        
+
         print(f"Training with lr={learning_rate}, batch_size={batch_size}")
         time.sleep(2)
-        
+
         accuracy = 0.5 + (0.1 - learning_rate) * 10 + (batch_size / 1000)
-        
+
         print(f"Training complete! Accuracy: {accuracy:.4f}")
         print(f"accuracy: {accuracy:.4f}")
         return accuracy
@@ -99,7 +100,7 @@ def main():
         func=train_fn,
         packages_to_install=["kubeflow"],
     )
-    
+
     template = TrainJobTemplate(trainer=trainer)
     print("✅ Training template defined")
 
@@ -130,13 +131,13 @@ def main():
         print("\n📝 Step 6: Get Optimization Results")
         print("-" * 60)
         results = optimizer.get_best_results(name=job_name)
-        
+
         if results:
             print("\n🎯 Best Hyperparameters Found:")
             print("-" * 60)
             for param, value in results.parameters.items():
                 print(f"  {param}: {value}")
-            
+
             print("\n📊 Best Metrics:")
             print("-" * 60)
             for metric in results.metrics:
@@ -155,6 +156,7 @@ def main():
     except Exception as e:
         print(f"\n❌ Error during optimization: {e}")
         import traceback
+
         traceback.print_exc()
     finally:
         print("\n📝 Step 8: Cleanup")
