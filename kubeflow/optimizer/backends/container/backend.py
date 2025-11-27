@@ -82,11 +82,12 @@ def _sample_hyperparameters_with_optuna(
     try:
         import optuna
         from optuna.storages import RDBStorage
-    except ImportError:
+    except ImportError as err:
+        # Re-raise with clearer message while preserving the original exception
         raise ImportError(
             "Optuna is required for hyperparameter optimization. "
             "Install with: pip install optuna"
-        )
+        ) from err
     
     import os
     import time
@@ -121,7 +122,10 @@ def _sample_hyperparameters_with_optuna(
                 # Wait with exponential backoff
                 time.sleep(0.1 * (2 ** attempt))
             else:
-                raise RuntimeError(f"Failed to create/load Optuna study after {max_retries} attempts: {e}")
+                # Preserve the original exception as the cause so stack traces show it.
+                raise RuntimeError(
+                    f"Failed to create/load Optuna study after {max_retries} attempts"
+                ) from e
     
     # Create trial and sample hyperparameters
     trial = study.ask()
@@ -283,6 +287,32 @@ class ContainerBackend(RuntimeBackend):
             param_spec.name = param_name
             parameters_spec.append(param_spec)
         
+        # Precompute algorithm/runtime/trainer/initializer specs to avoid long
+        # inline conditionals inside the experiment data dict and to keep
+        # line lengths under ruff's E501 limit.
+        if hasattr(algorithm, "_to_katib_spec"):
+            _algorithm_spec = algorithm._to_katib_spec()
+        else:
+            _algorithm_spec = {"algorithmName": algorithm.__class__.__name__}
+
+        _runtime_spec = (
+            trial_template.runtime.to_dict()
+            if hasattr(trial_template.runtime, "to_dict")
+            else trial_template.runtime
+        )
+
+        _trainer_spec = (
+            trial_template.trainer.to_dict()
+            if hasattr(trial_template.trainer, "to_dict")
+            else trial_template.trainer
+        )
+
+        _initializer_spec = (
+            trial_template.initializer.to_dict()
+            if trial_template.initializer and hasattr(trial_template.initializer, "to_dict")
+            else trial_template.initializer
+        )
+
         # Create experiment storage (mimics Katib Experiment CR).
         experiment_data = {
             "metadata": {
@@ -298,14 +328,14 @@ class ContainerBackend(RuntimeBackend):
                     if len(objectives) > 1
                     else None,
                 },
-                "algorithm": algorithm._to_katib_spec() if hasattr(algorithm, '_to_katib_spec') else {
-                    "algorithmName": algorithm.__class__.__name__
-                },
+                "algorithm": _algorithm_spec,
                 "trialTemplate": {
                     "trialSpec": {
-                        "runtime": trial_template.runtime.to_dict() if hasattr(trial_template.runtime, 'to_dict') else trial_template.runtime,
-                        "trainer": trial_template.trainer.to_dict() if hasattr(trial_template.trainer, 'to_dict') else trial_template.trainer,
-                        "initializer": trial_template.initializer.to_dict() if trial_template.initializer and hasattr(trial_template.initializer, 'to_dict') else trial_template.initializer,
+                        # Build runtime/trainer/initializer specs separately to keep
+                        # lines under 100 characters.
+                        "runtime": _runtime_spec,
+                        "trainer": _trainer_spec,
+                        "initializer": _initializer_spec,
                     }
                 },
                 "maxTrialCount": trial_config.num_trials,
@@ -626,11 +656,14 @@ class ContainerBackend(RuntimeBackend):
         try:
             # Create and run training job using trainer backend.
             # The train() method returns the job name
+            def _set_trial_name(job_spec, trainer, backend):
+                job_spec.setdefault("metadata", {})["name"] = trial_name
+
             actual_job_name = self.trainer_backend.train(
                 trainer=trial_job_template.trainer,
                 runtime=trial_job_template.runtime if hasattr(trial_job_template, 'runtime') else None,
                 initializer=trial_job_template.initializer if hasattr(trial_job_template, 'initializer') else None,
-                options=[lambda job_spec, trainer, backend: job_spec.setdefault("metadata", {}).update({"name": trial_name})],
+                options=[_set_trial_name],
             )
             
             # Wait for training job to complete.
@@ -666,11 +699,16 @@ class ContainerBackend(RuntimeBackend):
                 for pattern in metric_patterns:
                     matches = re.findall(pattern, line)
                     for metric_name, metric_value in matches:
-                        try:
-                            metrics[metric_name] = float(metric_value)
-                            logger.debug(f"Extracted metric {metric_name}={metric_value} from {trial_name}")
-                        except ValueError:
-                            continue
+                            try:
+                                metrics[metric_name] = float(metric_value)
+                                logger.debug(
+                                    "Extracted metric %s=%s from %s",
+                                    metric_name,
+                                    metric_value,
+                                    trial_name,
+                                )
+                            except ValueError:
+                                continue
             
             if not metrics:
                 logger.warning(f"No metrics found in logs for trial {trial_name}")
@@ -730,6 +768,15 @@ class ContainerBackend(RuntimeBackend):
                             f"New best trial: {trial_name} "
                             f"({objective.metric}={current_value} vs {best_value})"
                         )
+
+                def _metric_entry(name, value):
+                    return {
+                        "name": name,
+                        "value": value,
+                        "latest": value,
+                        "max": value,
+                        "min": value,
+                    }
             
             if should_update:
                 optimal_trial_data = {
@@ -740,7 +787,7 @@ class ContainerBackend(RuntimeBackend):
                     ],
                     "observation": {
                         "metrics": [
-                            {"name": name, "value": value, "latest": value, "max": value, "min": value}
+                            _metric_entry(name, value)
                             for name, value in metrics.items()
                         ]
                     },
@@ -958,9 +1005,11 @@ class ContainerBackend(RuntimeBackend):
 
         if experiment_data.get("status") and experiment_data["status"].get("conditions"):
             for condition in experiment_data["status"]["conditions"]:
-                if condition.get("type") == constants.EXPERIMENT_SUCCEEDED and condition.get("status") == "True":
+                cond_type = condition.get("type")
+                cond_status = condition.get("status")
+                if cond_type == constants.EXPERIMENT_SUCCEEDED and cond_status == "True":
                     optimization_job.status = constants.OPTIMIZATION_JOB_COMPLETE
-                elif condition.get("type") == constants.OPTIMIZATION_JOB_FAILED and condition.get("status") == "True":
+                elif cond_type == constants.OPTIMIZATION_JOB_FAILED and cond_status == "True":
                     optimization_job.status = constants.OPTIMIZATION_JOB_FAILED
                 else:
                     for trial in optimization_job.trials:

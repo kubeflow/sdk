@@ -39,6 +39,9 @@ docker = [
 podman = [
   "podman>=5.6.0"
 ]
+optuna = [
+  "optuna>=3.0.0",
+]
 
 [dependency-groups]
 dev = [

@@ -17,7 +17,6 @@ import logging
 from typing import Any, Optional, Union
 
 from kubeflow.common.types import KubernetesBackendConfig
-from kubeflow.optimizer.backends.container.backend import ContainerBackend
 from kubeflow.optimizer.backends.container.types import ContainerBackendConfig
 from kubeflow.optimizer.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.optimizer.constants import constants
@@ -44,8 +43,10 @@ class OptimizerClient:
             backend_config: Backend configuration. Either KubernetesBackendConfig,
                 ContainerBackendConfig, or None to use default KubernetesBackendConfig.
                 
-                - KubernetesBackendConfig: Run hyperparameter optimization on Kubernetes using Katib.
-                - ContainerBackendConfig: Run hyperparameter optimization locally using Docker/Podman
+                                - KubernetesBackendConfig: Run hyperparameter optimization on Kubernetes
+                                    using Katib.
+                                - ContainerBackendConfig: Run hyperparameter optimization locally using
+                                    Docker/Podman containers without requiring a Kubernetes cluster.
                   containers without requiring a Kubernetes cluster.
 
         Raises:
@@ -58,6 +59,10 @@ class OptimizerClient:
         if isinstance(backend_config, KubernetesBackendConfig):
             self.backend = KubernetesBackend(backend_config)
         elif isinstance(backend_config, ContainerBackendConfig):
+            # Lazy import to avoid importing optional runtime dependencies at
+            # module import time. Import the backend only when requested.
+            from kubeflow.optimizer.backends.container.backend import ContainerBackend
+
             self.backend = ContainerBackend(backend_config)
         else:
             raise ValueError(f"Invalid backend config '{backend_config}'")

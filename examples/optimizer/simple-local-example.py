@@ -29,7 +29,7 @@ try:
         TrialConfig,
         TrainJobTemplate,
     )
-    from kubeflow.trainer import CustomTrainer, Runtime
+    from kubeflow.trainer import CustomTrainer
 except ImportError as e:
     print("❌ Import Error!")
     print(f"   {e}")
