@@ -42,12 +42,10 @@ class OptimizerClient:
         Args:
             backend_config: Backend configuration. Either KubernetesBackendConfig,
                 ContainerBackendConfig, or None to use default KubernetesBackendConfig.
-
-                                - KubernetesBackendConfig: Run hyperparameter optimization on Kubernetes
-                                    using Katib.
-                                - ContainerBackendConfig: Run hyperparameter optimization locally using
-                                    Docker/Podman containers without requiring a Kubernetes cluster.
-                  containers without requiring a Kubernetes cluster.
+                - KubernetesBackendConfig: Run hyperparameter optimization on Kubernetes
+                    using Katib.
+                - ContainerBackendConfig: Run hyperparameter optimization locally using
+                    Docker/Podman containers without requiring a Kubernetes cluster.
 
         Raises:
             ValueError: Invalid backend configuration.

@@ -386,9 +386,11 @@ class ContainerBackend(RuntimeBackend):
                 )
             except Exception as status_error:
                 logger.warning(f"Failed to update status: {status_error}")
-            raise RuntimeError(
-                f"Failed to run optimization for {constants.OPTIMIZATION_JOB_KIND}: {optimization_job_name}"
-            ) from e
+            _msg = (
+                f"Failed to run optimization for {constants.OPTIMIZATION_JOB_KIND}: "
+                f"{optimization_job_name}"
+            )
+            raise RuntimeError(_msg) from e
 
         logger.debug(f"{constants.OPTIMIZATION_JOB_KIND} {optimization_job_name} has been created")
 
@@ -624,7 +626,10 @@ class ContainerBackend(RuntimeBackend):
                     "type": constants.EXPERIMENT_SUCCEEDED,
                     "status": "True",
                     "reason": "ExperimentSucceeded",
-                    "message": f"Completed {succeeded_trials}/{trial_config.num_trials} trials successfully",
+                    "message": (
+                        f"Completed {succeeded_trials}/{trial_config.num_trials} "
+                        "trials successfully"
+                    ),
                 }
             )
         else:

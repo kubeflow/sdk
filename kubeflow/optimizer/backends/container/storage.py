@@ -332,7 +332,13 @@ def update_experiment_status(
 
     Example:
         >>> update_experiment_status(
-        ...     "/path/to/storage", "job-123", {"trials": 5, "trialsSucceeded": 3, "trialsRunning": 2}
+        ...     "/path/to/storage",
+        ...     "job-123",
+        ...     {
+        ...         "trials": 5,
+        ...         "trialsSucceeded": 3,
+        ...         "trialsRunning": 2,
+        ...     },
         ... )
     """
     # Load current experiment
