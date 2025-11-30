@@ -352,8 +352,8 @@ class KubernetesBackend(RuntimeBackend):
         if pod_name is None and follow:
             import time
 
-            timeout = 120     # seconds
-            interval = 2      # seconds
+            timeout = 120  # seconds
+            interval = 2  # seconds
             waited = 0
 
             while waited < timeout:
