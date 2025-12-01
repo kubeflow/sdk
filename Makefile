@@ -63,6 +63,7 @@ verify: install-dev  ## install all required tools
 	@uv lock --check
 	@uv run ruff check --show-fixes --output-format=github .
 	@uv run ruff format --check kubeflow
+	@uv run ty check kubeflow/hub
 
 .PHONY: uv-venv
 uv-venv:  ## Create uv virtual environment

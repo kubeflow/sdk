@@ -120,6 +120,42 @@ optimization_id = OptimizerClient().optimize(
 print(f"OptimizationJob created: {optimization_id}")
 ```
 
+### Manage models with Model Registry
+
+**Install Model Registry support:**
+```bash
+pip install 'kubeflow[hub]'
+```
+
+To install the Model Registry server, see the [installation guide](https://www.kubeflow.org/docs/components/model-registry/installation/#standalone-installation).
+
+```python
+from kubeflow.hub import ModelRegistryClient
+
+client = ModelRegistryClient("https://model-registry.kubeflow.svc.cluster.local", author="Your Name")
+
+# Register a model
+model = client.register_model(
+    name="my-model",
+    uri="s3://bucket/path/to/model",
+    version="v1.0.0",
+    model_format_name="pytorch",
+    model_format_version="2.0",
+    version_description="My trained model"
+)
+
+# Get a registered model
+model = client.get_model("my-model")
+
+# List all models
+for model in client.list_models():
+    print(f"Model: {model.name}")
+
+# List model versions
+for version in client.list_model_versions("my-model"):
+    print(f"Version: {version.name}")
+```
+
 ## Local Development
 
 Kubeflow Trainer client supports local development without needing a Kubernetes cluster.
@@ -149,8 +185,8 @@ job_id = client.train(trainer=CustomTrainer(func=train_fn))
 | --------------------------- | ---------------- | --------------- | --------------------------------------------------------------------- |
 | **Kubeflow Trainer**        | ✅ **Available** | v2.0.0+         | Train and fine-tune AI models with various frameworks                 |
 | **Kubeflow Katib**          | ✅ **Available** | v0.19.0+        | Hyperparameter optimization                                           |
+| **Kubeflow Model Registry** | ✅ **Available** | v0.3.0+         | Manage model artifacts, versions and ML artifacts metadata            |
 | **Kubeflow Pipelines**      | 🚧 Planned       | TBD             | Build, run, and track AI workflows                                    |
-| **Kubeflow Model Registry** | 🚧 Planned       | TBD             | Manage model artifacts, versions and ML artifacts metadata            |
 | **Kubeflow Spark Operator** | 🚧 Planned       | TBD             | Manage Spark applications for data processing and feature engineering |
 
 ## Community
