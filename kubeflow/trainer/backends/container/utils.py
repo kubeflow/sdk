@@ -211,3 +211,102 @@ def aggregate_container_statuses(adapter, containers: list[dict]) -> str:
     """
     statuses = [get_container_status(adapter, c["id"]) for c in containers]
     return aggregate_status_from_containers(statuses)
+
+
+def build_initializer_command(initializer: types.BaseInitializer, init_type: str) -> list[str]:
+    """
+    Build the command for an initializer container.
+
+    Args:
+        initializer: Dataset or model initializer configuration.
+        init_type: Type of initializer ("dataset" or "model").
+
+    Returns:
+        Command list for the initializer container.
+    """
+    # Use the training-operator initializer script
+    # The initializer script is expected to be available in the image
+    python_cmd = (
+        "python -m kubeflow.storage_initializer.s3 "
+        if isinstance(initializer, (types.S3DatasetInitializer, types.S3ModelInitializer))
+        else "python -m kubeflow.storage_initializer.hugging_face "
+        if isinstance(
+            initializer, (types.HuggingFaceDatasetInitializer, types.HuggingFaceModelInitializer)
+        )
+        else "python -m kubeflow.storage_initializer.datacache "
+    )
+
+    return ["bash", "-c", python_cmd]
+
+
+def build_initializer_env(initializer: types.BaseInitializer, init_type: str) -> dict[str, str]:
+    """
+    Build environment variables for an initializer container.
+
+    Args:
+        initializer: Dataset or model initializer configuration.
+        init_type: Type of initializer ("dataset" or "model").
+
+    Returns:
+        Dictionary of environment variables.
+    """
+    env = {
+        "STORAGE_URI": initializer.storage_uri,
+    }
+
+    # Set the output path based on initializer type
+    if init_type == "dataset":
+        env["OUTPUT_PATH"] = constants.DATASET_PATH
+    else:  # model
+        env["OUTPUT_PATH"] = constants.MODEL_PATH
+
+    # Add optional fields based on initializer type
+    if isinstance(
+        initializer, (types.HuggingFaceDatasetInitializer, types.HuggingFaceModelInitializer)
+    ):
+        if initializer.access_token:
+            env["ACCESS_TOKEN"] = initializer.access_token
+        if hasattr(initializer, "ignore_patterns") and initializer.ignore_patterns:
+            env["IGNORE_PATTERNS"] = ",".join(initializer.ignore_patterns)
+
+    elif isinstance(initializer, (types.S3DatasetInitializer, types.S3ModelInitializer)):
+        if initializer.endpoint:
+            env["ENDPOINT"] = initializer.endpoint
+        if initializer.access_key_id:
+            env["ACCESS_KEY_ID"] = initializer.access_key_id
+        if initializer.secret_access_key:
+            env["SECRET_ACCESS_KEY"] = initializer.secret_access_key
+        if initializer.region:
+            env["REGION"] = initializer.region
+        if initializer.role_arn:
+            env["ROLE_ARN"] = initializer.role_arn
+        if hasattr(initializer, "ignore_patterns") and initializer.ignore_patterns:
+            env["IGNORE_PATTERNS"] = ",".join(initializer.ignore_patterns)
+
+    elif isinstance(initializer, types.DataCacheInitializer):
+        env["CLUSTER_SIZE"] = str(initializer.num_data_nodes + 1)
+        env["METADATA_LOC"] = initializer.metadata_loc
+        if initializer.head_cpu:
+            env["HEAD_CPU"] = initializer.head_cpu
+        if initializer.head_mem:
+            env["HEAD_MEM"] = initializer.head_mem
+        if initializer.worker_cpu:
+            env["WORKER_CPU"] = initializer.worker_cpu
+        if initializer.worker_mem:
+            env["WORKER_MEM"] = initializer.worker_mem
+        if initializer.iam_role:
+            env["IAM_ROLE"] = initializer.iam_role
+
+    return env
+
+
+def get_initializer_image() -> str:
+    """
+    Get the container image for initializers.
+
+    Returns:
+        Container image name for initializers.
+    """
+    # Use the training-operator image which contains initializer scripts
+    # This can be made configurable via backend config in the future
+    return "kubeflow/training-operator:latest"

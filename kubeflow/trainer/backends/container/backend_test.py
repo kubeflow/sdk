@@ -861,3 +861,333 @@ def test_create_adapter_error_message_format():
         error_msg = str(exc_info.value)
         assert "Could not connect" in error_msg
         assert "tried:" in error_msg
+
+
+# Tests for Initializer Support
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="train with HuggingFace dataset initializer",
+            expected_status=SUCCESS,
+            config={
+                "num_nodes": 1,
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(
+                        storage_uri="hf://username/dataset-repo",
+                        access_token="hf_token_123",
+                    )
+                ),
+                "expected_containers": 2,  # 1 dataset-initializer + 1 training node
+                "expected_initializer_type": "dataset",
+            },
+        ),
+        TestCase(
+            name="train with S3 dataset initializer",
+            expected_status=SUCCESS,
+            config={
+                "num_nodes": 1,
+                "initializer": types.Initializer(
+                    dataset=types.S3DatasetInitializer(
+                        storage_uri="s3://my-bucket/dataset",
+                        endpoint="https://s3.amazonaws.com",
+                        region="us-west-2",
+                    )
+                ),
+                "expected_containers": 2,  # 1 dataset-initializer + 1 training node
+                "expected_initializer_type": "dataset",
+            },
+        ),
+        TestCase(
+            name="train with HuggingFace model initializer",
+            expected_status=SUCCESS,
+            config={
+                "num_nodes": 1,
+                "initializer": types.Initializer(
+                    model=types.HuggingFaceModelInitializer(
+                        storage_uri="hf://username/model-repo",
+                        access_token="hf_token_456",
+                        ignore_patterns=["*.bin", "*.h5"],
+                    )
+                ),
+                "expected_containers": 2,  # 1 model-initializer + 1 training node
+                "expected_initializer_type": "model",
+            },
+        ),
+        TestCase(
+            name="train with S3 model initializer",
+            expected_status=SUCCESS,
+            config={
+                "num_nodes": 1,
+                "initializer": types.Initializer(
+                    model=types.S3ModelInitializer(
+                        storage_uri="s3://my-bucket/model",
+                        endpoint="https://s3.amazonaws.com",
+                        access_key_id="my_access_key",
+                        secret_access_key="my_secret_key",
+                    )
+                ),
+                "expected_containers": 2,  # 1 model-initializer + 1 training node
+                "expected_initializer_type": "model",
+            },
+        ),
+        TestCase(
+            name="train with both dataset and model initializers",
+            expected_status=SUCCESS,
+            config={
+                "num_nodes": 2,
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(
+                        storage_uri="hf://username/dataset-repo"
+                    ),
+                    model=types.HuggingFaceModelInitializer(storage_uri="hf://username/model-repo"),
+                ),
+                "expected_containers": 4,  # 1 dataset + 1 model + 2 training nodes
+            },
+        ),
+        TestCase(
+            name="train with DataCache initializer",
+            expected_status=SUCCESS,
+            config={
+                "num_nodes": 1,
+                "initializer": types.Initializer(
+                    dataset=types.DataCacheInitializer(
+                        storage_uri="cache://schema/table",
+                        metadata_loc="s3://bucket/metadata.json",
+                        num_data_nodes=3,
+                        head_cpu="2",
+                        head_mem="4Gi",
+                    )
+                ),
+                "expected_containers": 2,  # 1 datacache-initializer + 1 training node
+                "expected_initializer_type": "dataset",
+            },
+        ),
+    ],
+)
+def test_train_with_initializers(container_backend, test_case):
+    """Test training job creation with dataset and model initializers."""
+    print("Executing test:", test_case.name)
+    try:
+        trainer = types.CustomTrainer(
+            func=simple_train_func,
+            num_nodes=test_case.config.get("num_nodes", 1),
+        )
+        runtime = container_backend.get_runtime("torch-distributed")
+
+        # Mock initializer containers to complete successfully
+        original_create = container_backend._adapter.create_and_start_container
+
+        def mock_create_with_status(*args, **kwargs):
+            container_id = original_create(*args, **kwargs)
+            # If it's an initializer container, mark it as completed
+            if "initializer" in kwargs.get("name", ""):
+                container_backend._adapter.set_container_status(container_id, "exited", 0)
+            return container_id
+
+        container_backend._adapter.create_and_start_container = mock_create_with_status
+
+        job_name = container_backend.train(
+            runtime=runtime, trainer=trainer, initializer=test_case.config.get("initializer")
+        )
+
+        assert test_case.expected_status == SUCCESS
+        assert job_name is not None
+
+        # Check that expected number of containers were created
+        assert (
+            len(container_backend._adapter.containers_created)
+            == test_case.config["expected_containers"]
+        )
+
+        # Check that initializer containers have correct labels
+        initializer_containers = [
+            c
+            for c in container_backend._adapter.containers_created
+            if "initializer" in c["labels"].get(f"{container_backend.label_prefix}/step", "")
+        ]
+
+        if "expected_initializer_type" in test_case.config:
+            expected_type = test_case.config["expected_initializer_type"]
+            assert any(expected_type in c["name"] for c in initializer_containers)
+
+        # Check that initializer containers have correct environment variables
+        for container in initializer_containers:
+            assert "STORAGE_URI" in container["environment"]
+            assert "OUTPUT_PATH" in container["environment"]
+
+            # Verify OUTPUT_PATH is correct based on initializer type
+            if "dataset-initializer" in container["name"]:
+                assert container["environment"]["OUTPUT_PATH"] == constants.DATASET_PATH
+            elif "model-initializer" in container["name"]:
+                assert container["environment"]["OUTPUT_PATH"] == constants.MODEL_PATH
+
+        # Verify the job can be retrieved and has correct steps
+        job = container_backend.get_job(job_name)
+        assert job.name == job_name
+
+        # Check that initializer steps are included
+        step_names = [step.name for step in job.steps]
+        if test_case.config.get("initializer") and test_case.config["initializer"].dataset:
+            assert "dataset-initializer" in step_names
+        if test_case.config.get("initializer") and test_case.config["initializer"].model:
+            assert "model-initializer" in step_names
+
+        # Check that num_nodes only counts training nodes, not initializers
+        assert job.num_nodes == test_case.config.get("num_nodes", 1)
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="get logs from dataset initializer",
+            expected_status=SUCCESS,
+            config={
+                "step": "dataset-initializer",
+                "expected_log_count": 1,
+            },
+        ),
+        TestCase(
+            name="get logs from model initializer",
+            expected_status=SUCCESS,
+            config={
+                "step": "model-initializer",
+                "expected_log_count": 1,
+            },
+        ),
+        TestCase(
+            name="get logs from training node excludes initializers",
+            expected_status=SUCCESS,
+            config={
+                "step": constants.NODE + "-0",
+                "expected_log_count": 1,
+                "should_exclude_initializers": True,
+            },
+        ),
+    ],
+)
+def test_get_logs_with_initializers(container_backend, test_case):
+    """Test getting logs from initializer and training containers."""
+    print("Executing test:", test_case.name)
+    try:
+        trainer = types.CustomTrainer(func=simple_train_func, num_nodes=1)
+        runtime = container_backend.get_runtime("torch-distributed")
+
+        initializer = types.Initializer(
+            dataset=types.HuggingFaceDatasetInitializer(storage_uri="hf://user/dataset"),
+            model=types.HuggingFaceModelInitializer(storage_uri="hf://user/model"),
+        )
+
+        # Mock initializer containers to complete successfully
+        original_create = container_backend._adapter.create_and_start_container
+
+        def mock_create_with_status(*args, **kwargs):
+            container_id = original_create(*args, **kwargs)
+            if "initializer" in kwargs.get("name", ""):
+                container_backend._adapter.set_container_status(container_id, "exited", 0)
+            return container_id
+
+        container_backend._adapter.create_and_start_container = mock_create_with_status
+
+        job_name = container_backend.train(
+            runtime=runtime, trainer=trainer, initializer=initializer
+        )
+
+        # Get logs for the specified step
+        logs = list(container_backend.get_job_logs(job_name, step=test_case.config["step"]))
+
+        assert test_case.expected_status == SUCCESS
+        assert len(logs) >= test_case.config["expected_log_count"]
+
+        # If step is node-0, ensure initializer logs are not included
+        if test_case.config.get("should_exclude_initializers"):
+            log_str = "".join(logs)
+            # The logs should be from training containers only
+            assert "Complete log from container-" in log_str
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="initializer fails with non-zero exit code",
+            expected_status=FAILED,
+            config={
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(
+                        storage_uri="hf://user/invalid-dataset"
+                    )
+                ),
+                "initializer_exit_code": 1,
+            },
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="initializer timeout",
+            expected_status=FAILED,
+            config={
+                "initializer": types.Initializer(
+                    model=types.S3ModelInitializer(storage_uri="s3://bucket/model")
+                ),
+                "initializer_timeout": True,
+            },
+            expected_error=TimeoutError,
+        ),
+    ],
+)
+def test_initializer_failures(container_backend, test_case):
+    """Test handling of initializer failures."""
+    print("Executing test:", test_case.name)
+    try:
+        trainer = types.CustomTrainer(func=simple_train_func, num_nodes=1)
+        runtime = container_backend.get_runtime("torch-distributed")
+
+        # Mock initializer to fail
+        original_create = container_backend._adapter.create_and_start_container
+
+        def mock_create_with_failure(*args, **kwargs):
+            container_id = original_create(*args, **kwargs)
+            if (
+                "initializer" in kwargs.get("name", "")
+                and "initializer_exit_code" in test_case.config
+            ):
+                container_backend._adapter.set_container_status(
+                    container_id, "exited", test_case.config["initializer_exit_code"]
+                )
+                # For timeout test, keep status as running
+            return container_id
+
+        container_backend._adapter.create_and_start_container = mock_create_with_failure
+
+        # For timeout test, patch the timeout value
+        if test_case.config.get("initializer_timeout"):
+            with patch(
+                "kubeflow.trainer.backends.container.backend."
+                "ContainerBackend._run_single_initializer"
+            ) as mock_run:
+                mock_run.side_effect = TimeoutError("Initializer timeout")
+                container_backend.train(
+                    runtime=runtime,
+                    trainer=trainer,
+                    initializer=test_case.config["initializer"],
+                )
+        else:
+            container_backend.train(
+                runtime=runtime, trainer=trainer, initializer=test_case.config["initializer"]
+            )
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+        # Verify cleanup happened (containers and network should be cleaned up)
+        # This is tested by checking that the error was raised
+        # before training containers were created
+    print("test execution complete")

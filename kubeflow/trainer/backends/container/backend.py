@@ -259,6 +259,26 @@ class ContainerBackend(RuntimeBackend):
             workdir = container_utils.create_workdir(trainjob_name)
             logger.debug(f"Created working directory: {workdir}")
 
+            # Create network for multi-node communication and initializers
+            num_nodes = trainer.num_nodes or runtime.trainer.num_nodes or 1
+            logger.debug(f"Creating network for {num_nodes} nodes")
+
+            network_id = self._adapter.create_network(
+                name=f"{trainjob_name}-net",
+                labels={
+                    f"{self.label_prefix}/trainjob-name": trainjob_name,
+                    f"{self.label_prefix}/runtime-name": runtime.name,
+                    f"{self.label_prefix}/workdir": workdir,
+                },
+            )
+            logger.debug(f"Created network: {network_id}")
+
+            # Run initializers if configured
+            if initializer:
+                logger.debug("Running initializers")
+                self._run_initializers(trainjob_name, initializer, workdir, network_id)
+                logger.debug("Initializers completed successfully")
+
             # Generate training script code (inline, not written to disk)
             training_script_code = container_utils.get_training_script_code(trainer)
             logger.debug("Generated training script code")
@@ -276,10 +296,6 @@ class ContainerBackend(RuntimeBackend):
             # Construct pre-run command to install packages
             pre_install_cmd = container_utils.build_pip_install_cmd(trainer)
 
-            # Create network for multi-node communication
-            num_nodes = trainer.num_nodes or runtime.trainer.num_nodes or 1
-            logger.debug(f"Creating network for {num_nodes} nodes")
-
             # Determine number of processes per node from GPU count
             # For GPU training: spawn one process per GPU for optimal utilization
             # For CPU training: use single process (PyTorch parallelizes internally via threads)
@@ -295,16 +311,6 @@ class ContainerBackend(RuntimeBackend):
                     )
             else:
                 logger.debug("No GPU specified, using 1 process per node")
-
-            network_id = self._adapter.create_network(
-                name=f"{trainjob_name}-net",
-                labels={
-                    f"{self.label_prefix}/trainjob-name": trainjob_name,
-                    f"{self.label_prefix}/runtime-name": runtime.name,
-                    f"{self.label_prefix}/workdir": workdir,
-                },
-            )
-            logger.debug(f"Created network: {network_id}")
 
             # Create N containers (one per node)
             container_ids: list[str] = []
@@ -468,6 +474,156 @@ class ContainerBackend(RuntimeBackend):
 
         return containers
 
+    def _run_initializers(
+        self,
+        job_name: str,
+        initializer: types.Initializer,
+        workdir: str,
+        network_id: str,
+    ):
+        """
+        Run dataset and model initializers before training starts.
+
+        Args:
+            job_name: Name of the training job.
+            initializer: Initializer configuration.
+            workdir: Working directory path on host.
+            network_id: Network ID for containers.
+
+        Raises:
+            RuntimeError: If initializer fails to complete successfully.
+        """
+        # Get initializer image
+        init_image = container_utils.get_initializer_image()
+
+        # Pull initializer image if needed
+        container_utils.maybe_pull_image(self._adapter, init_image, self.cfg.pull_policy)
+
+        # Run dataset initializer if configured
+        if initializer.dataset:
+            logger.debug("Running dataset initializer")
+            self._run_single_initializer(
+                job_name=job_name,
+                initializer_config=initializer.dataset,
+                init_type="dataset",
+                image=init_image,
+                workdir=workdir,
+                network_id=network_id,
+            )
+            logger.debug("Dataset initializer completed")
+
+        # Run model initializer if configured
+        if initializer.model:
+            logger.debug("Running model initializer")
+            self._run_single_initializer(
+                job_name=job_name,
+                initializer_config=initializer.model,
+                init_type="model",
+                image=init_image,
+                workdir=workdir,
+                network_id=network_id,
+            )
+            logger.debug("Model initializer completed")
+
+    def _run_single_initializer(
+        self,
+        job_name: str,
+        initializer_config: types.BaseInitializer,
+        init_type: str,
+        image: str,
+        workdir: str,
+        network_id: str,
+    ):
+        """
+        Run a single initializer container and wait for completion.
+
+        Args:
+            job_name: Name of the training job.
+            initializer_config: Initializer configuration.
+            init_type: Type of initializer ("dataset" or "model").
+            image: Container image to use.
+            workdir: Working directory path on host.
+            network_id: Network ID for containers.
+
+        Raises:
+            RuntimeError: If initializer fails.
+        """
+        container_name = f"{job_name}-{init_type}-initializer"
+
+        # Build command and environment
+        command = container_utils.build_initializer_command(initializer_config, init_type)
+        env = container_utils.build_initializer_env(initializer_config, init_type)
+
+        # Create labels for tracking
+        labels = {
+            f"{self.label_prefix}/trainjob-name": job_name,
+            f"{self.label_prefix}/step": f"{init_type}-initializer",
+            f"{self.label_prefix}/network-id": network_id,
+        }
+
+        # Mount the shared volume
+        volumes = {
+            workdir: {
+                "bind": constants.WORKSPACE_PATH,
+                "mode": "rw",
+            }
+        }
+
+        logger.debug(f"Starting {init_type} initializer container: {container_name}")
+
+        # Create and start the initializer container
+        container_id = self._adapter.create_and_start_container(
+            image=image,
+            command=command,
+            name=container_name,
+            network_id=network_id,
+            environment=env,
+            labels=labels,
+            volumes=volumes,
+            working_dir=constants.WORKSPACE_PATH,
+        )
+
+        logger.debug(f"Initializer container started: {container_id[:12]}")
+
+        # Wait for the initializer to complete
+        try:
+            import time
+
+            timeout = 600  # 10 minutes timeout for initialization
+            polling_interval = 2
+            elapsed = 0
+
+            while elapsed < timeout:
+                status, exit_code = self._adapter.container_status(container_id)
+
+                if status == "exited":
+                    if exit_code == 0:
+                        logger.debug(f"{init_type} initializer completed successfully")
+                        return
+                    else:
+                        # Get logs for debugging
+                        logs = list(self._adapter.container_logs(container_id, follow=False))
+                        error_msg = (
+                            f"{init_type} initializer failed with exit code {exit_code}. "
+                            f"Logs: {' '.join(logs[-10:]) if logs else 'No logs available'}"
+                        )
+                        raise RuntimeError(error_msg)
+
+                time.sleep(polling_interval)
+                elapsed += polling_interval
+
+            raise TimeoutError(f"{init_type} initializer did not complete within {timeout} seconds")
+
+        except Exception as e:
+            logger.error(f"Error running {init_type} initializer: {e}")
+            # Clean up the failed container
+            from contextlib import suppress
+
+            with suppress(Exception):
+                self._adapter.stop_container(container_id, timeout=5)
+                self._adapter.remove_container(container_id, force=True)
+            raise
+
     def __get_trainjob_from_containers(
         self, job_name: str, containers: list[dict]
     ) -> types.TrainJob:
@@ -529,8 +685,8 @@ class ContainerBackend(RuntimeBackend):
                 )
             )
 
-        # Get num_nodes from container count
-        num_nodes = len(containers)
+        # Count only training nodes (not initializers) for num_nodes
+        num_nodes = sum(1 for step in steps if step.name.startswith(constants.NODE))
 
         return types.TrainJob(
             name=job_name,
@@ -596,11 +752,20 @@ class ContainerBackend(RuntimeBackend):
         """Get logs for a training job by querying container runtime."""
         containers = self._get_job_containers(name)
 
-        want_all = step == constants.NODE + "-0"
+        # Check if requesting logs from all node containers (default behavior)
+        want_all_nodes = step == constants.NODE + "-0"
+
         for container in sorted(containers, key=lambda c: c["name"]):
             container_step = container["labels"].get(f"{self.label_prefix}/step", "")
-            if not want_all and container_step != step:
+
+            # If want_all_nodes, only show node containers, not initializers
+            if want_all_nodes:
+                if not container_step.startswith(constants.NODE):
+                    continue
+            # Otherwise, match the specific step (could be initializer or node)
+            elif container_step != step:
                 continue
+
             try:
                 yield from self._adapter.container_logs(container["id"], follow)
             except Exception as e:
