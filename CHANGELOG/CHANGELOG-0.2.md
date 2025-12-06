@@ -1,3 +1,17 @@
+# [0.2.1](https://github.com/kubeflow/sdk/releases/tag/0.2.1) (2025-11-25)
+
+## New Features
+
+- feat(docs): Update README with announcement blog post ([#157](https://github.com/kubeflow/sdk/pull/157)) by @andreyvelich
+
+## Bug Fixes
+
+- fix(ci): Move permissions to the workflow root ([#177](https://github.com/kubeflow/sdk/pull/177)) by @kramaranya
+- fix: pip install with --user argument fails with image running in python virtual environment ([#162](https://github.com/kubeflow/sdk/pull/162)) by @briangallagher
+- fix(trainer): Remove namespace from ClusterTrainingRuntime exception messages ([#166](https://github.com/kubeflow/sdk/pull/166)) by @astefanutti
+- fix(trainer): Use PyTorch static rendezvous in container backend ([#168](https://github.com/kubeflow/sdk/pull/168)) by @astefanutti
+- fix(trainer): Fix listing containers with Podman backend ([#154](https://github.com/kubeflow/sdk/pull/154)) by @astefanutti
+
 # [0.2.0](https://github.com/kubeflow/sdk/releases/tag/0.2.0) (2025-11-06)
 
 ## New Features

@@ -55,7 +55,12 @@ def _build_runtime() -> types.Runtime:
                 "--no-warn-script-location --index-url https://pypi.org/simple "
                 "--extra-index-url https://private.repo.com/simple "
                 "--extra-index-url https://internal.company.com/simple "
-                "--user torch numpy custom-package\n"
+                "--user torch numpy custom-package ||\n"
+                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
+                "--no-warn-script-location --index-url https://pypi.org/simple "
+                "--extra-index-url https://private.repo.com/simple "
+                "--extra-index-url https://internal.company.com/simple "
+                "torch numpy custom-package\n"
             ),
         ),
         TestCase(
@@ -72,7 +77,10 @@ def _build_runtime() -> types.Runtime:
                 "fi\n\n"
                 "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
                 "--no-warn-script-location --index-url https://pypi.org/simple "
-                "--user torch numpy custom-package\n"
+                "--user torch numpy custom-package ||\n"
+                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
+                "--no-warn-script-location --index-url https://pypi.org/simple "
+                "torch numpy custom-package\n"
             ),
         ),
         TestCase(
@@ -95,7 +103,12 @@ def _build_runtime() -> types.Runtime:
                 "--no-warn-script-location --index-url https://pypi.org/simple "
                 "--extra-index-url https://private.repo.com/simple "
                 "--extra-index-url https://internal.company.com/simple "
-                "--user torch numpy custom-package\n"
+                "--user torch numpy custom-package ||\n"
+                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
+                "--no-warn-script-location --index-url https://pypi.org/simple "
+                "--extra-index-url https://private.repo.com/simple "
+                "--extra-index-url https://internal.company.com/simple "
+                "torch numpy custom-package\n"
             ),
         ),
         TestCase(
@@ -112,18 +125,19 @@ def _build_runtime() -> types.Runtime:
                 "fi\n\n"
                 "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
                 f"--no-warn-script-location --index-url "
-                f"{constants.DEFAULT_PIP_INDEX_URLS[0]} --user torch numpy\n"
+                f"{constants.DEFAULT_PIP_INDEX_URLS[0]} --user torch numpy ||\n"
+                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
+                f"--no-warn-script-location --index-url "
+                f"{constants.DEFAULT_PIP_INDEX_URLS[0]} torch numpy\n"
             ),
         ),
     ],
 )
 def test_get_script_for_python_packages(test_case):
     """Test get_script_for_python_packages with various configurations."""
-
     script = utils.get_script_for_python_packages(
         packages_to_install=test_case.config["packages_to_install"],
         pip_index_urls=test_case.config["pip_index_urls"],
-        is_mpi=test_case.config["is_mpi"],
     )
 
     assert test_case.expected_output == script
