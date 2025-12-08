@@ -395,8 +395,8 @@ Trainer definitions live under:
 
 #### CustomTrainer (`kubeflow.trainer.types.CustomTrainer`)
 
-Purpose: For custom, self-contained training functions that you write yourself  
-Use case: Bring your own training code.  
+Purpose: For custom, self-contained training functions that you write yourself
+Use case: Bring your own training code.
 Flexibility: Maximum control over training logic.
 
 Key attributes:
@@ -410,8 +410,8 @@ Key attributes:
 
 #### CustomTrainerContainer (`kubeflow.trainer.types.CustomTrainerContainer`)
 
-Purpose: For self-managed custom container images built by the user.  
-Use case: Bring your own training image.  
+Purpose: For self-managed custom container images built by the user.
+Use case: Bring your own training image.
 Flexibility: Full container-level control.
 
 Key attributes:
@@ -421,7 +421,7 @@ Key attributes:
 
 #### BuiltinTrainer (`kubeflow.trainer.types.BuiltinTrainer`)
 
-Purpose: Pre-built trainers with built-in fine-tuning logic.  
+Purpose: Pre-built trainers with built-in fine-tuning logic.
 Use case: Quick training using supported frameworks.
 
 Key attributes:
