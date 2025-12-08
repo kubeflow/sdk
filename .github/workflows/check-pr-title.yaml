@@ -28,6 +28,7 @@ jobs:
             fix
             feat
             revert
+            docs
 
           scopes: |
             ci
