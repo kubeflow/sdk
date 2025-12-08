@@ -367,49 +367,123 @@ class TrainingJobManager:
 ```
 
 ## Component: Trainer
+## Client Entrypoints
 
-**Client entrypoints**: `kubeflow.trainer.api.TrainerClient` and trainer definitions such as `CustomTrainer`
+This repository provides multiple high-level client entrypoints to interact with training workflows:
 
-**Trainer Types**:
+- `TrainerClient` – Main entrypoint to submit and manage training jobs.
+- `OptimizerClient` – Used to configure and manage optimization workflows such as hyperparameter tuning and performance optimization.
 
-**CustomTrainer** (`kubeflow.trainer.types.CustomTrainer`):
+These clients abstract backend-specific logic and provide a unified developer interface.
 
-- **Purpose**: For custom, self-contained training functions that you write yourself
-- **Flexibility**: Complete control over the training process
-- **Use case**: "Bring your own training code" - maximum flexibility
-- **Key attributes**: `func` (your training function), `func_args`, `packages_to_install`, `pip_index_urls`, `num_nodes`, `resources_per_node`, `env`
+---
 
-**CustomTrainerContainer** (`kubeflow.trainer.types.CustomTrainerContainer`):
+## Components
 
-- **Purpose**: For custom, self-contained container image that you create yourself
-- **Flexibility**: Complete control over the training process
-- **Use case**: "Bring your own training image" - maximum flexibility
-- **Key attributes**: `num_nodes`, `resources_per_node`, `env`
+### Trainer
 
-**BuiltinTrainer** (`kubeflow.trainer.types.BuiltinTrainer`):
+Client entrypoints:
+- `kubeflow.trainer.api.TrainerClient`
+- `kubeflow.trainer.api.OptimizerClient`
 
-- **Purpose**: For pre-built training frameworks with existing fine-tuning logic
-- **Convenience**: Just configure parameters, training logic is already implemented
-- **Use case**: "Use our pre-built trainers" - convenience for common scenarios
-- **Key attributes**: `config` (currently only supports `TorchTuneConfig` for LLM fine-tuning with TorchTune)
+Trainer definitions live under:
+- `kubeflow.trainer.types`
 
-**Backends**:
+---
 
-- `localprocess`: local execution for fast iteration
-- `kubernetes`: K8s-backed jobs, see `backends/kubernetes`
+### Trainer Types
 
-**Typical flow**:
+#### CustomTrainer (`kubeflow.trainer.types.CustomTrainer`)
 
-1. Get runtime, define trainer, submit with `TrainerClient().train(...)`
-2. `wait_for_job_status(...)` then fetch logs with `get_job_logs(...)`
-3. For full example, see README "Run your first PyTorch distributed job"
+Purpose: For custom, self-contained training functions that you write yourself  
+Use case: Bring your own training code.  
+Flexibility: Maximum control over training logic.
 
-**Integration patterns**:
+Key attributes:
+- `func`
+- `func_args`
+- `packages_to_install`
+- `pip_index_urls`
+- `num_nodes`
+- `resources_per_node`
+- `env`
+
+#### CustomTrainerContainer (`kubeflow.trainer.types.CustomTrainerContainer`)
+
+Purpose: For self-managed custom container images built by the user.  
+Use case: Bring your own training image.  
+Flexibility: Full container-level control.
+
+Key attributes:
+- `num_nodes`
+- `resources_per_node`
+- `env`
+
+#### BuiltinTrainer (`kubeflow.trainer.types.BuiltinTrainer`)
+
+Purpose: Pre-built trainers with built-in fine-tuning logic.  
+Use case: Quick training using supported frameworks.
+
+Key attributes:
+- `config` (currently supports `TorchTuneConfig`)
+
+### Backends
+
+Supported backends:
+
+- `localprocess` – local execution for fast iteration
+- `kubernetes` – Kubernetes-backed jobs (see `backends/kubernetes`)
+- `container` – container-based execution backends
+
+Backends are implemented under:
+- `kubeflow.trainer.backends`
+
+New backends should follow existing design patterns, implement proper error handling, and cleanup.
+
+
+### Training Options
+
+Training jobs can be customized using various options:
+
+- Number of nodes (`num_nodes`)
+- Resources per node (CPU, GPU, memory)
+- Environment variables
+- Python package installation
+- Custom container images
+
+These options allow flexible configuration for both local and distributed workloads.
+
+
+### Typical Flow
+
+A typical training flow looks like:
+
+1. Get a runtime
+2. Define a trainer (CustomTrainer, CustomTrainerContainer, or BuiltinTrainer)
+3. Submit job using `TrainerClient().train(...)`
+4. Wait using `wait_for_job_status(...)`
+5. Fetch logs using `get_job_logs(...)`
+
+Example workflows can be found in the README.
+
+
+### Integration Patterns
 
 - Follow existing patterns in `kubeflow.trainer.backends` for new backends
 - Use `kubeflow.trainer.types` for data models and type definitions
 - Implement proper error handling and resource cleanup
 - Include comprehensive tests for backend implementations
+
+
+### Repository Map
+
+Important directories in this repository:
+
+- `kubeflow/trainer/api/` – API clients such as `TrainerClient` and `OptimizerClient`
+- `kubeflow/trainer/types/` – Core data models like `CustomTrainer` and `CustomTrainerContainer`
+- `kubeflow/trainer/backends/` – Backend implementations like Kubernetes, localprocess, and container
+- `tests/` – Unit and integration tests
+- `examples/` – Sample training workflows
 
 ## CI & PRs
 
