@@ -20,10 +20,10 @@ jobs:
 
     steps:
       - name: Checkout Kubeflow SDK repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Checkout Kubeflow Trainer repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: kubeflow/trainer
           ref: ${{ matrix.trainer-ref }}
