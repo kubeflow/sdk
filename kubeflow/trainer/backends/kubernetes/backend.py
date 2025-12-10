@@ -494,7 +494,7 @@ class KubernetesBackend(RuntimeBackend):
                     )
 
             # Sort events by first occurrence time
-            events.sort(key=lambda e: e.first_occurrence or e.event_time)
+            events.sort(key=lambda e: e.first_occurrence)
 
             return events
 
