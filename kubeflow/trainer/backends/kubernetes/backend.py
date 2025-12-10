@@ -410,6 +410,103 @@ class KubernetesBackend(RuntimeBackend):
 
         logger.debug(f"{constants.TRAINJOB_KIND} {self.namespace}/{name} has been deleted")
 
+    def get_job_events(self, name: str) -> list[types.Event]:
+        """Get events for a TrainJob.
+
+        Retrieves all Kubernetes events related to the specified TrainJob and converts them
+        to Event objects. This provides visibility into pod state changes, errors, and other
+        significant occurrences during job execution.
+
+        Args:
+            name: Name of the TrainJob.
+
+        Returns:
+            A list of Event objects sorted by first occurrence time.
+
+        Raises:
+            TimeoutError: Timeout to get TrainJob events.
+            RuntimeError: Failed to get TrainJob events.
+        """
+        events = []
+
+        try:
+            # Get the TrainJob to ensure it exists
+            _ = self.get_job(name)
+
+            # Retrieve events related to the TrainJob
+            # Events are scoped to the namespace and can be filtered by involved object
+            event_response = self.core_api.list_namespaced_event(
+                namespace=self.namespace,
+                async_req=True,
+            ).get(common_constants.DEFAULT_TIMEOUT)
+
+            # Convert to event list
+            event_list = models.IoK8sApiCoreV1EventList.from_dict(event_response.to_dict())
+
+            if not event_list or not event_list.items:
+                return events
+
+            # Get all pod names related to this TrainJob
+            trainjob_pod_names = set()
+            try:
+                pod_response = self.core_api.list_namespaced_pod(
+                    self.namespace,
+                    label_selector=constants.POD_LABEL_SELECTOR.format(trainjob_name=name),
+                    async_req=True,
+                ).get(common_constants.DEFAULT_TIMEOUT)
+
+                pod_list = models.IoK8sApiCoreV1PodList.from_dict(pod_response.to_dict())
+                if pod_list and pod_list.items:
+                    trainjob_pod_names = {pod.metadata.name for pod in pod_list.items if pod.metadata}
+            except Exception:
+                # If unable to get pods, we'll still try to filter events by TrainJob object
+                pass
+
+            # Filter events related to this TrainJob or its pods
+            for event in event_list.items:
+                if not (event.metadata and event.involved_object and event.first_timestamp):
+                    continue
+
+                # Check if event is related to the TrainJob itself or one of its pods
+                involved_object = event.involved_object
+                is_related = False
+
+                # Event for the TrainJob object itself
+                if involved_object.kind == constants.TRAINJOB_KIND and involved_object.name == name:
+                    is_related = True
+                # Event for a pod of this TrainJob
+                elif involved_object.kind == "Pod" and involved_object.name in trainjob_pod_names:
+                    is_related = True
+
+                if is_related:
+                    events.append(
+                        types.Event(
+                            involved_object_kind=involved_object.kind,
+                            involved_object_name=involved_object.name,
+                            message=event.message or "",
+                            reason=event.reason or "",
+                            event_time=event.first_timestamp,
+                            first_occurrence=event.first_timestamp,
+                            last_occurrence=event.last_timestamp,
+                            count=event.count or 1,
+                            type=event.type or "Normal",
+                        )
+                    )
+
+            # Sort events by first occurrence time
+            events.sort(key=lambda e: e.first_occurrence or e.event_time)
+
+            return events
+
+        except TimeoutError:
+            raise TimeoutError(
+                f"Timeout to get events for {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to get events for {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
+            ) from e
+
     def __get_runtime_from_cr(
         self,
         runtime_cr: models.TrainerV1alpha1ClusterTrainingRuntime,

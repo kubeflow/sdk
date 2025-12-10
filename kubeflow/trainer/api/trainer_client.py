@@ -206,6 +206,24 @@ class TrainerClient:
         """
         return self.backend.get_job_logs(name=name, follow=follow, step=step)
 
+    def get_job_events(self, name: str) -> list[types.Event]:
+        """Get events for a TrainJob.
+
+        This provides additional clarity about the state of the TrainJob when logs alone are not sufficient.
+        Events include information about pod state changes, errors, and other significant occurrences.
+
+        Args:
+            name: Name of the TrainJob.
+
+        Returns:
+            A list of Event objects associated with the TrainJob.
+
+        Raises:
+            TimeoutError: Timeout to get a TrainJob.
+            RuntimeError: Failed to get a TrainJob.
+        """
+        return self.backend.get_job_events(name=name)
+
     def wait_for_job_status(
         self,
         name: str,

@@ -68,6 +68,22 @@ class RuntimeBackend(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
+    def get_job_events(self, name: str) -> list[types.Event]:
+        """Get events for a TrainJob.
+
+        Args:
+            name: Name of the TrainJob.
+
+        Returns:
+            A list of Event objects associated with the TrainJob.
+
+        Raises:
+            TimeoutError: Timeout to get TrainJob events.
+            RuntimeError: Failed to get TrainJob events.
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
     def wait_for_job_status(
         self,
         name: str,

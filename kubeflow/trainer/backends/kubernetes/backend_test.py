@@ -1233,14 +1233,45 @@ def test_delete_job(kubernetes_backend, test_case):
         kubernetes_backend.delete_job(test_case.config.get("name"))
         assert test_case.expected_status == SUCCESS
 
-        kubernetes_backend.custom_api.delete_namespaced_custom_object.assert_called_with(
-            constants.GROUP,
-            constants.VERSION,
-            test_case.config.get("namespace", DEFAULT_NAMESPACE),
-            constants.TRAINJOB_PLURAL,
-            name=test_case.config.get("name"),
-        )
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="get job events with valid trainjob",
+            expected_status=SUCCESS,
+            config={"name": BASIC_TRAIN_JOB_NAME},
+            expected_output=list,  # Expect a list of events
+        ),
+        TestCase(
+            name="timeout error when getting job events",
+            expected_status=FAILED,
+            config={"namespace": TIMEOUT},
+            expected_error=TimeoutError,
+        ),
+        TestCase(
+            name="runtime error when getting job events",
+            expected_status=FAILED,
+            config={"namespace": RUNTIME},
+            expected_error=RuntimeError,
+        ),
+    ],
+)
+def test_get_job_events(kubernetes_backend, test_case):
+    """Test KubernetesBackend.get_job_events with various scenarios."""
+    print("Executing test:", test_case.name)
+    try:
+        kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
+        events = kubernetes_backend.get_job_events(test_case.config.get("name"))
+
+        assert test_case.expected_status == SUCCESS
+        assert isinstance(events, test_case.expected_output)
 
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+

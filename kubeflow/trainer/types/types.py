@@ -275,6 +275,34 @@ class TrainJob:
     status: str = common_constants.UNKNOWN
 
 
+# Representation for TrainJob events.
+@dataclass
+class Event:
+    """Event object that represents a Kubernetes event related to a TrainJob.
+
+    Attributes:
+        involved_object_kind: The kind of object this event is about (e.g., 'TrainJob', 'Pod').
+        involved_object_name: The name of the object this event is about.
+        message: Human-readable description of the event.
+        reason: Short, machine understandable string describing why this event was generated.
+        event_time: The time at which the event was first recorded.
+        first_occurrence: The time at which the event was first observed.
+        last_occurrence: The time at which the most recent occurrence of this event was recorded.
+        count: The number of times this event has occurred.
+        type: Type of this event (Normal, Warning), new types could be added in the future.
+    """
+
+    involved_object_kind: str
+    involved_object_name: str
+    message: str
+    reason: str
+    event_time: datetime
+    first_occurrence: Optional[datetime] = None
+    last_occurrence: Optional[datetime] = None
+    count: int = 1
+    type: str = "Normal"
+
+
 @dataclass
 class BaseInitializer(abc.ABC):
     """Base class for all initializers"""
