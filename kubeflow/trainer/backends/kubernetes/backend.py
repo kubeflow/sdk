@@ -503,6 +503,8 @@ class KubernetesBackend(RuntimeBackend):
                 f"Timeout to get events for {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
             )
         except Exception as e:
+            if isinstance(e, RuntimeError):
+                raise
             raise RuntimeError(
                 f"Failed to get events for {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
             ) from e
