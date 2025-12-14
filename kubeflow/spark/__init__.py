@@ -61,6 +61,7 @@ For more examples, see the examples/ directory.
 from kubeflow.spark.base_client import BaseSparkClient
 from kubeflow.spark.batch_client import BatchSparkClient
 from kubeflow.spark.session_client import SparkSessionClient
+from kubeflow.spark.spark_client import SparkClient, SparkClientBuilder
 
 # Import backends and configs
 from kubeflow.spark.backends import (
@@ -79,6 +80,7 @@ from kubeflow.spark.backends import (
 from kubeflow.spark.models import (
     # States & Enums
     ApplicationState,
+    SparkConnectState,
     # Status Models
     ApplicationStatus,
     BatchSchedulerConfig,
@@ -93,6 +95,9 @@ from kubeflow.spark.models import (
     # Session Models (for Spark Connect)
     SessionInfo,
     SessionMetrics,
+    # SparkConnect Server (auto-provisioning)
+    SparkConnectServerConfig,
+    SparkConnectServerStatus,
     # Request & Response
     SparkApplicationRequest,
     SparkApplicationResponse,
@@ -113,6 +118,8 @@ from kubeflow.spark.validation import (
 
 __all__ = [
     # Client classes
+    "SparkClient",
+    "SparkClientBuilder",
     "BaseSparkClient",
     "BatchSparkClient",
     "SparkSessionClient",
@@ -131,6 +138,10 @@ __all__ = [
     "ManagedSparkSession",
     "SessionInfo",
     "SessionMetrics",
+    # SparkConnect Server (auto-provisioning)
+    "SparkConnectServerConfig",
+    "SparkConnectServerStatus",
+    "SparkConnectState",
     # Request & Response Models
     "SparkApplicationRequest",
     "SparkApplicationResponse",

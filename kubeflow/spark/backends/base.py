@@ -20,8 +20,6 @@ This module defines the backend interface hierarchy for the Kubeflow Spark SDK:
 - BatchSparkBackend: Interface for batch job submission (OperatorBackend, GatewayBackend)
 - SessionSparkBackend: Interface for interactive sessions (ConnectBackend)
 
-This design follows the Interface Segregation Principle (ISP), ensuring that
-backends only implement methods relevant to their use case.
 """
 
 import abc

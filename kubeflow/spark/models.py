@@ -25,6 +25,25 @@ class ApplicationState(Enum):
     UNKNOWN = "UNKNOWN"
 
 
+class SparkConnectState(Enum):
+    """Spark Connect server states matching Spark Operator SparkConnect CRD (v1alpha1).
+
+    These states represent the lifecycle of a SparkConnect server managed by
+    the Spark Operator.
+    """
+
+    # Server is being provisioned (pods being created)
+    PROVISIONING = "Provisioning"
+    # Server is ready and accepting connections
+    READY = "Ready"
+    # Server pods are not ready
+    NOT_READY = "NotReady"
+    # Server has failed
+    FAILED = "Failed"
+    # Unknown state
+    UNKNOWN = "Unknown"
+
+
 class RestartPolicyType(Enum):
     """Restart policy types from operator."""
 
@@ -653,6 +672,151 @@ class SparkApplicationResponse:
             app_name=data.get("appName", data.get("app_name", "")),
             status=data.get("status", "SUBMITTED"),
             message=data.get("message", ""),
+        )
+
+
+@dataclass
+class SparkConnectServerConfig:
+    """Configuration for creating a SparkConnect server via Spark Operator CRD (v1alpha1).
+
+    This allows auto-provisioning of Spark Connect servers on Kubernetes for
+    interactive sessions without requiring a pre-existing cluster.
+
+    Attributes:
+        # Basic Configuration
+        name: Name of the SparkConnect server (auto-generated if not provided)
+        namespace: Kubernetes namespace for the server
+        spark_version: Spark version to use
+        image: Container image for Spark (uses operator default if not set)
+
+        # Server Resources (driver pod)
+        server_cores: Number of cores for the server
+        server_memory: Memory for the server (e.g., "2g")
+
+        # Executor Resources
+        executor_cores: Number of cores per executor
+        executor_memory: Memory per executor (e.g., "4g")
+        num_executors: Initial number of executors
+
+        # Dynamic Allocation
+        dynamic_allocation: Dynamic allocation configuration
+
+        # Configuration
+        spark_conf: Spark configuration properties
+        hadoop_conf: Hadoop configuration properties
+        env_vars: Environment variables
+
+        # Kubernetes
+        service_account: Service account for Spark pods
+        node_selector: Node selector for scheduling
+        tolerations: Kubernetes tolerations
+        volumes: Volume configurations
+        volume_mounts: Volume mount configurations
+
+        # Labels & Annotations
+        labels: Kubernetes labels
+        annotations: Kubernetes annotations
+    """
+
+    # Basic Configuration
+    name: Optional[str] = None
+    namespace: str = "default"
+    spark_version: str = "3.5.0"
+    image: Optional[str] = None
+
+    # Server Resources
+    server_cores: int = 1
+    server_memory: str = "1g"
+
+    # Executor Resources
+    executor_cores: int = 1
+    executor_memory: str = "1g"
+    num_executors: int = 2
+
+    # Dynamic Allocation
+    dynamic_allocation: Optional[DynamicAllocation] = None
+
+    # Configuration
+    spark_conf: dict[str, str] = field(default_factory=dict)
+    hadoop_conf: dict[str, str] = field(default_factory=dict)
+    env_vars: dict[str, str] = field(default_factory=dict)
+
+    # Kubernetes
+    service_account: str = "spark-operator-spark"
+    node_selector: dict[str, str] = field(default_factory=dict)
+    tolerations: list[dict[str, Any]] = field(default_factory=list)
+    volumes: list[dict[str, Any]] = field(default_factory=list)
+    volume_mounts: list[dict[str, Any]] = field(default_factory=list)
+
+    # Labels & Annotations
+    labels: dict[str, str] = field(default_factory=dict)
+    annotations: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class SparkConnectServerStatus:
+    """Status of a SparkConnect server.
+
+    Attributes:
+        name: Name of the SparkConnect server
+        namespace: Kubernetes namespace
+        state: Current state of the server
+        connect_url: Spark Connect URL (sc://host:port)
+        service_name: Kubernetes service name
+        pod_name: Server pod name
+        pod_ip: Server pod IP address
+        creation_time: Server creation timestamp
+        message: Status message or error details
+    """
+
+    name: str
+    namespace: str
+    state: SparkConnectState = SparkConnectState.UNKNOWN
+    connect_url: Optional[str] = None
+    service_name: Optional[str] = None
+    pod_name: Optional[str] = None
+    pod_ip: Optional[str] = None
+    creation_time: Optional[str] = None
+    message: Optional[str] = None
+
+    @classmethod
+    def from_crd(cls, crd: dict[str, Any]) -> "SparkConnectServerStatus":
+        """Create status from SparkConnect CRD.
+
+        Args:
+            crd: SparkConnect CRD dictionary
+
+        Returns:
+            SparkConnectServerStatus instance
+        """
+        metadata = crd.get("metadata", {})
+        status = crd.get("status", {})
+        server_status = status.get("server", {})
+
+        # Parse state
+        state_str = status.get("state", "Unknown")
+        try:
+            state = SparkConnectState(state_str)
+        except ValueError:
+            state = SparkConnectState.UNKNOWN
+
+        # Build connect URL from service info
+        connect_url = None
+        service_name = server_status.get("serviceName")
+        namespace = metadata.get("namespace", "default")
+        if service_name:
+            connect_url = f"sc://{service_name}.{namespace}.svc:15002"
+
+        return cls(
+            name=metadata.get("name", ""),
+            namespace=namespace,
+            state=state,
+            connect_url=connect_url,
+            service_name=service_name,
+            pod_name=server_status.get("podName"),
+            pod_ip=server_status.get("podIp"),
+            creation_time=metadata.get("creationTimestamp"),
+            message=status.get("message"),
         )
 
 

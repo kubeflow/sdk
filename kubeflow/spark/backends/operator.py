@@ -28,6 +28,9 @@ from kubeflow.spark.models import (
     ApplicationState,
     ApplicationStatus,
     SparkApplicationResponse,
+    SparkConnectServerConfig,
+    SparkConnectServerStatus,
+    SparkConnectState,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,6 +41,13 @@ SPARK_OPERATOR_API_GROUP = "sparkoperator.k8s.io"
 SPARK_OPERATOR_API_VERSION = "v1beta2"
 SPARK_APPLICATION_PLURAL = "sparkapplications"
 SPARK_APPLICATION_KIND = "SparkApplication"
+
+# Constants for SparkConnect CRD (v1alpha1)
+SPARK_CONNECT_API_VERSION = "v1alpha1"
+SPARK_CONNECT_PLURAL = "sparkconnects"
+SPARK_CONNECT_KIND = "SparkConnect"
+SPARK_CONNECT_PORT = 15002
+
 DEFAULT_TIMEOUT = 60  # seconds
 
 
@@ -832,3 +842,386 @@ class OperatorBackend(BatchSparkBackend):
         """Close Kubernetes API client connections."""
         if hasattr(self, "custom_api") and self.custom_api.api_client:
             self.custom_api.api_client.close()
+
+    # =========================================================================
+    # SparkConnect Server Management (v1alpha1 CRD)
+    # =========================================================================
+
+    def create_connect_server(
+        self,
+        config: SparkConnectServerConfig,
+    ) -> SparkConnectServerStatus:
+        """Create a SparkConnect server using the Spark Operator SparkConnect CRD.
+
+        This method provisions a Spark Connect server that allows interactive
+        sessions via the Spark Connect protocol (gRPC).
+
+        Args:
+            config: SparkConnectServerConfig with server specifications
+
+        Returns:
+            SparkConnectServerStatus with server details and connection URL
+
+        Raises:
+            ValueError: If configuration is invalid
+            RuntimeError: If server creation fails
+            TimeoutError: If creation times out
+
+        Example:
+            ```python
+            from kubeflow.spark import OperatorBackend, SparkConnectServerConfig
+
+            backend = OperatorBackend(OperatorBackendConfig(namespace="spark-jobs"))
+
+            # Create a SparkConnect server
+            config = SparkConnectServerConfig(
+                server_cores=2,
+                server_memory="4g",
+                executor_cores=4,
+                executor_memory="8g",
+                num_executors=5,
+            )
+            status = backend.create_connect_server(config)
+
+            # Wait for server to be ready
+            status = backend.wait_for_connect_server_ready(status.name)
+
+            # Connect using the URL
+            print(f"Connect URL: {status.connect_url}")
+            ```
+        """
+        # Generate name if not provided
+        if config.name is None:
+            import secrets
+            import string
+
+            config.name = "sparkconnect-" + "".join(
+                secrets.choice(string.ascii_lowercase + string.digits) for _ in range(8)
+            )
+
+        # Determine target namespace
+        target_namespace = config.namespace or self.config.namespace
+
+        # Build SparkConnect CRD
+        spark_connect = self._build_spark_connect_crd(config, target_namespace)
+
+        # Submit to Kubernetes
+        try:
+            thread = self.custom_api.create_namespaced_custom_object(
+                group=SPARK_OPERATOR_API_GROUP,
+                version=SPARK_CONNECT_API_VERSION,
+                namespace=target_namespace,
+                plural=SPARK_CONNECT_PLURAL,
+                body=spark_connect,
+                async_req=True,
+            )
+            result = thread.get(self.config.timeout)
+
+            logger.info(
+                f"SparkConnect server {target_namespace}/{config.name} created successfully"
+            )
+
+            # Return initial status
+            return SparkConnectServerStatus(
+                name=config.name,
+                namespace=target_namespace,
+                state=SparkConnectState.PROVISIONING,
+                message="SparkConnect server is being provisioned",
+            )
+
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(
+                f"Timeout creating SparkConnect server {target_namespace}/{config.name}"
+            ) from e
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to create SparkConnect server {target_namespace}/{config.name}: {e}"
+            ) from e
+
+    def get_connect_server_status(
+        self,
+        name: str,
+        namespace: Optional[str] = None,
+    ) -> SparkConnectServerStatus:
+        """Get status of a SparkConnect server.
+
+        Args:
+            name: Name of the SparkConnect server
+            namespace: Kubernetes namespace (uses config namespace if None)
+
+        Returns:
+            SparkConnectServerStatus with current status and connection URL
+
+        Raises:
+            RuntimeError: If request fails
+            TimeoutError: If request times out
+        """
+        target_namespace = namespace or self.config.namespace
+
+        try:
+            thread = self.custom_api.get_namespaced_custom_object(
+                group=SPARK_OPERATOR_API_GROUP,
+                version=SPARK_CONNECT_API_VERSION,
+                namespace=target_namespace,
+                plural=SPARK_CONNECT_PLURAL,
+                name=name,
+                async_req=True,
+            )
+            spark_connect = thread.get(self.config.timeout)
+
+            return SparkConnectServerStatus.from_crd(spark_connect)
+
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(
+                f"Timeout getting SparkConnect server {target_namespace}/{name}"
+            ) from e
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to get SparkConnect server {target_namespace}/{name}: {e}"
+            ) from e
+
+    def list_connect_servers(
+        self,
+        namespace: Optional[str] = None,
+        labels: Optional[dict[str, str]] = None,
+    ) -> list[SparkConnectServerStatus]:
+        """List SparkConnect servers.
+
+        Args:
+            namespace: Kubernetes namespace (uses config namespace if None)
+            labels: Optional label filters
+
+        Returns:
+            List of SparkConnectServerStatus objects
+
+        Raises:
+            RuntimeError: If request fails
+            TimeoutError: If request times out
+        """
+        target_namespace = namespace or self.config.namespace
+
+        try:
+            # Build label selector
+            label_selector = None
+            if labels:
+                label_selector = ",".join([f"{k}={v}" for k, v in labels.items()])
+
+            thread = self.custom_api.list_namespaced_custom_object(
+                group=SPARK_OPERATOR_API_GROUP,
+                version=SPARK_CONNECT_API_VERSION,
+                namespace=target_namespace,
+                plural=SPARK_CONNECT_PLURAL,
+                label_selector=label_selector,
+                async_req=True,
+            )
+            result = thread.get(self.config.timeout)
+
+            servers = []
+            for item in result.get("items", []):
+                servers.append(SparkConnectServerStatus.from_crd(item))
+
+            return servers
+
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(
+                f"Timeout listing SparkConnect servers in namespace {target_namespace}"
+            ) from e
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to list SparkConnect servers in namespace {target_namespace}: {e}"
+            ) from e
+
+    def delete_connect_server(
+        self,
+        name: str,
+        namespace: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Delete a SparkConnect server.
+
+        Args:
+            name: Name of the SparkConnect server
+            namespace: Kubernetes namespace (uses config namespace if None)
+
+        Returns:
+            Dictionary with deletion response
+
+        Raises:
+            RuntimeError: If deletion fails
+            TimeoutError: If deletion times out
+        """
+        target_namespace = namespace or self.config.namespace
+
+        try:
+            thread = self.custom_api.delete_namespaced_custom_object(
+                group=SPARK_OPERATOR_API_GROUP,
+                version=SPARK_CONNECT_API_VERSION,
+                namespace=target_namespace,
+                plural=SPARK_CONNECT_PLURAL,
+                name=name,
+                async_req=True,
+            )
+            result = thread.get(self.config.timeout)
+
+            logger.info(f"SparkConnect server {target_namespace}/{name} deleted")
+
+            return {
+                "status": "deleted",
+                "message": f"SparkConnect server {name} deleted",
+            }
+
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(
+                f"Timeout deleting SparkConnect server {target_namespace}/{name}"
+            ) from e
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to delete SparkConnect server {target_namespace}/{name}: {e}"
+            ) from e
+
+    def wait_for_connect_server_ready(
+        self,
+        name: str,
+        namespace: Optional[str] = None,
+        timeout: int = 300,
+        polling_interval: int = 5,
+    ) -> SparkConnectServerStatus:
+        """Wait for SparkConnect server to be ready.
+
+        Args:
+            name: Name of the SparkConnect server
+            namespace: Kubernetes namespace (uses config namespace if None)
+            timeout: Maximum time to wait in seconds (default: 5 minutes)
+            polling_interval: Polling interval in seconds (default: 5)
+
+        Returns:
+            SparkConnectServerStatus when server is ready
+
+        Raises:
+            TimeoutError: If server doesn't become ready within timeout
+            RuntimeError: If server fails or monitoring fails
+        """
+        target_namespace = namespace or self.config.namespace
+        start_time = time.time()
+
+        while True:
+            status = self.get_connect_server_status(name, target_namespace)
+
+            # Check if server is ready
+            if status.state == SparkConnectState.READY:
+                logger.info(f"SparkConnect server {name} is ready at {status.connect_url}")
+                return status
+
+            # Check if server failed
+            if status.state == SparkConnectState.FAILED:
+                raise RuntimeError(
+                    f"SparkConnect server {name} failed: {status.message}"
+                )
+
+            # Check timeout
+            elapsed = time.time() - start_time
+            if elapsed >= timeout:
+                raise TimeoutError(
+                    f"SparkConnect server {name} did not become ready within {timeout}s. "
+                    f"Last state: {status.state.value}"
+                )
+
+            logger.debug(
+                f"SparkConnect server {name} state: {status.state.value}. "
+                f"Waiting {polling_interval}s... ({int(elapsed)}s elapsed)"
+            )
+            time.sleep(polling_interval)
+
+    def _build_spark_connect_crd(
+        self,
+        config: SparkConnectServerConfig,
+        namespace: str,
+    ) -> dict[str, Any]:
+        """Build SparkConnect CRD specification.
+
+        Args:
+            config: SparkConnectServerConfig with server specifications
+            namespace: Target Kubernetes namespace
+
+        Returns:
+            SparkConnect CRD dictionary
+        """
+        # Determine image
+        image = config.image or f"{self.config.default_spark_image}:{config.spark_version}"
+
+        # Build base CRD structure
+        spark_connect: dict[str, Any] = {
+            "apiVersion": f"{SPARK_OPERATOR_API_GROUP}/{SPARK_CONNECT_API_VERSION}",
+            "kind": SPARK_CONNECT_KIND,
+            "metadata": {
+                "name": config.name,
+                "labels": {
+                    "app": config.name,
+                    "spark-version": config.spark_version,
+                    **config.labels,
+                },
+                "annotations": config.annotations,
+            },
+            "spec": {
+                "sparkVersion": config.spark_version,
+                "image": image,
+                "imagePullPolicy": self.config.image_pull_policy,
+                "server": {
+                    "cores": config.server_cores,
+                    "memory": config.server_memory,
+                    "serviceAccount": config.service_account,
+                },
+                "executor": {
+                    "cores": config.executor_cores,
+                    "memory": config.executor_memory,
+                    "instances": config.num_executors,
+                },
+            },
+        }
+
+        # Add Spark configuration
+        if config.spark_conf:
+            spark_connect["spec"]["sparkConf"] = config.spark_conf
+
+        # Add Hadoop configuration
+        if config.hadoop_conf:
+            spark_connect["spec"]["hadoopConf"] = config.hadoop_conf
+
+        # Add environment variables
+        if config.env_vars:
+            env_list = [{"name": k, "value": v} for k, v in config.env_vars.items()]
+            spark_connect["spec"]["server"]["env"] = env_list
+            spark_connect["spec"]["executor"]["env"] = env_list
+
+        # Add node selector
+        if config.node_selector:
+            spark_connect["spec"]["server"]["nodeSelector"] = config.node_selector
+            spark_connect["spec"]["executor"]["nodeSelector"] = config.node_selector
+
+        # Add tolerations
+        if config.tolerations:
+            spark_connect["spec"]["server"]["tolerations"] = config.tolerations
+            spark_connect["spec"]["executor"]["tolerations"] = config.tolerations
+
+        # Add volumes
+        if config.volumes:
+            spark_connect["spec"]["volumes"] = config.volumes
+        if config.volume_mounts:
+            spark_connect["spec"]["server"]["volumeMounts"] = config.volume_mounts
+            spark_connect["spec"]["executor"]["volumeMounts"] = config.volume_mounts
+
+        # Add dynamic allocation
+        if config.dynamic_allocation and config.dynamic_allocation.enabled:
+            spark_connect["spec"]["dynamicAllocation"] = {
+                "enabled": True,
+                "initialExecutors": config.dynamic_allocation.initial_executors
+                or config.num_executors,
+                "minExecutors": config.dynamic_allocation.min_executors or 1,
+                "maxExecutors": config.dynamic_allocation.max_executors
+                or config.num_executors * 2,
+            }
+            if config.dynamic_allocation.shuffle_tracking_enabled is not None:
+                spark_connect["spec"]["dynamicAllocation"]["shuffleTrackingEnabled"] = (
+                    config.dynamic_allocation.shuffle_tracking_enabled
+                )
+
+        return spark_connect
