@@ -199,7 +199,7 @@ jobs:
             echo "EOF"
           } >> $GITHUB_OUTPUT
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.version }}
           name: ${{ needs.prepare.outputs.version }}
