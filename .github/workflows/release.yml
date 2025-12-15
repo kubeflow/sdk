@@ -148,7 +148,7 @@ jobs:
       url: https://pypi.org/project/kubeflow/
     steps:
       - name: Download build artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: dist-${{ needs.prepare.outputs.version }}
           path: dist/
@@ -170,7 +170,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.prepare.outputs.branch }}
       - name: Download build artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: dist-${{ needs.prepare.outputs.version }}
           path: dist/
