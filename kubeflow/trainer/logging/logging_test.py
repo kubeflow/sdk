@@ -27,6 +27,32 @@ from kubeflow.trainer.logging.config import get_logger, setup_logging
 from kubeflow.trainer.logging.formatters import StructuredFormatter
 
 
+@pytest.fixture(autouse=True)
+def cleanup_logging():
+    """Fixture to clean up logging handlers before and after each test."""
+    # Clean up before test
+    kubeflow_logger = logging.getLogger("kubeflow")
+    root_logger = logging.getLogger()
+
+    # Store original handlers
+    original_kubeflow_handlers = kubeflow_logger.handlers[:]
+    original_root_handlers = root_logger.handlers[:]
+
+    yield
+
+    # Clean up after test
+    for handler in kubeflow_logger.handlers[:]:
+        kubeflow_logger.removeHandler(handler)
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
+    # Restore original handlers
+    for handler in original_kubeflow_handlers:
+        kubeflow_logger.addHandler(handler)
+    for handler in original_root_handlers:
+        root_logger.addHandler(handler)
+
+
 @dataclass
 class LoggingConfigTestCase:
     """Test case definition for logging configuration tests."""
@@ -247,6 +273,11 @@ class TestNullHandlerPattern:
         logging.basicConfig(
             level=logging.DEBUG, stream=log_capture, format="%(levelname)s - %(name)s - %(message)s"
         )
+
+        # Ensure kubeflow logger propagates to root
+        kubeflow_logger = logging.getLogger("kubeflow")
+        kubeflow_logger.propagate = True
+        kubeflow_logger.setLevel(logging.DEBUG)
 
         # Now SDK calls should produce debug output
         config = LocalProcessBackendConfig()

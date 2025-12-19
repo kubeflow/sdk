@@ -18,7 +18,7 @@ This module provides structured and configurable logging support for the Kubeflo
 It includes centralized logger configuration, structured log messages, and context-aware logging.
 """
 
-from .config import get_logger, setup_logging
+from .config import configure_from_env, get_logger, setup_logging
 from .formatters import StructuredFormatter
 
-__all__ = ["get_logger", "setup_logging", "StructuredFormatter"]
+__all__ = ["configure_from_env", "get_logger", "setup_logging", "StructuredFormatter"]
