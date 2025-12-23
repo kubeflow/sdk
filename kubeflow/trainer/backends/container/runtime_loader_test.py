@@ -32,7 +32,7 @@ SAMPLE_RUNTIME_YAML = {
     "apiVersion": "trainer.kubeflow.org/v1alpha1",
     "kind": "ClusterTrainingRuntime",
     "metadata": {
-        "name": "torch-distributed",
+        "name": constants.DEFAULT_TRAINING_RUNTIME,
         "labels": {"trainer.kubeflow.org/framework": "torch"},
     },
     "spec": {
@@ -153,7 +153,7 @@ def test_parse_source_url(test_case):
             config={
                 "github_path": "kubeflow/trainer",
                 "discovered_files": ["torch_distributed.yaml"],
-                "expected_runtime_name": "torch-distributed",
+                "expected_runtime_name": constants.DEFAULT_TRAINING_RUNTIME,
                 "expected_framework": "torch",
             },
         ),
@@ -239,7 +239,7 @@ def test_load_from_github_url(test_case):
             config={
                 "sources": ["github://myorg/myrepo", "github://kubeflow/trainer"],
                 "expected_count": 2,
-                "expected_names": ["torch-distributed", "deepspeed-distributed"],
+                "expected_names": [constants.DEFAULT_TRAINING_RUNTIME, "deepspeed-distributed"],
             },
         ),
         TestCase(
@@ -249,7 +249,7 @@ def test_load_from_github_url(test_case):
                 "sources": ["github://myorg/myrepo", "github://kubeflow/trainer"],
                 "duplicate_names": True,
                 "expected_count": 1,
-                "expected_names": ["torch-distributed"],
+                "expected_names": [constants.DEFAULT_TRAINING_RUNTIME],
             },
         ),
         TestCase(
@@ -259,7 +259,7 @@ def test_load_from_github_url(test_case):
                 "sources": ["github://myorg/myrepo"],
                 "no_github_runtimes": True,
                 "expected_count": 1,
-                "expected_names": ["torch-distributed"],
+                "expected_names": [constants.DEFAULT_TRAINING_RUNTIME],
             },
         ),
     ],
@@ -278,7 +278,7 @@ def test_list_training_runtimes_from_sources(test_case):
         ):
             if test_case.name == "priority order github sources":
                 torch_runtime = base_types.Runtime(
-                    name="torch-distributed",
+                    name=constants.DEFAULT_TRAINING_RUNTIME,
                     trainer=base_types.RuntimeTrainer(
                         trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
@@ -300,7 +300,7 @@ def test_list_training_runtimes_from_sources(test_case):
 
             elif test_case.name == "duplicate runtime names skipped":
                 torch_runtime_1 = base_types.Runtime(
-                    name="torch-distributed",
+                    name=constants.DEFAULT_TRAINING_RUNTIME,
                     trainer=base_types.RuntimeTrainer(
                         trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
@@ -309,7 +309,7 @@ def test_list_training_runtimes_from_sources(test_case):
                     ),
                 )
                 torch_runtime_2 = base_types.Runtime(
-                    name="torch-distributed",
+                    name=constants.DEFAULT_TRAINING_RUNTIME,
                     trainer=base_types.RuntimeTrainer(
                         trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
@@ -323,7 +323,7 @@ def test_list_training_runtimes_from_sources(test_case):
             elif test_case.name == "fallback to defaults":
                 mock_github.return_value = []
                 default_runtime = base_types.Runtime(
-                    name="torch-distributed",
+                    name=constants.DEFAULT_TRAINING_RUNTIME,
                     trainer=base_types.RuntimeTrainer(
                         trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
                         framework="torch",
@@ -359,7 +359,7 @@ def test_create_default_runtimes():
     # Check torch runtime
     torch_runtimes = [r for r in runtimes if r.trainer.framework == "torch"]
     assert len(torch_runtimes) == 1
-    assert torch_runtimes[0].name == "torch-distributed"
+    assert torch_runtimes[0].name == constants.DEFAULT_TRAINING_RUNTIME
     assert torch_runtimes[0].trainer.trainer_type == base_types.TrainerType.CUSTOM_TRAINER
     assert torch_runtimes[0].trainer.num_nodes == 1
     # Verify default image is set
@@ -462,7 +462,7 @@ kind: ClusterTrainingRuntime
 metadata:
   name: torch-distributed
 """,
-                "expected_name": "torch-distributed",
+                "expected_name": constants.DEFAULT_TRAINING_RUNTIME,
             },
         ),
         TestCase(

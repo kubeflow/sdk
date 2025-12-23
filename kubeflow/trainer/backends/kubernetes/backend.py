@@ -171,16 +171,13 @@ class KubernetesBackend(RuntimeBackend):
 
     def train(
         self,
-        runtime: Optional[types.Runtime] = None,
+        runtime: Optional[Union[str, types.Runtime]] = None,
         initializer: Optional[types.Initializer] = None,
         trainer: Optional[
             Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
         ] = None,
         options: Optional[list] = None,
     ) -> str:
-        if runtime is None:
-            runtime = self.get_runtime(constants.TORCH_RUNTIME)
-
         # Process options to extract configuration
         job_spec = {}
         labels = None
@@ -588,7 +585,7 @@ class KubernetesBackend(RuntimeBackend):
 
     def _get_trainjob_spec(
         self,
-        runtime: Optional[types.Runtime] = None,
+        runtime: Optional[Union[str, types.Runtime]] = None,
         initializer: Optional[types.Initializer] = None,
         trainer: Optional[
             Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
@@ -599,8 +596,11 @@ class KubernetesBackend(RuntimeBackend):
         pod_template_overrides: Optional[models.IoK8sApiCoreV1PodTemplateSpec] = None,
     ) -> models.TrainerV1alpha1TrainJobSpec:
         """Get TrainJob spec from the given parameters"""
+
         if runtime is None:
-            runtime = self.get_runtime(constants.TORCH_RUNTIME)
+            runtime = self.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
+        elif isinstance(runtime, str):
+            runtime = self.get_runtime(runtime)
 
         # Build the Trainer.
         trainer_cr = models.TrainerV1alpha1Trainer()

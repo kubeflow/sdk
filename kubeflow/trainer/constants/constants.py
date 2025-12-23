@@ -148,8 +148,8 @@ MPI_COMMAND = (
     *DEFAULT_COMMAND,
 )
 
-# The default name for the Torch runtime.
-TORCH_RUNTIME = "torch-distributed"
+# The default name for the ClusterTrainingRuntime.
+DEFAULT_TRAINING_RUNTIME = os.getenv("DEFAULT_TRAINING_RUNTIME", "torch-distributed")
 
 # The default container command for the Torch CustomTrainer
 TORCH_COMMAND = (

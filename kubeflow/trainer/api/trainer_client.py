@@ -33,10 +33,12 @@ logger = logging.getLogger(__name__)
 class TrainerClient:
     def __init__(
         self,
-        backend_config: Union[
-            KubernetesBackendConfig,
-            LocalProcessBackendConfig,
-            ContainerBackendConfig,
+        backend_config: Optional[
+            Union[
+                KubernetesBackendConfig,
+                LocalProcessBackendConfig,
+                ContainerBackendConfig,
+            ]
         ] = None,
     ):
         """Initialize a Kubeflow Trainer client.
@@ -102,7 +104,7 @@ class TrainerClient:
 
     def train(
         self,
-        runtime: Optional[types.Runtime] = None,
+        runtime: Optional[Union[str, types.Runtime]] = None,
         initializer: Optional[types.Initializer] = None,
         trainer: Optional[
             Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
@@ -119,8 +121,9 @@ class TrainerClient:
             only parameter configuration.
 
         Args:
-            runtime: Optional reference to one of the existing runtimes. Defaults to the
-                torch-distributed runtime if not provided.
+            runtime: Optional reference to one of the existing runtimes. It can accept the runtime
+                name or Runtime object from the `get_runtime()` API.
+                Defaults to the torch-distributed runtime if not provided.
             initializer: Optional configuration for the dataset and model initializers.
             trainer: Optional configuration for a CustomTrainer, CustomTrainerContainer, or
                 BuiltinTrainer. If not specified, the TrainJob will use the

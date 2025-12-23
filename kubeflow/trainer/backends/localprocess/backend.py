@@ -70,7 +70,7 @@ class LocalProcessBackend(RuntimeBackend):
 
     def train(
         self,
-        runtime: Optional[types.Runtime] = None,
+        runtime: Optional[Union[str, types.Runtime]] = None,
         initializer: Optional[types.Initializer] = None,
         trainer: Optional[
             Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
@@ -79,6 +79,8 @@ class LocalProcessBackend(RuntimeBackend):
     ) -> str:
         if runtime is None:
             raise ValueError("Runtime must be provided for LocalProcessBackend")
+        if isinstance(runtime, str):
+            runtime = self.get_runtime(runtime)
 
         # Process options to extract configuration
         name = None

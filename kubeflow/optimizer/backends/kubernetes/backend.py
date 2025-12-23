@@ -30,7 +30,7 @@ import kubeflow.common.utils as common_utils
 from kubeflow.optimizer.backends.base import RuntimeBackend
 from kubeflow.optimizer.backends.kubernetes import utils
 from kubeflow.optimizer.constants import constants
-from kubeflow.optimizer.types.algorithm_types import RandomSearch
+from kubeflow.optimizer.types.algorithm_types import BaseAlgorithm, RandomSearch
 from kubeflow.optimizer.types.optimization_types import (
     Metric,
     Objective,
@@ -73,7 +73,7 @@ class KubernetesBackend(RuntimeBackend):
         search_space: dict[str, Any],
         trial_config: Optional[TrialConfig] = None,
         objectives: Optional[list[Objective]] = None,
-        algorithm: Optional[RandomSearch] = None,
+        algorithm: Optional[BaseAlgorithm] = None,
     ) -> str:
         # Generate unique name for the OptimizationJob.
         optimization_job_name = random.choice(string.ascii_lowercase) + uuid.uuid4().hex[:11]

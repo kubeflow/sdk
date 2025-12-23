@@ -72,7 +72,7 @@ def get_torch_dist(learning_rate: str, num_epochs: str):
 
 # Create the TrainJob template
 template = TrainJobTemplate(
-    runtime=TrainerClient().get_runtime("torch-distributed"),
+    runtime="torch-distributed",
     trainer=CustomTrainer(
         func=get_torch_dist,
         func_args={"learning_rate": "0.01", "num_epochs": "5"},

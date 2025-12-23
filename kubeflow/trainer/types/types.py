@@ -459,14 +459,15 @@ class TrainJobTemplate:
 
     Args:
         trainer (`CustomTrainer`): Configuration for a CustomTrainer.
-        runtime (`Optional[Runtime]`): Optional, reference to one of the existing runtimes. Defaults
-            to the torch-distributed runtime if not provided.
+        runtime (`Optional[Union[str, Runtime]]`): Optional, reference to one of the existing
+            runtimes. It can accept the runtime name or Runtime object from the `get_runtime()` API.
+            Defaults to the torch-distributed runtime if not provided.
         initializer (`Optional[Initializer]`): Optional configuration for the dataset and model
             initializers.
     """
 
     trainer: CustomTrainer
-    runtime: Optional[Runtime] = None
+    runtime: Optional[Union[str, Runtime]] = None
     initializer: Optional[Initializer] = None
 
     def keys(self):
