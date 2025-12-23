@@ -217,6 +217,7 @@ def get_custom_trainer(
     env: Optional[list[models.IoK8sApiCoreV1EnvVar]] = None,
     pip_index_urls: Optional[list[str]] = constants.DEFAULT_PIP_INDEX_URLS,
     packages_to_install: list[str] = ["torch", "numpy"],
+    image: Optional[str] = None,
 ) -> models.TrainerV1alpha1Trainer:
     """
     Get the custom trainer for the TrainJob.
@@ -244,6 +245,7 @@ def get_custom_trainer(
         ],
         numNodes=2,
         env=env,
+        image=image,
     )
 
 
@@ -805,7 +807,7 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             ),
         ),
         TestCase(
-            name="valid flow with custom trainer and env vars",
+            name="valid flow with custom trainer that has env and image",
             expected_status=SUCCESS,
             config={
                 "trainer": types.CustomTrainer(
@@ -818,6 +820,7 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                         "TEST_ENV": "test_value",
                         "ANOTHER_ENV": "another_value",
                     },
+                    image="my-custom-image",
                 )
             },
             expected_output=get_train_job(
@@ -830,6 +833,7 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                     ],
                     pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
                     packages_to_install=["torch", "numpy"],
+                    image="my-custom-image",
                 ),
             ),
         ),
