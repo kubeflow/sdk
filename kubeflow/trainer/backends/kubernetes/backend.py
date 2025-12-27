@@ -20,7 +20,7 @@ import random
 import re
 import string
 import time
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, Callable
 import uuid
 
 from kubeflow_trainer_api import models
@@ -352,6 +352,7 @@ class KubernetesBackend(RuntimeBackend):
         status: set[str] = {constants.TRAINJOB_COMPLETE},
         timeout: int = 600,
         polling_interval: int = 2,
+        callback: Callable = None,
     ) -> types.TrainJob:
         job_statuses = {
             constants.TRAINJOB_CREATED,
@@ -371,6 +372,10 @@ class KubernetesBackend(RuntimeBackend):
             # Check the status after event is generated for the TrainJob's Pods.
             trainjob = self.get_job(name)
             logger.debug(f"TrainJob {name}, status {trainjob.status}")
+
+            # Execute callback function is it is set.
+            if callback:
+                callback(trainjob)
 
             # Raise an error if TrainJob is Failed and it is not the expected status.
             if (

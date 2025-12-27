@@ -213,6 +213,7 @@ class LocalProcessBackend(RuntimeBackend):
         name: str,
         status: set[str] = {constants.TRAINJOB_COMPLETE},
         timeout: int = 600,
+        callback: Optional[Callable] = None,
         polling_interval: int = 2,
     ) -> types.TrainJob:
         # find first match or fallback
@@ -226,7 +227,9 @@ class LocalProcessBackend(RuntimeBackend):
                 constants.TRAINJOB_RUNNING,
                 constants.TRAINJOB_CREATED,
             ]:
-                _step.job.join(timeout=timeout)
+             if callback is not None:
+                callback(_step.job)  
+            _step.job.join(timeout=timeout)
         return self.get_job(name)
 
     def delete_job(self, name: str):

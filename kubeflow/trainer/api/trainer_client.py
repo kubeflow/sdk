@@ -14,7 +14,7 @@
 
 from collections.abc import Iterator
 import logging
-from typing import Optional, Union
+from typing import Optional, Union,Callable
 
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.trainer.backends.container.backend import ContainerBackend
@@ -213,6 +213,7 @@ class TrainerClient:
         self,
         name: str,
         status: set[str] = {constants.TRAINJOB_COMPLETE},
+        callback: Optional[Callable] = None,
         timeout: int = 600,
         polling_interval: int = 2,
     ) -> types.TrainJob:
@@ -222,6 +223,8 @@ class TrainerClient:
             name: Name of the TrainJob.
             status: Expected statuses. Must be a subset of Created, Running, Complete, and
                 Failed statuses.
+            callback: Callback function that is invoked after Job status is polled. This 
+                 function takes a single argument which is current Job object.
             timeout: Maximum number of seconds to wait for the TrainJob to reach one of the
                 expected statuses.
             polling_interval: The polling interval in seconds to check TrainJob status.
@@ -238,6 +241,7 @@ class TrainerClient:
             name=name,
             status=status,
             timeout=timeout,
+            callback=callback,
             polling_interval=polling_interval,
         )
 

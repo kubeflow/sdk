@@ -14,7 +14,7 @@
 
 from collections.abc import Iterator
 import logging
-from typing import Any, Optional
+from typing import Any, Optional,Callable
 
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.optimizer.backends.kubernetes.backend import KubernetesBackend
@@ -183,6 +183,7 @@ class OptimizerClient:
         self,
         name: str,
         status: set[str] = {constants.OPTIMIZATION_JOB_COMPLETE},
+        callback: Optional[Callable] = None,
         timeout: int = 3600,
         polling_interval: int = 2,
     ) -> OptimizationJob:
@@ -192,6 +193,8 @@ class OptimizerClient:
             name: Name of the OptimizationJob.
             status: Expected statuses. Must be a subset of Created, Running, Complete, and
                 Failed statuses.
+            callback: Callback function that is invoked after Job status is polled. This 
+                function takes a single argument which is current Job object.    
             timeout: Maximum number of seconds to wait for the OptimizationJob to reach one of the
                 expected statuses.
             polling_interval: The polling interval in seconds to check OptimizationJob status.
@@ -209,6 +212,7 @@ class OptimizerClient:
             name=name,
             status=status,
             timeout=timeout,
+            callback=callback,
             polling_interval=polling_interval,
         )
 

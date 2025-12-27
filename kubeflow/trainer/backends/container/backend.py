@@ -44,7 +44,7 @@ import os
 import random
 import shutil
 import string
-from typing import Optional, Union
+from typing import Optional, Union,Callable
 import uuid
 
 from kubeflow.trainer.backends.base import RuntimeBackend
@@ -612,6 +612,7 @@ class ContainerBackend(RuntimeBackend):
         name: str,
         status: set[str] = {constants.TRAINJOB_COMPLETE},
         timeout: int = 600,
+        callback: Optional[Callable] = None,
         polling_interval: int = 2,
     ) -> types.TrainJob:
         import time
@@ -620,6 +621,9 @@ class ContainerBackend(RuntimeBackend):
         while time.time() < end:
             tj = self.get_job(name)
             logger.debug(f"TrainJob {name}, status {tj.status}")
+            # Execute callback function is it is set.
+            if callback:
+                callback(tj)
             if tj.status in status:
                 return tj
             if constants.TRAINJOB_FAILED not in status and tj.status == constants.TRAINJOB_FAILED:

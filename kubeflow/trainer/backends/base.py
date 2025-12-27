@@ -14,7 +14,7 @@
 
 import abc
 from collections.abc import Iterator
-from typing import Optional, Union
+from typing import Optional, Union ,Callable
 
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
@@ -73,6 +73,7 @@ class RuntimeBackend(abc.ABC):
         name: str,
         status: set[str] = {constants.TRAINJOB_COMPLETE},
         timeout: int = 600,
+        callback: Optional[Callable] = None,
         polling_interval: int = 2,
     ) -> types.TrainJob:
         raise NotImplementedError()
