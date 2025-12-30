@@ -87,8 +87,16 @@ class DockerClientAdapter(BaseContainerClientAdapter):
         labels: dict[str, str],
         volumes: dict[str, dict[str, str]],
         working_dir: str,
+        gpu_count: Optional[int] = None,
     ) -> str:
         """Create and start a Docker container."""
+        import docker.types
+
+        # Configure GPU access via NVIDIA Container Toolkit
+        device_requests = None
+        if gpu_count is not None and gpu_count > 0:
+            device_requests = [docker.types.DeviceRequest(count=gpu_count, capabilities=[["gpu"]])]
+
         container = self.client.containers.run(
             image=image,
             command=tuple(command),
@@ -100,6 +108,7 @@ class DockerClientAdapter(BaseContainerClientAdapter):
             labels=labels,
             volumes=volumes,
             auto_remove=False,
+            device_requests=device_requests,
         )
         return container.id
 

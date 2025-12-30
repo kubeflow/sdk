@@ -41,6 +41,7 @@ from collections.abc import Callable, Iterator
 from datetime import datetime
 import logging
 import os
+import platform
 import random
 import shutil
 import string
@@ -284,10 +285,22 @@ class ContainerBackend(RuntimeBackend):
             # For GPU training: spawn one process per GPU for optimal utilization
             # For CPU training: use single process (PyTorch parallelizes internally via threads)
             nproc_per_node = 1  # Default for CPU training
+            gpu_count = None  # GPU count for container device passthrough
             if trainer.resources_per_node and "gpu" in trainer.resources_per_node:
                 try:
-                    nproc_per_node = int(trainer.resources_per_node["gpu"])
+                    gpu_count = int(trainer.resources_per_node["gpu"])
+                    nproc_per_node = gpu_count
                     logger.debug(f"Using {nproc_per_node} processes per node (1 per GPU)")
+
+                    # Check for macOS - GPU passthrough is not supported
+                    if platform.system() == "Darwin":
+                        logger.warning(
+                            "GPU passthrough is not supported on macOS. "
+                            "Containers will run without GPU access. "
+                            "To use GPUs, run on a Linux machine with NVIDIA drivers "
+                            "and the NVIDIA Container Toolkit installed."
+                        )
+                        gpu_count = None  # Don't attempt GPU passthrough on macOS
                 except (ValueError, TypeError):
                     logger.warning(
                         f"Invalid GPU count in resources_per_node: "
@@ -391,6 +404,7 @@ class ContainerBackend(RuntimeBackend):
                     labels=labels,
                     volumes=volumes,
                     working_dir=constants.WORKSPACE_PATH,
+                    gpu_count=gpu_count,
                 )
 
                 logger.debug(f"Started container {container_name} (ID: {container_id[:12]})")

@@ -74,6 +74,7 @@ class MockContainerAdapter(BaseContainerClientAdapter):
         labels: dict[str, str],
         volumes: dict[str, dict[str, str]],
         working_dir: str,
+        gpu_count: Optional[int] = None,
     ) -> str:
         container_id = f"container-{len(self.containers_created)}"
         self.containers_created.append(
@@ -89,6 +90,7 @@ class MockContainerAdapter(BaseContainerClientAdapter):
                 "working_dir": working_dir,
                 "status": "running",
                 "exit_code": None,
+                "gpu_count": gpu_count,
             }
         )
         return container_id
@@ -861,3 +863,94 @@ def test_create_adapter_error_message_format():
         error_msg = str(exc_info.value)
         assert "Could not connect" in error_msg
         assert "tried:" in error_msg
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="gpu passthrough on linux",
+            expected_status=SUCCESS,
+            config={
+                "platform": "Linux",
+                "resources_per_node": {"gpu": "2"},
+                "expected_gpu_count": 2,
+            },
+        ),
+        TestCase(
+            name="gpu passthrough disabled on macos",
+            expected_status=SUCCESS,
+            config={
+                "platform": "Darwin",
+                "resources_per_node": {"gpu": "2"},
+                "expected_gpu_count": None,  # Should be None on macOS
+            },
+        ),
+        TestCase(
+            name="no gpu specified",
+            expected_status=SUCCESS,
+            config={
+                "platform": "Linux",
+                "resources_per_node": {"cpu": "4"},
+                "expected_gpu_count": None,
+            },
+        ),
+        TestCase(
+            name="gpu passthrough on windows wsl",
+            expected_status=SUCCESS,
+            config={
+                "platform": "Linux",  # WSL2 reports as Linux
+                "resources_per_node": {"gpu": "1"},
+                "expected_gpu_count": 1,
+            },
+        ),
+    ],
+)
+def test_gpu_passthrough(container_backend, test_case):
+    """Test GPU passthrough configuration for containers."""
+    print("Executing test:", test_case.name)
+    try:
+        with patch("platform.system", return_value=test_case.config["platform"]):
+            trainer = types.CustomTrainer(
+                func=simple_train_func,
+                num_nodes=1,
+                resources_per_node=test_case.config.get("resources_per_node"),
+            )
+            runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
+
+            container_backend.train(runtime=runtime, trainer=trainer)
+
+            assert test_case.expected_status == SUCCESS
+            container = container_backend._adapter.containers_created[0]
+            assert container["gpu_count"] == test_case.config["expected_gpu_count"], (
+                f"Expected gpu_count={test_case.config['expected_gpu_count']}, "
+                f"got gpu_count={container['gpu_count']}"
+            )
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+def test_gpu_multi_node_passthrough(container_backend):
+    """Test GPU passthrough for multi-node training."""
+    print("Executing test: gpu_multi_node_passthrough")
+
+    with patch("platform.system", return_value="Linux"):
+        trainer = types.CustomTrainer(
+            func=simple_train_func,
+            num_nodes=3,
+            resources_per_node={"gpu": "4"},
+        )
+        runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
+
+        container_backend.train(runtime=runtime, trainer=trainer)
+
+        # All 3 nodes should have GPU passthrough configured
+        assert len(container_backend._adapter.containers_created) == 3
+        for container in container_backend._adapter.containers_created:
+            assert container["gpu_count"] == 4, (
+                f"Expected gpu_count=4 for all nodes, got {container['gpu_count']}"
+            )
+
+    print("test execution complete")
