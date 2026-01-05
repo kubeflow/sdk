@@ -276,8 +276,17 @@ class ContainerBackend(RuntimeBackend):
             # Run initializers if configured
             if initializer:
                 logger.debug("Running initializers")
-                self._run_initializers(trainjob_name, initializer, workdir, network_id)
-                logger.debug("Initializers completed successfully")
+                try:
+                    self._run_initializers(trainjob_name, initializer, workdir, network_id)
+                    logger.debug("Initializers completed successfully")
+                except Exception as e:
+                    # Clean up network if initializers fail
+                    logger.error(f"Initializer failed, cleaning up network: {e}")
+                    from contextlib import suppress
+
+                    with suppress(Exception):
+                        self._adapter.delete_network(network_id)
+                    raise
 
             # Generate training script code (inline, not written to disk)
             training_script_code = container_utils.get_training_script_code(trainer)
@@ -494,7 +503,7 @@ class ContainerBackend(RuntimeBackend):
             RuntimeError: If initializer fails to complete successfully.
         """
         # Get initializer image
-        init_image = container_utils.get_initializer_image()
+        init_image = container_utils.get_initializer_image(self.cfg)
 
         # Pull initializer image if needed
         container_utils.maybe_pull_image(self._adapter, init_image, self.cfg.pull_policy)
@@ -587,32 +596,40 @@ class ContainerBackend(RuntimeBackend):
 
         # Wait for the initializer to complete
         try:
-            import time
+            # Use the wait API for efficient waiting
+            exit_code = self._adapter.wait_for_container(
+                container_id, timeout=self.cfg.initializer_timeout
+            )
 
-            timeout = 600  # 10 minutes timeout for initialization
-            polling_interval = 2
-            elapsed = 0
+            if exit_code == 0:
+                logger.debug(f"{init_type} initializer completed successfully")
+                # Clean up the successful container
+                from contextlib import suppress
 
-            while elapsed < timeout:
-                status, exit_code = self._adapter.container_status(container_id)
+                with suppress(Exception):
+                    self._adapter.remove_container(container_id, force=True)
+                return
+            else:
+                # Get logs for debugging
+                logs = list(self._adapter.container_logs(container_id, follow=False))
+                error_msg = (
+                    f"{init_type} initializer failed with exit code {exit_code}. "
+                    f"Logs: {' '.join(logs[-10:]) if logs else 'No logs available'}"
+                )
+                raise RuntimeError(error_msg)
 
-                if status == "exited":
-                    if exit_code == 0:
-                        logger.debug(f"{init_type} initializer completed successfully")
-                        return
-                    else:
-                        # Get logs for debugging
-                        logs = list(self._adapter.container_logs(container_id, follow=False))
-                        error_msg = (
-                            f"{init_type} initializer failed with exit code {exit_code}. "
-                            f"Logs: {' '.join(logs[-10:]) if logs else 'No logs available'}"
-                        )
-                        raise RuntimeError(error_msg)
+        except TimeoutError:
+            logger.error(
+                f"{init_type} initializer did not complete within "
+                f"{self.cfg.initializer_timeout} seconds"
+            )
+            # Clean up the timed-out container
+            from contextlib import suppress
 
-                time.sleep(polling_interval)
-                elapsed += polling_interval
-
-            raise TimeoutError(f"{init_type} initializer did not complete within {timeout} seconds")
+            with suppress(Exception):
+                self._adapter.stop_container(container_id, timeout=5)
+                self._adapter.remove_container(container_id, force=True)
+            raise
 
         except Exception as e:
             logger.error(f"Error running {init_type} initializer: {e}")

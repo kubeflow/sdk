@@ -193,3 +193,22 @@ class BaseContainerClientAdapter(abc.ABC):
             Dictionary with network info including labels, or None if not found
         """
         raise NotImplementedError()
+
+    @abc.abstractmethod
+    def wait_for_container(self, container_id: str, timeout: Optional[int] = None) -> int:
+        """
+        Wait for a container to exit and return its exit code.
+
+        This is a blocking call that waits until the container stops.
+
+        Args:
+            container_id: Container ID
+            timeout: Maximum time to wait in seconds, or None to wait indefinitely
+
+        Returns:
+            Container exit code
+
+        Raises:
+            TimeoutError: If timeout is reached before container exits
+        """
+        raise NotImplementedError()

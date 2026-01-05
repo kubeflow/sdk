@@ -223,18 +223,26 @@ def build_initializer_command(initializer: types.BaseInitializer, init_type: str
 
     Returns:
         Command list for the initializer container.
+
+    Raises:
+        ValueError: If the initializer type is not supported.
     """
     # Use the training-operator initializer script
     # The initializer script is expected to be available in the image
-    python_cmd = (
-        "python -m kubeflow.storage_initializer.s3 "
-        if isinstance(initializer, (types.S3DatasetInitializer, types.S3ModelInitializer))
-        else "python -m kubeflow.storage_initializer.hugging_face "
-        if isinstance(
-            initializer, (types.HuggingFaceDatasetInitializer, types.HuggingFaceModelInitializer)
+    if isinstance(initializer, (types.S3DatasetInitializer, types.S3ModelInitializer)):
+        python_cmd = "python -m kubeflow.storage_initializer.s3 "
+    elif isinstance(
+        initializer, (types.HuggingFaceDatasetInitializer, types.HuggingFaceModelInitializer)
+    ):
+        python_cmd = "python -m kubeflow.storage_initializer.hugging_face "
+    elif isinstance(initializer, types.DataCacheInitializer):
+        python_cmd = "python -m kubeflow.storage_initializer.datacache "
+    else:
+        raise ValueError(
+            f"Unsupported initializer type: {type(initializer).__name__}. "
+            "Supported types: HuggingFaceDatasetInitializer, HuggingFaceModelInitializer, "
+            "S3DatasetInitializer, S3ModelInitializer, DataCacheInitializer"
         )
-        else "python -m kubeflow.storage_initializer.datacache "
-    )
 
     return ["bash", "-c", python_cmd]
 
@@ -300,13 +308,14 @@ def build_initializer_env(initializer: types.BaseInitializer, init_type: str) ->
     return env
 
 
-def get_initializer_image() -> str:
+def get_initializer_image(config) -> str:
     """
-    Get the container image for initializers.
+    Get the container image for initializers from backend config.
+
+    Args:
+        config: ContainerBackendConfig with initializer_image setting.
 
     Returns:
         Container image name for initializers.
     """
-    # Use the training-operator image which contains initializer scripts
-    # This can be made configurable via backend config in the future
-    return "kubeflow/training-operator:latest"
+    return config.initializer_image

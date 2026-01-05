@@ -197,6 +197,31 @@ class MockContainerAdapter(BaseContainerClientAdapter):
                 }
         return None
 
+    def wait_for_container(self, container_id: str, timeout: Optional[int] = None) -> int:
+        """
+        Wait for a container to exit and return its exit code.
+
+        For testing, immediately returns the container's exit code if it has exited,
+        or raises TimeoutError if the container is still running.
+
+        Args:
+            container_id: Container ID
+            timeout: Maximum time to wait in seconds (not used in mock)
+
+        Returns:
+            Container exit code
+
+        Raises:
+            TimeoutError: If container is still running
+        """
+        for container in self.containers_created:
+            if container["id"] == container_id:
+                if container["status"] == "exited":
+                    return container.get("exit_code", 0)
+                # In mock, if not exited, simulate timeout
+                raise TimeoutError(f"Container {container_id} did not exit within timeout")
+        raise RuntimeError(f"Container {container_id} not found")
+
 
 # Fixtures
 @pytest.fixture

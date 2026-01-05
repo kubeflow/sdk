@@ -254,3 +254,29 @@ class PodmanClientAdapter(BaseContainerClientAdapter):
             }
         except Exception:
             return None
+
+    def wait_for_container(self, container_id: str, timeout: Optional[int] = None) -> int:
+        """
+        Wait for a Podman container to exit and return its exit code.
+
+        Args:
+            container_id: Container ID
+            timeout: Maximum time to wait in seconds, or None to wait indefinitely
+
+        Returns:
+            Container exit code
+
+        Raises:
+            TimeoutError: If timeout is reached before container exits
+        """
+        try:
+            container = self.get_container(container_id)
+            result = container.wait(timeout=timeout)
+            # Podman wait() returns exit code directly
+            return int(result)
+        except Exception as e:
+            if "timeout" in str(e).lower():
+                raise TimeoutError(
+                    f"Container {container_id} did not exit within {timeout} seconds"
+                ) from e
+            raise
