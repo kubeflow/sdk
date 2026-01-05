@@ -1250,13 +1250,13 @@ def test_delete_job(kubernetes_backend, test_case):
         TestCase(
             name="timeout error when getting job events",
             expected_status=FAILED,
-            config={"namespace": TIMEOUT},
+            config={"namespace": TIMEOUT, "name": BASIC_TRAIN_JOB_NAME},
             expected_error=TimeoutError,
         ),
         TestCase(
             name="runtime error when getting job events",
             expected_status=FAILED,
-            config={"namespace": RUNTIME},
+            config={"namespace": RUNTIME, "name": BASIC_TRAIN_JOB_NAME},
             expected_error=RuntimeError,
         ),
     ],
