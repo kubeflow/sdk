@@ -219,8 +219,8 @@ class TrainerClient:
             A list of Event objects associated with the TrainJob.
 
         Raises:
-            TimeoutError: Timeout to get a TrainJob.
-            RuntimeError: Failed to get a TrainJob.
+            TimeoutError: Timeout to get a TrainJob events.
+            RuntimeError: Failed to get a TrainJob events.
         """
         return self.backend.get_job_events(name=name)
 

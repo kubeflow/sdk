@@ -658,21 +658,3 @@ class ContainerBackend(RuntimeBackend):
         # Remove working directory if configured
         if self.cfg.auto_remove and workdir_host and os.path.isdir(workdir_host):
             shutil.rmtree(workdir_host, ignore_errors=True)
-
-    def get_job_events(self, name: str) -> list[types.Event]:
-        """Get events for a TrainJob.
-
-        For container backend, return empty list as events are not available
-        in local container execution environments. Events are a Kubernetes-specific feature.
-
-        Args:
-            name: Name of the TrainJob.
-
-        Returns:
-            An empty list since container backend does not support events.
-        """
-        # Verify job exists
-        _ = self.get_job(name)
-
-        # Container backend doesn't support Kubernetes events
-        return []

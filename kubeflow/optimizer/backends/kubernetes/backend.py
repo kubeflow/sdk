@@ -41,7 +41,7 @@ from kubeflow.optimizer.types.optimization_types import (
 )
 from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend as TrainerBackend
 import kubeflow.trainer.constants.constants as trainer_constants
-from kubeflow.trainer.types.types import TrainJobTemplate
+from kubeflow.trainer.types.types import Event, TrainJobTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -327,6 +327,72 @@ class KubernetesBackend(RuntimeBackend):
             ) from e
 
         logger.debug(f"{constants.OPTIMIZATION_JOB_KIND} {self.namespace}/{name} has been deleted")
+
+    def get_job_events(self, name: str) -> list[Event]:
+        events = []
+        try:
+            # Get the OptimizationJob to ensure it exists
+            job = self.get_job(name)
+
+            # Retrieve events related to the OptimizationJob
+            event_response = self.core_api.list_namespaced_event(
+                namespace=self.namespace,
+                async_req=True,
+            ).get(common_constants.DEFAULT_TIMEOUT)
+
+            event_list = models.IoK8sApiCoreV1EventList.from_dict(event_response.to_dict())
+
+            if not event_list:
+                return events
+
+            # Get trial names
+            trial_names = {t.name for t in job.trials}
+
+            # Filter events
+            for event in event_list.items:
+                if not (event.metadata and event.involved_object and event.first_timestamp):
+                    continue
+
+                involved_object = event.involved_object
+                is_related = False
+
+                # Event for the OptimizationJob (Experiment) itself
+                if (
+                    involved_object.kind == constants.EXPERIMENT_KIND
+                    and involved_object.name == name
+                ):
+                    is_related = True
+
+                # Event for a Trial of this OptimizationJob
+                elif (
+                    involved_object.kind == constants.TRIAL_KIND
+                    and involved_object.name in trial_names
+                ):
+                    is_related = True
+
+                if is_related:
+                    events.append(
+                        Event(
+                            involved_object_kind=involved_object.kind,
+                            involved_object_name=involved_object.name,
+                            message=event.message or "",
+                            reason=event.reason or "",
+                            event_time=event.first_timestamp,
+                        )
+                    )
+
+            # Sort events by first occurrence time
+            events.sort(key=lambda e: e.event_time)
+            return events
+
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(
+                f"Timeout to get events for {constants.OPTIMIZATION_JOB_KIND}: {self.namespace}/{name}"
+            ) from e
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to get events for {constants.OPTIMIZATION_JOB_KIND}: {self.namespace}/{name}"
+            ) from e
 
     def _get_best_trial(self, name: str) -> Optional[Trial]:
         """Get the best current Trial for the OptimizationJob"""

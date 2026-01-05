@@ -238,26 +238,6 @@ class LocalProcessBackend(RuntimeBackend):
         # remove the job from the list of jobs
         self.__local_jobs.remove(_job)
 
-    def get_job_events(self, name: str) -> list[types.Event]:
-        """Get events for a TrainJob.
-
-        For local process backend, return empty list as events are not available
-        in local execution environments. Events are a Kubernetes-specific feature.
-
-        Args:
-            name: Name of the TrainJob.
-
-        Returns:
-            An empty list since local process backend does not support events.
-        """
-        # Verify job exists
-        _job = next((j for j in self.__local_jobs if j.name == name), None)
-        if _job is None:
-            raise ValueError(f"No TrainJob with name {name}")
-
-        # Local process backend doesn't support Kubernetes events
-        return []
-
     def __get_job_status(self, job: LocalBackendJobs) -> str:
         statuses = [_step.job.status for _step in job.steps]
         # if status is running or failed will take precedence over completed

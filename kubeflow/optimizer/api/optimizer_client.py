@@ -26,7 +26,7 @@ from kubeflow.optimizer.types.optimization_types import (
     Result,
     TrialConfig,
 )
-from kubeflow.trainer.types.types import TrainJobTemplate
+from kubeflow.trainer.types.types import Event, TrainJobTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -223,3 +223,21 @@ class OptimizerClient:
             RuntimeError: Failed to delete OptimizationJob.
         """
         return self.backend.delete_job(name=name)
+
+    def get_job_events(self, name: str) -> list[Event]:
+        """Get events for an OptimizationJob.
+
+        This provides additional clarity about the state of the OptimizationJob when logs alone are not sufficient.
+        Events include information about trial state changes, errors, and other significant occurrences.
+
+        Args:
+            name: Name of the OptimizationJob.
+
+        Returns:
+            A list of Event objects associated with the OptimizationJob.
+
+        Raises:
+            TimeoutError: Timeout to get an OptimizationJob events.
+            RuntimeError: Failed to get an OptimizationJob events.
+        """
+        return self.backend.get_job_events(name=name)
