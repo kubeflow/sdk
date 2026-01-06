@@ -449,16 +449,16 @@ class KubernetesBackend(RuntimeBackend):
                 ):
                     events.append(
                         types.Event(
-                            involvedObjectKind=involved_object.kind,
-                            involvedObjectName=involved_object.name,
+                            involved_object_kind=involved_object.kind,
+                            involved_object_name=involved_object.name,
                             message=event.message or "",
                             reason=event.reason or "",
-                            eventTime=event.first_timestamp,
+                            event_time=event.first_timestamp,
                         )
                     )
 
             # Sort events by first occurrence time
-            events.sort(key=lambda e: e.eventTime)
+            events.sort(key=lambda e: e.event_time)
 
             return events
         except multiprocessing.TimeoutError as e:
