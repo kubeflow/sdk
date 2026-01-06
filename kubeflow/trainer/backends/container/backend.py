@@ -196,6 +196,35 @@ class ContainerBackend(RuntimeBackend):
         """Get the runtime type for debugging/logging."""
         return self._adapter._runtime_type
 
+    def _cleanup_container_resources(
+        self,
+        container_ids: Optional[list[str]] = None,
+        network_id: Optional[str] = None,
+        stop_timeout: int = 5,
+    ):
+        """
+        Clean up container resources in a best-effort manner.
+
+        Args:
+            container_ids: List of container IDs to stop and remove.
+            network_id: Network ID to delete.
+            stop_timeout: Timeout in seconds for stopping containers.
+        """
+        from contextlib import suppress
+
+        # Stop and remove containers
+        if container_ids:
+            for container_id in container_ids:
+                with suppress(Exception):
+                    self._adapter.stop_container(container_id, timeout=stop_timeout)
+                with suppress(Exception):
+                    self._adapter.remove_container(container_id, force=True)
+
+        # Delete network
+        if network_id:
+            with suppress(Exception):
+                self._adapter.delete_network(network_id)
+
     # ---- Runtime APIs ----
     def list_runtimes(self) -> list[types.Runtime]:
         return list_training_runtimes_from_sources(self.cfg.runtime_source.sources)
@@ -437,20 +466,14 @@ class ContainerBackend(RuntimeBackend):
             logger.exception("Full traceback:")
 
             # Try to clean up any resources that were created
-            from contextlib import suppress
-
             try:
                 # Stop and remove any containers that were created
                 if "container_ids" in locals():
-                    for container_id in container_ids:
-                        with suppress(Exception):
-                            self._adapter.stop_container(container_id, timeout=5)
-                            self._adapter.remove_container(container_id, force=True)
-
-                # Remove network if it was created
-                if "network_id" in locals():
-                    with suppress(Exception):
-                        self._adapter.delete_network(network_id)
+                    self._cleanup_container_resources(
+                        container_ids=container_ids,
+                        network_id=network_id if "network_id" in locals() else None,
+                        stop_timeout=5,
+                    )
 
                 # Remove working directory if it was created
                 if "workdir" in locals() and os.path.isdir(workdir):
@@ -604,10 +627,7 @@ class ContainerBackend(RuntimeBackend):
             if exit_code == 0:
                 logger.debug(f"{init_type} initializer completed successfully")
                 # Clean up the successful container
-                from contextlib import suppress
-
-                with suppress(Exception):
-                    self._adapter.remove_container(container_id, force=True)
+                self._cleanup_container_resources(container_ids=[container_id], stop_timeout=0)
                 return
             else:
                 # Get logs for debugging
@@ -624,21 +644,13 @@ class ContainerBackend(RuntimeBackend):
                 f"{self.cfg.initializer_timeout} seconds"
             )
             # Clean up the timed-out container
-            from contextlib import suppress
-
-            with suppress(Exception):
-                self._adapter.stop_container(container_id, timeout=5)
-                self._adapter.remove_container(container_id, force=True)
+            self._cleanup_container_resources(container_ids=[container_id], stop_timeout=5)
             raise
 
         except Exception as e:
             logger.error(f"Error running {init_type} initializer: {e}")
             # Clean up the failed container
-            from contextlib import suppress
-
-            with suppress(Exception):
-                self._adapter.stop_container(container_id, timeout=5)
-                self._adapter.remove_container(container_id, force=True)
+            self._cleanup_container_resources(container_ids=[container_id], stop_timeout=5)
             raise
 
     def __get_trainjob_from_containers(
@@ -832,18 +844,12 @@ class ContainerBackend(RuntimeBackend):
                 workdir_host = network_labels.get(f"{self.label_prefix}/workdir")
 
         # Stop containers and remove
-        from contextlib import suppress
-
-        for container in containers:
-            with suppress(Exception):
-                self._adapter.stop_container(container["id"], timeout=10)
-            with suppress(Exception):
-                self._adapter.remove_container(container["id"], force=True)
-
-        # Remove network (best-effort)
-        if network_id:
-            with suppress(Exception):
-                self._adapter.delete_network(network_id)
+        container_ids = [c["id"] for c in containers]
+        self._cleanup_container_resources(
+            container_ids=container_ids,
+            network_id=network_id,
+            stop_timeout=10,
+        )
 
         # Remove working directory if configured
         if self.cfg.auto_remove and workdir_host and os.path.isdir(workdir_host):
