@@ -227,8 +227,9 @@ class OptimizerClient:
     def get_job_events(self, name: str) -> list[Event]:
         """Get events for an OptimizationJob.
 
-        This provides additional clarity about the state of the OptimizationJob when logs alone are not sufficient.
-        Events include information about trial state changes, errors, and other significant occurrences.
+        This provides additional clarity about the state of the OptimizationJob
+        when logs alone are not sufficient. Events include information about
+        trial state changes, errors, and other significant occurrences.
 
         Args:
             name: Name of the OptimizationJob.

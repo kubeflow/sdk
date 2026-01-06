@@ -412,14 +412,18 @@ class KubernetesBackend(RuntimeBackend):
 
     def get_job_events(self, name: str) -> list[types.Event]:
         events = []
-
         try:
             # Get all pod names related to this TrainJob
             trainjob = self.get_job(name)
-            trainjob_pod_names = {step.pod_name for step in trainjob.steps if step.pod_name}
 
-            # Retrieve events related to the TrainJob
-            # Events are scoped to the namespace and can be filtered by involved object
+            # Create set of all TrainJob-related resource names
+            trainjob_resources = {name}
+            for step in trainjob.steps:
+                trainjob_resources.add(step.name)
+                if step.pod_name:
+                    trainjob_resources.add(step.pod_name)
+
+            # Retrieve events from the namespace
             event_response = self.core_api.list_namespaced_event(
                 namespace=self.namespace,
                 async_req=True,
@@ -436,43 +440,34 @@ class KubernetesBackend(RuntimeBackend):
                 if not (event.metadata and event.involved_object and event.first_timestamp):
                     continue
 
-                # Check if event is related to the TrainJob itself or one of its pods
                 involved_object = event.involved_object
-                is_related = False
 
-                # Event for the TrainJob object itself or JobSet (same name)
-                if involved_object.name == name and involved_object.kind in {
-                    constants.TRAINJOB_KIND,
-                    "JobSet",
-                }:
-                    is_related = True
-                # Event for a pod of this TrainJob
-                elif involved_object.kind == "Pod" and involved_object.name in trainjob_pod_names:
-                    is_related = True
-
-                if is_related:
+                # Check if event is related to TrainJob resources
+                if (
+                    involved_object.kind in {constants.TRAINJOB_KIND, "JobSet", "Job", "Pod"}
+                    and involved_object.name in trainjob_resources
+                ):
                     events.append(
                         types.Event(
-                            involved_object_kind=involved_object.kind,
-                            involved_object_name=involved_object.name,
+                            involvedObjectKind=involved_object.kind,
+                            involvedObjectName=involved_object.name,
                             message=event.message or "",
                             reason=event.reason or "",
-                            event_time=event.first_timestamp,
+                            eventTime=event.first_timestamp,
                         )
                     )
 
             # Sort events by first occurrence time
-            events.sort(key=lambda e: e.event_time)
+            events.sort(key=lambda e: e.eventTime)
 
             return events
-
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(
-                f"Timeout to get events for {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
+                f"Timeout getting events for {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
             ) from e
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get events for {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
+                f"Failed getting events for {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
             ) from e
 
     def __get_runtime_from_cr(

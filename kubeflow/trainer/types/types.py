@@ -281,18 +281,18 @@ class Event:
     """Event object that represents a Kubernetes event related to a TrainJob.
 
     Attributes:
-        involved_object_kind: The kind of object this event is about (e.g., 'TrainJob', 'Pod').
-        involved_object_name: The name of the object this event is about.
+        involvedObjectKind: The kind of object this event is about (e.g., 'TrainJob', 'Pod').
+        involvedObjectName: The name of the object this event is about.
         message: Human-readable description of the event.
         reason: Short, machine understandable string describing why this event was generated.
-        event_time: The time at which the event was first recorded.
+        eventTime: The time at which the event was first recorded.
     """
 
-    involved_object_kind: str
-    involved_object_name: str
+    involvedObjectKind: str  
+    involvedObjectName: str  
     message: str
     reason: str
-    event_time: datetime
+    eventTime: datetime  
 
 
 @dataclass

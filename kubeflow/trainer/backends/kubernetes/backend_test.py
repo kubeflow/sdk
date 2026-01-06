@@ -1274,4 +1274,3 @@ def test_get_job_events(kubernetes_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
-

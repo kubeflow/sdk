@@ -334,7 +334,12 @@ class KubernetesBackend(RuntimeBackend):
             # Get the OptimizationJob to ensure it exists
             job = self.get_job(name)
 
-            # Retrieve events related to the OptimizationJob
+            # Create set of all OptimizationJob-related resource names
+            optimization_job_resources = {name}
+            for trial in job.trials:
+                optimization_job_resources.add(trial.name)
+
+            # Retrieve events from the namespace
             event_response = self.core_api.list_namespaced_event(
                 namespace=self.namespace,
                 async_req=True,
@@ -345,53 +350,38 @@ class KubernetesBackend(RuntimeBackend):
             if not event_list:
                 return events
 
-            # Get trial names
-            trial_names = {t.name for t in job.trials}
-
-            # Filter events
+            # Filter events related to OptimizationJob resources
             for event in event_list.items:
                 if not (event.metadata and event.involved_object and event.first_timestamp):
                     continue
 
                 involved_object = event.involved_object
-                is_related = False
 
-                # Event for the OptimizationJob (Experiment) itself
+                # Check if event is related to OptimizationJob resources
                 if (
-                    involved_object.kind == constants.EXPERIMENT_KIND
-                    and involved_object.name == name
+                    involved_object.kind in {constants.EXPERIMENT_KIND, constants.TRIAL_KIND}
+                    and involved_object.name in optimization_job_resources
                 ):
-                    is_related = True
-
-                # Event for a Trial of this OptimizationJob
-                elif (
-                    involved_object.kind == constants.TRIAL_KIND
-                    and involved_object.name in trial_names
-                ):
-                    is_related = True
-
-                if is_related:
                     events.append(
                         Event(
-                            involved_object_kind=involved_object.kind,
-                            involved_object_name=involved_object.name,
+                            involvedObjectKind=involved_object.kind,
+                            involvedObjectName=involved_object.name,
                             message=event.message or "",
                             reason=event.reason or "",
-                            event_time=event.first_timestamp,
+                            eventTime=event.first_timestamp,
                         )
                     )
 
             # Sort events by first occurrence time
-            events.sort(key=lambda e: e.event_time)
+            events.sort(key=lambda e: e.eventTime)
             return events
-
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(
-                f"Timeout to get events for {constants.OPTIMIZATION_JOB_KIND}: {self.namespace}/{name}"
+                f"Timeout getting {constants.OPTIMIZATION_JOB_KIND} events: {self.namespace}/{name}"
             ) from e
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get events for {constants.OPTIMIZATION_JOB_KIND}: {self.namespace}/{name}"
+                f"Failed getting {constants.OPTIMIZATION_JOB_KIND} events: {self.namespace}/{name}"
             ) from e
 
     def _get_best_trial(self, name: str) -> Optional[Trial]:

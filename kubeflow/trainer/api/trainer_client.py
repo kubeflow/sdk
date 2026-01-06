@@ -209,8 +209,9 @@ class TrainerClient:
     def get_job_events(self, name: str) -> list[types.Event]:
         """Get events for a TrainJob.
 
-        This provides additional clarity about the state of the TrainJob when logs alone are not sufficient.
-        Events include information about pod state changes, errors, and other significant occurrences.
+        This provides additional clarity about the state of the TrainJob
+        when logs alone are not sufficient. Events include information about
+        pod state changes, errors, and other significant occurrences.
 
         Args:
             name: Name of the TrainJob.
