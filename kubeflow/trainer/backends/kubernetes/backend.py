@@ -461,7 +461,7 @@ class KubernetesBackend(RuntimeBackend):
             events.sort(key=lambda e: e.event_time)
 
             return events
-        except multiprocessing.TimeoutError as e:
+        except (multiprocessing.TimeoutError, TimeoutError) as e:
             raise TimeoutError(
                 f"Timeout getting events for {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
             ) from e
