@@ -329,16 +329,16 @@ class KubernetesBackend(RuntimeBackend):
         logger.debug(f"{constants.OPTIMIZATION_JOB_KIND} {self.namespace}/{name} has been deleted")
 
     def get_job_events(self, name: str) -> list[Event]:
+        # Get the OptimizationJob to ensure it exists
+        job = self.get_job(name)
+
+        # Create set of all OptimizationJob-related resource names
+        optimization_job_resources = {name}
+        for trial in job.trials:
+            optimization_job_resources.add(trial.name)
+
         events = []
         try:
-            # Get the OptimizationJob to ensure it exists
-            job = self.get_job(name)
-
-            # Create set of all OptimizationJob-related resource names
-            optimization_job_resources = {name}
-            for trial in job.trials:
-                optimization_job_resources.add(trial.name)
-
             # Retrieve events from the namespace
             event_response = self.core_api.list_namespaced_event(
                 namespace=self.namespace,
@@ -375,13 +375,9 @@ class KubernetesBackend(RuntimeBackend):
             # Sort events by first occurrence time
             events.sort(key=lambda e: e.event_time)
             return events
-        except (multiprocessing.TimeoutError, TimeoutError) as e:
+        except multiprocessing.TimeoutError as e:
             raise TimeoutError(
                 f"Timeout getting {constants.OPTIMIZATION_JOB_KIND} events: {self.namespace}/{name}"
-            ) from e
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed getting {constants.OPTIMIZATION_JOB_KIND} events: {self.namespace}/{name}"
             ) from e
 
     def _get_best_trial(self, name: str) -> Optional[Trial]:

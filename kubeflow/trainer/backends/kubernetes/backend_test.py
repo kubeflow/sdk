@@ -414,7 +414,7 @@ def mock_list_namespaced_event(*args, **kwargs):
 
     # Errors occur at call time, not during .get()
     if namespace == TIMEOUT:
-        raise TimeoutError()
+        raise multiprocessing.TimeoutError()
     if namespace == RUNTIME:
         raise RuntimeError()
 

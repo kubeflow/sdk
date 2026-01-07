@@ -411,18 +411,18 @@ class KubernetesBackend(RuntimeBackend):
         logger.debug(f"{constants.TRAINJOB_KIND} {self.namespace}/{name} has been deleted")
 
     def get_job_events(self, name: str) -> list[types.Event]:
+        # Get all pod names related to this TrainJob
+        trainjob = self.get_job(name)
+
+        # Create set of all TrainJob-related resource names
+        trainjob_resources = {name}
+        for step in trainjob.steps:
+            trainjob_resources.add(step.name)
+            if step.pod_name:
+                trainjob_resources.add(step.pod_name)
+
         events = []
         try:
-            # Get all pod names related to this TrainJob
-            trainjob = self.get_job(name)
-
-            # Create set of all TrainJob-related resource names
-            trainjob_resources = {name}
-            for step in trainjob.steps:
-                trainjob_resources.add(step.name)
-                if step.pod_name:
-                    trainjob_resources.add(step.pod_name)
-
             # Retrieve events from the namespace
             event_response = self.core_api.list_namespaced_event(
                 namespace=self.namespace,
@@ -461,13 +461,9 @@ class KubernetesBackend(RuntimeBackend):
             events.sort(key=lambda e: e.event_time)
 
             return events
-        except (multiprocessing.TimeoutError, TimeoutError) as e:
+        except multiprocessing.TimeoutError as e:
             raise TimeoutError(
-                f"Timeout getting events for {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
-            ) from e
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed getting events for {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
+                f"Timeout getting {constants.TRAINJOB_KIND} events: {self.namespace}/{name}"
             ) from e
 
     def __get_runtime_from_cr(
