@@ -240,7 +240,7 @@ class SparkClientBuilder:
 
         Args:
             conf: Dictionary of S3A configuration (endpoint, access.key, secret.key,
-                region, path.style.access, connection.ssl.enabled, etc.)
+                region, path.style.access, etc.)
         """
 
     def seaweedfs_config(
@@ -299,7 +299,6 @@ class SparkClient:
         self,
         url: Optional[str] = None,
         token: Optional[str] = None,
-        use_ssl: bool = False,
         name: Optional[str] = None,
         app_name: Optional[str] = None,
         num_executors: Optional[int] = None,
@@ -319,7 +318,6 @@ class SparkClient:
             url: Optional URL to existing Spark Connect server (e.g., "sc://server:15002").
                  If provided, connects to existing server. If None, creates new session.
             token: Optional authentication token for existing server.
-            use_ssl: Whether to use SSL for connection (only for existing servers).
             name: Optional session name. Auto-generated if not provided (create mode only).
             app_name: Optional Spark application name (create mode only).
             num_executors: Number of executor instances (create mode only).
