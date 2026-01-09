@@ -153,8 +153,6 @@ Resources are specified as dictionaries:
 resources_per_executor = {
     "cpu": "5",
     "memory": "10Gi",
-    "cpu_limit": "8",
-    "memory_limit": "12Gi"
 }
 ```
 
