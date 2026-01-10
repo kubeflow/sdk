@@ -111,7 +111,9 @@ def kubernetes_backend(request):
         yield KubernetesBackend(KubernetesBackendConfig())
 
 
-def _build_core_api_mock(config_map_data: Optional[dict] = None, error: Exception | None = None):
+def _build_core_api_mock(
+    config_map_data: Optional[dict] = None, error: Optional[Exception] = None
+):
     """Helper to construct a CoreV1Api mock for version checks."""
 
     core_api = Mock()
