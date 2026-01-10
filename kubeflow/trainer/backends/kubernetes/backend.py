@@ -16,12 +16,15 @@ from collections.abc import Callable, Iterator
 import copy
 import logging
 import multiprocessing
+import os
 import random
 import re
 import string
 import time
 from typing import Any, Optional, Union
 import uuid
+
+from importlib import metadata
 
 from kubeflow_trainer_api import models
 from kubernetes import client, config, watch
@@ -55,6 +58,86 @@ class KubernetesBackend(RuntimeBackend):
         self.core_api = client.CoreV1Api(k8s_client)
 
         self.namespace = cfg.namespace
+
+        # Perform control-plane / SDK version compatibility verification.
+        self.verify_backend()
+
+    def verify_backend(self) -> None:
+        """Verify that the Trainer control plane matches the local SDK version.
+
+        This check only applies to the Kubernetes backend. It compares the
+        version of the installed ``kubeflow-trainer-api`` package with the
+        version published by the control plane in a public ConfigMap.
+
+        The verification can be skipped entirely by setting the
+        ``KUBEFLOW_TRAINER_SKIP_VERSION_CHECK`` environment variable to any
+        value.
+
+        Raises:
+            RuntimeError: If the ConfigMap cannot be read, is missing the
+                expected version key, or the versions do not match.
+        """
+
+        # Allow users to opt out of version verification entirely.
+        if os.getenv("KUBEFLOW_TRAINER_SKIP_VERSION_CHECK") is not None:
+            return
+
+        # Resolve the namespace where control-plane components expose their
+        # public ConfigMaps.
+        system_namespace = os.getenv("KUBEFLOW_SYSTEM_NAMESPACE", "kubeflow")
+        config_map_name = "kubeflow-trainer-public"
+
+        try:
+            config_map = self.core_api.read_namespaced_config_map(
+                name=config_map_name,
+                namespace=system_namespace,
+            )
+        except Exception as e:
+            # Do not leak Kubernetes-specific exceptions; present a concise
+            # RuntimeError with guidance and allow users to bypass the check.
+            raise RuntimeError(
+                "Failed to read Kubeflow Trainer control-plane version "
+                f"ConfigMap '{config_map_name}' in namespace "
+                f"'{system_namespace}'. Ensure that the Kubeflow Trainer "
+                "control plane is installed and exposes this ConfigMap, or "
+                "set KUBEFLOW_TRAINER_SKIP_VERSION_CHECK=1 to skip this "
+                "check."
+            ) from e
+
+        data = getattr(config_map, "data", None)
+        server_version = None
+
+        if data and isinstance(data, dict):
+            server_version = data.get("kubeflow_trainer_api_version")
+
+        if not server_version:
+            raise RuntimeError(
+                "Kubeflow Trainer control-plane version ConfigMap '"
+                f"{config_map_name}' in namespace '{system_namespace}' is "
+                "missing the 'kubeflow_trainer_api_version' data key. "
+                "Ensure the control plane is configured correctly, or set "
+                "KUBEFLOW_TRAINER_SKIP_VERSION_CHECK=1 to skip this check."
+            )
+
+        try:
+            local_version = metadata.version("kubeflow-trainer-api")
+        except Exception as e:
+            raise RuntimeError(
+                "Failed to determine local 'kubeflow-trainer-api' package "
+                "version. Ensure the package is installed correctly, or set "
+                "KUBEFLOW_TRAINER_SKIP_VERSION_CHECK=1 to skip this check."
+            ) from e
+
+        if local_version != server_version:
+            raise RuntimeError(
+                "Kubeflow Trainer SDK version mismatch detected: local "
+                f"kubeflow-trainer-api=={local_version}, control plane "
+                f"kubeflow-trainer-api=={server_version}. The control plane "
+                "may be outdated or mismatched with this SDK. Please upgrade "
+                "either the SDK or the control plane so the versions match, "
+                "or set KUBEFLOW_TRAINER_SKIP_VERSION_CHECK=1 to bypass "
+                "this verification (not recommended)."
+            )
 
     def list_runtimes(self) -> list[types.Runtime]:
         result = []

@@ -30,6 +30,15 @@ class RuntimeBackend(abc.ABC):
     def list_runtimes(self) -> list[types.Runtime]:
         raise NotImplementedError()
 
+    def verify_backend(self) -> None:
+        """Optional hook to validate backend configuration.
+
+        Backends may override this method to perform backend-specific checks,
+        such as control-plane version compatibility. The default
+        implementation is a no-op so that verification remains optional.
+        """
+
+
     @abc.abstractmethod
     def get_runtime(self, name: str) -> types.Runtime:
         raise NotImplementedError()

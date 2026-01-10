@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Unit tests for TrainerClient backend selection.
-"""
+"""Unit tests for TrainerClient backend selection."""
 
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
@@ -54,10 +53,19 @@ def test_backend_selection(test_case):
         with (
             patch("kubernetes.config.load_kube_config"),
             patch("kubernetes.client.CustomObjectsApi") as mock_custom_api,
-            patch("kubernetes.client.CoreV1Api") as mock_core_api,
+            patch(
+                "kubernetes.client.CoreV1Api",
+                return_value=Mock(
+                    read_namespaced_config_map=Mock(
+                        return_value=SimpleNamespace(
+                            data={"kubeflow_trainer_api_version": "1.2.3"}
+                        )
+                    )
+                ),
+            ),
+            patch("importlib.metadata.version", return_value="1.2.3"),
         ):
             mock_custom_api.return_value = Mock()
-            mock_core_api.return_value = Mock()
 
             if test_case["backend_config"]:
                 client = TrainerClient(backend_config=test_case["backend_config"])
