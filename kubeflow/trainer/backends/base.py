@@ -30,6 +30,10 @@ class RuntimeBackend(abc.ABC):
     def list_runtimes(self) -> list[types.Runtime]:
         raise NotImplementedError()
 
+    def verify_backend(self) -> None:
+        """Verify that the backend is configured correctly and compatible."""
+        pass
+
     @abc.abstractmethod
     def get_runtime(self, name: str) -> types.Runtime:
         raise NotImplementedError()

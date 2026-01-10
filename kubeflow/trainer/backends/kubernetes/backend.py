@@ -23,6 +23,7 @@ import time
 from typing import Any, Optional, Union
 import uuid
 
+import kubeflow_trainer_api
 from kubeflow_trainer_api import models
 from kubernetes import client, config, watch
 
@@ -55,6 +56,34 @@ class KubernetesBackend(RuntimeBackend):
         self.core_api = client.CoreV1Api(k8s_client)
 
         self.namespace = cfg.namespace
+
+    def verify_backend(self) -> None:
+        try:
+            config_map = self.core_api.read_namespaced_config_map(
+                name=constants.TRAINER_VERSION_CONFIG_MAP,
+                namespace=constants.KUBEFLOW_NAMESPACE,
+            )
+        except client.ApiException as e:
+            if e.status == 404:
+                logger.warning(
+                    f"ConfigMap '{constants.TRAINER_VERSION_CONFIG_MAP}' not found "
+                    f"in namespace '{constants.KUBEFLOW_NAMESPACE}'. "
+                    "Cannot verify Kubeflow Trainer version compatibility."
+                )
+                return
+            else:
+                raise
+
+        server_version = (config_map.data or {}).get("version")
+        client_version = kubeflow_trainer_api.__version__
+
+        if server_version != client_version:
+            logger.warning(
+                f"Kubeflow Trainer version mismatch. "
+                f"Client version: {client_version}, "
+                f"Server version: {server_version}. "
+                "Some features might not work as expected."
+            )
 
     def list_runtimes(self) -> list[types.Runtime]:
         result = []

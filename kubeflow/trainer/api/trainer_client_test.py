@@ -70,3 +70,12 @@ def test_backend_selection(test_case):
         client = TrainerClient(backend_config=test_case["backend_config"])
         backend_name = client.backend.__class__.__name__
         assert backend_name == test_case["expected_backend"]
+
+
+def test_verify_backend_called():
+    with patch("kubeflow.trainer.api.trainer_client.KubernetesBackend") as MockBackend:
+        mock_instance = MockBackend.return_value
+        
+        TrainerClient()
+        
+        mock_instance.verify_backend.assert_called_once()

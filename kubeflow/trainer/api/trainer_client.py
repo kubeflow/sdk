@@ -66,6 +66,8 @@ class TrainerClient:
         else:
             raise ValueError(f"Invalid backend config '{backend_config}'")
 
+        self.backend.verify_backend()
+
     def list_runtimes(self) -> list[types.Runtime]:
         """List of the available runtimes.
 

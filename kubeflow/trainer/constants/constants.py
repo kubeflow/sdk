@@ -29,6 +29,12 @@ CLUSTER_TRAINING_RUNTIME_PLURAL = "clustertrainingruntimes"
 # The Kind name for the TrainJob.
 TRAINJOB_KIND = "TrainJob"
 
+# The system namespace for the Kubeflow components.
+KUBEFLOW_NAMESPACE = "kubeflow"
+
+# The name of the ConfigMap that contains the Trainer version.
+TRAINER_VERSION_CONFIG_MAP = "kubeflow-trainer-public"
+
 # The plural for the TrainJob.
 TRAINJOB_PLURAL = "trainjobs"
 
