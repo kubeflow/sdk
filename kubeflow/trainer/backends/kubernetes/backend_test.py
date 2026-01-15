@@ -332,6 +332,12 @@ def get_namespaced_custom_object_response(*args, **kwargs):
         raise RuntimeError()
     if args[3] == TRAIN_JOBS:  # TODO: review this.
         mock_thread.get.return_value = add_status(create_train_job(train_job_name=args[4]))
+    elif args[3] == constants.TRAINING_RUNTIME_PLURAL:
+        # Return a namespaced TrainingRuntime for the requested name.
+        mock_thread.get.return_value = normalize_model(
+            create_training_runtime(name=args[4]),
+            models.TrainerV1alpha1TrainingRuntime,
+        )
 
     return mock_thread
 

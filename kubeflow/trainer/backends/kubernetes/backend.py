@@ -57,64 +57,130 @@ class KubernetesBackend(RuntimeBackend):
         self.namespace = cfg.namespace
 
     def list_runtimes(self) -> list[types.Runtime]:
-        result = []
+        result: list[types.Runtime] = []
+
+        cluster_err = None
+        namespace_err = None
+        cluster_runtime_list = None
+        namespace_runtime_list = None
+
         try:
-            cluster_thread = self.custom_api.list_cluster_custom_object(
+            thread = self.custom_api.list_cluster_custom_object(
                 constants.GROUP,
                 constants.VERSION,
                 constants.CLUSTER_TRAINING_RUNTIME_PLURAL,
                 async_req=True,
             )
+            cluster_runtime_list = models.TrainerV1alpha1ClusterTrainingRuntimeList.from_dict(
+                thread.get(common_constants.DEFAULT_TIMEOUT)
+            )
+        except multiprocessing.TimeoutError as e:
+            cluster_err = e
+            logger.warning("Cluster runtimes timed out", exc_info=True)
+        except Exception as e:
+            cluster_err = e
+            logger.warning("Cluster runtimes failed", exc_info=True)
 
-            namespace_thread = self.custom_api.list_namespaced_custom_object(
+        try:
+            thread = self.custom_api.list_namespaced_custom_object(
                 constants.GROUP,
                 constants.VERSION,
                 self.namespace,
                 constants.TRAINING_RUNTIME_PLURAL,
                 async_req=True,
             )
-
-            cluster_runtime_list = models.TrainerV1alpha1ClusterTrainingRuntimeList.from_dict(
-                cluster_thread.get(common_constants.DEFAULT_TIMEOUT)
-            )
-
             namespace_runtime_list = models.TrainerV1alpha1TrainingRuntimeList.from_dict(
-                namespace_thread.get(common_constants.DEFAULT_TIMEOUT)
+                thread.get(common_constants.DEFAULT_TIMEOUT)
+            )
+        except multiprocessing.TimeoutError as e:
+            namespace_err = e
+            logger.warning(
+                f"Namespace runtimes timed out in namespace: {self.namespace}", exc_info=True
+            )
+        except Exception as e:
+            namespace_err = e
+            logger.warning(
+                f"Namespace runtimes failed in namespace: {self.namespace}", exc_info=True
             )
 
-            if not (cluster_runtime_list or namespace_runtime_list):
-                return result
+        if cluster_runtime_list is None and namespace_runtime_list is None:
+            # If both timed out → timeout
+            if isinstance(cluster_err, multiprocessing.TimeoutError) and isinstance(
+                namespace_err, multiprocessing.TimeoutError
+            ):
+                raise TimeoutError(
+                    f"Timeout while retrieving both cluster and namespace runtimes "
+                    f"(namespace={self.namespace})"
+                ) from cluster_err
 
-            for runtime in namespace_runtime_list.items + cluster_runtime_list.items:
+            raise RuntimeError(
+                f"Failed to retrieve runtimes.\n"
+                f"Cluster error: {repr(cluster_err)}\n"
+                f"Namespace error: {repr(namespace_err)}"
+            ) from (cluster_err or namespace_err)
+
+        runtimes = []
+        if namespace_runtime_list:
+            runtimes.extend(namespace_runtime_list.items)
+        if cluster_runtime_list:
+            runtimes.extend(cluster_runtime_list.items)
+
+        try:
+            for runtime in runtimes:
                 if not (
                     runtime.metadata
                     and runtime.metadata.labels
                     and constants.RUNTIME_FRAMEWORK_LABEL in runtime.metadata.labels
                 ):
                     logger.warning(
-                        f"Runtime {runtime.metadata.name} must have "  # type: ignore
-                        f"{constants.RUNTIME_FRAMEWORK_LABEL} label."
+                        "Runtime %s missing %s label",
+                        runtime.metadata.name if runtime.metadata else "<unknown>",
+                        constants.RUNTIME_FRAMEWORK_LABEL,
                     )
                     continue
+
                 result.append(self.__get_runtime_from_cr(runtime))
-
-        except multiprocessing.TimeoutError as e:
-            raise TimeoutError(
-                "Timeout to list "
-                f"{constants.CLUSTER_TRAINING_RUNTIME_KIND}s/{constants.TRAINING_RUNTIME_KIND}s "
-                f"in namespace: {self.namespace}"
-            ) from e
-        except Exception as e:
-            raise RuntimeError(
-                "Failed to list "
-                f"{constants.CLUSTER_TRAINING_RUNTIME_KIND}s/{constants.TRAINING_RUNTIME_KIND}s "
-                f"in namespace: {self.namespace}"
-            ) from e
-
+        except Exception:
+            logger.exception(
+                "Failed to parse runtime %s",
+                runtime.metadata.name if runtime.metadata else "<unknown>",
+            )
+            raise
         return result
 
     def get_runtime(self, name: str) -> types.Runtime:
-        """Get the Runtime object prefer namespaced, fall-back to cluster-scoped"""
+        """Prefer namespaced runtime, fall back to cluster-scoped only if it does not exist"""
+        try:
+            ns_thread = self.custom_api.get_namespaced_custom_object(
+                constants.GROUP,
+                constants.VERSION,
+                self.namespace,
+                constants.TRAINING_RUNTIME_PLURAL,
+                name,
+                async_req=True,
+            )
+            runtime = models.TrainerV1alpha1TrainingRuntime.from_dict(
+                ns_thread.get(common_constants.DEFAULT_TIMEOUT)
+            )
+            return self.__get_runtime_from_cr(runtime)
+
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(
+                f"Timeout while getting namespaced TrainingRuntime {self.namespace}/{name}"
+            ) from e
+
+        except client.exceptions.ApiException as e:
+            if e.status != 404:
+                raise RuntimeError(
+                    f"Failed to get namespaced TrainingRuntime "
+                    f"{self.namespace}/{name}: {e.status} {e.reason}"
+                ) from e
+
+            logger.info(
+                "Namespaced TrainingRuntime %s/%s not found, falling back to cluster-scoped",
+                self.namespace,
+                name,
+            )
 
         try:
             cluster_thread = self.custom_api.get_cluster_custom_object(
@@ -124,41 +190,15 @@ class KubernetesBackend(RuntimeBackend):
                 name,
                 async_req=True,
             )
-
-            namespace_thread = self.custom_api.get_namespaced_custom_object(
-                constants.GROUP,
-                constants.VERSION,
-                self.namespace,
-                constants.TRAINING_RUNTIME_PLURAL,
-                name,
-                async_req=True,
+            runtime = models.TrainerV1alpha1ClusterTrainingRuntime.from_dict(
+                cluster_thread.get(common_constants.DEFAULT_TIMEOUT)
             )
-
-            # Try namespaced runtime first, fall back to cluster-scoped one
-            try:
-                runtime = models.TrainerV1alpha1TrainingRuntime.from_dict(
-                    namespace_thread.get(common_constants.DEFAULT_TIMEOUT)  # type: ignore
-                )
-            except Exception as e:
-                logger.warning(
-                    f"Namespaced TrainingRuntime '{self.namespace}/{name}' not found "
-                    f"({type(e).__name__}: {e}); falling back to cluster-scoped runtime."
-                )
-
-                runtime = models.TrainerV1alpha1ClusterTrainingRuntime.from_dict(
-                    cluster_thread.get(common_constants.DEFAULT_TIMEOUT)  # type: ignore
-                )
+            return self.__get_runtime_from_cr(runtime)
 
         except multiprocessing.TimeoutError as e:
-            raise TimeoutError(
-                f"Timeout to get {constants.CLUSTER_TRAINING_RUNTIME_PLURAL}: {name}"
-            ) from e
+            raise TimeoutError(f"Timeout while getting cluster TrainingRuntime '{name}'") from e
         except Exception as e:
-            raise RuntimeError(
-                f"Failed to get {constants.CLUSTER_TRAINING_RUNTIME_PLURAL}: {name}"
-            ) from e
-
-        return self.__get_runtime_from_cr(runtime)  # type: ignore
+            raise RuntimeError(f"Failed while retrieving cluster TrainingRuntime: '{name}'") from e
 
     def get_runtime_packages(self, runtime: types.Runtime):
         if runtime.trainer.trainer_type == types.TrainerType.BUILTIN_TRAINER:
