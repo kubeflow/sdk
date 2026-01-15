@@ -593,9 +593,13 @@ def create_runtime_type(
         image="example.com/test-runtime",
     )
     trainer.set_command(constants.TORCH_COMMAND)
+    # Namespaced TrainingRuntime objects and default torch runtime use project scope;
+    # other runtimes created as cluster-scoped use cluster scope.
+    scope = "project" if name.startswith("ns-") or name == TORCH_RUNTIME else "cluster"
     return types.Runtime(
         name=name,
         trainer=trainer,
+        scope=scope,
     )
 
 
@@ -617,10 +621,7 @@ def get_train_job_data_type(
     return types.TrainJob(
         name=train_job_name,
         creation_timestamp=datetime.datetime(2025, 6, 1, 10, 30, 0),
-        runtime=types.Runtime(
-            name=runtime_name,
-            trainer=trainer,
-        ),
+        runtime=types.Runtime(name=runtime_name, trainer=trainer, scope="project"),
         steps=[
             types.Step(
                 name="dataset-initializer",

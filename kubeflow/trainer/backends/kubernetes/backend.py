@@ -499,6 +499,10 @@ class KubernetesBackend(RuntimeBackend):
         crd_kind = getattr(runtime_cr, "kind", "UnknownKind")
         crd_name = getattr(runtime_cr.metadata, "name", "UnknownName")
 
+        scope = None
+        if crd_kind != "UnknownKind":
+            scope = "cluster" if crd_kind == constants.CLUSTER_TRAINING_RUNTIME_KIND else "project"
+
         if not (
             runtime_cr.metadata
             and runtime_cr.metadata.name
@@ -529,6 +533,7 @@ class KubernetesBackend(RuntimeBackend):
                 runtime_cr.spec.template.spec.replicated_jobs,
                 runtime_cr.spec.ml_policy,
             ),
+            scope=scope,
         )
 
     def _read_pod_logs(self, pod_name: str, container_name: str, follow: bool) -> Iterator[str]:

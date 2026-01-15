@@ -252,6 +252,12 @@ class Runtime:
     name: str
     trainer: RuntimeTrainer
     pretrained_model: Optional[str] = None
+    scope: Optional[str] = None
+
+    def __post_init__(self):
+        valid_scopes = ["project", "cluster", None]
+        if self.scope not in valid_scopes:
+            raise ValueError(f"Scope must be one of {valid_scopes}, got '{self.scope}'")
 
 
 # Representation for the TrainJob steps.
