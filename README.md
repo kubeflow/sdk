@@ -39,6 +39,17 @@ infrastructure.
   />
 </div>
 
+## Kubeflow SDK Introduction
+
+The following KubeCon + CloudNativeCon 2025 talk provides an overview of Kubeflow SDK:
+
+[![Kubeflow SDK](https://img.youtube.com/vi/e_rFwH7CZ_E/0.jpg)](https://youtu.be/e_rFwH7CZ_E)
+
+Additionally, check out these demos to deep dive into Kubeflow SDK capabilities:
+
+- [LLM Fine-Tuning with BuiltinTrainer](https://youtu.be/pRWTLiW3dKQ)
+- [Local & Remote Backends in Kubeflow SDK](https://youtu.be/hhaebdkJLLQ)
+
 ## Get Started
 
 ### Install Kubeflow SDK
