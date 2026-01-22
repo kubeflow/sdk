@@ -367,7 +367,7 @@ class TrainingJobManager:
 ```
 
 ## Component: Trainer
-## Client Entrypoints
+### Client Entrypoints
 
 This repository provides multiple high-level client entrypoints to interact with training workflows:
 
