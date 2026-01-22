@@ -438,7 +438,7 @@ Supported backends:
 Backends are implemented under:
 - `kubeflow.trainer.backends`
 
-New backends should follow existing design patterns, implement proper error handling, and cleanup.
+New backends should follow existing design patterns, implement proper error handling and cleanup.
 
 
 ### Training Options
