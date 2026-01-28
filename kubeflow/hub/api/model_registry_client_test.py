@@ -126,6 +126,30 @@ def test_init_import_error(test_case, monkeypatch):
                 "is_secure": False,
             },
         ),
+        TestCase(
+            name="https URL with explicit port parses port",
+            expected_status=SUCCESS,
+            config={
+                "base_url": "https://example.org:456",
+                "author": "test",
+            },
+            expected_output={
+                "port": 456,
+                "is_secure": True,
+            },
+        ),
+        TestCase(
+            name="http URL with explicit port parses port",
+            expected_status=SUCCESS,
+            config={
+                "base_url": "http://example.org:456",
+                "author": "test",
+            },
+            expected_output={
+                "port": 456,
+                "is_secure": False,
+            },
+        ),
     ],
 )
 def test_init(test_case, monkeypatch):
