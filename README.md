@@ -126,7 +126,7 @@ print(f"OptimizationJob created: {optimization_id}")
 from kubeflow.hub import ModelRegistryClient
 
 ModelRegistryClient("https://example.org", port=456)  # port kwarg
-ModelRegistryClient("https://example.org:456")        # base_url 
+ModelRegistryClient("https://example.org:456")        # base_url
 ModelRegistryClient("https://example.org")            # default (`443` for https, `8080` for http)
 ```
 
