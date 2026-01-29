@@ -148,35 +148,6 @@ def get_local_runtime_trainer(
     return trainer
 
 
-def get_dependencies_command(
-    runtime_packages: list[str],
-    pip_index_urls: list[str],
-    trainer_packages: list[str],
-    quiet: bool = True,
-) -> str:
-    # resolve runtime dependencies and trainer dependencies.
-    packages = get_install_packages(
-        runtime_packages=runtime_packages,
-        trainer_packages=trainer_packages,
-    )
-
-    options = [f"--index-url {pip_index_urls[0]}"]
-    options.extend(f"--extra-index-url {extra_index_url}" for extra_index_url in pip_index_urls[1:])
-
-    """
-           PIP_DISABLE_PIP_VERSION_CHECK=1 pip install $QUIET $AS_USER \
-       --no-warn-script-location $PIP_INDEX $PACKAGE_STR
-       """
-    mapping = {
-        "QUIET": "--quiet" if quiet else "",
-        "PIP_INDEX": " ".join(options),
-        "PACKAGE_STR": '"{}"'.format('" "'.join(packages)),  # quote deps
-    }
-    t = Template(local_exec_constants.DEPENDENCIES_SCRIPT)
-    result = t.substitute(**mapping)
-    return result
-
-
 def get_command_using_train_func(
     runtime: types.Runtime,
     train_func: Callable,
@@ -185,7 +156,7 @@ def get_command_using_train_func(
     train_job_name: str,
 ) -> str:
     """
-    Get the Trainer container command from the given training function and parameters.
+    Get the file path of the training function script.
     """
     # Check if the runtime has a Trainer.
     if not runtime.trainer:
@@ -207,11 +178,7 @@ def get_command_using_train_func(
     # We need to dedent the function code.
     func_code = textwrap.dedent(func_code)
 
-    # Wrap function code to execute it from the file. For example:
-    # TODO (andreyvelich): Find a better way to run users' scripts.
-    # def train(parameters):
-    #     print('Start Training...')
-    # train({'lr': 0.01})
+    # Wrap function code to execute it from the file.
     if train_func_parameters is None:
         func_code = f"{func_code}\n{train_func.__name__}()\n"
     else:
@@ -219,30 +186,9 @@ def get_command_using_train_func(
 
     with open(func_file, "w") as f:
         f.write(func_code)
-    f.close()
+    # File is closed automatically by with block
 
-    t = Template(local_exec_constants.LOCAL_EXEC_ENTRYPOINT)
-    mapping = {
-        "PARAMETERS": "",  ## Torch Parameters if any
-        "PYENV_LOCATION": venv_dir,
-        "ENTRYPOINT": " ".join(runtime.trainer.command),
-        "FUNC_FILE": func_file,
-    }
-    entrypoint = t.safe_substitute(**mapping)
-
-    return entrypoint
-
-
-def get_cleanup_venv_script(venv_dir: str, cleanup_venv: bool = True) -> str:
-    script = "\n"
-    if not cleanup_venv:
-        return script
-
-    t = Template(local_exec_constants.LOCAL_EXEC_JOB_CLEANUP_SCRIPT)
-    mapping = {
-        "PYENV_LOCATION": venv_dir,
-    }
-    return t.substitute(**mapping)
+    return str(func_file)
 
 
 def get_local_train_job_script(
@@ -251,9 +197,7 @@ def get_local_train_job_script(
     trainer: types.CustomTrainer,
     runtime: types.Runtime,
     cleanup_venv: bool = True,
-) -> tuple:
-    # use local-exec train job template
-    t = Template(local_exec_constants.LOCAL_EXEC_JOB_TEMPLATE)
+) -> list[str]:
     # find os python binary to create venv
     python_bin = shutil.which("python")
     if not python_bin:
@@ -266,20 +210,19 @@ def get_local_train_job_script(
         runtime_trainer: LocalRuntimeTrainer = runtime.trainer
     else:
         raise ValueError("Invalid Runtime Trainer type: {type(runtime.trainer)}")
-    dependency_script = "\n"
+
+    packages_list = []
     if trainer.packages_to_install:
-        dependency_script = get_dependencies_command(
-            pip_index_urls=(
-                trainer.pip_index_urls
-                if trainer.pip_index_urls
-                else constants.DEFAULT_PIP_INDEX_URLS
-            ),
+        packages_list = get_install_packages(
             runtime_packages=runtime_trainer.packages,
             trainer_packages=trainer.packages_to_install,
-            quiet=False,
         )
+    # Default runtime packages if no trainer packages (though get_install_packages handles merge)
+    elif runtime_trainer.packages:
+         packages_list = runtime_trainer.packages
 
-    entrypoint = get_command_using_train_func(
+
+    func_file = get_command_using_train_func(
         venv_dir=venv_dir,
         runtime=runtime,
         train_func=trainer.func,
@@ -287,16 +230,23 @@ def get_local_train_job_script(
         train_job_name=train_job_name,
     )
 
-    cleanup_script = get_cleanup_venv_script(cleanup_venv=cleanup_venv, venv_dir=venv_dir)
+    # Build the full command to be executed inside the runner
+    # runtime.trainer.command should point to venv's python/torchrun
+    full_command = list(runtime.trainer.command) + [func_file]
 
+    # Create the runner script
+    runner_file = Path(venv_dir) / "runner.py"
+    t = Template(local_exec_constants.RUNNER_TEMPLATE)
+    
     mapping = {
-        "OS_PYTHON_BIN": python_bin,
-        "PYENV_LOCATION": venv_dir,
-        "DEPENDENCIES_SCRIPT": dependency_script,
-        "ENTRYPOINT": entrypoint,
-        "CLEANUP_SCRIPT": cleanup_script,
+        "pyenv_location": venv_dir,
+        "packages_list": str(packages_list),
+        "pip_index_urls": str(trainer.pip_index_urls if trainer.pip_index_urls else constants.DEFAULT_PIP_INDEX_URLS),
+        "command": str(full_command),
+        "cleanup_venv": str(cleanup_venv),
     }
+    
+    with open(runner_file, "w") as f:
+        f.write(t.substitute(**mapping))
 
-    command = t.safe_substitute(**mapping)
-
-    return "bash", "-c", command
+    return [python_bin, str(runner_file)]

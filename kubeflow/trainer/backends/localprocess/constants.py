@@ -41,48 +41,69 @@ local_runtimes = [
 ]
 
 
+
+TORCH_COMMAND = "torchrun"
+DEFAULT_COMMAND = "python"
+
 # Create venv script
 
 
-# The exec script to embed training function into container command.
-DEPENDENCIES_SCRIPT = textwrap.dedent(
+RUNNER_TEMPLATE = textwrap.dedent(
     """
-        PIP_DISABLE_PIP_VERSION_CHECK=1 pip install $QUIET \
-    --no-warn-script-location $PIP_INDEX $PACKAGE_STR
-    """
-)
+import os
+import shutil
+import subprocess
+import sys
 
-# activate virtualenv, then run the entrypoint from the virtualenv bin
-LOCAL_EXEC_ENTRYPOINT = textwrap.dedent(
-    """
-    $ENTRYPOINT "$FUNC_FILE" "$PARAMETERS"
-    """
-)
+def main():
+    venv_dir = r"${pyenv_location}"
+    requirements = ${packages_list}
+    pip_index_urls = ${pip_index_urls}
+    command = ${command}
+    cleanup_venv = ${cleanup_venv}
 
-TORCH_COMMAND = "torchrun"
+    # 1. Create venv
+    print(f"Creating venv at {venv_dir}")
+    # Use sys.executable to ensure we use the same python interpreter kind
+    subprocess.run([sys.executable, "-m", "venv", venv_dir], check=True)
 
-# default command, will run from within the virtualenv
-DEFAULT_COMMAND = "python"
+    venv_python = os.path.join(venv_dir, "bin", "python")
+    # Upgrade pip
+    subprocess.run([venv_python, "-m", "ensurepip", "--upgrade", "--default-pip"], check=True)
 
-# remove virtualenv after training is completed.
-LOCAL_EXEC_JOB_CLEANUP_SCRIPT = textwrap.dedent(
-    """
-    rm -rf $PYENV_LOCATION
-    """
-)
+    # 2. Install dependencies
+    if requirements:
+        pip_cmd = [venv_python, "-m", "pip", "install"]
+        if pip_index_urls:
+            pip_cmd.extend(["--index-url", pip_index_urls[0]])
+            for url in pip_index_urls[1:]:
+                pip_cmd.extend(["--extra-index-url", url])
+        pip_cmd.extend(requirements)
+        print(f"Installing dependencies: {requirements}")
+        subprocess.run(pip_cmd, check=True)
 
+    # 3. Run Training Command
+    print(f"Running command: {command}")
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Command failed with exit code {e.returncode}")
+        sys.exit(e.returncode)
+    finally:
+        # 4. Cleanup
+        if cleanup_venv:
+            print(f"Cleaning up venv at {venv_dir}")
+            try:
+                # We are running inside venv_dir, so we can't delete it fully on some OSs.
+                # But typically on Unix it's allowed.
+                # If we encounter errors, we ignore them to avoid failing the job status.
+                shutil.rmtree(venv_dir, ignore_errors=True)
+            except Exception as e:
+                print(f"Warning: Failed to cleanup venv: {e}")
 
-LOCAL_EXEC_JOB_TEMPLATE = textwrap.dedent(
-    """
-    set -e
-    $OS_PYTHON_BIN -m venv --without-pip $PYENV_LOCATION
-    echo "Operating inside $PYENV_LOCATION"
-    source $PYENV_LOCATION/bin/activate
-    $PYENV_LOCATION/bin/python -m ensurepip --upgrade --default-pip
-    $DEPENDENCIES_SCRIPT
-    $ENTRYPOINT
-    $CLEANUP_SCRIPT
-    """
+if __name__ == "__main__":
+    main()
+"""
 )
 
 LOCAL_EXEC_FILENAME = "train_{}.py"
