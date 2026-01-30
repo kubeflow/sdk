@@ -15,6 +15,7 @@
 from collections.abc import Callable, Iterator
 import logging
 from typing import Optional, Union
+import json
 
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.trainer.backends.container.backend import ContainerBackend
@@ -208,6 +209,15 @@ class TrainerClient:
             RuntimeError: Failed to get a TrainJob.
         """
         return self.backend.get_job_logs(name=name, follow=follow, step=step)
+
+    def get_gpu_status(self, name:str):
+        """Get GPU status for the training nodes of a TrainJob.
+        Args:
+            name: Name of the TrainJob.
+        Returns:
+            A list of dictionaries containing GPU metrics.
+        """
+        return self.backend.get_gpu_status(name=name)
 
     def get_job_events(self, name: str) -> list[types.Event]:
         """Get events for a TrainJob.

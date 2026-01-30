@@ -18,7 +18,7 @@ import random
 import string
 import tempfile
 import time
-from typing import Optional, Union
+from typing import Any, Optional, Union
 import uuid
 
 from kubeflow.trainer.backends.base import RuntimeBackend
@@ -256,6 +256,9 @@ class LocalProcessBackend(RuntimeBackend):
         _ = [step.job.cancel() for step in _job.steps]
         # remove the job from the list of jobs
         self.__local_jobs.remove(_job)
+
+    def get_gpu_status(self, name: str) -> list[dict[str, Any]]:
+        return []
 
     def __get_job_status(self, job: LocalBackendJobs) -> str:
         statuses = [_step.job.status for _step in job.steps]

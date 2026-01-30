@@ -1342,3 +1342,46 @@ def test_get_job_events(kubernetes_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid flow with gpu status",
+            expected_status=SUCCESS,
+            config={"name": BASIC_TRAIN_JOB_NAME},
+            expected_output=[
+                {
+                    "node": "node-0",
+                    "index": "0",
+                    "uuid": "GPU-12345",
+                    "name": "NVIDIA A100",
+                    "temperature": "40C",
+                    "utilization": "50%",
+                    "memory_utilization": "20%",
+                    "memory": "2000/40000 MiB",
+                    "power": "150W",
+                    "pstate": "P0",
+                }
+            ],
+        ),
+    ],
+)
+def test_get_gpu_status(kubernetes_backend, test_case):
+    """Test KubernetesBackend.get_gpu_status with success path."""
+    print("Executing test:", test_case.name)
+
+    # Mock stream response
+    mock_stream_res = "0, GPU-12345, NVIDIA A100, 40, 50, 20, 40000, 2000, 150, P0"
+
+    with patch(
+        "kubeflow.trainer.backends.kubernetes.backend.stream", return_value=mock_stream_res
+    ):
+        try:
+            status = kubernetes_backend.get_gpu_status(**test_case.config)
+            assert test_case.expected_status == SUCCESS
+            assert status == test_case.expected_output
+        except Exception as e:
+            assert type(e) is test_case.expected_error
+    print("test execution complete")

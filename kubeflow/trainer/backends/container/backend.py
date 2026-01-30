@@ -44,7 +44,7 @@ import os
 import random
 import shutil
 import string
-from typing import Optional, Union
+from typing import Any, Optional, Union
 import uuid
 
 from kubeflow.trainer.backends.base import RuntimeBackend
@@ -666,3 +666,6 @@ class ContainerBackend(RuntimeBackend):
         # Remove working directory if configured
         if self.cfg.auto_remove and workdir_host and os.path.isdir(workdir_host):
             shutil.rmtree(workdir_host, ignore_errors=True)
+
+    def get_gpu_status(self, name: str) -> list[dict[str, Any]]:
+        return []

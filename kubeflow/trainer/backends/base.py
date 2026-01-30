@@ -92,3 +92,7 @@ class RuntimeBackend(abc.ABC):
     @abc.abstractmethod
     def delete_job(self, name: str):
         raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_gpu_status(self, name: str) -> list[dict[str, str]]:
+        raise NotImplementedError()

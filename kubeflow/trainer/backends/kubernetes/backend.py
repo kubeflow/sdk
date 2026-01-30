@@ -22,9 +22,9 @@ import string
 import time
 from typing import Any, Optional, Union
 import uuid
-
+import io,csv
 from kubeflow_trainer_api import models
-from kubernetes import client, config, watch
+from kubernetes import client, config, watch , stream
 
 import kubeflow.common.constants as common_constants
 from kubeflow.common.types import KubernetesBackendConfig
@@ -168,6 +168,51 @@ class KubernetesBackend(RuntimeBackend):
         self.wait_for_job_status(job_name)
         print("\n".join(self.get_job_logs(name=job_name)))
         self.delete_job(job_name)
+
+    def get_gpu_status(self , name: str) -> list[dict[str, str]]:
+        train_job = self.get_job(name=name)
+        gpu_status = []
+        
+        command = [
+            "nvidia-smi",
+            "--query-gpu=index,uuid,name,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.used,power.draw,pstate",
+            "--format=csv,noheader,nounits"
+        ]
+
+        for step in train_job.steps:
+            if not step.name.startswith(constants.NODE) or not step.pod_name:
+                continue
+
+            try:
+                res = stream(
+                    self.core_api.connect_get_namespaced_pod_exec,
+                    step.pod_name,
+                    self.namespace,
+                    command=command,
+                    stderr=True,
+                    stdin=False,
+                    stdout=True,
+                    tty=False,
+                )
+                f = io.StringIO(res)
+                reader = csv.reader(f)
+                for row in reader:
+                    gpu_status.append({
+                        "node": step.name,
+                        "index": row[0].strip(),
+                        "uuid": row[1].strip(),
+                        "name": row[2].strip(),
+                        "temperature": f"{row[3].strip()}C",
+                        "utilization": f"{row[4].strip()}%",
+                        "memory_utilization": f"{row[5].strip()}%",
+                        "memory": f"{row[7].strip()}/{row[6].strip()} MiB",
+                        "power": f"{row[8].strip()}W",
+                        "pstate": row[9].strip(),
+                    })
+            except Exception as e:
+                logger.warning(f"Failed to get GPU status for pod {step.pod_name}: {e}")
+
+        return gpu_status
 
     def train(
         self,
