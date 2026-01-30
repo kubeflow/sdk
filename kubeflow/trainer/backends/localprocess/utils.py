@@ -219,8 +219,7 @@ def get_local_train_job_script(
         )
     # Default runtime packages if no trainer packages (though get_install_packages handles merge)
     elif runtime_trainer.packages:
-         packages_list = runtime_trainer.packages
-
+        packages_list = runtime_trainer.packages
 
     func_file = get_command_using_train_func(
         venv_dir=venv_dir,
@@ -237,15 +236,17 @@ def get_local_train_job_script(
     # Create the runner script
     runner_file = Path(venv_dir) / "runner.py"
     t = Template(local_exec_constants.RUNNER_TEMPLATE)
-    
+
     mapping = {
         "pyenv_location": venv_dir,
         "packages_list": str(packages_list),
-        "pip_index_urls": str(trainer.pip_index_urls if trainer.pip_index_urls else constants.DEFAULT_PIP_INDEX_URLS),
+        "pip_index_urls": str(
+            trainer.pip_index_urls if trainer.pip_index_urls else constants.DEFAULT_PIP_INDEX_URLS
+        ),
         "command": str(full_command),
         "cleanup_venv": str(cleanup_venv),
     }
-    
+
     with open(runner_file, "w") as f:
         f.write(t.substitute(**mapping))
 

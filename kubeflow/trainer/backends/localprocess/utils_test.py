@@ -12,16 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 from pathlib import Path
-import shutil
 import tempfile
-from unittest.mock import Mock, patch
 
-import pytest
-
-from kubeflow.trainer.backends.localprocess import constants as local_exec_constants
-from kubeflow.trainer.backends.localprocess import utils
+from kubeflow.trainer.backends.localprocess import constants as local_exec_constants, utils
 from kubeflow.trainer.backends.localprocess.types import LocalRuntimeTrainer
 from kubeflow.trainer.types import types
 
@@ -62,7 +56,7 @@ def test_get_local_train_job_script():
         # Check command structure
         assert isinstance(command, list)
         assert len(command) == 2
-        assert "python" in command[0].lower() # OS specific, but should contain python
+        assert "python" in command[0].lower()  # OS specific, but should contain python
         assert command[1].endswith("runner.py")
         assert Path(command[1]).exists()
 
@@ -74,7 +68,7 @@ def test_get_local_train_job_script():
             assert "numpy" in content
             assert "torch" in content
             assert "https://pypi.org/simple" in content
-            assert "python" in content # command part
+            assert "python" in content  # command part
 
         # Check train function file creation
         func_file = Path(venv_dir) / local_exec_constants.LOCAL_EXEC_FILENAME.format(train_job_name)
@@ -82,5 +76,4 @@ def test_get_local_train_job_script():
         with open(func_file) as f:
             func_content = f.read()
             assert "def dummy_func" in func_content
-            assert "dummy_func()" in func_content # parameters match
-
+            assert "dummy_func()" in func_content  # parameters match
