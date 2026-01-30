@@ -16,6 +16,7 @@ from collections.abc import Callable, Iterator
 import copy
 import logging
 import multiprocessing
+import os
 import random
 import re
 import string
@@ -55,6 +56,59 @@ class KubernetesBackend(RuntimeBackend):
         self.core_api = client.CoreV1Api(k8s_client)
 
         self.namespace = cfg.namespace
+
+        # Perform control-plane version metadata verification.
+        self.verify_backend()
+
+    def verify_backend(self) -> None:
+        """Verify that the Trainer control plane exposes version metadata.
+
+        This check only ensures that the public control-plane ConfigMap exists
+        and contains a ``kubeflow_trainer_api_version`` field. It does not
+        enforce version compatibility and never raises.
+        """
+
+        system_namespace = os.getenv("KUBEFLOW_SYSTEM_NAMESPACE", "kubeflow")
+        config_map_name = "kubeflow-trainer-public"
+
+        try:
+            config_map = self.core_api.read_namespaced_config_map(
+                name=config_map_name,
+                namespace=system_namespace,
+            )
+        except Exception:
+            logger.warning(
+                "Trainer control-plane version info is not available: "
+                f"failed to read ConfigMap '{config_map_name}' in namespace "
+                f"'{system_namespace}'."
+            )
+            return
+
+        data = getattr(config_map, "data", None)
+
+        if not isinstance(data, dict):
+            logger.warning(
+                "Trainer control-plane version info is not available: "
+                f"ConfigMap '{config_map_name}' in namespace "
+                f"'{system_namespace}' has no data dictionary."
+            )
+            return
+
+        server_version = data.get("kubeflow_trainer_api_version")
+
+        if not server_version:
+            logger.warning(
+                "Trainer control-plane version info is not available: "
+                f"ConfigMap '{config_map_name}' in namespace "
+                f"'{system_namespace}' is missing the "
+                "'kubeflow_trainer_api_version' data key."
+            )
+            return
+
+        # When the control plane advertises a "dev" API version, skip any
+        # additional checks silently.
+        if server_version == "dev":
+            return
 
     def list_runtimes(self) -> list[types.Runtime]:
         result = []

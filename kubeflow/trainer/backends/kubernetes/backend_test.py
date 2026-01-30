@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Unit tests for the KubernetesBackend class in the Kubeflow Trainer SDK.
+"""Unit tests for the KubernetesBackend class in the Kubeflow Trainer SDK.
 
 This module uses pytest and unittest.mock to simulate Kubernetes API interactions.
-It tests KubernetesBackend's behavior across job listing, resource creation etc
+It tests KubernetesBackend's behavior across job listing, resource creation etc.
 """
 
 from dataclasses import asdict
 import datetime
+import logging
 import multiprocessing
 import random
 import string
@@ -266,6 +266,19 @@ def get_custom_trainer_container(
         resourcesPerNode=resources_per_node,
         env=env,
     )
+
+
+def _build_core_api_mock(config_map_data: Optional[dict] = None, error: Exception | None = None):
+    """Helper to construct a CoreV1Api mock for version checks."""
+
+    core_api = Mock()
+
+    if error is not None:
+        core_api.read_namespaced_config_map.side_effect = error
+    else:
+        core_api.read_namespaced_config_map.return_value = Mock(data=config_map_data)
+
+    return core_api
 
 
 def get_builtin_trainer(
@@ -651,6 +664,116 @@ def get_train_job_data_type(
         num_nodes=2,
         status="Complete",
     )
+
+
+def test_version_check_success(caplog):
+    """Backend initializes when control-plane version metadata is present."""
+
+    core_api = _build_core_api_mock({"kubeflow_trainer_api_version": "1.2.3"})
+
+    with caplog.at_level(
+        logging.WARNING, logger="kubeflow.trainer.backends.kubernetes.backend"
+    ):
+        with (
+            patch("kubernetes.config.load_kube_config", return_value=None),
+            patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
+            patch("kubernetes.client.ApiClient", return_value=Mock()),
+            patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
+            patch("kubernetes.client.CoreV1Api", return_value=core_api),
+        ):
+            backend = KubernetesBackend(KubernetesBackendConfig())
+            assert backend.namespace is not None
+
+    core_api.read_namespaced_config_map.assert_called_once()
+    assert "Trainer control-plane version info is not available" not in caplog.text
+
+
+def test_version_check_missing_configmap_logs_warning(caplog):
+    """Backend logs a warning when the ConfigMap cannot be read."""
+
+    error = Exception("ConfigMap not found")
+    core_api = _build_core_api_mock(None, error)
+
+    with caplog.at_level(
+        logging.WARNING, logger="kubeflow.trainer.backends.kubernetes.backend"
+    ):
+        with (
+            patch("kubernetes.config.load_kube_config", return_value=None),
+            patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
+            patch("kubernetes.client.ApiClient", return_value=Mock()),
+            patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
+            patch("kubernetes.client.CoreV1Api", return_value=core_api),
+        ):
+            backend = KubernetesBackend(KubernetesBackendConfig())
+            assert backend.namespace is not None
+
+    assert "Trainer control-plane version info is not available" in caplog.text
+    assert "kubeflow-trainer-public" in caplog.text
+
+
+def test_version_check_missing_data_key_logs_warning(caplog):
+    """Backend logs a warning when the expected data key is missing."""
+
+    core_api = _build_core_api_mock({})
+
+    with caplog.at_level(
+        logging.WARNING, logger="kubeflow.trainer.backends.kubernetes.backend"
+    ):
+        with (
+            patch("kubernetes.config.load_kube_config", return_value=None),
+            patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
+            patch("kubernetes.client.ApiClient", return_value=Mock()),
+            patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
+            patch("kubernetes.client.CoreV1Api", return_value=core_api),
+        ):
+            backend = KubernetesBackend(KubernetesBackendConfig())
+            assert backend.namespace is not None
+
+    assert "Trainer control-plane version info is not available" in caplog.text
+    assert "kubeflow_trainer_api_version" in caplog.text
+
+
+def test_version_check_data_none_logs_warning(caplog):
+    """Backend logs a warning when ConfigMap data is None."""
+
+    core_api = _build_core_api_mock(None)
+
+    with caplog.at_level(
+        logging.WARNING, logger="kubeflow.trainer.backends.kubernetes.backend"
+    ):
+        with (
+            patch("kubernetes.config.load_kube_config", return_value=None),
+            patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
+            patch("kubernetes.client.ApiClient", return_value=Mock()),
+            patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
+            patch("kubernetes.client.CoreV1Api", return_value=core_api),
+        ):
+            backend = KubernetesBackend(KubernetesBackendConfig())
+            assert backend.namespace is not None
+
+    assert "Trainer control-plane version info is not available" in caplog.text
+    assert "kubeflow_trainer_api_version" in caplog.text
+
+
+def test_version_check_dev_version_skips_silently(caplog):
+    """Backend skips all checks silently when version is 'dev'."""
+
+    core_api = _build_core_api_mock({"kubeflow_trainer_api_version": "dev"})
+
+    with caplog.at_level(
+        logging.WARNING, logger="kubeflow.trainer.backends.kubernetes.backend"
+    ):
+        with (
+            patch("kubernetes.config.load_kube_config", return_value=None),
+            patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
+            patch("kubernetes.client.ApiClient", return_value=Mock()),
+            patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
+            patch("kubernetes.client.CoreV1Api", return_value=core_api),
+        ):
+            backend = KubernetesBackend(KubernetesBackendConfig())
+            assert backend.namespace is not None
+
+    assert "Trainer control-plane version info is not available" not in caplog.text
 
 
 # --------------------------
