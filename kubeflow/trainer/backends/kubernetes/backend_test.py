@@ -19,8 +19,9 @@ It tests KubernetesBackend's behavior across job listing, resource creation, and
 control-plane version validation.
 """
 
-from dataclasses import asdict
 import datetime
+import logging
+from dataclasses import asdict
 import multiprocessing
 import random
 import string
@@ -111,9 +112,7 @@ def kubernetes_backend(request):
         yield KubernetesBackend(KubernetesBackendConfig())
 
 
-def _build_core_api_mock(
-    config_map_data: Optional[dict] = None, error: Optional[Exception] = None
-):
+def _build_core_api_mock(config_map_data: Optional[dict] = None, error: Exception | None = None):
     """Helper to construct a CoreV1Api mock for version checks."""
 
     core_api = Mock()
@@ -290,137 +289,126 @@ def get_custom_trainer_container(
     )
 
 
-def test_version_check_success():
-    """Backend initializes successfully when control-plane and SDK versions match."""
+def test_version_check_success(caplog):
+    """Backend initializes successfully when control-plane version metadata is present."""
 
-    with (
-        patch("kubernetes.config.load_kube_config", return_value=None),
-        patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
-        patch("kubernetes.client.ApiClient", return_value=Mock()),
-        patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
-        patch("importlib.metadata.version", return_value="1.2.3"),
-        patch(
-            "kubernetes.client.CoreV1Api",
-            return_value=_build_core_api_mock(
-                {"kubeflow_trainer_api_version": "1.2.3"}
-            ),
-        ),
-    ):
-        backend = KubernetesBackend(KubernetesBackendConfig())
-        assert backend.namespace is not None
+    core_api = _build_core_api_mock({"kubeflow_trainer_api_version": "1.2.3"})
 
+    with caplog.at_level(logging.WARNING, logger="kubeflow.trainer.backends.kubernetes.backend"):
+        with (
+            patch("kubernetes.config.load_kube_config", return_value=None),
+            patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
+            patch("kubernetes.client.ApiClient", return_value=Mock()),
+            patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
+            patch("kubernetes.client.CoreV1Api", return_value=core_api),
+        ):
+            backend = KubernetesBackend(KubernetesBackendConfig())
+            assert backend.namespace is not None
 
-def test_version_check_mismatch_raises():
-    """Backend raises RuntimeError when versions do not match."""
-
-    with (
-        patch("kubernetes.config.load_kube_config", return_value=None),
-        patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
-        patch("kubernetes.client.ApiClient", return_value=Mock()),
-        patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
-        patch("importlib.metadata.version", return_value="1.0.0"),
-        patch(
-            "kubernetes.client.CoreV1Api",
-            return_value=_build_core_api_mock(
-                {"kubeflow_trainer_api_version": "9.9.9"}
-            ),
-        ),
-    ):
-        with pytest.raises(RuntimeError) as exc:
-            KubernetesBackend(KubernetesBackendConfig())
-
-        message = str(exc.value)
-        assert "version mismatch" in message
-        assert "local kubeflow-trainer-api==1.0.0" in message
-        assert "control plane kubeflow-trainer-api==9.9.9" in message
-        assert "KUBEFLOW_TRAINER_SKIP_VERSION_CHECK" in message
+    core_api.read_namespaced_config_map.assert_called_once()
+    assert "Trainer control-plane version info is not available" not in caplog.text
 
 
-def test_version_check_missing_configmap_raises():
-    """Backend raises RuntimeError when the ConfigMap cannot be read."""
+def test_version_check_mismatch_does_not_fail(caplog):
+    """Backend does not fail when control-plane and SDK versions differ."""
+
+    core_api = _build_core_api_mock({"kubeflow_trainer_api_version": "9.9.9"})
+
+    with caplog.at_level(logging.WARNING, logger="kubeflow.trainer.backends.kubernetes.backend"):
+        with (
+            patch("kubernetes.config.load_kube_config", return_value=None),
+            patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
+            patch("kubernetes.client.ApiClient", return_value=Mock()),
+            patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
+            patch("kubernetes.client.CoreV1Api", return_value=core_api),
+        ):
+            backend = KubernetesBackend(KubernetesBackendConfig())
+            assert backend.namespace is not None
+
+    assert "version mismatch" not in caplog.text
+    assert "Trainer control-plane version info is not available" not in caplog.text
+
+
+def test_version_check_missing_configmap_logs_warning(caplog):
+    """Backend logs a warning when the ConfigMap cannot be read."""
 
     error = Exception("ConfigMap not found")
 
-    with (
-        patch("kubernetes.config.load_kube_config", return_value=None),
-        patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
-        patch("kubernetes.client.ApiClient", return_value=Mock()),
-        patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
-        patch("importlib.metadata.version", return_value="1.0.0"),
-        patch("kubernetes.client.CoreV1Api", return_value=_build_core_api_mock(None, error)),
-    ):
-        with pytest.raises(RuntimeError) as exc:
-            KubernetesBackend(KubernetesBackendConfig())
+    core_api = _build_core_api_mock(None, error)
 
-        message = str(exc.value)
-        assert "Failed to read Kubeflow Trainer control-plane version ConfigMap" in message
-        assert "kubeflow-trainer-public" in message
-        assert "KUBEFLOW_TRAINER_SKIP_VERSION_CHECK" in message
+    with caplog.at_level(logging.WARNING, logger="kubeflow.trainer.backends.kubernetes.backend"):
+        with (
+            patch("kubernetes.config.load_kube_config", return_value=None),
+            patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
+            patch("kubernetes.client.ApiClient", return_value=Mock()),
+            patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
+            patch("kubernetes.client.CoreV1Api", return_value=core_api),
+        ):
+            backend = KubernetesBackend(KubernetesBackendConfig())
+            assert backend.namespace is not None
 
-
-def test_version_check_missing_data_key_raises():
-    """Backend raises RuntimeError when the expected data key is missing."""
-
-    with (
-        patch("kubernetes.config.load_kube_config", return_value=None),
-        patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
-        patch("kubernetes.client.ApiClient", return_value=Mock()),
-        patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
-        patch("importlib.metadata.version", return_value="1.2.3"),
-        patch(
-            "kubernetes.client.CoreV1Api",
-            return_value=_build_core_api_mock({}),
-        ),
-    ):
-        with pytest.raises(RuntimeError) as exc:
-            KubernetesBackend(KubernetesBackendConfig())
-
-        message = str(exc.value)
-        assert "kubeflow_trainer_api_version" in message
+    assert "Trainer control-plane version info is not available" in caplog.text
+    assert "kubeflow-trainer-public" in caplog.text
 
 
-def test_version_check_data_none_raises():
-    """Backend raises RuntimeError when ConfigMap data is None."""
+def test_version_check_missing_data_key_logs_warning(caplog):
+    """Backend logs a warning when the expected data key is missing."""
 
-    with (
-        patch("kubernetes.config.load_kube_config", return_value=None),
-        patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
-        patch("kubernetes.client.ApiClient", return_value=Mock()),
-        patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
-        patch("importlib.metadata.version", return_value="1.2.3"),
-        patch(
-            "kubernetes.client.CoreV1Api",
-            return_value=_build_core_api_mock(None),
-        ),
-    ):
-        with pytest.raises(RuntimeError) as exc:
-            KubernetesBackend(KubernetesBackendConfig())
+    core_api = _build_core_api_mock({})
 
-        message = str(exc.value)
-        assert "kubeflow_trainer_api_version" in message
+    with caplog.at_level(logging.WARNING, logger="kubeflow.trainer.backends.kubernetes.backend"):
+        with (
+            patch("kubernetes.config.load_kube_config", return_value=None),
+            patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
+            patch("kubernetes.client.ApiClient", return_value=Mock()),
+            patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
+            patch("kubernetes.client.CoreV1Api", return_value=core_api),
+        ):
+            backend = KubernetesBackend(KubernetesBackendConfig())
+            assert backend.namespace is not None
+
+    assert "Trainer control-plane version info is not available" in caplog.text
+    assert "kubeflow_trainer_api_version" in caplog.text
 
 
-def test_version_check_can_be_skipped(monkeypatch):
-    """Backend skips verification entirely when skip env var is set."""
+def test_version_check_data_none_logs_warning(caplog):
+    """Backend logs a warning when ConfigMap data is None."""
 
-    monkeypatch.setenv("KUBEFLOW_TRAINER_SKIP_VERSION_CHECK", "1")
+    core_api = _build_core_api_mock(None)
 
-    core_api = _build_core_api_mock(
-        {"kubeflow_trainer_api_version": "9.9.9"}
-    )
+    with caplog.at_level(logging.WARNING, logger="kubeflow.trainer.backends.kubernetes.backend"):
+        with (
+            patch("kubernetes.config.load_kube_config", return_value=None),
+            patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
+            patch("kubernetes.client.ApiClient", return_value=Mock()),
+            patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
+            patch("kubernetes.client.CoreV1Api", return_value=core_api),
+        ):
+            backend = KubernetesBackend(KubernetesBackendConfig())
+            assert backend.namespace is not None
 
-    with (
-        patch("kubernetes.config.load_kube_config", return_value=None),
-        patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
-        patch("kubernetes.client.ApiClient", return_value=Mock()),
-        patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
-        patch("importlib.metadata.version", return_value="1.0.0"),
-        patch("kubernetes.client.CoreV1Api", return_value=core_api),
-    ):
-        backend = KubernetesBackend(KubernetesBackendConfig())
-        assert backend.namespace is not None
-        # No Kubernetes ConfigMap reads should occur when skip env is set.
-        core_api.read_namespaced_config_map.assert_not_called()
+    assert "Trainer control-plane version info is not available" in caplog.text
+    assert "kubeflow_trainer_api_version" in caplog.text
+
+
+def test_version_check_dev_version_skips_silently(caplog):
+    """Backend skips all checks silently when control-plane version is 'dev'."""
+
+    core_api = _build_core_api_mock({"kubeflow_trainer_api_version": "dev"})
+
+    with caplog.at_level(logging.WARNING, logger="kubeflow.trainer.backends.kubernetes.backend"):
+        with (
+            patch("kubernetes.config.load_kube_config", return_value=None),
+            patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
+            patch("kubernetes.client.ApiClient", return_value=Mock()),
+            patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
+            patch("kubernetes.client.CoreV1Api", return_value=core_api),
+        ):
+            backend = KubernetesBackend(KubernetesBackendConfig())
+            assert backend.namespace is not None
+
+    # No warnings should be emitted for the dev version.
+    assert "Trainer control-plane version info is not available" not in caplog.text
 
 
 def get_builtin_trainer(
