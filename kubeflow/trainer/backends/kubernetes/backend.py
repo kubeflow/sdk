@@ -14,6 +14,8 @@
 
 from collections.abc import Callable, Iterator
 import copy
+import csv
+import io
 import logging
 import multiprocessing
 import os
@@ -25,7 +27,7 @@ from typing import Any
 import uuid
 
 from kubeflow_trainer_api import models
-from kubernetes import client, config, watch
+from kubernetes import client, config, stream, watch
 
 import kubeflow.common.constants as common_constants
 from kubeflow.common.types import KubernetesBackendConfig
@@ -291,6 +293,102 @@ class KubernetesBackend(RuntimeBackend):
                         self.namespace,
                         job_name,
                     )
+
+    def get_gpu_status(self, name: str) -> list[dict[str, str]]:
+        """Get GPU status for the training nodes of a TrainJob.
+
+        Args:
+            name: Name of the TrainJob.
+
+        Returns:
+            A list of dicts, one per GPU, containing the ``node``, ``index``, ``uuid``,
+            ``name``, ``temperature``, ``utilization``, ``memory_utilization``, ``memory``,
+            ``power`` and ``pstate`` keys.
+            An empty list is a valid result and means no GPUs are reporting status
+            for this TrainJob.
+
+        Raises:
+            TimeoutError: Timeout occurred while getting the TrainJob or running nvidia-smi.
+            RuntimeError: Failed to get the TrainJob or to run nvidia-smi.
+        """
+        train_job = self.get_job(name=name)
+        gpu_status: list[dict[str, str]] = []
+
+        command = [
+            "nvidia-smi",
+            "--query-gpu=index,uuid,name,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.used,power.draw,pstate",
+            "--format=csv,noheader,nounits",
+        ]
+
+        for step in train_job.steps:
+            if not step.name.startswith(constants.NODE) or not step.pod_name:
+                continue
+
+            stdout, stderr, returncode = self.__exec_command_in_pod(step.pod_name, command)
+
+            if returncode != 0:
+                logger.error("nvidia-smi failed in node %s: %s", step.name, stderr)
+                raise RuntimeError(
+                    f"Failed to get GPU status for {constants.TRAINJOB_KIND} {name}: "
+                    f"nvidia-smi returned exit code {returncode} in node {step.name}: {stderr}"
+                )
+
+            gpu_status.extend(self.__parse_gpu_status(stdout, node_name=step.name))
+
+        return gpu_status
+
+    def __exec_command_in_pod(self, pod_name: str, command: list[str]) -> tuple[str, str, int]:
+        """Execute a command in a pod and return its stdout, stderr and exit code."""
+        try:
+            ws = stream(
+                self.core_api.connect_get_namespaced_pod_exec,
+                pod_name,
+                self.namespace,
+                command=command,
+                stdin=False,
+                stdout=True,
+                stderr=True,
+                tty=False,
+                _preload_content=False,
+            )
+        except client.ApiException as e:
+            logger.error("Failed to exec %s in pod %s: %s", command[0], pod_name, e)
+            raise RuntimeError(
+                f"Failed to exec {constants.TRAINJOB_KIND} {command[0]} in pod {pod_name}"
+            ) from e
+
+        ws.run_forever(timeout=common_constants.DEFAULT_TIMEOUT)
+        stdout, stderr = ws.read_stdout(), ws.read_stderr()
+        returncode = ws.returncode
+        ws.close()
+
+        if returncode is None:
+            raise TimeoutError(f"Timeout to run {command[0]} in pod {self.namespace}/{pod_name}")
+        return stdout, stderr, returncode
+
+    def __parse_gpu_status(self, stdout: str, node_name: str) -> list[dict[str, str]]:
+        """Parse nvidia-smi CSV output into a list of GPU status dicts."""
+        gpu_status: list[dict[str, str]] = []
+        reader = csv.reader(io.StringIO(stdout))
+        for row in reader:
+            row = [col.strip() for col in row]
+            if len(row) < 10:
+                continue
+            gpu_status.append(
+                {
+                    "node": node_name,
+                    "index": row[0],
+                    "uuid": row[1],
+                    "name": row[2],
+                    "temperature": f"{row[3]}C",
+                    "utilization": f"{row[4]}%",
+                    "memory_utilization": f"{row[5]}%",
+                    "memory": f"{row[7]}/{row[6]} MiB",
+                    "power": f"{row[8]}W",
+                    "pstate": row[9],
+                }
+            )
+        return gpu_status
 
     def train(
         self,
