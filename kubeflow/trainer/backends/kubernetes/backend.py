@@ -76,11 +76,11 @@ class KubernetesBackend(RuntimeBackend):
                 name=config_map_name,
                 namespace=system_namespace,
             )
-        except Exception:
+        except Exception as e:
             logger.warning(
                 "Trainer control-plane version info is not available: "
                 f"failed to read ConfigMap '{config_map_name}' in namespace "
-                f"'{system_namespace}'."
+                f"'{system_namespace}', error: {e!r}."
             )
             return
 
