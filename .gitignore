@@ -10,8 +10,15 @@ __debug_bin
 __pycache__/
 *.egg-info/
 
+# Build artifacts
+build/
+dist/
+
 .coverage
 bin
 
 coverage.xml
 htmlcov/
+
+# Documentation build
+docs/_build/

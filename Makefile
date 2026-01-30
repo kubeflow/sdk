@@ -21,6 +21,16 @@ SHELL = /usr/bin/env bash -o pipefail
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 VENV_DIR := $(PROJECT_DIR)/.venv
 
+# Setting SED for compatibility with macos
+ifeq ($(shell command -v gsed 2>/dev/null),)
+    SED ?= $(shell command -v sed)
+else
+    SED ?= $(shell command -v gsed)
+endif
+ifeq ($(shell ${SED} --version 2>&1 | grep -q GNU; echo $$?),1)
+    $(error !!! GNU sed is required. If on OS X, use 'brew install gnu-sed'.)
+endif
+
 ##@ General
 
 # The help target prints out all targets with their descriptions organized
@@ -53,6 +63,7 @@ verify: install-dev  ## install all required tools
 	@uv lock --check
 	@uv run ruff check --show-fixes --output-format=github .
 	@uv run ruff format --check kubeflow
+	@uv run ty check kubeflow/hub
 
 .PHONY: uv-venv
 uv-venv:  ## Create uv virtual environment
@@ -65,11 +76,22 @@ uv-venv:  ## Create uv virtual environment
 
 .PHONY: release
 release: install-dev
-	@if [ -z "$(VERSION)" ]; then echo "Usage: make release VERSION=0.1.0"; exit 1; fi
-	@V_NO_V=$(VERSION); \
-	sed -i.bak "s/^__version__ = \".*\"/__version__ = \"$$V_NO_V\"/" kubeflow/__init__.py && \
-	rm -f kubeflow/__init__.py.bak
-	@uv run python scripts/gen-changelog.py --token=$${GITHUB_TOKEN} --version=$(VERSION)
+	@if [ -z "$(VERSION)" ] || ! echo "$(VERSION)" | grep -E -q '^[0-9]+\.[0-9]+\.[0-9]+$$'; then \
+		echo "Error: VERSION must be set in X.Y.Z format. Usage: make release VERSION=X.Y.Z"; \
+		exit 1; \
+	fi
+	@$(SED) -i 's/^__version__ = ".*"/__version__ = "$(VERSION)"/' kubeflow/__init__.py
+	@MAJOR_MINOR=$$(echo "$(VERSION)" | cut -d. -f1,2); \
+	CHANGELOG_PATH="CHANGELOG/CHANGELOG-$$MAJOR_MINOR.md"; \
+	echo "Generating changelog for $(VERSION) (unreleased)"; \
+	CLIFF_CMD="uv run git-cliff --unreleased --tag $(VERSION)"; \
+	if [ -f "$$CHANGELOG_PATH" ]; then \
+		$$CLIFF_CMD --prepend "$$CHANGELOG_PATH"; \
+	else \
+		$$CLIFF_CMD -o "$$CHANGELOG_PATH"; \
+	fi; \
+	echo "Changelog generated at $$CHANGELOG_PATH"
+
 
  # make test-python will produce html coverage by default. Run with `make test-python report=xml` to produce xml report.
 .PHONY: test-python
@@ -90,3 +112,20 @@ install-dev: uv uv-venv ruff  ## Install uv, create .venv, sync deps.
 	@echo "Syncing dependencies with uv..."
 	@uv sync
 	@echo "Environment is ready."
+
+## Documentation
+
+.PHONY: docs
+docs:  ## Build documentation
+	@uv sync --group docs
+	@uv run sphinx-build -b html docs/source docs/_build/html
+
+.PHONY: docs-clean
+docs-clean:  ## Clean documentation build
+	@rm -rf docs/_build
+
+.PHONY: docs-serve
+docs-serve:  ## Build and serve docs with live reload
+	@uv sync --group docs
+	@uv pip install sphinx-autobuild
+	@uv run sphinx-autobuild docs/source docs/_build/html

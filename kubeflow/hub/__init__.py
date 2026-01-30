@@ -12,4 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__version__ = "0.3.0"
+from kubeflow.hub.api.model_registry_client import ModelRegistryClient
+
+__all__ = ["ModelRegistryClient"]

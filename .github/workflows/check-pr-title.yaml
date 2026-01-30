@@ -34,6 +34,7 @@ jobs:
             docs
             deps
             examples
+            hub
             optimizer
             scripts
             test

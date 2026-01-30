@@ -1,0 +1,68 @@
+name: Documentation
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "kubeflow/**"
+      - ".readthedocs.yaml"
+      - ".github/workflows/docs.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "kubeflow/**"
+      - ".readthedocs.yaml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Build Documentation
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Build documentation
+        run: |
+          uv sync --group docs
+          uv run sphinx-build -b html docs/source docs/_build/html
+
+      - name: Upload documentation artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: documentation
+          path: docs/_build/html
+          retention-days: 7
+
+  linkcheck:
+    runs-on: ubuntu-latest
+    name: Check Links
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Check links
+        run: |
+          uv sync --group docs
+          uv run sphinx-build -b linkcheck docs/source docs/_build/linkcheck || true

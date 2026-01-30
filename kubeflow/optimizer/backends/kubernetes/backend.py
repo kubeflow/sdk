@@ -346,18 +346,13 @@ class KubernetesBackend(RuntimeBackend):
         events = []
         try:
             # Retrieve events from the namespace
-            event_response = self.core_api.list_namespaced_event(
+            event_response: models.IoK8sApiCoreV1EventList = self.core_api.list_namespaced_event(
                 namespace=self.namespace,
                 async_req=True,
             ).get(common_constants.DEFAULT_TIMEOUT)
 
-            event_list = models.IoK8sApiCoreV1EventList.from_dict(event_response.to_dict())
-
-            if not event_list:
-                return events
-
             # Filter events related to OptimizationJob resources
-            for event in event_list.items:
+            for event in event_response.items:
                 if not (event.metadata and event.involved_object and event.first_timestamp):
                     continue
 

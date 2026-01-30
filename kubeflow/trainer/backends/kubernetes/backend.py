@@ -68,8 +68,6 @@ class KubernetesBackend(RuntimeBackend):
         perform any version compatibility enforcement and never raises.
         """
 
-        # Resolve the namespace where control-plane components expose their
-        # public ConfigMaps.
         system_namespace = os.getenv("KUBEFLOW_SYSTEM_NAMESPACE", "kubeflow")
         config_map_name = "kubeflow-trainer-public"
 
@@ -87,18 +85,15 @@ class KubernetesBackend(RuntimeBackend):
             return
 
         data = getattr(config_map, "data", None)
-
         if not isinstance(data, dict):
             logger.warning(
                 "Trainer control-plane version info is not available: "
                 f"ConfigMap '{config_map_name}' in namespace "
-                f"'{system_namespace}' has no data dictionary and is "
-                "missing the 'kubeflow_trainer_api_version' data key."
+                f"'{system_namespace}' has no data dictionary."
             )
             return
 
         server_version = data.get("kubeflow_trainer_api_version")
-
         if not server_version:
             logger.warning(
                 "Trainer control-plane version info is not available: "
@@ -108,8 +103,6 @@ class KubernetesBackend(RuntimeBackend):
             )
             return
 
-        # When the control plane advertises a "dev" API version, skip any
-        # additional checks silently.
         if server_version == "dev":
             return
 
@@ -137,7 +130,7 @@ class KubernetesBackend(RuntimeBackend):
                     and constants.RUNTIME_FRAMEWORK_LABEL in runtime.metadata.labels
                 ):
                     logger.warning(
-                        f"Runtime {runtime.metadata.name} must have "  # type: ignore
+                        f"Runtime {runtime.metadata.name} must have "
                         f"{constants.RUNTIME_FRAMEWORK_LABEL} label."
                     )
                     continue
@@ -151,8 +144,6 @@ class KubernetesBackend(RuntimeBackend):
         return result
 
     def get_runtime(self, name: str) -> types.Runtime:
-        """Get the Runtime object"""
-
         try:
             thread = self.custom_api.get_cluster_custom_object(
                 constants.GROUP,
@@ -163,7 +154,7 @@ class KubernetesBackend(RuntimeBackend):
             )
 
             runtime = models.TrainerV1alpha1ClusterTrainingRuntime.from_dict(
-                thread.get(common_constants.DEFAULT_TIMEOUT)  # type: ignore
+                thread.get(common_constants.DEFAULT_TIMEOUT)
             )
 
         except multiprocessing.TimeoutError as e:
@@ -175,16 +166,14 @@ class KubernetesBackend(RuntimeBackend):
                 f"Failed to get {constants.CLUSTER_TRAINING_RUNTIME_PLURAL}: {name}"
             ) from e
 
-        return self.__get_runtime_from_cr(runtime)  # type: ignore
+        return self.__get_runtime_from_cr(runtime)
 
     def get_runtime_packages(self, runtime: types.Runtime):
         if runtime.trainer.trainer_type == types.TrainerType.BUILTIN_TRAINER:
             raise ValueError("Cannot get Runtime packages for BuiltinTrainer")
 
-        # Create a deepcopy of the runtime to avoid modifying the original command.
         runtime_copy = copy.deepcopy(runtime)
 
-        # Run mpirun only within the single process.
         if runtime_copy.trainer.command[0] == "mpirun":
             mpi_command = list(constants.MPI_COMMAND)
             mpi_command[1:3] = ["-np", "1"]
@@ -195,24 +184,19 @@ class KubernetesBackend(RuntimeBackend):
             import subprocess
             import sys
 
-            # Print Python version.
             print(f"Python: {sys.version}")
 
-            # Print Python packages.
             if shutil.which("pip"):
                 pip_list = subprocess.run(["pip", "list"], capture_output=True, text=True)
                 print(pip_list.stdout)
             else:
                 print("Unable to get installed packages: pip command not found")
 
-            # Print nvidia-smi if GPUs are available.
             if shutil.which("nvidia-smi"):
                 print("Available GPUs on the single training node")
                 nvidia_smi = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
                 print(nvidia_smi.stdout)
 
-        # Create the TrainJob and wait until it completes.
-        # If Runtime trainer has GPU resources use them, otherwise run TrainJob with 1 CPU.
         job_name = self.train(
             runtime=runtime_copy,
             trainer=types.CustomTrainer(
@@ -484,19 +468,13 @@ class KubernetesBackend(RuntimeBackend):
         events = []
         try:
             # Retrieve events from the namespace
-            event_response = self.core_api.list_namespaced_event(
+            event_response: models.IoK8sApiCoreV1EventList = self.core_api.list_namespaced_event(
                 namespace=self.namespace,
                 async_req=True,
             ).get(common_constants.DEFAULT_TIMEOUT)
 
-            # Convert to event list
-            event_list = models.IoK8sApiCoreV1EventList.from_dict(event_response.to_dict())
-
-            if not event_list:
-                return events
-
             # Filter events related to this TrainJob or its pods
-            for event in event_list.items:
+            for event in event_response.items:
                 if not (event.metadata and event.involved_object and event.first_timestamp):
                     continue
 
@@ -628,6 +606,7 @@ class KubernetesBackend(RuntimeBackend):
             ).get(common_constants.DEFAULT_TIMEOUT)
 
             # Convert Pod to the correct format.
+            # This is required to convert Pod's container resources into API object from str
             pod_list = models.IoK8sApiCoreV1PodList.from_dict(response.to_dict())
             if not pod_list:
                 return trainjob
