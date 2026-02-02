@@ -1,7 +1,6 @@
 name: E2E Test
 
-on:
-  pull_request
+on: pull_request
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -15,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kubernetes-version: ["1.30.0", "1.31.0", "1.32.3", "1.33.1"]
+        kubernetes-version: ["1.32.3", "1.33.1", "1.34.0", "1.35.0"]
         trainer-ref: ["master"]
 
     steps:
