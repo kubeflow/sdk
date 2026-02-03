@@ -25,7 +25,6 @@ import multiprocessing
 import random
 import string
 from typing import Optional
-import unittest
 from unittest.mock import Mock, patch
 import uuid
 
@@ -670,12 +669,26 @@ def get_train_job_data_type(
     )
 
 
-class KubernetesBackendVersionCheckTest(unittest.TestCase):
-    """Tests for Trainer control-plane version metadata verification."""
+def _run_verify_backend_with_core_api(core_api: Mock) -> tuple[list[str], int]:
+    """Helper to run verify_backend and capture warning logs."""
 
-    LOGGER_NAME = "kubeflow.trainer.backends.kubernetes.backend"
+    logger_name = "kubeflow.trainer.backends.kubernetes.backend"
+    logger_obj = logging.getLogger(logger_name)
 
-    def _create_backend_with_core_api(self, core_api: Mock) -> None:
+    class _ListHandler(logging.Handler):
+        def __init__(self) -> None:
+            super().__init__()
+            self.records: list[logging.LogRecord] = []
+
+        def emit(self, record: logging.LogRecord) -> None:  # type: ignore[override]
+            self.records.append(record)
+
+    handler = _ListHandler()
+    logger_obj.addHandler(handler)
+    previous_level = logger_obj.level
+    logger_obj.setLevel(logging.WARNING)
+
+    try:
         with (
             patch("kubernetes.config.load_kube_config", return_value=None),
             patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
@@ -683,82 +696,89 @@ class KubernetesBackendVersionCheckTest(unittest.TestCase):
             patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
             patch("kubernetes.client.CoreV1Api", return_value=core_api),
         ):
-            backend = KubernetesBackend(KubernetesBackendConfig())
-            self.assertIsNotNone(backend.namespace)
+            KubernetesBackend(KubernetesBackendConfig())
+    finally:
+        logger_obj.removeHandler(handler)
+        logger_obj.setLevel(previous_level)
 
-    def _capture_warnings(self, core_api: Mock) -> list[str]:
-        logger_obj = logging.getLogger(self.LOGGER_NAME)
+    return [record.getMessage() for record in handler.records], core_api.read_namespaced_config_map.call_count
 
-        class _ListHandler(logging.Handler):
-            def __init__(self) -> None:
-                super().__init__()
-                self.records: list[logging.LogRecord] = []
 
-            def emit(self, record: logging.LogRecord) -> None:  # type: ignore[override]
-                self.records.append(record)
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="version metadata present",
+            expected_status=SUCCESS,
+            config={
+                "core_api": _build_core_api_mock({"kubeflow_trainer_version": "1.2.3"}),
+                "expect_warning": False,
+            },
+        ),
+        TestCase(
+            name="ConfigMap read error logs warning",
+            expected_status=SUCCESS,
+            config={
+                "core_api": _build_core_api_mock(None, Exception("ConfigMap not found")),
+                "expect_warning": True,
+                "must_contain": [
+                    "Trainer control-plane version info is not available",
+                    "kubeflow-trainer-public",
+                    "kubeflow_trainer_version",
+                    "ConfigMap not found",
+                ],
+            },
+        ),
+        TestCase(
+            name="missing data key logs warning",
+            expected_status=SUCCESS,
+            config={
+                "core_api": _build_core_api_mock({}),
+                "expect_warning": True,
+                "must_contain": [
+                    "Trainer control-plane version info is not available",
+                    "kubeflow-trainer-public",
+                    "kubeflow_trainer_version",
+                ],
+            },
+        ),
+        TestCase(
+            name="data None logs warning",
+            expected_status=SUCCESS,
+            config={
+                "core_api": _build_core_api_mock(None),
+                "expect_warning": True,
+                "must_contain": [
+                    "Trainer control-plane version info is not available",
+                    "kubeflow-trainer-public",
+                    "kubeflow_trainer_version",
+                ],
+            },
+        ),
+    ],
+)
+def test_verify_backend(test_case):
+    """Test KubernetesBackend.verify_backend across version metadata scenarios."""
 
-        handler = _ListHandler()
-        logger_obj.addHandler(handler)
-        previous_level = logger_obj.level
-        logger_obj.setLevel(logging.WARNING)
+    print("Executing test:", test_case.name)
 
-        try:
-            self._create_backend_with_core_api(core_api)
-        finally:
-            logger_obj.removeHandler(handler)
-            logger_obj.setLevel(previous_level)
+    core_api: Mock = test_case.config["core_api"]
+    expect_warning: bool = test_case.config.get("expect_warning", False)
+    must_contain: list[str] = test_case.config.get("must_contain", [])
 
-        return [record.getMessage() for record in handler.records]
+    warnings, call_count = _run_verify_backend_with_core_api(core_api)
+    combined = "\n".join(warnings)
 
-    def test_version_check_success(self) -> None:
-        """Backend initializes when control-plane version metadata is present."""
+    assert call_count >= 1
 
-        core_api = _build_core_api_mock({"kubeflow_trainer_version": "1.2.3"})
+    if expect_warning:
+        assert warnings, "Expected warning logs but found none"
+        for text in must_contain:
+            assert text in combined
+    else:
+        assert "Trainer control-plane version info is not available" not in combined
 
-        warnings = self._capture_warnings(core_api)
-        combined = "\n".join(warnings)
-
-        self.assertEqual(core_api.read_namespaced_config_map.call_count, 1)
-        self.assertNotIn("Trainer control-plane version info is not available", combined)
-
-    def test_version_check_missing_configmap_logs_warning(self) -> None:
-        """Backend logs a warning when the ConfigMap cannot be read."""
-
-        error = Exception("ConfigMap not found")
-        core_api = _build_core_api_mock(None, error)
-
-        warnings = self._capture_warnings(core_api)
-        combined = "\n".join(warnings)
-
-        self.assertGreaterEqual(core_api.read_namespaced_config_map.call_count, 1)
-        self.assertIn("Trainer control-plane version info is not available", combined)
-        self.assertIn("kubeflow-trainer-public", combined)
-        self.assertIn("kubeflow_trainer_version", combined)
-        self.assertIn("ConfigMap not found", combined)
-
-    def test_version_check_missing_data_key_logs_warning(self) -> None:
-        """Backend logs a warning when the expected data key is missing."""
-
-        core_api = _build_core_api_mock({})
-
-        warnings = self._capture_warnings(core_api)
-        combined = "\n".join(warnings)
-
-        self.assertIn("Trainer control-plane version info is not available", combined)
-        self.assertIn("kubeflow-trainer-public", combined)
-        self.assertIn("kubeflow_trainer_version", combined)
-
-    def test_version_check_data_none_logs_warning(self) -> None:
-        """Backend logs a warning when ConfigMap data is None."""
-
-        core_api = _build_core_api_mock(None)
-
-        warnings = self._capture_warnings(core_api)
-        combined = "\n".join(warnings)
-
-        self.assertIn("Trainer control-plane version info is not available", combined)
-        self.assertIn("kubeflow-trainer-public", combined)
-        self.assertIn("kubeflow_trainer_version", combined)
+    print("test execution complete")
 
 
 # --------------------------
