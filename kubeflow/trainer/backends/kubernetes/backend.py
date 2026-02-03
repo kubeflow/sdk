@@ -72,12 +72,10 @@ class KubernetesBackend(RuntimeBackend):
         config_map_name = "kubeflow-trainer-public"
 
         try:
-            config_map = self.core_api.read_namespaced_config_map(
+           _ = self.core_api.read_namespaced_config_map(
                 name=config_map_name,
                 namespace=system_namespace,
-            )
-            data = getattr(config_map, "data", None)
-            _ = data["kubeflow_trainer_version"]  # Ensure field exists and is readable.
+            ).data["kubeflow_trainer_version"]
         except Exception as e:  # noqa: BLE001
             logger.warning(
                 "Trainer control-plane version info is not available: "
