@@ -72,7 +72,7 @@ class KubernetesBackend(RuntimeBackend):
         config_map_name = "kubeflow-trainer-public"
 
         try:
-           _ = self.core_api.read_namespaced_config_map(
+            _ = self.core_api.read_namespaced_config_map(
                 name=config_map_name,
                 namespace=system_namespace,
             ).data["kubeflow_trainer_version"]
