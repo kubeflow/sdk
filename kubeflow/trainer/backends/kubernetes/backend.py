@@ -64,11 +64,11 @@ class KubernetesBackend(RuntimeBackend):
         """Verify that the Trainer control plane exposes version metadata.
 
         This check only ensures that the public control-plane ConfigMap exists
-        and contains a ``kubeflow_trainer_api_version`` field. It does not
+        and contains a ``kubeflow_trainer_version`` field. It does not
         enforce version compatibility and never raises.
         """
 
-        system_namespace = os.getenv("KUBEFLOW_SYSTEM_NAMESPACE", "kubeflow")
+        system_namespace = os.getenv("KUBEFLOW_SYSTEM_NAMESPACE", "kubeflow-system")
         config_map_name = "kubeflow-trainer-public"
 
         try:
@@ -76,38 +76,14 @@ class KubernetesBackend(RuntimeBackend):
                 name=config_map_name,
                 namespace=system_namespace,
             )
-        except Exception as e:
+            data = getattr(config_map, "data", None)
+            _ = data["kubeflow_trainer_version"]  # Ensure field exists and is readable.
+        except Exception as e:  # noqa: BLE001
             logger.warning(
                 "Trainer control-plane version info is not available: "
-                f"failed to read ConfigMap '{config_map_name}' in namespace "
-                f"'{system_namespace}', error: {e!r}."
+                f"unable to read 'kubeflow_trainer_version' from ConfigMap "
+                f"'{config_map_name}' in namespace '{system_namespace}': {e}"
             )
-            return
-
-        data = getattr(config_map, "data", None)
-
-        if not isinstance(data, dict):
-            logger.warning(
-                "Trainer control-plane version info is not available: "
-                f"ConfigMap '{config_map_name}' in namespace "
-                f"'{system_namespace}' has no data dictionary."
-            )
-            return
-
-        server_version = data.get("kubeflow_trainer_api_version")
-
-        if not server_version:
-            logger.warning(
-                "Trainer control-plane version info is not available: "
-                f"ConfigMap '{config_map_name}' in namespace "
-                f"'{system_namespace}' is missing the "
-                "'kubeflow_trainer_api_version' data key."
-            )
-            return
-
-        # When the control plane advertises a "dev" API version, skip any
-        # additional checks silently.
-        if server_version == "dev":
             return
 
     def list_runtimes(self) -> list[types.Runtime]:
