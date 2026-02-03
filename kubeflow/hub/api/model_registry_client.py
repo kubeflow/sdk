@@ -69,8 +69,8 @@ class ModelRegistryClient:
             ImportError: If model-registry is not installed.
         Examples:
             ModelRegistryClient("https://example.org", port=456)  # port kwarg
-            ModelRegistryClient("https://example.org:456")        # base_url
-            ModelRegistryClient("https://example.org")            # default (`443` for https, `8080` for http)
+            ModelRegistryClient("https://example.org:456")        # base_url (including port)
+            ModelRegistryClient("https://example.org")            # default port (`443` for https, `8080` for http)
         """
         try:
             from model_registry import ModelRegistry
