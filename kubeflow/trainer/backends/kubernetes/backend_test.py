@@ -701,7 +701,9 @@ def _run_verify_backend_with_core_api(core_api: Mock) -> tuple[list[str], int]:
         logger_obj.removeHandler(handler)
         logger_obj.setLevel(previous_level)
 
-    return [record.getMessage() for record in handler.records], core_api.read_namespaced_config_map.call_count
+    messages = [record.getMessage() for record in handler.records]
+    call_count = core_api.read_namespaced_config_map.call_count
+    return messages, call_count
 
 
 @pytest.mark.parametrize(
