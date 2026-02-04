@@ -227,11 +227,16 @@ def get_resources_per_node(
     Get the Trainer resources for the training node from the given dict.
     """
 
-    # Convert all keys in resources to lowercase.
-    resources = {
-        k.lower(): models.IoK8sApimachineryPkgApiResourceQuantity(v)
-        for k, v in resources_per_node.items()
-    }
+    # Convert only standard resource keys and aliases to lowercase.
+    resources = {}
+    for k, v in resources_per_node.items():
+        if (
+            k.lower() in {constants.CPU_LABEL, "memory", "ephemeral-storage", "gpu"}
+            or k.lower().startswith("mig-")
+        ):
+            resources[k.lower()] = models.IoK8sApimachineryPkgApiResourceQuantity(v)
+        else:
+            resources[k] = models.IoK8sApimachineryPkgApiResourceQuantity(v)
     if "gpu" in resources:
         resources["nvidia.com/gpu"] = resources.pop("gpu")
 

@@ -117,6 +117,55 @@ def test_get_container_devices(test_case: TestCase):
             },
             expected_error=ValueError,
         ),
+        TestCase(
+            name="extended resource preserves case",
+            expected_status=SUCCESS,
+            config={
+                "resources_per_node": {
+                    "huawei.com/Ascend910": 1,
+                    "CPU": 2,
+                    "Memory": "16Gi",
+                }
+            },
+            expected_output=models.IoK8sApiCoreV1ResourceRequirements(
+                limits={
+                    "huawei.com/Ascend910": models.IoK8sApimachineryPkgApiResourceQuantity(1),
+                    "cpu": models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                    "memory": models.IoK8sApimachineryPkgApiResourceQuantity("16Gi"),
+                },
+                requests={
+                    "huawei.com/Ascend910": models.IoK8sApimachineryPkgApiResourceQuantity(1),
+                    "cpu": models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                    "memory": models.IoK8sApimachineryPkgApiResourceQuantity("16Gi"),
+                },
+            ),
+        ),
+        TestCase(
+            name="diverse resource types and mixed case standard keys",
+            expected_status=SUCCESS,
+            config={
+                "resources_per_node": {
+                    "aws.amazon.com/neuron": 1,
+                    "Example.com/Custom-NPU": 2,
+                    "mEmOrY": "8Gi",
+                    "EPHEMERAL-STORAGE": "100Gi",
+                }
+            },
+            expected_output=models.IoK8sApiCoreV1ResourceRequirements(
+                limits={
+                    "aws.amazon.com/neuron": models.IoK8sApimachineryPkgApiResourceQuantity(1),
+                    "Example.com/Custom-NPU": models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                    "memory": models.IoK8sApimachineryPkgApiResourceQuantity("8Gi"),
+                    "ephemeral-storage": models.IoK8sApimachineryPkgApiResourceQuantity("100Gi"),
+                },
+                requests={
+                    "aws.amazon.com/neuron": models.IoK8sApimachineryPkgApiResourceQuantity(1),
+                    "Example.com/Custom-NPU": models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                    "memory": models.IoK8sApimachineryPkgApiResourceQuantity("8Gi"),
+                    "ephemeral-storage": models.IoK8sApimachineryPkgApiResourceQuantity("100Gi"),
+                },
+            ),
+        ),
     ],
 )
 def test_get_resources_per_node(test_case: TestCase):
