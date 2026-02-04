@@ -525,20 +525,18 @@ class ContainerBackend(RuntimeBackend):
         Raises:
             RuntimeError: If initializer fails to complete successfully.
         """
-        # Get initializer image
-        init_image = container_utils.get_initializer_image(self.cfg)
-
-        # Pull initializer image if needed
-        container_utils.maybe_pull_image(self._adapter, init_image, self.cfg.pull_policy)
-
         # Run dataset initializer if configured
         if initializer.dataset:
+            # Get and pull dataset initializer image
+            dataset_image = container_utils.get_initializer_image(self.cfg, "dataset")
+            container_utils.maybe_pull_image(self._adapter, dataset_image, self.cfg.pull_policy)
+
             logger.debug("Running dataset initializer")
             self._run_single_initializer(
                 job_name=job_name,
                 initializer_config=initializer.dataset,
                 init_type="dataset",
-                image=init_image,
+                image=dataset_image,
                 workdir=workdir,
                 network_id=network_id,
             )
@@ -546,12 +544,16 @@ class ContainerBackend(RuntimeBackend):
 
         # Run model initializer if configured
         if initializer.model:
+            # Get and pull model initializer image
+            model_image = container_utils.get_initializer_image(self.cfg, "model")
+            container_utils.maybe_pull_image(self._adapter, model_image, self.cfg.pull_policy)
+
             logger.debug("Running model initializer")
             self._run_single_initializer(
                 job_name=job_name,
                 initializer_config=initializer.model,
                 init_type="model",
-                image=init_image,
+                image=model_image,
                 workdir=workdir,
                 network_id=network_id,
             )
@@ -604,6 +606,8 @@ class ContainerBackend(RuntimeBackend):
         logger.debug(f"Starting {init_type} initializer container: {container_name}")
 
         # Create and start the initializer container
+        # The initializer images use /app as their working directory
+        # See: https://github.com/kubeflow/trainer/blob/master/cmd/initializers/dataset/Dockerfile
         container_id = self._adapter.create_and_start_container(
             image=image,
             command=command,
@@ -612,7 +616,7 @@ class ContainerBackend(RuntimeBackend):
             environment=env,
             labels=labels,
             volumes=volumes,
-            working_dir=constants.WORKSPACE_PATH,
+            working_dir="/app",
         )
 
         logger.debug(f"Initializer container started: {container_id[:12]}")

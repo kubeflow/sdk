@@ -227,22 +227,28 @@ def build_initializer_command(initializer: types.BaseInitializer, init_type: str
     Raises:
         ValueError: If the initializer type is not supported.
     """
-    # Use the training-operator initializer script
-    # The initializer script is expected to be available in the image
-    if isinstance(initializer, (types.S3DatasetInitializer, types.S3ModelInitializer)):
-        python_cmd = "python -m kubeflow.storage_initializer.s3 "
-    elif isinstance(
-        initializer, (types.HuggingFaceDatasetInitializer, types.HuggingFaceModelInitializer)
-    ):
-        python_cmd = "python -m kubeflow.storage_initializer.hugging_face "
-    elif isinstance(initializer, types.DataCacheInitializer):
-        python_cmd = "python -m kubeflow.storage_initializer.datacache "
-    else:
+    # Validate initializer type
+    supported_types = (
+        types.S3DatasetInitializer,
+        types.S3ModelInitializer,
+        types.HuggingFaceDatasetInitializer,
+        types.HuggingFaceModelInitializer,
+        types.DataCacheInitializer,
+    )
+    if not isinstance(initializer, supported_types):
         raise ValueError(
             f"Unsupported initializer type: {type(initializer).__name__}. "
             "Supported types: HuggingFaceDatasetInitializer, HuggingFaceModelInitializer, "
             "S3DatasetInitializer, S3ModelInitializer, DataCacheInitializer"
         )
+
+    # Use the initializer module based on init_type
+    # The images (kubeflow/dataset-initializer and kubeflow/model-initializer)
+    # have pkg.initializers.dataset and pkg.initializers.model respectively
+    if init_type == "dataset":
+        python_cmd = "python -m pkg.initializers.dataset"
+    else:  # model
+        python_cmd = "python -m pkg.initializers.model"
 
     return ["bash", "-c", python_cmd]
 
@@ -308,14 +314,18 @@ def build_initializer_env(initializer: types.BaseInitializer, init_type: str) ->
     return env
 
 
-def get_initializer_image(config) -> str:
+def get_initializer_image(config, init_type: str) -> str:
     """
     Get the container image for initializers from backend config.
 
     Args:
-        config: ContainerBackendConfig with initializer_image setting.
+        config: ContainerBackendConfig with initializer image settings.
+        init_type: Type of initializer ("dataset" or "model").
 
     Returns:
-        Container image name for initializers.
+        Container image name for the specified initializer type.
     """
-    return config.initializer_image
+    if init_type == "dataset":
+        return config.dataset_initializer_image
+    else:  # model
+        return config.model_initializer_image

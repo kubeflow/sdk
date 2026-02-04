@@ -65,9 +65,13 @@ class ContainerBackendConfig(BaseModel):
         default_factory=TrainingRuntimeSource,
         description="Configuration for training runtime sources",
     )
-    initializer_image: str = Field(
-        default="kubeflow/training-operator:latest",
-        description="Container image for dataset and model initializers",
+    dataset_initializer_image: str = Field(
+        default="kubeflow/dataset-initializer:latest",
+        description="Container image for dataset initializers",
+    )
+    model_initializer_image: str = Field(
+        default="kubeflow/model-initializer:latest",
+        description="Container image for model initializers",
     )
     initializer_timeout: int = Field(
         default=600,
