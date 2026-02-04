@@ -230,10 +230,12 @@ def get_resources_per_node(
     # Convert only standard resource keys and aliases to lowercase.
     resources = {}
     for k, v in resources_per_node.items():
-        if (
-            k.lower() in {constants.CPU_LABEL, "memory", "ephemeral-storage", "gpu"}
-            or k.lower().startswith("mig-")
-        ):
+        if k.lower() in {
+            constants.CPU_LABEL,
+            "memory",
+            "ephemeral-storage",
+            "gpu",
+        } or k.lower().startswith("mig-"):
             resources[k.lower()] = models.IoK8sApimachineryPkgApiResourceQuantity(v)
         else:
             resources[k] = models.IoK8sApimachineryPkgApiResourceQuantity(v)
