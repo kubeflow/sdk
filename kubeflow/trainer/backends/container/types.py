@@ -66,11 +66,11 @@ class ContainerBackendConfig(BaseModel):
         description="Configuration for training runtime sources",
     )
     dataset_initializer_image: str = Field(
-        default="kubeflow/dataset-initializer:latest",
+        default="ghcr.io/kubeflow/trainer/dataset-initializer:latest",
         description="Container image for dataset initializers",
     )
     model_initializer_image: str = Field(
-        default="kubeflow/model-initializer:latest",
+        default="ghcr.io/kubeflow/trainer/model-initializer:latest",
         description="Container image for model initializers",
     )
     initializer_timeout: int = Field(

@@ -210,20 +210,24 @@ class ContainerBackend(RuntimeBackend):
             network_id: Network ID to delete.
             stop_timeout: Timeout in seconds for stopping containers.
         """
-        from contextlib import suppress
-
         # Stop and remove containers
         if container_ids:
             for container_id in container_ids:
-                with suppress(Exception):
+                try:  # noqa: SIM105
                     self._adapter.stop_container(container_id, timeout=stop_timeout)
-                with suppress(Exception):
+                except Exception:
+                    pass
+                try:  # noqa: SIM105
                     self._adapter.remove_container(container_id, force=True)
+                except Exception:
+                    pass
 
         # Delete network
         if network_id:
-            with suppress(Exception):
+            try:  # noqa: SIM105
                 self._adapter.delete_network(network_id)
+            except Exception:
+                pass
 
     # ---- Runtime APIs ----
     def list_runtimes(self) -> list[types.Runtime]:
@@ -311,10 +315,10 @@ class ContainerBackend(RuntimeBackend):
                 except Exception as e:
                     # Clean up network if initializers fail
                     logger.error(f"Initializer failed, cleaning up network: {e}")
-                    from contextlib import suppress
-
-                    with suppress(Exception):
+                    try:  # noqa: SIM105
                         self._adapter.delete_network(network_id)
+                    except Exception:
+                        pass
                     raise
 
             # Generate training script code (inline, not written to disk)
@@ -527,16 +531,16 @@ class ContainerBackend(RuntimeBackend):
         """
         # Run dataset initializer if configured
         if initializer.dataset:
-            # Get and pull dataset initializer image
-            dataset_image = container_utils.get_initializer_image(self.cfg, "dataset")
-            container_utils.maybe_pull_image(self._adapter, dataset_image, self.cfg.pull_policy)
+            dataset_init = container_utils.get_dataset_initializer(initializer.dataset, self.cfg)
+            container_utils.maybe_pull_image(
+                self._adapter, dataset_init.image, self.cfg.pull_policy
+            )
 
             logger.debug("Running dataset initializer")
             self._run_single_initializer(
                 job_name=job_name,
-                initializer_config=initializer.dataset,
+                container_init=dataset_init,
                 init_type="dataset",
-                image=dataset_image,
                 workdir=workdir,
                 network_id=network_id,
             )
@@ -544,16 +548,14 @@ class ContainerBackend(RuntimeBackend):
 
         # Run model initializer if configured
         if initializer.model:
-            # Get and pull model initializer image
-            model_image = container_utils.get_initializer_image(self.cfg, "model")
-            container_utils.maybe_pull_image(self._adapter, model_image, self.cfg.pull_policy)
+            model_init = container_utils.get_model_initializer(initializer.model, self.cfg)
+            container_utils.maybe_pull_image(self._adapter, model_init.image, self.cfg.pull_policy)
 
             logger.debug("Running model initializer")
             self._run_single_initializer(
                 job_name=job_name,
-                initializer_config=initializer.model,
+                container_init=model_init,
                 init_type="model",
-                image=model_image,
                 workdir=workdir,
                 network_id=network_id,
             )
@@ -562,9 +564,8 @@ class ContainerBackend(RuntimeBackend):
     def _run_single_initializer(
         self,
         job_name: str,
-        initializer_config: types.BaseInitializer,
+        container_init: container_utils.ContainerInitializer,
         init_type: str,
-        image: str,
         workdir: str,
         network_id: str,
     ):
@@ -573,9 +574,8 @@ class ContainerBackend(RuntimeBackend):
 
         Args:
             job_name: Name of the training job.
-            initializer_config: Initializer configuration.
+            container_init: ContainerInitializer with image, command, and env.
             init_type: Type of initializer ("dataset" or "model").
-            image: Container image to use.
             workdir: Working directory path on host.
             network_id: Network ID for containers.
 
@@ -583,10 +583,6 @@ class ContainerBackend(RuntimeBackend):
             RuntimeError: If initializer fails.
         """
         container_name = f"{job_name}-{init_type}-initializer"
-
-        # Build command and environment
-        command = container_utils.build_initializer_command(initializer_config, init_type)
-        env = container_utils.build_initializer_env(initializer_config, init_type)
 
         # Create labels for tracking
         labels = {
@@ -609,11 +605,11 @@ class ContainerBackend(RuntimeBackend):
         # The initializer images use /app as their working directory
         # See: https://github.com/kubeflow/trainer/blob/master/cmd/initializers/dataset/Dockerfile
         container_id = self._adapter.create_and_start_container(
-            image=image,
-            command=command,
+            image=container_init.image,
+            command=container_init.command,
             name=container_name,
             network_id=network_id,
-            environment=env,
+            environment=container_init.env,
             labels=labels,
             volumes=volumes,
             working_dir="/app",

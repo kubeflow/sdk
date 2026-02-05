@@ -16,6 +16,7 @@
 Utility functions for the Container backend.
 """
 
+from dataclasses import dataclass
 import logging
 import os
 from pathlib import Path
@@ -213,119 +214,106 @@ def aggregate_container_statuses(adapter, containers: list[dict]) -> str:
     return aggregate_status_from_containers(statuses)
 
 
-def build_initializer_command(initializer: types.BaseInitializer, init_type: str) -> list[str]:
+@dataclass
+class ContainerInitializer:
+    """Internal type for container initializer configuration."""
+
+    image: str
+    command: list[str]
+    env: dict[str, str]
+
+
+def get_optional_initializer_envs(
+    initializer: types.BaseInitializer, required_fields: set[str]
+) -> dict[str, str]:
     """
-    Build the command for an initializer container.
+    Get optional environment variables from the initializer config.
+
+    Iterates over dataclass fields and converts non-required, non-None values
+    to environment variables with uppercase names.
 
     Args:
         initializer: Dataset or model initializer configuration.
-        init_type: Type of initializer ("dataset" or "model").
-
-    Returns:
-        Command list for the initializer container.
-
-    Raises:
-        ValueError: If the initializer type is not supported.
-    """
-    # Validate initializer type
-    supported_types = (
-        types.S3DatasetInitializer,
-        types.S3ModelInitializer,
-        types.HuggingFaceDatasetInitializer,
-        types.HuggingFaceModelInitializer,
-        types.DataCacheInitializer,
-    )
-    if not isinstance(initializer, supported_types):
-        raise ValueError(
-            f"Unsupported initializer type: {type(initializer).__name__}. "
-            "Supported types: HuggingFaceDatasetInitializer, HuggingFaceModelInitializer, "
-            "S3DatasetInitializer, S3ModelInitializer, DataCacheInitializer"
-        )
-
-    # Use the initializer module based on init_type
-    # The images (kubeflow/dataset-initializer and kubeflow/model-initializer)
-    # have pkg.initializers.dataset and pkg.initializers.model respectively
-    if init_type == "dataset":
-        python_cmd = "python -m pkg.initializers.dataset"
-    else:  # model
-        python_cmd = "python -m pkg.initializers.model"
-
-    return ["bash", "-c", python_cmd]
-
-
-def build_initializer_env(initializer: types.BaseInitializer, init_type: str) -> dict[str, str]:
-    """
-    Build environment variables for an initializer container.
-
-    Args:
-        initializer: Dataset or model initializer configuration.
-        init_type: Type of initializer ("dataset" or "model").
+        required_fields: Set of field names to skip (already handled).
 
     Returns:
         Dictionary of environment variables.
     """
-    env = {
-        "STORAGE_URI": initializer.storage_uri,
-    }
+    from dataclasses import fields
 
-    # Set the output path based on initializer type
-    if init_type == "dataset":
-        env["OUTPUT_PATH"] = constants.DATASET_PATH
-    else:  # model
-        env["OUTPUT_PATH"] = constants.MODEL_PATH
-
-    # Add optional fields based on initializer type
-    if isinstance(
-        initializer, (types.HuggingFaceDatasetInitializer, types.HuggingFaceModelInitializer)
-    ):
-        if initializer.access_token:
-            env["ACCESS_TOKEN"] = initializer.access_token
-        if hasattr(initializer, "ignore_patterns") and initializer.ignore_patterns:
-            env["IGNORE_PATTERNS"] = ",".join(initializer.ignore_patterns)
-
-    elif isinstance(initializer, (types.S3DatasetInitializer, types.S3ModelInitializer)):
-        if initializer.endpoint:
-            env["ENDPOINT"] = initializer.endpoint
-        if initializer.access_key_id:
-            env["ACCESS_KEY_ID"] = initializer.access_key_id
-        if initializer.secret_access_key:
-            env["SECRET_ACCESS_KEY"] = initializer.secret_access_key
-        if initializer.region:
-            env["REGION"] = initializer.region
-        if initializer.role_arn:
-            env["ROLE_ARN"] = initializer.role_arn
-        if hasattr(initializer, "ignore_patterns") and initializer.ignore_patterns:
-            env["IGNORE_PATTERNS"] = ",".join(initializer.ignore_patterns)
-
-    elif isinstance(initializer, types.DataCacheInitializer):
-        env["CLUSTER_SIZE"] = str(initializer.num_data_nodes + 1)
-        env["METADATA_LOC"] = initializer.metadata_loc
-        if initializer.head_cpu:
-            env["HEAD_CPU"] = initializer.head_cpu
-        if initializer.head_mem:
-            env["HEAD_MEM"] = initializer.head_mem
-        if initializer.worker_cpu:
-            env["WORKER_CPU"] = initializer.worker_cpu
-        if initializer.worker_mem:
-            env["WORKER_MEM"] = initializer.worker_mem
-        if initializer.iam_role:
-            env["IAM_ROLE"] = initializer.iam_role
-
+    env = {}
+    for f in fields(initializer):
+        if f.name not in required_fields:
+            value = getattr(initializer, f.name)
+            if value is not None:
+                # Convert list values (like ignore_patterns) to comma-separated strings
+                if isinstance(value, list):
+                    value = ",".join(str(item) for item in value)
+                env[f.name.upper()] = str(value)
     return env
 
 
-def get_initializer_image(config, init_type: str) -> str:
+def get_dataset_initializer(dataset: types.BaseInitializer, config) -> ContainerInitializer:
     """
-    Get the container image for initializers from backend config.
+    Get container initializer configuration for dataset initialization.
 
     Args:
+        dataset: Dataset initializer configuration (HuggingFace or S3).
         config: ContainerBackendConfig with initializer image settings.
-        init_type: Type of initializer ("dataset" or "model").
 
     Returns:
-        Container image name for the specified initializer type.
+        ContainerInitializer with image, command, and environment variables.
+
+    Raises:
+        ValueError: If the dataset initializer type is not supported.
     """
-    if init_type == "dataset":
-        return config.dataset_initializer_image
-    else:  # model
-        return config.model_initializer_image
+    if not isinstance(dataset, (types.HuggingFaceDatasetInitializer, types.S3DatasetInitializer)):
+        raise ValueError(
+            f"Unsupported dataset initializer type: {type(dataset).__name__}. "
+            "Supported types: HuggingFaceDatasetInitializer, S3DatasetInitializer"
+        )
+
+    env = {
+        "STORAGE_URI": dataset.storage_uri,
+        "OUTPUT_PATH": constants.DATASET_PATH,
+    }
+    env.update(get_optional_initializer_envs(dataset, required_fields={"storage_uri"}))
+
+    return ContainerInitializer(
+        image=config.dataset_initializer_image,
+        command=["bash", "-c", "python -m pkg.initializers.dataset"],
+        env=env,
+    )
+
+
+def get_model_initializer(model: types.BaseInitializer, config) -> ContainerInitializer:
+    """
+    Get container initializer configuration for model initialization.
+
+    Args:
+        model: Model initializer configuration (HuggingFace or S3).
+        config: ContainerBackendConfig with initializer image settings.
+
+    Returns:
+        ContainerInitializer with image, command, and environment variables.
+
+    Raises:
+        ValueError: If the model initializer type is not supported.
+    """
+    if not isinstance(model, (types.HuggingFaceModelInitializer, types.S3ModelInitializer)):
+        raise ValueError(
+            f"Unsupported model initializer type: {type(model).__name__}. "
+            "Supported types: HuggingFaceModelInitializer, S3ModelInitializer"
+        )
+
+    env = {
+        "STORAGE_URI": model.storage_uri,
+        "OUTPUT_PATH": constants.MODEL_PATH,
+    }
+    env.update(get_optional_initializer_envs(model, required_fields={"storage_uri"}))
+
+    return ContainerInitializer(
+        image=config.model_initializer_image,
+        command=["bash", "-c", "python -m pkg.initializers.model"],
+        env=env,
+    )
