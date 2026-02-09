@@ -218,6 +218,7 @@ def aggregate_container_statuses(adapter, containers: list[dict]) -> str:
 class ContainerInitializer:
     """Internal type for container initializer configuration."""
 
+    name: str
     image: str
     command: list[str]
     env: dict[str, str]
@@ -280,6 +281,7 @@ def get_dataset_initializer(dataset: types.BaseInitializer, config) -> Container
     env.update(get_optional_initializer_envs(dataset, required_fields={"storage_uri"}))
 
     return ContainerInitializer(
+        name="dataset-initializer",
         image=config.dataset_initializer_image,
         command=["bash", "-c", "python -m pkg.initializers.dataset"],
         env=env,
@@ -313,6 +315,7 @@ def get_model_initializer(model: types.BaseInitializer, config) -> ContainerInit
     env.update(get_optional_initializer_envs(model, required_fields={"storage_uri"}))
 
     return ContainerInitializer(
+        name="model-initializer",
         image=config.model_initializer_image,
         command=["bash", "-c", "python -m pkg.initializers.model"],
         env=env,

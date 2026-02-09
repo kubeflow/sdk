@@ -540,7 +540,6 @@ class ContainerBackend(RuntimeBackend):
             self._run_single_initializer(
                 job_name=job_name,
                 container_init=dataset_init,
-                init_type="dataset",
                 workdir=workdir,
                 network_id=network_id,
             )
@@ -555,7 +554,6 @@ class ContainerBackend(RuntimeBackend):
             self._run_single_initializer(
                 job_name=job_name,
                 container_init=model_init,
-                init_type="model",
                 workdir=workdir,
                 network_id=network_id,
             )
@@ -565,7 +563,6 @@ class ContainerBackend(RuntimeBackend):
         self,
         job_name: str,
         container_init: container_utils.ContainerInitializer,
-        init_type: str,
         workdir: str,
         network_id: str,
     ):
@@ -574,20 +571,19 @@ class ContainerBackend(RuntimeBackend):
 
         Args:
             job_name: Name of the training job.
-            container_init: ContainerInitializer with image, command, and env.
-            init_type: Type of initializer ("dataset" or "model").
+            container_init: ContainerInitializer with name, image, command, and env.
             workdir: Working directory path on host.
             network_id: Network ID for containers.
 
         Raises:
             RuntimeError: If initializer fails.
         """
-        container_name = f"{job_name}-{init_type}-initializer"
+        container_name = f"{job_name}-{container_init.name}"
 
         # Create labels for tracking
         labels = {
             f"{self.label_prefix}/trainjob-name": job_name,
-            f"{self.label_prefix}/step": f"{init_type}-initializer",
+            f"{self.label_prefix}/step": container_init.name,
             f"{self.label_prefix}/network-id": network_id,
         }
 
@@ -599,7 +595,7 @@ class ContainerBackend(RuntimeBackend):
             }
         }
 
-        logger.debug(f"Starting {init_type} initializer container: {container_name}")
+        logger.debug(f"Starting {container_init.name} container: {container_name}")
 
         # Create and start the initializer container
         # The initializer images use /app as their working directory
@@ -625,7 +621,7 @@ class ContainerBackend(RuntimeBackend):
             )
 
             if exit_code == 0:
-                logger.debug(f"{init_type} initializer completed successfully")
+                logger.debug(f"{container_init.name} completed successfully")
                 # Clean up the successful container
                 self._cleanup_container_resources(container_ids=[container_id], stop_timeout=0)
                 return
@@ -633,14 +629,14 @@ class ContainerBackend(RuntimeBackend):
                 # Get logs for debugging
                 logs = list(self._adapter.container_logs(container_id, follow=False))
                 error_msg = (
-                    f"{init_type} initializer failed with exit code {exit_code}. "
+                    f"{container_init.name} failed with exit code {exit_code}. "
                     f"Logs: {' '.join(logs[-10:]) if logs else 'No logs available'}"
                 )
                 raise RuntimeError(error_msg)
 
         except TimeoutError:
             logger.error(
-                f"{init_type} initializer did not complete within "
+                f"{container_init.name} did not complete within "
                 f"{self.cfg.initializer_timeout} seconds"
             )
             # Clean up the timed-out container
@@ -648,7 +644,7 @@ class ContainerBackend(RuntimeBackend):
             raise
 
         except Exception as e:
-            logger.error(f"Error running {init_type} initializer: {e}")
+            logger.error(f"Error running {container_init.name}: {e}")
             # Clean up the failed container
             self._cleanup_container_resources(container_ids=[container_id], stop_timeout=5)
             raise
