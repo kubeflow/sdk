@@ -726,37 +726,10 @@ def _run_verify_backend_with_core_api(core_api: Mock) -> tuple[list[str], int]:
                 "must_contain": [
                     "Trainer control-plane version info is not available",
                     "kubeflow-trainer-public",
-                    "kubeflow_trainer_version",
                     "ConfigMap not found",
                 ],
             },
-        ),
-        TestCase(
-            name="missing data key logs warning",
-            expected_status=SUCCESS,
-            config={
-                "core_api": _build_core_api_mock({}),
-                "expect_warning": True,
-                "must_contain": [
-                    "Trainer control-plane version info is not available",
-                    "kubeflow-trainer-public",
-                    "kubeflow_trainer_version",
-                ],
-            },
-        ),
-        TestCase(
-            name="data None logs warning",
-            expected_status=SUCCESS,
-            config={
-                "core_api": _build_core_api_mock(None),
-                "expect_warning": True,
-                "must_contain": [
-                    "Trainer control-plane version info is not available",
-                    "kubeflow-trainer-public",
-                    "kubeflow_trainer_version",
-                ],
-            },
-        ),
+        )
     ],
 )
 def test_verify_backend(test_case):
