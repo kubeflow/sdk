@@ -40,6 +40,11 @@ docker = [
 podman = [
   "podman>=5.6.0"
 ]
+spark = [
+    # Match major.minor to SparkConnect server image (see kubeflow.spark.backends.kubernetes.constants)
+    # Use [connect] extra to get compatible grpcio, pandas, pyarrow versions automatically
+    "pyspark[connect]==3.4.1",
+]
 hub = [
   "model-registry>=0.3.0",
 ]
@@ -54,7 +59,7 @@ docs = [
   "sphinx-design>=0.6",
 ]
 dev = [
-  "kubeflow[hub]",
+  "kubeflow[hub,spark]",
   "pytest>=7.0",
   "pytest-mock>=3.10",
   "coverage>=7.0",
@@ -64,6 +69,7 @@ dev = [
   "pre-commit>=4.2.0",
   "PyGithub>=2.7.0",
   "git-cliff>=2.11.0",
+  "setuptools>=80.9.0",
   "ty>=0.0.11",
 ]
 
@@ -98,6 +104,7 @@ extend-exclude = [
   "dist",
   "__pycache__",
   "docs/_build",
+  "spark-operator",
 ]
 
 [tool.ruff.format]
@@ -135,6 +142,18 @@ ignore = [
 known-first-party = ["kubeflow"]
 combine-as-imports = true
 force-sort-within-sections = true
+
+[tool.pytest.ini_options]
+markers = [
+  "integration: marks tests as integration tests (requires Kind cluster)",
+  "slow: marks tests as slow running",
+  "smoke: CRD-only smoke test (Kind + CRD, no operator)",
+  "timeout: marks tests with timeout limit",
+  "options: marks tests for Spark options pattern",
+]
+filterwarnings = [
+  "ignore::pydantic.warnings.PydanticDeprecatedSince20",
+]
 
 [tool.ty.environment]
 python-version = "3.10"
