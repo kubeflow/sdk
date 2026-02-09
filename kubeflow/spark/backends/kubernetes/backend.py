@@ -379,7 +379,7 @@ class KubernetesBackend(RuntimeBackend):
             logger.warning("Port %s did not become reachable in time for %s", port, key)
         raise RuntimeError(f"Port-forward failed for all candidates in {info.namespace}")
 
-    def connect_session(
+    def connect(
         self,
         info: SparkConnectInfo,
         connect_timeout: int = 120,

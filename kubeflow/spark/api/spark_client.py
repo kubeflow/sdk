@@ -168,7 +168,7 @@ class SparkClient:
         info = self.backend._wait_for_session_ready(info.name, timeout=timeout)
         logger.info("Session ready, connecting (service_name=%s)", info.service_name)
 
-        return self.backend.connect_session(info, connect_timeout=connect_timeout)
+        return self.backend.connect(info, connect_timeout=connect_timeout)
 
     def list_sessions(self) -> list[SparkConnectInfo]:
         """List all SparkConnect sessions."""
