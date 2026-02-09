@@ -28,7 +28,7 @@ class RuntimeBackend(abc.ABC):
     """
 
     @abc.abstractmethod
-    def _create_session(
+    def connect(
         self,
         num_executors: Optional[int] = None,
         resources_per_executor: Optional[dict[str, str]] = None,
