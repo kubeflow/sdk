@@ -16,8 +16,6 @@
 
 from collections.abc import Iterator
 import logging
-import os
-import sys
 from typing import Optional
 
 from pyspark.sql import SparkSession
@@ -28,22 +26,6 @@ from kubeflow.spark.backends.kubernetes.utils import validate_spark_connect_url
 from kubeflow.spark.types.types import Driver, Executor, SparkConnectInfo
 
 logger = logging.getLogger(__name__)
-
-_spark_debug_logging_enabled = False
-
-
-def _enable_spark_debug_logging() -> None:
-    """Turn on INFO logging for kubeflow.spark to stderr (for E2E debug)."""
-    global _spark_debug_logging_enabled
-    if _spark_debug_logging_enabled:
-        return
-    _spark_debug_logging_enabled = True
-    root = logging.getLogger("kubeflow.spark")
-    root.setLevel(logging.INFO)
-    if not root.handlers:
-        h = logging.StreamHandler(sys.stderr)
-        h.setLevel(logging.INFO)
-        root.addHandler(h)
 
 
 class SparkClient:
@@ -127,19 +109,6 @@ class SparkClient:
             Server port defaults to 15002 (Spark Connect gRPC). PySpark and server Spark
             major.minor should match; see constants and pyproject.toml [spark].
         """
-        if resources_per_executor is not None and not isinstance(resources_per_executor, dict):
-            raise TypeError(
-                f"resources_per_executor must be a dict, got {type(resources_per_executor)}"
-            )
-        if spark_conf is not None and not isinstance(spark_conf, dict):
-            raise TypeError(f"spark_conf must be a dict, got {type(spark_conf)}")
-        if num_executors is not None and not isinstance(num_executors, int):
-            raise TypeError(f"num_executors must be an int, got {type(num_executors)}")
-        if driver is not None and not isinstance(driver, Driver):
-            raise TypeError(f"driver must be a Driver instance, got {type(driver)}")
-        if executor is not None and not isinstance(executor, Executor):
-            raise TypeError(f"executor must be an Executor instance, got {type(executor)}")
-
         if base_url:
             validate_spark_connect_url(base_url)
             builder = SparkSession.builder.remote(base_url)
@@ -147,28 +116,16 @@ class SparkClient:
                 builder = builder.config("spark.connect.authenticate.token", token)
             return builder.getOrCreate()
 
-        if os.environ.get("SPARK_E2E_DEBUG"):
-            _enable_spark_debug_logging()
-
-        info = self.backend._create_session(
+        return self.backend.create_and_connect(
             num_executors=num_executors,
             resources_per_executor=resources_per_executor,
             spark_conf=spark_conf,
             driver=driver,
             executor=executor,
             options=options,
+            timeout=timeout,
+            connect_timeout=connect_timeout,
         )
-        logger.info(
-            "Created session %s/%s, waiting for ready (timeout=%ss)",
-            info.namespace,
-            info.name,
-            timeout,
-        )
-
-        info = self.backend._wait_for_session_ready(info.name, timeout=timeout)
-        logger.info("Session ready, connecting (service_name=%s)", info.service_name)
-
-        return self.backend.connect(info, connect_timeout=connect_timeout)
 
     def list_sessions(self) -> list[SparkConnectInfo]:
         """List all SparkConnect sessions."""

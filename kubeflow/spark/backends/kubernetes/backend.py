@@ -22,6 +22,7 @@ import os
 import random
 import socket
 import subprocess
+import sys
 import threading
 import time
 from typing import Optional
@@ -43,6 +44,22 @@ from kubeflow.spark.types.options import Name
 from kubeflow.spark.types.types import Driver, Executor, SparkConnectInfo, SparkConnectState
 
 logger = logging.getLogger(__name__)
+
+_spark_debug_logging_enabled = False
+
+
+def _enable_spark_debug_logging() -> None:
+    """Turn on INFO logging for kubeflow.spark to stderr (for E2E debug)."""
+    global _spark_debug_logging_enabled
+    if _spark_debug_logging_enabled:
+        return
+    _spark_debug_logging_enabled = True
+    root = logging.getLogger("kubeflow.spark")
+    root.setLevel(logging.INFO)
+    if not root.handlers:
+        h = logging.StreamHandler(sys.stderr)
+        h.setLevel(logging.INFO)
+        root.addHandler(h)
 
 
 class KubernetesBackend(RuntimeBackend):
@@ -104,6 +121,20 @@ class KubernetesBackend(RuntimeBackend):
         options: Optional[list] = None,
     ) -> SparkConnectInfo:
         """Create a new SparkConnect session (INTERNAL USE ONLY)."""
+        # Validate input types
+        if resources_per_executor is not None and not isinstance(resources_per_executor, dict):
+            raise TypeError(
+                f"resources_per_executor must be a dict, got {type(resources_per_executor)}"
+            )
+        if spark_conf is not None and not isinstance(spark_conf, dict):
+            raise TypeError(f"spark_conf must be a dict, got {type(spark_conf)}")
+        if num_executors is not None and not isinstance(num_executors, int):
+            raise TypeError(f"num_executors must be an int, got {type(num_executors)}")
+        if driver is not None and not isinstance(driver, Driver):
+            raise TypeError(f"driver must be a Driver instance, got {type(driver)}")
+        if executor is not None and not isinstance(executor, Executor):
+            raise TypeError(f"executor must be an Executor instance, got {type(executor)}")
+
         # Extract Name option if present, or auto-generate
         name, filtered_options = self._extract_name_option(options)
 
@@ -502,6 +533,64 @@ class KubernetesBackend(RuntimeBackend):
                 f"(code={pf_proc.returncode}). stderr: {stderr_str}"
             )
         raise TimeoutError(base_msg)
+
+    def create_and_connect(
+        self,
+        num_executors: Optional[int] = None,
+        resources_per_executor: Optional[dict[str, str]] = None,
+        spark_conf: Optional[dict[str, str]] = None,
+        driver: Optional[Driver] = None,
+        executor: Optional[Executor] = None,
+        options: Optional[list] = None,
+        timeout: int = 300,
+        connect_timeout: int = 120,
+    ) -> SparkSession:
+        """Create a new SparkConnect session and connect to it.
+
+        This method handles the full session lifecycle:
+        1. Creates a new session via _create_session
+        2. Waits for session to become ready
+        3. Connects to the session and returns SparkSession
+
+        Args:
+            num_executors: Number of executor instances.
+            resources_per_executor: Resource requirements per executor.
+            spark_conf: Spark configuration properties.
+            driver: Driver configuration.
+            executor: Executor configuration.
+            options: List of configuration options (use Name option for custom name).
+            timeout: Timeout in seconds to wait for session ready.
+            connect_timeout: Timeout in seconds for SparkSession.getOrCreate().
+
+        Returns:
+            Connected SparkSession.
+
+        Raises:
+            TimeoutError: If session creation or connection times out.
+            RuntimeError: If session creation or connection fails.
+        """
+        if os.environ.get("SPARK_E2E_DEBUG"):
+            _enable_spark_debug_logging()
+
+        info = self._create_session(
+            num_executors=num_executors,
+            resources_per_executor=resources_per_executor,
+            spark_conf=spark_conf,
+            driver=driver,
+            executor=executor,
+            options=options,
+        )
+        logger.info(
+            "Created session %s/%s, waiting for ready (timeout=%ss)",
+            info.namespace,
+            info.name,
+            timeout,
+        )
+
+        info = self._wait_for_session_ready(info.name, timeout=timeout)
+        logger.info("Session ready, connecting (service_name=%s)", info.service_name)
+
+        return self.connect(info, connect_timeout=connect_timeout)
 
     def get_session_logs(
         self,

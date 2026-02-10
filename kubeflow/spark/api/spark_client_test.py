@@ -154,28 +154,18 @@ class TestSparkClientConnectWithNameOption:
     def test_connect_with_name_option(self, spark_client, mock_backend):
         """C18: Connect passes options to backend including Name option."""
         mock_session = Mock()
-        mock_builder = Mock()
-        mock_builder.remote.return_value = mock_builder
-        mock_builder.getOrCreate.return_value = mock_session
-        mock_spark = Mock()
-        mock_spark.builder = mock_builder
+        mock_backend.create_and_connect.return_value = mock_session
         options = [Name("custom-session")]
-        with patch("kubeflow.spark.api.spark_client.SparkSession", mock_spark):
-            spark_client.connect(options=options)
-        mock_backend._create_session.assert_called_once()
-        call_args = mock_backend._create_session.call_args
+        spark_client.connect(options=options)
+        mock_backend.create_and_connect.assert_called_once()
+        call_args = mock_backend.create_and_connect.call_args
         assert call_args.kwargs["options"] == options
 
     def test_connect_without_options_auto_generates(self, spark_client, mock_backend):
         """C19: Connect without options auto-generates name via backend."""
         mock_session = Mock()
-        mock_builder = Mock()
-        mock_builder.remote.return_value = mock_builder
-        mock_builder.getOrCreate.return_value = mock_session
-        mock_spark = Mock()
-        mock_spark.builder = mock_builder
-        with patch("kubeflow.spark.api.spark_client.SparkSession", mock_spark):
-            spark_client.connect()
-        mock_backend._create_session.assert_called_once()
-        call_args = mock_backend._create_session.call_args
+        mock_backend.create_and_connect.return_value = mock_session
+        spark_client.connect()
+        mock_backend.create_and_connect.assert_called_once()
+        call_args = mock_backend.create_and_connect.call_args
         assert call_args.kwargs["options"] is None
