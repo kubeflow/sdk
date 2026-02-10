@@ -729,7 +729,7 @@ def _run_verify_backend_with_core_api(core_api: Mock) -> tuple[list[str], int]:
                     "ConfigMap not found",
                 ],
             },
-        )
+        ),
     ],
 )
 def test_verify_backend(test_case):
