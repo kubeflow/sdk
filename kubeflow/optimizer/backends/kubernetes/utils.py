@@ -13,7 +13,8 @@
 # limitations under the License.
 
 from dataclasses import fields
-from typing import Any, Optional, get_args, get_origin
+from types import NoneType, UnionType
+from typing import Any, Union, get_args, get_origin
 
 from kubeflow_katib_api import models
 
@@ -32,18 +33,31 @@ from kubeflow.optimizer.types.search_types import (
 
 
 def convert_value(raw_value: str, target_type: Any):
-    origin = get_origin(target_type)
-    args = get_args(target_type)
+    """Convert a string value to the target type, handling optional types.
 
-    if origin is Optional:
-        target_type = args[0]
+    Args:
+        raw_value: String value to convert.
+        target_type: Target type. `Optional[T]` and `T | None` will be treated as `T`
+
+    Returns:
+        Converted value in the target type.
+    """
+    origin = get_origin(target_type)
+
+    # `T | None` produces UnionType instead of Union before Python 3.14.
+    # `Optional[T]` always produces Union
+    if origin is Union or origin is UnionType:
+        args = get_args(target_type)
+        non_none_types = [arg for arg in args if arg is not NoneType]
+        if len(non_none_types) == 1:
+            target_type = non_none_types[0]
 
     if target_type is int:
         return int(raw_value)
     elif target_type is float:
         return float(raw_value)
     elif target_type is bool:
-        return raw_value.lower() in ("True", "1")
+        return raw_value.lower() in ("true", "1")
     return raw_value
 
 
