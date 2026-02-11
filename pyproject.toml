@@ -1,7 +1,7 @@
 [project]
 name = "kubeflow"
 dynamic = ["version"]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
   { name = "The Kubeflow Authors", email = "kubeflow-discuss@googlegroups.com" },
 ]
@@ -14,7 +14,6 @@ classifiers = [
   "Intended Audience :: Developers",
   "Intended Audience :: Education",
   "Intended Audience :: Science/Research",
-  "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -89,7 +88,7 @@ allow-direct-references = true
 [tool.ruff]
 # Formatting + lint coordination
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 src = ["kubeflow"]
 extend-exclude = [
   ".venv",

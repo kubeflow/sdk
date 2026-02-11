@@ -123,7 +123,7 @@ class MockContainerAdapter(BaseContainerClientAdapter):
         return "local" in image or image in self.images_pulled
 
     def run_oneoff_container(self, image: str, command: list[str]) -> str:
-        return "Python 3.9.0\npip 21.0.1\nnvidia-smi not found\n"
+        return "Python 3.10.0\npip 21.0.1\nnvidia-smi not found\n"
 
     def container_status(self, container_id: str) -> tuple[str, Optional[int]]:
         for container in self.containers_created:
