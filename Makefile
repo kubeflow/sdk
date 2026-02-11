@@ -116,6 +116,11 @@ test-e2e-setup-cluster:  ## Setup Kind cluster for Spark E2E tests
 	 SPARK_OPERATOR_VERSION=$(SPARK_OPERATOR_VERSION) \
 	 KIND=$(KIND) \
 	 ./hack/e2e-setup-cluster.sh
+.PHONY: test-scripts
+test-scripts: uv-venv  ## Run GitHub Actions script tests
+	@uv sync
+	@uv run pytest .github/scripts/test_scripts.py -v
+
 
 .PHONY: install-dev
 install-dev: uv uv-venv ruff  ## Install uv, create .venv, sync deps.

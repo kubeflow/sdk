@@ -42,6 +42,9 @@ jobs:
       - name: Verify
         run: make verify
 
+      - name: Test GitHub Actions Scripts
+        run: make test-scripts
+
       - name: Run Tests
         run: |
           make test-python report=xml

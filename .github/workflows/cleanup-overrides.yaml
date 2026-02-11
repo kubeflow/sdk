@@ -84,7 +84,7 @@ jobs:
             fi
 
             # Check the resulting version
-            NATURAL_VER=$(uv tree --package "$PACKAGE" | grep -F "$PACKAGE v" | grep -oP 'v\K[0-9.]+' | head -n 1)
+            NATURAL_VER=$(uv tree --package "$PACKAGE" | uv run python3 .github/scripts/extract_version.py "$PACKAGE")
 
             if [ -z "$NATURAL_VER" ]; then
               echo "Warning: Could not determine natural version, keeping override"
@@ -97,19 +97,21 @@ jobs:
             echo "Natural upgrade resulted in version: $NATURAL_VER"
 
             # Compare versions: if natural version >= override version, we can remove override
-            if [ "$NATURAL_VER" = "$OVERRIDE_VER" ] || \
-               [ "$(printf '%s\n' "$NATURAL_VER" "$OVERRIDE_VER" | sort -V | tail -n1)" = "$NATURAL_VER" ]; then
-              echo "SUCCESS: Natural upgrade now works! Version $NATURAL_VER >= $OVERRIDE_VER"
-              echo "  Removing override for $TARGET"
-              echo "- $TARGET (upgraded to $NATURAL_VER)" >> removed.txt
-              # Keep the modified files (override removed)
-              rm -f pyproject.toml.backup uv.lock.backup
-            else
+            # compare_versions.py exits 0 if first arg < second arg, so we need to check if NATURAL_VER < OVERRIDE_VER
+            if uv run python3 .github/scripts/compare_versions.py "$NATURAL_VER" "$OVERRIDE_VER"; then
+              # NATURAL_VER < OVERRIDE_VER, so we need to keep the override
               echo "SKIP: Natural upgrade insufficient. Version $NATURAL_VER < $OVERRIDE_VER"
               echo "  Keeping override for $TARGET"
               mv pyproject.toml.backup pyproject.toml
               mv uv.lock.backup uv.lock
               echo "- $TARGET (natural upgrade only reached $NATURAL_VER, need $OVERRIDE_VER)" >> kept.txt
+            else
+              # NATURAL_VER >= OVERRIDE_VER, we can remove the override
+              echo "SUCCESS: Natural upgrade now works! Version $NATURAL_VER >= $OVERRIDE_VER"
+              echo "  Removing override for $TARGET"
+              echo "- $TARGET (upgraded to $NATURAL_VER)" >> removed.txt
+              # Keep the modified files (override removed)
+              rm -f pyproject.toml.backup uv.lock.backup
             fi
           done <<< "$OVERRIDES"
 
@@ -182,4 +184,4 @@ jobs:
           branch: cleanup-overrides-${{ github.run_id }}
           delete-branch: true
           labels: |
-            "area/dependencies"
+            "area/security"
