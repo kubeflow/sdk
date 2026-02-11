@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 import logging
 from typing import Optional, Union
 
@@ -33,10 +33,12 @@ logger = logging.getLogger(__name__)
 class TrainerClient:
     def __init__(
         self,
-        backend_config: Union[
-            KubernetesBackendConfig,
-            LocalProcessBackendConfig,
-            ContainerBackendConfig,
+        backend_config: Optional[
+            Union[
+                KubernetesBackendConfig,
+                LocalProcessBackendConfig,
+                ContainerBackendConfig,
+            ]
         ] = None,
     ):
         """Initialize a Kubeflow Trainer client.
@@ -102,7 +104,7 @@ class TrainerClient:
 
     def train(
         self,
-        runtime: Optional[types.Runtime] = None,
+        runtime: Optional[Union[str, types.Runtime]] = None,
         initializer: Optional[types.Initializer] = None,
         trainer: Optional[
             Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
@@ -119,8 +121,9 @@ class TrainerClient:
             only parameter configuration.
 
         Args:
-            runtime: Optional reference to one of the existing runtimes. Defaults to the
-                torch-distributed runtime if not provided.
+            runtime: Optional reference to one of the existing runtimes. It can accept the runtime
+                name or Runtime object from the `get_runtime()` API.
+                Defaults to the torch-distributed runtime if not provided.
             initializer: Optional configuration for the dataset and model initializers.
             trainer: Optional configuration for a CustomTrainer, CustomTrainerContainer, or
                 BuiltinTrainer. If not specified, the TrainJob will use the
@@ -206,12 +209,32 @@ class TrainerClient:
         """
         return self.backend.get_job_logs(name=name, follow=follow, step=step)
 
+    def get_job_events(self, name: str) -> list[types.Event]:
+        """Get events for a TrainJob.
+
+        This provides additional clarity about the state of the TrainJob
+        when logs alone are not sufficient. Events include information about
+        pod state changes, errors, and other significant occurrences.
+
+        Args:
+            name: Name of the TrainJob.
+
+        Returns:
+            A list of Event objects associated with the TrainJob.
+
+        Raises:
+            TimeoutError: Timeout to get a TrainJob events.
+            RuntimeError: Failed to get a TrainJob events.
+        """
+        return self.backend.get_job_events(name=name)
+
     def wait_for_job_status(
         self,
         name: str,
         status: set[str] = {constants.TRAINJOB_COMPLETE},
         timeout: int = 600,
         polling_interval: int = 2,
+        callbacks: Optional[list[Callable[[types.TrainJob], None]]] = None,
     ) -> types.TrainJob:
         """Wait for a TrainJob to reach a desired status.
 
@@ -222,6 +245,8 @@ class TrainerClient:
             timeout: Maximum number of seconds to wait for the TrainJob to reach one of the
                 expected statuses.
             polling_interval: The polling interval in seconds to check TrainJob status.
+            callbacks: Optional list of callback functions to be invoked after each polling
+                interval. Each callback should accept a single argument: the TrainJob object.
 
         Returns:
             A TrainJob object that reaches the desired status.
@@ -236,6 +261,7 @@ class TrainerClient:
             status=status,
             timeout=timeout,
             polling_interval=polling_interval,
+            callbacks=callbacks,
         )
 
     def delete_job(self, name: str):

@@ -31,15 +31,34 @@ Before writing code, agents should:
 ## Repository Map
 
 ```
-kubeflow/trainer/           # Trainer component
-├── backends/kubernetes/    # K8s backend implementation + tests
-├── backends/localprocess/  # Local process backend
-├── api/                   # Client API, TrainerClient
-├── types/                 # Pydantic v2 data models
-└── utils/                 # Shared helpers + tests
-docs/                      # Diagrams and proposals
-scripts/                   # Project scripts (e.g., changelog)
-Root files: AGENTS.md, README.md, pyproject.toml, Makefile, CI workflows
+.github/                         # GitHub actions for CI/CD
+docs/                            # Kubeflow SDK documentation
+examples/                        # Kubeflow SDK examples
+kubeflow/                        # Main Python package
+├── common/                        # Shared utilities and types across all projects
+|
+├── trainer/                       # Kubeflow Trainer
+│   ├── api/                         # TrainerClient - main user interface
+│   ├── backends/                    # Execution backend implementations
+│   │   ├── kubernetes/                # Kubernetes backend
+│   │   │   ├── backend.py
+│   │   ├── container/                 # Container backend for local development
+│   │   │   ├── backend.py
+│   │   │   └── adapters/                # Docker & Podman adapter implementations
+│   │   └── localprocess/              # Subprocess backend for quick prototyping
+│   ├── constants/                   # Common trainer constants and defaults
+│   ├── options/                     # Backend configuration options (KubernetesOptions, etc.)
+│   ├── types/                       # Common trainer types (e.g. TrainJob, CustomTrainer, BuiltinTrainer)
+|
+├── optimizer/                   # Kubeflow Optimizer
+│   ├── api/                       # OptimizerClient - main user interface
+│   ├── backends/                  # Execution backend implementations
+│   │   └── kubernetes/              # Kubernetes backend
+│   ├── types/                     # Common optimizer types (e.g. OptimizationJob, Search)
+│   └── constants/                 # Common optimizer constants and defaults
+|
+└── hub/                         # Kubeflow Hub
+    └── api/                       # ModelRegistryClient - main user interface
 ```
 
 ## Environment & Tooling
@@ -50,7 +69,7 @@ Root files: AGENTS.md, README.md, pyproject.toml, Makefile, CI workflows
 - **Build**: Hatchling (optional `uv build`)
 - **Pre-commit**: Config provided and enforced in CI
 
-## Quick Start
+## Commands
 
 <!-- BEGIN: AGENT_COMMANDS -->
 
@@ -202,32 +221,7 @@ def filter_completed_jobs(jobs: list[str], completed: set[str]) -> list[str]:
 - Include `name`, `expected_status`, `config`, `expected_output/error` fields
 - Print test execution status for debugging
 - Handle both success and exception cases in the same test function
-
-**Test Quality Checklist:**
-
-- [ ] Tests fail when your new logic is broken
-- [ ] Happy path is covered
-- [ ] Edge cases and error conditions are tested
-- [ ] Use fixtures/mocks for external dependencies
-- [ ] Tests are deterministic (no flaky tests)
-
-**Test Examples:**
-
-Simple test:
-
-```python
-def test_filter_completed_jobs():
-    """Test filtering completed jobs from a list."""
-    jobs = ["job-1", "job-2", "job-3"]
-    completed = {"job-1", "job-2"}
-
-    result = filter_completed_jobs(jobs, completed)
-
-    assert result == ["job-3"]
-    assert len(result) == 1
-```
-
-Parametrized test cases (preferred for multiple scenarios):
+- Use `pytest.mark.parametrize` with `TestCase` dataclass for multiple test scenarios:
 
 ```python
 @pytest.mark.parametrize(
@@ -320,138 +314,3 @@ def submit_job(name: str, config: dict, *, priority: str = "normal") -> str:
 - Document all parameters, return values, and exceptions
 - Keep descriptions concise but clear
 - Use Pydantic v2 models in `kubeflow.trainer.types` for schemas
-
-### 6. Architectural Improvements
-
-**When you encounter code that could be improved, suggest better designs:**
-
-❌ **Poor Design:**
-
-```python
-def process_training(data, k8s_client, storage, logger):
-    # Function doing too many things
-    validated = validate_data(data)
-    job = k8s_client.create_job(validated)
-    storage.save_metadata(job)
-    logger.info(f"Created job {job.name}")
-    return job
-```
-
-✅ **Better Design:**
-
-```python
-@dataclass
-class TrainingJobResult:
-    """Result of training job submission."""
-    job_id: str
-    status: str
-    created_at: datetime
-
-class TrainingJobManager:
-    """Handles training job lifecycle operations."""
-
-    def __init__(self, k8s_client: KubernetesClient, storage: Storage):
-        self.k8s = k8s_client
-        self.storage = storage
-
-    def submit_job(self, config: TrainingConfig) -> TrainingJobResult:
-        """Submit and track a new training job."""
-        validated_config = self._validate_config(config)
-        job = self._create_k8s_job(validated_config)
-        self._save_job_metadata(job)
-        return TrainingJobResult(
-            job_id=job.name,
-            status=job.status,
-            created_at=job.created_at
-        )
-```
-
-## Component: Trainer
-
-**Client entrypoints**: `kubeflow.trainer.api.TrainerClient` and trainer definitions such as `CustomTrainer`
-
-**Trainer Types**:
-
-**CustomTrainer** (`kubeflow.trainer.types.CustomTrainer`):
-
-- **Purpose**: For custom, self-contained training functions that you write yourself
-- **Flexibility**: Complete control over the training process
-- **Use case**: "Bring your own training code" - maximum flexibility
-- **Key attributes**: `func` (your training function), `func_args`, `packages_to_install`, `pip_index_urls`, `num_nodes`, `resources_per_node`, `env`
-
-**CustomTrainerContainer** (`kubeflow.trainer.types.CustomTrainerContainer`):
-
-- **Purpose**: For custom, self-contained container image that you create yourself
-- **Flexibility**: Complete control over the training process
-- **Use case**: "Bring your own training image" - maximum flexibility
-- **Key attributes**: `num_nodes`, `resources_per_node`, `env`
-
-**BuiltinTrainer** (`kubeflow.trainer.types.BuiltinTrainer`):
-
-- **Purpose**: For pre-built training frameworks with existing fine-tuning logic
-- **Convenience**: Just configure parameters, training logic is already implemented
-- **Use case**: "Use our pre-built trainers" - convenience for common scenarios
-- **Key attributes**: `config` (currently only supports `TorchTuneConfig` for LLM fine-tuning with TorchTune)
-
-**Backends**:
-
-- `localprocess`: local execution for fast iteration
-- `kubernetes`: K8s-backed jobs, see `backends/kubernetes`
-
-**Typical flow**:
-
-1. Get runtime, define trainer, submit with `TrainerClient().train(...)`
-2. `wait_for_job_status(...)` then fetch logs with `get_job_logs(...)`
-3. For full example, see README "Run your first PyTorch distributed job"
-
-**Integration patterns**:
-
-- Follow existing patterns in `kubeflow.trainer.backends` for new backends
-- Use `kubeflow.trainer.types` for data models and type definitions
-- Implement proper error handling and resource cleanup
-- Include comprehensive tests for backend implementations
-
-## CI & PRs
-
-**PR Requirements**:
-
-- Title must follow Conventional Commits:
-  - Types: `chore`, `fix`, `feat`, `revert`
-  - Scopes: `ci`, `docs`, `examples`, `scripts`, `test`, `trainer`
-- CI runs `make verify` and tests on Python 3.9/3.11
-- Keep changes focused and minimal; align with existing style
-
-## Releasing
-
-**Version management**:
-
-```bash
-make release VERSION=X.Y.Z   # Updates kubeflow/__init__.py and generates changelog
-```
-
-- Do not commit secrets; verify coverage and lint pass before tagging
-
-## Troubleshooting
-
-- **`uv` not found**: run `make uv` or re-run `make install-dev`
-- **Ruff not installed**: `make install-dev` ensures tools; or `uv tool install ruff`
-- **Virtualenv issues**: remove `.venv` and re-run `make install-dev`
-- **Tests failing locally but not in CI**: run `make verify` to match CI formatting and lint rules
-
-## Quick Reference Checklist
-
-Before submitting code changes:
-
-- [ ] **Breaking Changes**: Verified no public API changes without deprecation
-- [ ] **Type Hints**: All functions have complete type annotations and return types
-- [ ] **Tests**: New functionality is fully tested with unit tests
-- [ ] **Security**: No dangerous patterns (eval, bare except, resource leaks, etc.)
-- [ ] **Documentation**: Google-style docstrings for public functions
-- [ ] **Code Quality**: `make verify` passes (lint and format)
-- [ ] **Architecture**: Suggested improvements where applicable
-- [ ] **Commit Message**: Follows Conventional Commits format
-
-## Community & Support
-
-- **Issues/Discussions**: https://github.com/kubeflow/sdk
-- **Contributing**: see CONTRIBUTING.md

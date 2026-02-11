@@ -32,6 +32,7 @@ class CustomTrainer:
     Args:
         func (`Callable`): The function that encapsulates the entire model training process.
         func_args (`Optional[dict]`): The arguments to pass to the function.
+        image (`Optional[str]`): The optional container image to use in TrainJob.
         packages_to_install (`Optional[list[str]]`):
             A list of Python packages to install before running the function.
         pip_index_urls (`list[str]`): The PyPI URLs from which to install
@@ -39,11 +40,20 @@ class CustomTrainer:
             are extra-index-urls.
         num_nodes (`Optional[int]`): The number of nodes to use for training.
         resources_per_node (`Optional[dict]`): The computing resources to allocate per node.
+          ```python
+          resources_per_node = {"gpu": 4, "cpu": 5, "memory": "10G"}
+          ```
+         If your compute supports fractional GPUs (e.g. multi-instance GPU),
+            you can set the resources as follows (request 1 GPU slice of 5Gb) :
+          ```python
+          resources_per_node = {"mig-1g.5gb": 1}
+          ```
         env (`Optional[dict[str, str]]`): The environment variables to set in the training nodes.
     """
 
     func: Callable
     func_args: Optional[dict] = None
+    image: Optional[str] = None
     packages_to_install: Optional[list[str]] = None
     pip_index_urls: list[str] = field(
         default_factory=lambda: list(constants.DEFAULT_PIP_INDEX_URLS)
@@ -63,6 +73,14 @@ class CustomTrainerContainer:
         image (`str`): The container image that encapsulates the entire model training process.
         num_nodes (`Optional[int]`): The number of nodes to use for training.
         resources_per_node (`Optional[dict]`): The computing resources to allocate per node.
+          ```python
+          resources_per_node = {"gpu": 4, "cpu": 5, "memory": "10G"}
+          ```
+         If your compute supports fractional GPUs (e.g. multi-instance GPU),
+            you can set the resources as follows (request 1 GPU slice of 5Gb) :
+          ```python
+          resources_per_node = {"mig-1g.5gb": 1}
+          ```
         env (`Optional[dict[str, str]]`): The environment variables to set in the training nodes.
     """
 
@@ -281,6 +299,28 @@ class TrainJob:
     status: str = common_constants.UNKNOWN
 
 
+# Representation for TrainJob events.
+@dataclass
+class Event:
+    """Event object that represents a Kubernetes event related to a TrainJob.
+
+    Args:
+        involved_object_kind (`str`): The kind of object this event is about
+            (e.g., 'TrainJob', 'Pod').
+        involved_object_name (`str`): The name of the object this event is about.
+        message (`str`): Human-readable description of the event.
+        reason (`str`): Short, machine understandable string describing why
+            this event was generated.
+        event_time (`datetime`): The time at which the event was first recorded.
+    """
+
+    involved_object_kind: str
+    involved_object_name: str
+    message: str
+    reason: str
+    event_time: datetime
+
+
 @dataclass
 class BaseInitializer(abc.ABC):
     """Base class for all initializers"""
@@ -465,14 +505,15 @@ class TrainJobTemplate:
 
     Args:
         trainer (`CustomTrainer`): Configuration for a CustomTrainer.
-        runtime (`Optional[Runtime]`): Optional, reference to one of the existing runtimes. Defaults
-            to the torch-distributed runtime if not provided.
+        runtime (`Optional[Union[str, Runtime]]`): Optional, reference to one of the existing
+            runtimes. It can accept the runtime name or Runtime object from the `get_runtime()` API.
+            Defaults to the torch-distributed runtime if not provided.
         initializer (`Optional[Initializer]`): Optional configuration for the dataset and model
             initializers.
     """
 
     trainer: CustomTrainer
-    runtime: Optional[Runtime] = None
+    runtime: Optional[Union[str, Runtime]] = None
     initializer: Optional[Initializer] = None
 
     def keys(self):

@@ -46,6 +46,13 @@ def get_container_devices(
     elif constants.TPU_LABEL in resources.limits:
         device = constants.TPU_LABEL.split("/")[1]
         device_count = resources.limits[constants.TPU_LABEL].actual_instance
+    elif any(k.startswith(constants.GPU_MIG_PREFIX) for k in resources.limits):
+        mig_keys = [k for k in resources.limits if k.startswith(constants.GPU_MIG_PREFIX)]
+        if len(mig_keys) > 1:
+            raise ValueError(f"Multiple MIG resource types are not supported yet: {mig_keys}")
+        mig_key = mig_keys[0]
+        device = mig_key.split("/")[1]
+        device_count = resources.limits[mig_key].actual_instance
     elif constants.CPU_LABEL in resources.limits:
         device = constants.CPU_LABEL
         device_count = resources.limits[constants.CPU_LABEL].actual_instance
@@ -212,7 +219,6 @@ def get_trainjob_node_step(
     return step
 
 
-# TODO (andreyvelich): Discuss if we want to support V1ResourceRequirements resources as input.
 def get_resources_per_node(
     resources_per_node: dict,
 ) -> models.IoK8sApiCoreV1ResourceRequirements:
@@ -220,25 +226,40 @@ def get_resources_per_node(
     Get the Trainer resources for the training node from the given dict.
     """
 
-    # Convert all keys in resources to lowercase.
-    resources = {
-        k.lower(): models.IoK8sApimachineryPkgApiResourceQuantity(v)
-        for k, v in resources_per_node.items()
-    }
-    if "gpu" in resources:
-        resources["nvidia.com/gpu"] = resources.pop("gpu")
+    # Convert only standard resource keys and aliases to lowercase.
+    # Extended resources (e.g., "example.com/Custom-NPU") preserve their original case.
+    standard_resources = {constants.CPU_LABEL, "memory", "gpu", "storage", "ephemeral-storage"}
+    resource_aliases = {"gpu": "nvidia.com/gpu", "storage": "ephemeral-storage"}
 
-    resources = models.IoK8sApiCoreV1ResourceRequirements(
+    resources = {}
+    for k, v in resources_per_node.items():
+        key = k.lower() if k.lower() in standard_resources or k.lower().startswith("mig-") else k
+        key = resource_aliases.get(key, key)
+        resources[key] = models.IoK8sApimachineryPkgApiResourceQuantity(v)
+
+    # Optional alias for MIG: "mig-<profile>" -> "nvidia.com/mig-<profile>"
+    # Example: "mig-1g.5gb" -> "nvidia.com/mig-1g.5gb"
+    mig_alias_keys = [k for k in resources if k.startswith("mig-")]
+    for k in mig_alias_keys:
+        resources[f"{constants.GPU_MIG_PREFIX}{k[len('mig-') :]}"] = resources.pop(k)
+
+    mig_keys = [k for k in resources if k.startswith(constants.GPU_MIG_PREFIX)]
+    if len(mig_keys) > 1:
+        raise ValueError(f"Multiple MIG resource types are not supported: {mig_keys}")
+    if mig_keys and "nvidia.com/gpu" in resources:
+        raise ValueError(
+            f"GPU (nvidia.com/gpu) and MIG ({mig_keys[0]}) cannot be requested together"
+        )
+
+    return models.IoK8sApiCoreV1ResourceRequirements(
         requests=resources,
         limits=resources,
     )
-    return resources
 
 
 def get_script_for_python_packages(
     packages_to_install: list[str],
     pip_index_urls: list[str],
-    is_mpi: bool,
 ) -> str:
     """
     Get init script to install Python packages from the given pip index URLs.
@@ -248,8 +269,6 @@ def get_script_for_python_packages(
     # first url will be the index-url.
     options = [f"--index-url {pip_index_urls[0]}"]
     options.extend(f"--extra-index-url {extra_index_url}" for extra_index_url in pip_index_urls[1:])
-    # Always install for the user to avoid permission issues across environments.
-    options.append("--user")
 
     header_script = textwrap.dedent(
         """
@@ -263,6 +282,11 @@ def get_script_for_python_packages(
     script_for_python_packages = (
         header_script
         + "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
+        + "--no-warn-script-location {} --user {}".format(
+            " ".join(options),
+            packages_str,
+        )
+        + " ||\nPIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
         + "--no-warn-script-location {} {}\n".format(
             " ".join(options),
             packages_str,
@@ -327,7 +351,6 @@ def get_command_using_train_func(
         install_packages = get_script_for_python_packages(
             packages_to_install,
             pip_index_urls,
-            is_mpi,
         )
 
     # Add function code to the Trainer command.
@@ -374,8 +397,9 @@ def get_trainer_cr_from_custom_trainer(
             trainer.pip_index_urls,
             trainer.packages_to_install,
         )
-    else:
-        # Alternatively, set the Trainer image.
+
+    # Set the TrainJob trainer image if that is set.
+    if trainer.image:
         trainer_cr.image = trainer.image
 
     # Add environment variables to the Trainer.

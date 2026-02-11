@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import abc
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Optional, Union
 
 from kubeflow.trainer.constants import constants
@@ -41,7 +41,7 @@ class RuntimeBackend(abc.ABC):
     @abc.abstractmethod
     def train(
         self,
-        runtime: Optional[types.Runtime] = None,
+        runtime: Optional[Union[str, types.Runtime]] = None,
         initializer: Optional[types.Initializer] = None,
         trainer: Optional[
             Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
@@ -67,6 +67,17 @@ class RuntimeBackend(abc.ABC):
     ) -> Iterator[str]:
         raise NotImplementedError()
 
+    def get_job_events(self, name: str) -> list[types.Event]:
+        """Get events for a TrainJob.
+
+        Args:
+            name: Name of the TrainJob.
+
+        Returns:
+            A list of Event objects associated with the TrainJob.
+        """
+        return []
+
     @abc.abstractmethod
     def wait_for_job_status(
         self,
@@ -74,6 +85,7 @@ class RuntimeBackend(abc.ABC):
         status: set[str] = {constants.TRAINJOB_COMPLETE},
         timeout: int = 600,
         polling_interval: int = 2,
+        callbacks: Optional[list[Callable[[types.TrainJob], None]]] = None,
     ) -> types.TrainJob:
         raise NotImplementedError()
 

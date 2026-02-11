@@ -17,6 +17,7 @@ classifiers = [
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
   "License :: OSI Approved :: Apache Software License",
   "Operating System :: OS Independent",
   "Topic :: Scientific/Engineering",
@@ -39,9 +40,21 @@ docker = [
 podman = [
   "podman>=5.6.0"
 ]
+hub = [
+  "model-registry>=0.3.0",
+]
 
 [dependency-groups]
+docs = [
+  "sphinx>=7.0",
+  "furo>=2024.0",
+  "sphinx-autodoc-typehints>=2.0",
+  "sphinx-copybutton>=0.5",
+  "myst-parser>=3.0",
+  "sphinx-design>=0.6",
+]
 dev = [
+  "kubeflow[hub]",
   "pytest>=7.0",
   "pytest-mock>=3.10",
   "coverage>=7.0",
@@ -50,6 +63,8 @@ dev = [
   "ruff>=0.12.2",
   "pre-commit>=4.2.0",
   "PyGithub>=2.7.0",
+  "git-cliff>=2.11.0",
+  "ty>=0.0.11",
 ]
 
 [project.urls]
@@ -111,6 +126,7 @@ ignore = [
   "B006",  # mutable-argument-default
   "UP007", # Use X | Y instead of Union[X, Y] (requires Python 3.10+)
   "UP045", # Use X | None instead of Optional[X] (requires Python 3.10+)
+  "E501",  # Embedded HTML/SVG has long lines
 ]
 
 
@@ -119,3 +135,6 @@ ignore = [
 known-first-party = ["kubeflow"]
 combine-as-imports = true
 force-sort-within-sections = true
+
+[tool.ty.environment]
+python-version = "3.10"

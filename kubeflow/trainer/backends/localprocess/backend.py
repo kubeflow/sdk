@@ -11,12 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import datetime
 import logging
 import random
 import string
 import tempfile
+import time
 from typing import Optional, Union
 import uuid
 
@@ -70,7 +71,7 @@ class LocalProcessBackend(RuntimeBackend):
 
     def train(
         self,
-        runtime: Optional[types.Runtime] = None,
+        runtime: Optional[Union[str, types.Runtime]] = None,
         initializer: Optional[types.Initializer] = None,
         trainer: Optional[
             Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
@@ -79,6 +80,8 @@ class LocalProcessBackend(RuntimeBackend):
     ) -> str:
         if runtime is None:
             raise ValueError("Runtime must be provided for LocalProcessBackend")
+        if isinstance(runtime, str):
+            runtime = self.get_runtime(runtime)
 
         # Process options to extract configuration
         name = None
@@ -212,20 +215,36 @@ class LocalProcessBackend(RuntimeBackend):
         status: set[str] = {constants.TRAINJOB_COMPLETE},
         timeout: int = 600,
         polling_interval: int = 2,
+        callbacks: Optional[list[Callable[[types.TrainJob], None]]] = None,
     ) -> types.TrainJob:
         # find first match or fallback
         _job = next((_job for _job in self.__local_jobs if _job.name == name), None)
 
         if _job is None:
             raise ValueError(f"No TrainJob with name {name}")
-        # find a better implementation for this
-        for _step in _job.steps:
-            if _step.job.status in [
-                constants.TRAINJOB_RUNNING,
-                constants.TRAINJOB_CREATED,
-            ]:
-                _step.job.join(timeout=timeout)
-        return self.get_job(name)
+
+        if polling_interval > timeout:
+            raise ValueError(
+                f"Polling interval {polling_interval} must be less than timeout: {timeout}"
+            )
+
+        for _ in range(round(timeout / polling_interval)):
+            # Get current job status
+            trainjob = self.get_job(name)
+
+            # Invoke callbacks if provided
+            if callbacks:
+                for callback in callbacks:
+                    callback(trainjob)
+
+            # Return if job has reached desired status
+            if trainjob.status in status:
+                return trainjob
+
+            time.sleep(polling_interval)
+
+        # Timeout reached
+        raise TimeoutError(f"Timeout waiting for TrainJob {name} to reach status: {status}")
 
     def delete_job(self, name: str):
         # find job first.

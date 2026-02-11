@@ -23,7 +23,7 @@ jobs:
       branch: ${{ steps.vars.outputs.branch }}
       is-prerelease: ${{ steps.vars.outputs.is-prerelease }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -83,13 +83,13 @@ jobs:
     needs: [prepare]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ needs.prepare.outputs.branch }}
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -117,7 +117,7 @@ jobs:
           uvx twine check dist/*
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: dist-${{ needs.prepare.outputs.version }}
           path: dist/
@@ -127,7 +127,7 @@ jobs:
     needs: [prepare, build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ needs.prepare.outputs.branch }}
@@ -148,7 +148,7 @@ jobs:
       url: https://pypi.org/project/kubeflow/
     steps:
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: dist-${{ needs.prepare.outputs.version }}
           path: dist/
@@ -165,12 +165,12 @@ jobs:
       name: release
       url: https://github.com/kubeflow/sdk/releases
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ needs.prepare.outputs.branch }}
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: dist-${{ needs.prepare.outputs.version }}
           path: dist/
@@ -183,23 +183,23 @@ jobs:
           CHANGELOG_FILE="CHANGELOG/CHANGELOG-${MAJOR_MINOR}.md"
           set -euo pipefail
           [[ -f "$CHANGELOG_FILE" ]] || { echo "ERROR: $CHANGELOG_FILE not found" >&2; exit 1; }
-          HEADER_REGEX="^# \\[${VERSION//./\\.}\\]"
-          SECTION=$(sed -n "/$HEADER_REGEX/,\$p" "$CHANGELOG_FILE" | tail -n +2)
-          [[ -n "$SECTION" ]] || { echo "ERROR: No changelog section for $VERSION in $CHANGELOG_FILE" >&2; exit 1; }
-          NEXT_VERSION=$(echo "$SECTION" | grep -m1 "^# \\[[0-9]" || true)
+          HEADER_REGEX="^#\{1,2\} \\[${VERSION//./\\.}\\]"
+          SECTION=$(sed -n "/$HEADER_REGEX/,\$p" "$CHANGELOG_FILE")
+          [[ -n "$SECTION" ]] || { echo "ERROR: No changelog section for $VERSION in "$CHANGELOG_FILE"" >&2; exit 1; }
+          NEXT_VERSION=$(echo "$SECTION" | grep -m1 "^#\{1,2\} \\[[0-9]" || true)
           if [[ -n "$NEXT_VERSION" ]]; then
-            CHANGELOG=$(echo "$SECTION" | sed -n "1,/^# \\[[0-9]/p" | sed '1d;$d')
+              CHANGELOG=$(echo "$SECTION" | sed '1d' | sed '/^#\{1,2\} \[[0-9]/,$d')
           else
-            CHANGELOG=$(echo "$SECTION" | sed '1d')
+              CHANGELOG=$(echo "$SECTION" | sed '1d')
           fi
-          [[ -n "$CHANGELOG" ]] || { echo "ERROR: Empty changelog body for $VERSION in $CHANGELOG_FILE" >&2; exit 1; }
+          [[ -n "$CHANGELOG" ]] || { echo "ERROR: Empty changelog body for $VERSION in "$CHANGELOG_FILE"" >&2; exit 1; }
           {
             echo "changelog<<EOF"
             echo "$CHANGELOG"
             echo "EOF"
           } >> $GITHUB_OUTPUT
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.version }}
           name: ${{ needs.prepare.outputs.version }}

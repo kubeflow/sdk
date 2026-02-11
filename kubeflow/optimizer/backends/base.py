@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import abc
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any, Optional
 
 from kubeflow.optimizer.constants import constants
@@ -68,6 +68,7 @@ class RuntimeBackend(abc.ABC):
         status: set[str] = {constants.OPTIMIZATION_JOB_COMPLETE},
         timeout: int = 3600,
         polling_interval: int = 2,
+        callbacks: Optional[list[Callable[[OptimizationJob], None]]] = None,
     ) -> OptimizationJob:
         raise NotImplementedError()
 

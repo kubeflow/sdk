@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 import logging
 from typing import Any, Optional
 
@@ -26,7 +26,7 @@ from kubeflow.optimizer.types.optimization_types import (
     Result,
     TrialConfig,
 )
-from kubeflow.trainer.types.types import TrainJobTemplate
+from kubeflow.trainer.types.types import Event, TrainJobTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +185,7 @@ class OptimizerClient:
         status: set[str] = {constants.OPTIMIZATION_JOB_COMPLETE},
         timeout: int = 3600,
         polling_interval: int = 2,
+        callbacks: Optional[list[Callable[[OptimizationJob], None]]] = None,
     ) -> OptimizationJob:
         """Wait for an OptimizationJob to reach a desired status.
 
@@ -195,6 +196,8 @@ class OptimizerClient:
             timeout: Maximum number of seconds to wait for the OptimizationJob to reach one of the
                 expected statuses.
             polling_interval: The polling interval in seconds to check OptimizationJob status.
+            callbacks: Optional list of callback functions to be invoked after each polling
+                interval. Each callback should accept a single argument: the OptimizationJob object.
 
         Returns:
             An OptimizationJob object that reaches the desired status.
@@ -210,6 +213,7 @@ class OptimizerClient:
             status=status,
             timeout=timeout,
             polling_interval=polling_interval,
+            callbacks=callbacks,
         )
 
     def delete_job(self, name: str):
@@ -223,3 +227,22 @@ class OptimizerClient:
             RuntimeError: Failed to delete OptimizationJob.
         """
         return self.backend.delete_job(name=name)
+
+    def get_job_events(self, name: str) -> list[Event]:
+        """Get events for an OptimizationJob.
+
+        This provides additional clarity about the state of the OptimizationJob
+        when logs alone are not sufficient. Events include information about
+        trial state changes, errors, and other significant occurrences.
+
+        Args:
+            name: Name of the OptimizationJob.
+
+        Returns:
+            A list of Event objects associated with the OptimizationJob.
+
+        Raises:
+            TimeoutError: Timeout to get an OptimizationJob events.
+            RuntimeError: Failed to get an OptimizationJob events.
+        """
+        return self.backend.get_job_events(name=name)

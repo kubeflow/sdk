@@ -38,7 +38,7 @@ from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.types import types
 
 # Test constants
-TORCH_RUNTIME = constants.TORCH_RUNTIME
+TORCH_RUNTIME = constants.DEFAULT_TRAINING_RUNTIME
 BASIC_TRAIN_JOB_NAME = "test-job"
 
 

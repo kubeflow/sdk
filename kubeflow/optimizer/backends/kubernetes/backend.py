@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 import logging
 import multiprocessing
 import random
@@ -30,7 +30,7 @@ import kubeflow.common.utils as common_utils
 from kubeflow.optimizer.backends.base import RuntimeBackend
 from kubeflow.optimizer.backends.kubernetes import utils
 from kubeflow.optimizer.constants import constants
-from kubeflow.optimizer.types.algorithm_types import RandomSearch
+from kubeflow.optimizer.types.algorithm_types import BaseAlgorithm, RandomSearch
 from kubeflow.optimizer.types.optimization_types import (
     Metric,
     Objective,
@@ -41,7 +41,7 @@ from kubeflow.optimizer.types.optimization_types import (
 )
 from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend as TrainerBackend
 import kubeflow.trainer.constants.constants as trainer_constants
-from kubeflow.trainer.types.types import TrainJobTemplate
+from kubeflow.trainer.types.types import Event, TrainJobTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ class KubernetesBackend(RuntimeBackend):
         search_space: dict[str, Any],
         trial_config: Optional[TrialConfig] = None,
         objectives: Optional[list[Objective]] = None,
-        algorithm: Optional[RandomSearch] = None,
+        algorithm: Optional[BaseAlgorithm] = None,
     ) -> str:
         # Generate unique name for the OptimizationJob.
         optimization_job_name = random.choice(string.ascii_lowercase) + uuid.uuid4().hex[:11]
@@ -268,6 +268,7 @@ class KubernetesBackend(RuntimeBackend):
         status: set[str] = {constants.OPTIMIZATION_JOB_COMPLETE},
         timeout: int = 3600,
         polling_interval: int = 2,
+        callbacks: Optional[list[Callable[[OptimizationJob], None]]] = None,
     ) -> OptimizationJob:
         job_statuses = {
             constants.OPTIMIZATION_JOB_CREATED,
@@ -289,6 +290,11 @@ class KubernetesBackend(RuntimeBackend):
             logger.debug(
                 f"{constants.OPTIMIZATION_JOB_KIND} {name}, status {optimization_job.status}"
             )
+
+            # Invoke callbacks if provided
+            if callbacks:
+                for callback in callbacks:
+                    callback(optimization_job)
 
             if (
                 constants.OPTIMIZATION_JOB_FAILED not in status
@@ -327,6 +333,53 @@ class KubernetesBackend(RuntimeBackend):
             ) from e
 
         logger.debug(f"{constants.OPTIMIZATION_JOB_KIND} {self.namespace}/{name} has been deleted")
+
+    def get_job_events(self, name: str) -> list[Event]:
+        # Get the OptimizationJob to ensure it exists
+        job = self.get_job(name)
+
+        # Create set of all OptimizationJob-related resource names
+        optimization_job_resources = {name}
+        for trial in job.trials:
+            optimization_job_resources.add(trial.name)
+
+        events = []
+        try:
+            # Retrieve events from the namespace
+            event_response: models.IoK8sApiCoreV1EventList = self.core_api.list_namespaced_event(
+                namespace=self.namespace,
+                async_req=True,
+            ).get(common_constants.DEFAULT_TIMEOUT)
+
+            # Filter events related to OptimizationJob resources
+            for event in event_response.items:
+                if not (event.metadata and event.involved_object and event.first_timestamp):
+                    continue
+
+                involved_object = event.involved_object
+
+                # Check if event is related to OptimizationJob resources
+                if (
+                    involved_object.kind in {constants.EXPERIMENT_KIND, constants.TRIAL_KIND}
+                    and involved_object.name in optimization_job_resources
+                ):
+                    events.append(
+                        Event(
+                            involved_object_kind=involved_object.kind,
+                            involved_object_name=involved_object.name,
+                            message=event.message or "",
+                            reason=event.reason or "",
+                            event_time=event.first_timestamp,
+                        )
+                    )
+
+            # Sort events by first occurrence time
+            events.sort(key=lambda e: e.event_time)
+            return events
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(
+                f"Timeout getting {constants.OPTIMIZATION_JOB_KIND} events: {self.namespace}/{name}"
+            ) from e
 
     def _get_best_trial(self, name: str) -> Optional[Trial]:
         """Get the best current Trial for the OptimizationJob"""

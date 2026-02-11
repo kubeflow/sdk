@@ -322,7 +322,7 @@ def test_list_runtimes(container_backend):
     assert isinstance(runtimes, list)
     assert len(runtimes) > 0
     runtime_names = [r.name for r in runtimes]
-    assert "torch-distributed" in runtime_names
+    assert constants.DEFAULT_TRAINING_RUNTIME in runtime_names
     print("test execution complete")
 
 
@@ -332,7 +332,7 @@ def test_list_runtimes(container_backend):
         TestCase(
             name="get valid runtime",
             expected_status=SUCCESS,
-            config={"name": "torch-distributed"},
+            config={"name": constants.DEFAULT_TRAINING_RUNTIME},
         ),
         TestCase(
             name="get invalid runtime",
@@ -360,7 +360,7 @@ def test_get_runtime(container_backend, test_case):
 def test_get_runtime_packages(container_backend):
     """Test getting runtime packages."""
     print("Executing test: get_runtime_packages")
-    runtime = container_backend.get_runtime("torch-distributed")
+    runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
     container_backend.get_runtime_packages(runtime)
 
     assert len(
@@ -453,7 +453,7 @@ def test_train(container_backend, test_case):
             packages_to_install=test_case.config.get("packages"),
             resources_per_node=test_case.config.get("resources_per_node"),
         )
-        runtime = container_backend.get_runtime("torch-distributed")
+        runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
 
         job_name = container_backend.train(runtime=runtime, trainer=trainer)
 
@@ -513,7 +513,7 @@ def test_list_jobs(container_backend, test_case):
     """Test listing training jobs."""
     print("Executing test:", test_case.name)
     try:
-        runtime = container_backend.get_runtime("torch-distributed")
+        runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
         created_jobs = []
 
         for _ in range(test_case.config["num_jobs"]):
@@ -559,7 +559,7 @@ def test_get_job(container_backend, test_case):
             trainer = types.CustomTrainer(
                 func=simple_train_func, num_nodes=test_case.config["num_nodes"]
             )
-            runtime = container_backend.get_runtime("torch-distributed")
+            runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
             job_name = container_backend.train(runtime=runtime, trainer=trainer)
 
             job = container_backend.get_job(job_name)
@@ -597,7 +597,7 @@ def test_get_job_logs(container_backend, test_case):
     print("Executing test:", test_case.name)
     try:
         trainer = types.CustomTrainer(func=simple_train_func, num_nodes=1)
-        runtime = container_backend.get_runtime("torch-distributed")
+        runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
         job_name = container_backend.train(runtime=runtime, trainer=trainer)
 
         logs = list(container_backend.get_job_logs(job_name, follow=test_case.config["follow"]))
@@ -641,7 +641,7 @@ def test_wait_for_job_status(container_backend, test_case):
     print("Executing test:", test_case.name)
     try:
         trainer = types.CustomTrainer(func=simple_train_func, num_nodes=1)
-        runtime = container_backend.get_runtime("torch-distributed")
+        runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
         job_name = container_backend.train(runtime=runtime, trainer=trainer)
 
         if test_case.name == "wait for complete":
@@ -704,7 +704,7 @@ def test_delete_job(container_backend, temp_workdir, test_case):
         trainer = types.CustomTrainer(
             func=simple_train_func, num_nodes=test_case.config["num_nodes"]
         )
-        runtime = container_backend.get_runtime("torch-distributed")
+        runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
         job_name = container_backend.train(runtime=runtime, trainer=trainer)
 
         job_workdir = Path.home() / ".kubeflow" / "trainer" / "containers" / job_name
@@ -764,7 +764,7 @@ def test_container_status_mapping(container_backend, test_case):
     print("Executing test:", test_case.name)
     try:
         trainer = types.CustomTrainer(func=simple_train_func, num_nodes=1)
-        runtime = container_backend.get_runtime("torch-distributed")
+        runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
         job_name = container_backend.train(runtime=runtime, trainer=trainer)
 
         container_id = container_backend._adapter.containers_created[0]["id"]

@@ -27,7 +27,7 @@ LOCAL_RUNTIME_IMAGE = "local"
 
 local_runtimes = [
     base_types.Runtime(
-        name=constants.TORCH_RUNTIME,
+        name=constants.DEFAULT_TRAINING_RUNTIME,
         trainer=types.LocalRuntimeTrainer(
             trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
             framework=TORCH_FRAMEWORK_TYPE,

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from kubeflow_trainer_api import models
 import pytest
 
 import kubeflow.trainer.backends.kubernetes.utils as utils
@@ -30,6 +31,158 @@ def _build_runtime() -> types.Runtime:
     )
     runtime_trainer.set_command(constants.DEFAULT_COMMAND)
     return types.Runtime(name="test-runtime", trainer=runtime_trainer)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="single MIG limit returns device and count",
+            expected_status=SUCCESS,
+            config={
+                "resources": models.IoK8sApiCoreV1ResourceRequirements(
+                    limits={
+                        "nvidia.com/mig-1g.5gb": models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                    }
+                )
+            },
+            expected_output=("mig-1g.5gb", "2.0"),
+        ),
+        TestCase(
+            name="multiple MIG limits are not supported",
+            expected_status=FAILED,
+            config={
+                "resources": models.IoK8sApiCoreV1ResourceRequirements(
+                    limits={
+                        "nvidia.com/mig-1g.5gb": models.IoK8sApimachineryPkgApiResourceQuantity(1),
+                        "nvidia.com/mig-2g.10gb": models.IoK8sApimachineryPkgApiResourceQuantity(1),
+                    }
+                )
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_get_container_devices(test_case: TestCase):
+    print("Executing test:", test_case.name)
+    try:
+        device = utils.get_container_devices(test_case.config["resources"])
+
+        assert test_case.expected_status == SUCCESS
+        assert device == test_case.expected_output
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="mig alias expands to fully qualified key",
+            expected_status=SUCCESS,
+            config={
+                "resources_per_node": {
+                    "MiG-1G.5GB": 2,
+                    "cpu": "500m",
+                }
+            },
+            expected_output=models.IoK8sApiCoreV1ResourceRequirements(
+                limits={
+                    "cpu": models.IoK8sApimachineryPkgApiResourceQuantity("500m"),
+                    "nvidia.com/mig-1g.5gb": models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                },
+                requests={
+                    "cpu": models.IoK8sApimachineryPkgApiResourceQuantity("500m"),
+                    "nvidia.com/mig-1g.5gb": models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                },
+            ),
+        ),
+        TestCase(
+            name="gpu and mig together raises error",
+            expected_status=FAILED,
+            config={"resources_per_node": {"gpu": 1, "mig-1g.5gb": 1}},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="multiple mig resource types raises error",
+            expected_status=FAILED,
+            config={
+                "resources_per_node": {
+                    "mig-1g.5gb": 1,
+                    "nvidia.com/mig-2g.10gb": 1,
+                }
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="extended resource preserves case",
+            expected_status=SUCCESS,
+            config={
+                "resources_per_node": {
+                    "example.com/Capitalized": 1,
+                    "CPU": 2,
+                    "Memory": "16Gi",
+                    "EPHEMERAL-STORAGE": "100Gi",
+                }
+            },
+            expected_output=models.IoK8sApiCoreV1ResourceRequirements(
+                limits={
+                    "example.com/Capitalized": models.IoK8sApimachineryPkgApiResourceQuantity(1),
+                    "cpu": models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                    "memory": models.IoK8sApimachineryPkgApiResourceQuantity("16Gi"),
+                    "ephemeral-storage": models.IoK8sApimachineryPkgApiResourceQuantity("100Gi"),
+                },
+                requests={
+                    "example.com/Capitalized": models.IoK8sApimachineryPkgApiResourceQuantity(1),
+                    "cpu": models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                    "memory": models.IoK8sApimachineryPkgApiResourceQuantity("16Gi"),
+                    "ephemeral-storage": models.IoK8sApimachineryPkgApiResourceQuantity("100Gi"),
+                },
+            ),
+        ),
+        TestCase(
+            name="diverse resource types and mixed case standard keys",
+            expected_status=SUCCESS,
+            config={
+                "resources_per_node": {
+                    "example.com/test": 1,
+                    "Example.com/Custom-NPU": 2,
+                    "mEmOrY": "8Gi",
+                    "STORAGE": "100Gi",
+                }
+            },
+            expected_output=models.IoK8sApiCoreV1ResourceRequirements(
+                limits={
+                    "example.com/test": models.IoK8sApimachineryPkgApiResourceQuantity(1),
+                    "Example.com/Custom-NPU": models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                    "memory": models.IoK8sApimachineryPkgApiResourceQuantity("8Gi"),
+                    "ephemeral-storage": models.IoK8sApimachineryPkgApiResourceQuantity("100Gi"),
+                },
+                requests={
+                    "example.com/test": models.IoK8sApimachineryPkgApiResourceQuantity(1),
+                    "Example.com/Custom-NPU": models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                    "memory": models.IoK8sApimachineryPkgApiResourceQuantity("8Gi"),
+                    "ephemeral-storage": models.IoK8sApimachineryPkgApiResourceQuantity("100Gi"),
+                },
+            ),
+        ),
+    ],
+)
+def test_get_resources_per_node(test_case: TestCase):
+    print("Executing test:", test_case.name)
+    try:
+        resources = utils.get_resources_per_node(test_case.config["resources_per_node"])
+
+        assert test_case.expected_status == SUCCESS
+        assert resources == test_case.expected_output
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
 
 
 @pytest.mark.parametrize(
@@ -55,7 +208,12 @@ def _build_runtime() -> types.Runtime:
                 "--no-warn-script-location --index-url https://pypi.org/simple "
                 "--extra-index-url https://private.repo.com/simple "
                 "--extra-index-url https://internal.company.com/simple "
-                "--user torch numpy custom-package\n"
+                "--user torch numpy custom-package ||\n"
+                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
+                "--no-warn-script-location --index-url https://pypi.org/simple "
+                "--extra-index-url https://private.repo.com/simple "
+                "--extra-index-url https://internal.company.com/simple "
+                "torch numpy custom-package\n"
             ),
         ),
         TestCase(
@@ -72,7 +230,10 @@ def _build_runtime() -> types.Runtime:
                 "fi\n\n"
                 "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
                 "--no-warn-script-location --index-url https://pypi.org/simple "
-                "--user torch numpy custom-package\n"
+                "--user torch numpy custom-package ||\n"
+                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
+                "--no-warn-script-location --index-url https://pypi.org/simple "
+                "torch numpy custom-package\n"
             ),
         ),
         TestCase(
@@ -95,7 +256,12 @@ def _build_runtime() -> types.Runtime:
                 "--no-warn-script-location --index-url https://pypi.org/simple "
                 "--extra-index-url https://private.repo.com/simple "
                 "--extra-index-url https://internal.company.com/simple "
-                "--user torch numpy custom-package\n"
+                "--user torch numpy custom-package ||\n"
+                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
+                "--no-warn-script-location --index-url https://pypi.org/simple "
+                "--extra-index-url https://private.repo.com/simple "
+                "--extra-index-url https://internal.company.com/simple "
+                "torch numpy custom-package\n"
             ),
         ),
         TestCase(
@@ -112,18 +278,19 @@ def _build_runtime() -> types.Runtime:
                 "fi\n\n"
                 "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
                 f"--no-warn-script-location --index-url "
-                f"{constants.DEFAULT_PIP_INDEX_URLS[0]} --user torch numpy\n"
+                f"{constants.DEFAULT_PIP_INDEX_URLS[0]} --user torch numpy ||\n"
+                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
+                f"--no-warn-script-location --index-url "
+                f"{constants.DEFAULT_PIP_INDEX_URLS[0]} torch numpy\n"
             ),
         ),
     ],
 )
 def test_get_script_for_python_packages(test_case):
     """Test get_script_for_python_packages with various configurations."""
-
     script = utils.get_script_for_python_packages(
         packages_to_install=test_case.config["packages_to_install"],
         pip_index_urls=test_case.config["pip_index_urls"],
-        is_mpi=test_case.config["is_mpi"],
     )
 
     assert test_case.expected_output == script

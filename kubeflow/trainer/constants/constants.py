@@ -98,6 +98,9 @@ CPU_LABEL = "cpu"
 # The label for NVIDIA GPU in the container resources.
 GPU_LABEL = "nvidia.com/gpu"
 
+# The prefix for NVIDIA MIG device in the container resources.
+GPU_MIG_PREFIX = "nvidia.com/mig-"
+
 # The label for TPU in the container resources.
 TPU_LABEL = "google.com/tpu"
 
@@ -154,8 +157,8 @@ MPI_COMMAND = (
     *DEFAULT_COMMAND,
 )
 
-# The default name for the Torch runtime.
-TORCH_RUNTIME = "torch-distributed"
+# The default name for the ClusterTrainingRuntime.
+DEFAULT_TRAINING_RUNTIME = os.getenv("DEFAULT_TRAINING_RUNTIME", "torch-distributed")
 
 # The default container command for the Torch CustomTrainer
 TORCH_COMMAND = (
