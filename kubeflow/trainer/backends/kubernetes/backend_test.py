@@ -329,7 +329,7 @@ def get_cluster_custom_object_response(*args, **kwargs):
 
 
 def get_namespaced_custom_object_response(*args, **kwargs):
-    """Return a mocked TrainJob object."""
+    """Return a mocked TrainJob or TrainingRuntime object."""
     mock_thread = Mock()
     if args[2] == TIMEOUT or args[4] == TIMEOUT:
         raise multiprocessing.TimeoutError()
@@ -370,7 +370,7 @@ def add_status(
 
 
 def list_namespaced_custom_object_response(*args, **kwargs):
-    """Return a list of mocked TrainJob objects."""
+    """Return a list of mocked TrainJob or TrainingRuntime objects."""
     mock_thread = Mock()
     if args[2] == TIMEOUT:
         raise multiprocessing.TimeoutError()
@@ -581,7 +581,7 @@ def create_training_runtime(
     """Create a mock namespaced TrainingRuntime object (not cluster-scoped)."""
     return models.TrainerV1alpha1TrainingRuntime(
         apiVersion=constants.API_VERSION,
-        kind="TrainingRuntime",
+        kind=constants.TRAINING_RUNTIME_KIND,
         metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
             name=name,
             namespace=namespace,
@@ -633,7 +633,7 @@ def get_container() -> models.IoK8sApiCoreV1Container:
 
 def create_runtime_type(
     name: str,
-    scope: str,
+    scope: types.RuntimeScope,
 ) -> types.Runtime:
     """Create a mock Runtime object for testing."""
     trainer = types.RuntimeTrainer(
@@ -645,13 +645,9 @@ def create_runtime_type(
         image="example.com/test-runtime",
     )
     trainer.set_command(constants.TORCH_COMMAND)
-    # Namespaced TrainingRuntime objects and default torch runtime use project scope;
+    # Namespaced TrainingRuntime objects and default torch runtime use namespace scope;
     # other runtimes created as cluster-scoped use cluster scope.
-    return types.Runtime(
-        name=name,
-        trainer=trainer,
-        scope=scope,
-    )
+    return types.Runtime(name=name, trainer=trainer, scope=scope)
 
 
 def get_train_job_data_type(
@@ -672,7 +668,11 @@ def get_train_job_data_type(
     return types.TrainJob(
         name=train_job_name,
         creation_timestamp=datetime.datetime(2025, 6, 1, 10, 30, 0),
-        runtime=types.Runtime(name=runtime_name, trainer=trainer, scope="project"),
+        runtime=types.Runtime(
+            name=runtime_name,
+            trainer=trainer,
+            scope=types.RuntimeScope.NAMESPACE,
+        ),
         steps=[
             types.Step(
                 name="dataset-initializer",
@@ -713,7 +713,10 @@ def get_train_job_data_type(
             name="valid flow with all defaults",
             expected_status=SUCCESS,
             config={"name": TORCH_RUNTIME},
-            expected_output=create_runtime_type(name=TORCH_RUNTIME, scope="project"),
+            expected_output=create_runtime_type(
+                name=TORCH_RUNTIME,
+                scope=types.RuntimeScope.NAMESPACE,
+            ),
         ),
         TestCase(
             name="timeout error when getting runtime",
@@ -752,10 +755,22 @@ def test_get_runtime(kubernetes_backend, test_case):
             expected_status=SUCCESS,
             config={"name": LIST_RUNTIMES},
             expected_output=[
-                create_runtime_type(name="ns-runtime-1", scope="project"),
-                create_runtime_type(name="ns-runtime-2", scope="project"),
-                create_runtime_type(name="runtime-1", scope="cluster"),
-                create_runtime_type(name="runtime-2", scope="cluster"),
+                create_runtime_type(
+                    name="ns-runtime-1",
+                    scope=types.RuntimeScope.NAMESPACE,
+                ),
+                create_runtime_type(
+                    name="ns-runtime-2",
+                    scope=types.RuntimeScope.NAMESPACE,
+                ),
+                create_runtime_type(
+                    name="runtime-1",
+                    scope=types.RuntimeScope.CLUSTER,
+                ),
+                create_runtime_type(
+                    name="runtime-2",
+                    scope=types.RuntimeScope.CLUSTER,
+                ),
             ],
         ),
     ],
@@ -783,7 +798,12 @@ def test_list_runtimes(kubernetes_backend, test_case):
         TestCase(
             name="valid flow with custom trainer runtime",
             expected_status=SUCCESS,
-            config={"runtime": create_runtime_type(name=TORCH_RUNTIME, scope="project")},
+            config={
+                "runtime": create_runtime_type(
+                    name=TORCH_RUNTIME,
+                    scope=types.RuntimeScope.NAMESPACE,
+                )
+            },
         ),
         TestCase(
             name="value error with builtin trainer runtime",

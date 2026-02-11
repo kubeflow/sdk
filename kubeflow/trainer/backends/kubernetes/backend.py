@@ -550,9 +550,9 @@ class KubernetesBackend(RuntimeBackend):
         ],
     ) -> types.Runtime:
         scope = (
-            "cluster"
+            types.RuntimeScope.CLUSTER
             if isinstance(runtime_cr, models.TrainerV1alpha1ClusterTrainingRuntime)
-            else "project"
+            else types.RuntimeScope.NAMESPACE
         )
 
         if not (
