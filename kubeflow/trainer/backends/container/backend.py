@@ -44,7 +44,6 @@ import os
 import random
 import shutil
 import string
-from typing import Optional, Union
 import uuid
 
 from kubeflow.trainer.backends.base import RuntimeBackend
@@ -80,7 +79,7 @@ class ContainerBackend(RuntimeBackend):
         # Initialize the container client adapter
         self._adapter = self._create_adapter()
 
-    def _get_common_socket_locations(self, runtime_name: str) -> list[Optional[str]]:
+    def _get_common_socket_locations(self, runtime_name: str) -> list[str | None]:
         """
         Get common socket locations to try for the given runtime.
 
@@ -198,8 +197,8 @@ class ContainerBackend(RuntimeBackend):
 
     def _cleanup_container_resources(
         self,
-        container_ids: Optional[list[str]] = None,
-        network_id: Optional[str] = None,
+        container_ids: list[str] | None = None,
+        network_id: str | None = None,
         stop_timeout: int = 5,
     ):
         """
@@ -255,12 +254,13 @@ class ContainerBackend(RuntimeBackend):
 
     def train(
         self,
-        runtime: Optional[Union[str, types.Runtime]] = None,
-        initializer: Optional[types.Initializer] = None,
-        trainer: Optional[
-            Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
-        ] = None,
-        options: Optional[list] = None,
+        runtime: str | types.Runtime | None = None,
+        initializer: types.Initializer | None = None,
+        trainer: types.CustomTrainer
+        | types.CustomTrainerContainer
+        | types.BuiltinTrainer
+        | None = None,
+        options: list | None = None,
     ) -> str:
         if runtime is None:
             runtime = self.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
@@ -722,7 +722,7 @@ class ContainerBackend(RuntimeBackend):
             status=container_utils.aggregate_container_statuses(self._adapter, containers),
         )
 
-    def list_jobs(self, runtime: Optional[types.Runtime] = None) -> list[types.TrainJob]:
+    def list_jobs(self, runtime: types.Runtime | None = None) -> list[types.TrainJob]:
         """List all training jobs by querying container runtime."""
         # Get all containers with our label prefix
         filters = {"label": [f"{self.label_prefix}/trainjob-name"]}
@@ -803,7 +803,7 @@ class ContainerBackend(RuntimeBackend):
         status: set[str] = {constants.TRAINJOB_COMPLETE},
         timeout: int = 600,
         polling_interval: int = 2,
-        callbacks: Optional[list[Callable[[types.TrainJob], None]]] = None,
+        callbacks: list[Callable[[types.TrainJob], None]] | None = None,
     ) -> types.TrainJob:
         import time
 

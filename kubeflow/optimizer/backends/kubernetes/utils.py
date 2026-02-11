@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from dataclasses import fields
-from typing import Any, Optional, Union, get_args, get_origin
+from typing import Any, Optional, get_args, get_origin
 
 from kubeflow_katib_api import models
 
@@ -49,7 +49,7 @@ def convert_value(raw_value: str, target_type: Any):
 
 def get_algorithm_from_katib_spec(
     algorithm: models.V1beta1AlgorithmSpec,
-) -> Union[GridSearch, RandomSearch]:
+) -> GridSearch | RandomSearch:
     alg_cls = ALGORITHM_REGISTRY.get(algorithm.algorithm_name or "")
 
     if alg_cls is None:
@@ -83,7 +83,7 @@ def get_objectives_from_katib_spec(objective: models.V1beta1ObjectiveSpec) -> li
 
 def get_search_space_from_katib_spec(
     parameters: list[models.V1beta1ParameterSpec],
-) -> dict[str, Union[ContinuousSearchSpace, CategoricalSearchSpace]]:
+) -> dict[str, ContinuousSearchSpace | CategoricalSearchSpace]:
     search_space = {}
 
     for p in parameters:

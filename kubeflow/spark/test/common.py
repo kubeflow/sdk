@@ -15,7 +15,7 @@
 """Shared test utilities and types for Kubeflow Spark tests."""
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 # Common status constants
 SUCCESS = "success"
@@ -37,6 +37,6 @@ class TestCase:
     name: str
     expected_status: str = SUCCESS
     config: dict[str, Any] = field(default_factory=dict)
-    expected_output: Optional[Any] = None
-    expected_error: Optional[type[Exception]] = None
+    expected_output: Any | None = None
+    expected_error: type[Exception] | None = None
     __test__ = False

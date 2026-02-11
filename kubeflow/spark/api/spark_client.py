@@ -16,7 +16,6 @@
 
 from collections.abc import Iterator
 import logging
-from typing import Optional
 
 from pyspark.sql import SparkSession
 
@@ -31,7 +30,7 @@ logger = logging.getLogger(__name__)
 class SparkClient:
     """Stateless Spark client for Kubeflow."""
 
-    def __init__(self, backend_config: Optional[KubernetesBackendConfig] = None):
+    def __init__(self, backend_config: KubernetesBackendConfig | None = None):
         """Initialize SparkClient."""
         if backend_config is None:
             backend_config = KubernetesBackendConfig()
@@ -43,14 +42,14 @@ class SparkClient:
 
     def connect(
         self,
-        base_url: Optional[str] = None,
-        token: Optional[str] = None,
-        num_executors: Optional[int] = None,
-        resources_per_executor: Optional[dict[str, str]] = None,
-        spark_conf: Optional[dict[str, str]] = None,
-        driver: Optional[Driver] = None,
-        executor: Optional[Executor] = None,
-        options: Optional[list] = None,
+        base_url: str | None = None,
+        token: str | None = None,
+        num_executors: int | None = None,
+        resources_per_executor: dict[str, str] | None = None,
+        spark_conf: dict[str, str] | None = None,
+        driver: Driver | None = None,
+        executor: Executor | None = None,
+        options: list | None = None,
         timeout: int = 300,
         connect_timeout: int = 120,
     ) -> SparkSession:

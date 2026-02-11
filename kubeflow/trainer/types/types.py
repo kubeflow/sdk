@@ -17,7 +17,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Union
 from urllib.parse import urlparse
 
 import kubeflow.common.constants as common_constants
@@ -53,15 +52,15 @@ class CustomTrainer:
     """
 
     func: Callable
-    func_args: Optional[dict] = None
-    image: Optional[str] = None
-    packages_to_install: Optional[list[str]] = None
+    func_args: dict | None = None
+    image: str | None = None
+    packages_to_install: list[str] | None = None
     pip_index_urls: list[str] = field(
         default_factory=lambda: list(constants.DEFAULT_PIP_INDEX_URLS)
     )
-    num_nodes: Optional[int] = None
-    resources_per_node: Optional[dict] = None
-    env: Optional[dict[str, str]] = None
+    num_nodes: int | None = None
+    resources_per_node: dict | None = None
+    env: dict[str, str] | None = None
 
 
 # Configuration for the Custom Trainer Container.
@@ -86,9 +85,9 @@ class CustomTrainerContainer:
     """
 
     image: str
-    num_nodes: Optional[int] = None
-    resources_per_node: Optional[dict] = None
-    env: Optional[dict[str, str]] = None
+    num_nodes: int | None = None
+    resources_per_node: dict | None = None
+    env: dict[str, str] | None = None
 
 
 # TODO(Electronic-Waste): Add more loss functions.
@@ -143,11 +142,11 @@ class TorchTuneInstructDataset:
             "output" column names.
     """
 
-    source: Optional[DataFormat] = None
-    split: Optional[str] = None
-    train_on_input: Optional[bool] = None
-    new_system_prompt: Optional[str] = None
-    column_map: Optional[dict[str, str]] = None
+    source: DataFormat | None = None
+    split: str | None = None
+    train_on_input: bool | None = None
+    new_system_prompt: str | None = None
+    column_map: dict[str, str] | None = None
 
 
 @dataclass
@@ -176,16 +175,16 @@ class LoraConfig:
         use_dora (`Optional[bool]`): Whether to enable DoRA.
     """
 
-    apply_lora_to_mlp: Optional[bool] = None
-    apply_lora_to_output: Optional[bool] = None
+    apply_lora_to_mlp: bool | None = None
+    apply_lora_to_output: bool | None = None
     lora_attn_modules: list[str] = field(
         default_factory=lambda: ["q_proj", "v_proj", "output_proj"]
     )
-    lora_rank: Optional[int] = None
-    lora_alpha: Optional[int] = None
-    lora_dropout: Optional[float] = None
-    quantize_base: Optional[bool] = None
-    use_dora: Optional[bool] = None
+    lora_rank: int | None = None
+    lora_alpha: int | None = None
+    lora_dropout: float | None = None
+    quantize_base: bool | None = None
+    use_dora: bool | None = None
 
 
 # Configuration for the TorchTune LLM Trainer.
@@ -213,14 +212,14 @@ class TorchTuneConfig:
         resources_per_node (`Optional[Dict]`): The computing resources to allocate per node.
     """
 
-    dtype: Optional[DataType] = None
-    batch_size: Optional[int] = None
-    epochs: Optional[int] = None
-    loss: Optional[Loss] = None
-    num_nodes: Optional[int] = None
-    peft_config: Optional[LoraConfig] = None
-    dataset_preprocess_config: Optional[TorchTuneInstructDataset] = None
-    resources_per_node: Optional[dict] = None
+    dtype: DataType | None = None
+    batch_size: int | None = None
+    epochs: int | None = None
+    loss: Loss | None = None
+    num_nodes: int | None = None
+    peft_config: LoraConfig | None = None
+    dataset_preprocess_config: TorchTuneInstructDataset | None = None
+    resources_per_node: dict | None = None
 
 
 # Configuration for the Builtin Trainer.
@@ -270,14 +269,14 @@ class RuntimeTrainer:
 class Runtime:
     name: str
     trainer: RuntimeTrainer
-    pretrained_model: Optional[str] = None
+    pretrained_model: str | None = None
 
 
 # Representation for the TrainJob steps.
 @dataclass
 class Step:
     name: str
-    status: Optional[str]
+    status: str | None
     pod_name: str
     device: str = common_constants.UNKNOWN
     device_count: str = common_constants.UNKNOWN
@@ -333,8 +332,8 @@ class HuggingFaceDatasetInitializer(BaseInitializer):
         access_token (`Optional[str]`): HuggingFace Hub access token for private datasets.
     """
 
-    ignore_patterns: Optional[list[str]] = None
-    access_token: Optional[str] = None
+    ignore_patterns: list[str] | None = None
+    access_token: str | None = None
 
     def __post_init__(self):
         """Validate HuggingFaceDatasetInitializer parameters."""
@@ -363,12 +362,12 @@ class S3DatasetInitializer(BaseInitializer):
         role_arn (`Optional[str]`): The ARN of the role you want to assume.
     """
 
-    ignore_patterns: Optional[list[str]] = None
-    endpoint: Optional[str] = None
-    access_key_id: Optional[str] = None
-    secret_access_key: Optional[str] = None
-    region: Optional[str] = None
-    role_arn: Optional[str] = None
+    ignore_patterns: list[str] | None = None
+    endpoint: str | None = None
+    access_key_id: str | None = None
+    secret_access_key: str | None = None
+    region: str | None = None
+    role_arn: str | None = None
 
     def __post_init__(self):
         """Validate S3DatasetInitializer parameters."""
@@ -397,11 +396,11 @@ class DataCacheInitializer(BaseInitializer):
 
     metadata_loc: str
     num_data_nodes: int
-    head_cpu: Optional[str] = None
-    head_mem: Optional[str] = None
-    worker_cpu: Optional[str] = None
-    worker_mem: Optional[str] = None
-    iam_role: Optional[str] = None
+    head_cpu: str | None = None
+    head_mem: str | None = None
+    worker_cpu: str | None = None
+    worker_mem: str | None = None
+    iam_role: str | None = None
 
     def __post_init__(self):
         """Validate DataCacheInitializer parameters."""
@@ -433,10 +432,10 @@ class HuggingFaceModelInitializer(BaseInitializer):
         access_token (`Optional[str]`): HuggingFace Hub access token.
     """
 
-    ignore_patterns: Optional[list[str]] = field(
+    ignore_patterns: list[str] | None = field(
         default_factory=lambda: constants.INITIALIZER_DEFAULT_IGNORE_PATTERNS
     )
-    access_token: Optional[str] = None
+    access_token: str | None = None
 
     def __post_init__(self):
         """Validate HuggingFaceModelInitializer parameters."""
@@ -460,14 +459,14 @@ class S3ModelInitializer(BaseInitializer):
         role_arn (`Optional[str]`): The ARN of the role you want to assume.
     """
 
-    ignore_patterns: Optional[list[str]] = field(
+    ignore_patterns: list[str] | None = field(
         default_factory=lambda: constants.INITIALIZER_DEFAULT_IGNORE_PATTERNS
     )
-    endpoint: Optional[str] = None
-    access_key_id: Optional[str] = None
-    secret_access_key: Optional[str] = None
-    region: Optional[str] = None
-    role_arn: Optional[str] = None
+    endpoint: str | None = None
+    access_key_id: str | None = None
+    secret_access_key: str | None = None
+    region: str | None = None
+    role_arn: str | None = None
 
     def __post_init__(self):
         """Validate S3ModelInitializer parameters."""
@@ -487,10 +486,10 @@ class Initializer:
             The configuration for one of the supported model initializers.
     """  # noqa: E501
 
-    dataset: Optional[
-        Union[HuggingFaceDatasetInitializer, S3DatasetInitializer, DataCacheInitializer]
-    ] = None
-    model: Optional[Union[HuggingFaceModelInitializer, S3ModelInitializer]] = None
+    dataset: HuggingFaceDatasetInitializer | S3DatasetInitializer | DataCacheInitializer | None = (
+        None
+    )
+    model: HuggingFaceModelInitializer | S3ModelInitializer | None = None
 
 
 # TODO (andreyvelich): Add train() and optimize() methods to this class.
@@ -508,8 +507,8 @@ class TrainJobTemplate:
     """
 
     trainer: CustomTrainer
-    runtime: Optional[Union[str, Runtime]] = None
-    initializer: Optional[Initializer] = None
+    runtime: str | Runtime | None = None
+    initializer: Initializer | None = None
 
     def keys(self):
         return ["trainer", "runtime", "initializer"]

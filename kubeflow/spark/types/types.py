@@ -17,7 +17,6 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 
 class SparkConnectState(str, Enum):
@@ -48,10 +47,10 @@ class SparkConnectInfo:
     name: str
     namespace: str
     state: SparkConnectState
-    pod_name: Optional[str] = None
-    pod_ip: Optional[str] = None
-    service_name: Optional[str] = None
-    creation_timestamp: Optional[datetime] = None
+    pod_name: str | None = None
+    pod_ip: str | None = None
+    service_name: str | None = None
+    creation_timestamp: datetime | None = None
 
 
 @dataclass
@@ -79,10 +78,10 @@ class Driver:
         This design allows GPU support and future resource types without API changes.
     """
 
-    image: Optional[str] = None
-    resources: Optional[dict[str, str]] = None
-    java_options: Optional[str] = None
-    service_account: Optional[str] = None
+    image: str | None = None
+    resources: dict[str, str] | None = None
+    java_options: str | None = None
+    service_account: str | None = None
 
 
 @dataclass
@@ -111,6 +110,6 @@ class Executor:
         resource types without API changes.
     """
 
-    num_instances: Optional[int] = None
-    resources_per_executor: Optional[dict[str, str]] = None
-    java_options: Optional[str] = None
+    num_instances: int | None = None
+    resources_per_executor: dict[str, str] | None = None
+    java_options: str | None = None

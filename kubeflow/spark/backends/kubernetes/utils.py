@@ -17,7 +17,7 @@
 import contextlib
 from datetime import datetime
 import re
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlparse
 import uuid
 
@@ -91,14 +91,14 @@ def build_service_url(info: SparkConnectInfo) -> str:
 def build_spark_connect_crd(
     name: str,
     namespace: str,
-    spark_version: Optional[str] = None,
-    num_executors: Optional[int] = None,
-    resources_per_executor: Optional[dict[str, str]] = None,
-    spark_conf: Optional[dict[str, str]] = None,
-    driver: Optional[Driver] = None,
-    executor: Optional[Executor] = None,
-    options: Optional[list] = None,
-    backend: Optional[Any] = None,
+    spark_version: str | None = None,
+    num_executors: int | None = None,
+    resources_per_executor: dict[str, str] | None = None,
+    spark_conf: dict[str, str] | None = None,
+    driver: Driver | None = None,
+    executor: Executor | None = None,
+    options: list | None = None,
+    backend: Any | None = None,
 ) -> dict[str, Any]:
     """Build SparkConnect CRD manifest (KEP-107 compliant).
 

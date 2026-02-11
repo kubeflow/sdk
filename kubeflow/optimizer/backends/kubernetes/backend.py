@@ -18,7 +18,7 @@ import multiprocessing
 import random
 import string
 import time
-from typing import Any, Optional
+from typing import Any
 import uuid
 
 from kubeflow_katib_api import models
@@ -71,9 +71,9 @@ class KubernetesBackend(RuntimeBackend):
         trial_template: TrainJobTemplate,
         *,
         search_space: dict[str, Any],
-        trial_config: Optional[TrialConfig] = None,
-        objectives: Optional[list[Objective]] = None,
-        algorithm: Optional[BaseAlgorithm] = None,
+        trial_config: TrialConfig | None = None,
+        objectives: list[Objective] | None = None,
+        algorithm: BaseAlgorithm | None = None,
     ) -> str:
         # Generate unique name for the OptimizationJob.
         optimization_job_name = random.choice(string.ascii_lowercase) + uuid.uuid4().hex[:11]
@@ -217,7 +217,7 @@ class KubernetesBackend(RuntimeBackend):
     def get_job_logs(
         self,
         name: str,
-        trial_name: Optional[str] = None,
+        trial_name: str | None = None,
         follow: bool = False,
     ) -> Iterator[str]:
         """Get the OptimizationJob logs from a Trial"""
@@ -250,7 +250,7 @@ class KubernetesBackend(RuntimeBackend):
             pod_name=pod_name, container_name=container_name, follow=follow
         )
 
-    def get_best_results(self, name: str) -> Optional[Result]:
+    def get_best_results(self, name: str) -> Result | None:
         """Get the best hyperparameters and metrics from an OptimizationJob"""
         best_trial = self._get_best_trial(name)
 
@@ -268,7 +268,7 @@ class KubernetesBackend(RuntimeBackend):
         status: set[str] = {constants.OPTIMIZATION_JOB_COMPLETE},
         timeout: int = 3600,
         polling_interval: int = 2,
-        callbacks: Optional[list[Callable[[OptimizationJob], None]]] = None,
+        callbacks: list[Callable[[OptimizationJob], None]] | None = None,
     ) -> OptimizationJob:
         job_statuses = {
             constants.OPTIMIZATION_JOB_CREATED,
@@ -381,7 +381,7 @@ class KubernetesBackend(RuntimeBackend):
                 f"Timeout getting {constants.OPTIMIZATION_JOB_KIND} events: {self.namespace}/{name}"
             ) from e
 
-    def _get_best_trial(self, name: str) -> Optional[Trial]:
+    def _get_best_trial(self, name: str) -> Trial | None:
         """Get the best current Trial for the OptimizationJob"""
         optimization_job = self.__get_experiment_cr(name)
 

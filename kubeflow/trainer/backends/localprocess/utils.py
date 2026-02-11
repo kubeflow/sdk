@@ -6,7 +6,7 @@ import re
 import shutil
 from string import Template
 import textwrap
-from typing import Any, Optional
+from typing import Any
 
 from kubeflow.trainer.backends.localprocess import constants as local_exec_constants
 from kubeflow.trainer.backends.localprocess.types import LocalRuntimeTrainer
@@ -49,7 +49,7 @@ def _canonicalize_name(name: str) -> str:
 
 def get_install_packages(
     runtime_packages: list[str],
-    trainer_packages: Optional[list[str]] = None,
+    trainer_packages: list[str] | None = None,
 ) -> list[str]:
     """
     Merge two requirement lists into a single list of strings.
@@ -181,7 +181,7 @@ def get_dependencies_command(
 def get_command_using_train_func(
     runtime: types.Runtime,
     train_func: Callable,
-    train_func_parameters: Optional[dict[str, Any]],
+    train_func_parameters: dict[str, Any] | None,
     venv_dir: str,
     train_job_name: str,
 ) -> str:

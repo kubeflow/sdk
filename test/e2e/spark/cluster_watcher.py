@@ -17,7 +17,6 @@
 import subprocess
 import threading
 import time
-from typing import Optional
 
 
 def _run_kubectl(args: list[str], namespace: str, timeout: int = 10) -> str:
@@ -59,7 +58,7 @@ def _snapshot(namespace: str, elapsed_sec: float) -> list[str]:
     return lines
 
 
-def _driver_pod_from_sparkconnect(namespace: str) -> Optional[str]:
+def _driver_pod_from_sparkconnect(namespace: str) -> str | None:
     out = _run_kubectl(
         ["get", "sparkconnect", "-o", "jsonpath={.items[*].status.server.podName}"],
         namespace,
@@ -89,7 +88,7 @@ def run_watcher(
     executor startup and where time is spent.
     """
     start = time.monotonic()
-    last_driver: Optional[str] = None
+    last_driver: str | None = None
 
     while not stop_event.is_set():
         elapsed = time.monotonic() - start

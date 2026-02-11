@@ -24,7 +24,6 @@ import os
 from pathlib import Path
 import shutil
 import tempfile
-from typing import Optional
 from unittest.mock import Mock, patch
 
 import pytest
@@ -125,27 +124,27 @@ class MockContainerAdapter(BaseContainerClientAdapter):
     def run_oneoff_container(self, image: str, command: list[str]) -> str:
         return "Python 3.10.0\npip 21.0.1\nnvidia-smi not found\n"
 
-    def container_status(self, container_id: str) -> tuple[str, Optional[int]]:
+    def container_status(self, container_id: str) -> tuple[str, int | None]:
         for container in self.containers_created:
             if container["id"] == container_id:
                 return (container["status"], container.get("exit_code"))
         return ("unknown", None)
 
-    def set_container_status(self, container_id: str, status: str, exit_code: Optional[int] = None):
+    def set_container_status(self, container_id: str, status: str, exit_code: int | None = None):
         """Helper method to set container status for testing."""
         for container in self.containers_created:
             if container["id"] == container_id:
                 container["status"] = status
                 container["exit_code"] = exit_code
 
-    def get_container_ip(self, container_id: str, network_id: str) -> Optional[str]:
+    def get_container_ip(self, container_id: str, network_id: str) -> str | None:
         """Get container IP address on a specific network."""
         for container in self.containers_created:
             if container["id"] == container_id:
                 return f"192.168.1.{len(self.containers_created)}"
         return None
 
-    def list_containers(self, filters: Optional[dict[str, list[str]]] = None) -> list[dict]:
+    def list_containers(self, filters: dict[str, list[str]] | None = None) -> list[dict]:
         """List containers with optional filters."""
         if not filters:
             return [
@@ -186,7 +185,7 @@ class MockContainerAdapter(BaseContainerClientAdapter):
                     )
         return result
 
-    def get_network(self, network_id: str) -> Optional[dict]:
+    def get_network(self, network_id: str) -> dict | None:
         """Get network information."""
         for network in self.networks_created:
             if network["id"] == network_id or network["name"] == network_id:
@@ -197,7 +196,7 @@ class MockContainerAdapter(BaseContainerClientAdapter):
                 }
         return None
 
-    def wait_for_container(self, container_id: str, timeout: Optional[int] = None) -> int:
+    def wait_for_container(self, container_id: str, timeout: int | None = None) -> int:
         """
         Wait for a container to exit and return its exit code.
 

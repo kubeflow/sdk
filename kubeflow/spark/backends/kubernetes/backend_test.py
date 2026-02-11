@@ -16,7 +16,6 @@
 
 from dataclasses import dataclass
 import multiprocessing
-from typing import Optional
 from unittest.mock import Mock, patch
 
 from kubernetes.client import ApiException
@@ -39,13 +38,13 @@ class Case:
     """Test case parameter container."""
 
     name: str
-    expected_state: Optional[SparkConnectState] = None
+    expected_state: SparkConnectState | None = None
     should_raise: bool = False
-    error_match: Optional[str] = None
-    num_executors: Optional[int] = None
-    expected_name_prefix: Optional[str] = None
-    session_name: Optional[str] = None
-    error_type: Optional[str] = None
+    error_match: str | None = None
+    num_executors: int | None = None
+    expected_name_prefix: str | None = None
+    session_name: str | None = None
+    error_type: str | None = None
 
 
 def create_mock_thread_with_error(response=None, raise_timeout=False, raise_error=False):

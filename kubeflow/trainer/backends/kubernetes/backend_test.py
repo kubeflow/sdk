@@ -24,7 +24,6 @@ import logging
 import multiprocessing
 import random
 import string
-from typing import Optional
 from unittest.mock import Mock, patch
 import uuid
 
@@ -215,10 +214,10 @@ def get_resource_requirements() -> models.IoK8sApiCoreV1ResourceRequirements:
 
 
 def get_custom_trainer(
-    env: Optional[list[models.IoK8sApiCoreV1EnvVar]] = None,
-    pip_index_urls: Optional[list[str]] = constants.DEFAULT_PIP_INDEX_URLS,
+    env: list[models.IoK8sApiCoreV1EnvVar] | None = None,
+    pip_index_urls: list[str] | None = constants.DEFAULT_PIP_INDEX_URLS,
     packages_to_install: list[str] = ["torch", "numpy"],
-    image: Optional[str] = None,
+    image: str | None = None,
 ) -> models.TrainerV1alpha1Trainer:
     """
     Get the custom trainer for the TrainJob.
@@ -269,8 +268,8 @@ def get_custom_trainer_container(
 
 
 def _build_core_api_mock(
-    config_map_data: Optional[dict] = None,
-    error: Optional[Exception] = None,
+    config_map_data: dict | None = None,
+    error: Exception | None = None,
 ):
     """Helper to construct a CoreV1Api mock for version checks."""
 
@@ -300,11 +299,11 @@ def get_builtin_trainer(
 def get_train_job(
     runtime_name: str,
     train_job_name: str = BASIC_TRAIN_JOB_NAME,
-    train_job_trainer: Optional[models.TrainerV1alpha1Trainer] = None,
-    labels: Optional[dict[str, str]] = None,
-    annotations: Optional[dict[str, str]] = None,
-    spec_labels: Optional[dict[str, str]] = None,
-    spec_annotations: Optional[dict[str, str]] = None,
+    train_job_trainer: models.TrainerV1alpha1Trainer | None = None,
+    labels: dict[str, str] | None = None,
+    annotations: dict[str, str] | None = None,
+    spec_labels: dict[str, str] | None = None,
+    spec_annotations: dict[str, str] | None = None,
 ) -> models.TrainerV1alpha1TrainJob:
     """
     Create a mock TrainJob object with optional trainer configurations.
@@ -514,9 +513,9 @@ def create_train_job(
     train_job_name: str = random.choice(string.ascii_lowercase) + uuid.uuid4().hex[:11],
     namespace: str = "default",
     image: str = "pytorch/pytorch:latest",
-    initializer: Optional[types.Initializer] = None,
-    command: Optional[list] = None,
-    args: Optional[list] = None,
+    initializer: types.Initializer | None = None,
+    command: list | None = None,
+    args: list | None = None,
 ) -> models.TrainerV1alpha1TrainJob:
     """Create a mock TrainJob object."""
     return models.TrainerV1alpha1TrainJob(

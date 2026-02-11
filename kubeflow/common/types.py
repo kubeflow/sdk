@@ -12,17 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 from kubernetes import client
 from pydantic import BaseModel
 
 
 class KubernetesBackendConfig(BaseModel):
-    namespace: Optional[str] = None
-    config_file: Optional[str] = None
-    context: Optional[str] = None
-    client_configuration: Optional[client.Configuration] = None
+    namespace: str | None = None
+    config_file: str | None = None
+    context: str | None = None
+    client_configuration: client.Configuration | None = None
 
     class Config:
         arbitrary_types_allowed = True

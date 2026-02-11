@@ -25,7 +25,6 @@ import subprocess
 import sys
 import threading
 import time
-from typing import Optional
 
 from kubernetes import client, config
 from pyspark.sql import SparkSession
@@ -82,7 +81,7 @@ class KubernetesBackend(RuntimeBackend):
         self.custom_api = client.CustomObjectsApi()
         self.core_api = client.CoreV1Api()
 
-    def _extract_name_option(self, options: Optional[list]) -> tuple[str, list]:
+    def _extract_name_option(self, options: list | None) -> tuple[str, list]:
         """Extract Name option from options list, or generate name if absent.
 
         Args:
@@ -113,12 +112,12 @@ class KubernetesBackend(RuntimeBackend):
 
     def _create_session(
         self,
-        num_executors: Optional[int] = None,
-        resources_per_executor: Optional[dict[str, str]] = None,
-        spark_conf: Optional[dict[str, str]] = None,
-        driver: Optional[Driver] = None,
-        executor: Optional[Executor] = None,
-        options: Optional[list] = None,
+        num_executors: int | None = None,
+        resources_per_executor: dict[str, str] | None = None,
+        spark_conf: dict[str, str] | None = None,
+        driver: Driver | None = None,
+        executor: Executor | None = None,
+        options: list | None = None,
     ) -> SparkConnectInfo:
         """Create a new SparkConnect session (INTERNAL USE ONLY)."""
         # Validate input types
@@ -318,8 +317,8 @@ class KubernetesBackend(RuntimeBackend):
         return False
 
     def get_connect_url(
-        self, info: SparkConnectInfo, local_port: Optional[int] = None
-    ) -> tuple[str, Optional[subprocess.Popen]]:
+        self, info: SparkConnectInfo, local_port: int | None = None
+    ) -> tuple[str, subprocess.Popen | None]:
         """Build connect URL; when running outside cluster, start port-forward and return localhost URL.
 
         When KUBERNETES_SERVICE_HOST is not set (e.g. local E2E), starts kubectl port-forward
@@ -414,7 +413,7 @@ class KubernetesBackend(RuntimeBackend):
         self,
         info: SparkConnectInfo,
         connect_timeout: int = 120,
-        grpc_ready_delay: Optional[int] = None,
+        grpc_ready_delay: int | None = None,
     ) -> SparkSession:
         """Connect to a Spark Connect session and return a SparkSession.
 
@@ -536,12 +535,12 @@ class KubernetesBackend(RuntimeBackend):
 
     def create_and_connect(
         self,
-        num_executors: Optional[int] = None,
-        resources_per_executor: Optional[dict[str, str]] = None,
-        spark_conf: Optional[dict[str, str]] = None,
-        driver: Optional[Driver] = None,
-        executor: Optional[Executor] = None,
-        options: Optional[list] = None,
+        num_executors: int | None = None,
+        resources_per_executor: dict[str, str] | None = None,
+        spark_conf: dict[str, str] | None = None,
+        driver: Driver | None = None,
+        executor: Executor | None = None,
+        options: list | None = None,
         timeout: int = 300,
         connect_timeout: int = 120,
     ) -> SparkSession:

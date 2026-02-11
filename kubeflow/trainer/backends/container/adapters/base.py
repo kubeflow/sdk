@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import abc
 from collections.abc import Iterator
-from typing import Optional
 
 
 class BaseContainerClientAdapter(abc.ABC):
@@ -138,7 +137,7 @@ class BaseContainerClientAdapter(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def container_status(self, container_id: str) -> tuple[str, Optional[int]]:
+    def container_status(self, container_id: str) -> tuple[str, int | None]:
         """
         Get container status.
 
@@ -150,7 +149,7 @@ class BaseContainerClientAdapter(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_container_ip(self, container_id: str, network_id: str) -> Optional[str]:
+    def get_container_ip(self, container_id: str, network_id: str) -> str | None:
         """
         Get container's IP address on a specific network.
 
@@ -164,7 +163,7 @@ class BaseContainerClientAdapter(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def list_containers(self, filters: Optional[dict[str, list[str]]] = None) -> list[dict]:
+    def list_containers(self, filters: dict[str, list[str]] | None = None) -> list[dict]:
         """
         List containers, optionally filtered by labels.
 
@@ -182,7 +181,7 @@ class BaseContainerClientAdapter(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_network(self, network_id: str) -> Optional[dict]:
+    def get_network(self, network_id: str) -> dict | None:
         """
         Get network information by ID or name.
 
@@ -195,7 +194,7 @@ class BaseContainerClientAdapter(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def wait_for_container(self, container_id: str, timeout: Optional[int] = None) -> int:
+    def wait_for_container(self, container_id: str, timeout: int | None = None) -> int:
         """
         Wait for a container to exit and return its exit code.
 

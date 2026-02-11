@@ -20,7 +20,6 @@ and prevent obscure failures deep in the stack.
 """
 
 import re
-from typing import Optional
 
 
 class ValidationError(ValueError):
@@ -31,9 +30,7 @@ class ValidationError(ValueError):
     """
 
 
-def validate_resource_dict(
-    resources: Optional[dict[str, str]], param_name: str = "resources"
-) -> None:
+def validate_resource_dict(resources: dict[str, str] | None, param_name: str = "resources") -> None:
     """Validate a Kubernetes resource requirements dictionary.
 
     Args:
@@ -88,7 +85,7 @@ def validate_resource_dict(
             )
 
 
-def validate_spark_conf(conf: Optional[dict[str, str]]) -> None:
+def validate_spark_conf(conf: dict[str, str] | None) -> None:
     """Validate Spark configuration dictionary.
 
     Args:
@@ -118,7 +115,7 @@ def validate_spark_conf(conf: Optional[dict[str, str]]) -> None:
             )
 
 
-def validate_num_instances(num: Optional[int], param_name: str = "num_executors") -> None:
+def validate_num_instances(num: int | None, param_name: str = "num_executors") -> None:
     """Validate number of instances.
 
     Args:
@@ -144,7 +141,7 @@ def validate_num_instances(num: Optional[int], param_name: str = "num_executors"
         )
 
 
-def validate_image_name(image: Optional[str]) -> None:
+def validate_image_name(image: str | None) -> None:
     """Validate Docker image name.
 
     Args:
@@ -171,7 +168,7 @@ def validate_image_name(image: Optional[str]) -> None:
         )
 
 
-def validate_service_account(sa: Optional[str]) -> None:
+def validate_service_account(sa: str | None) -> None:
     """Validate Kubernetes service account name.
 
     Args:

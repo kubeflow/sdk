@@ -16,7 +16,6 @@
 
 import abc
 from collections.abc import Iterator
-from typing import Optional
 
 from kubeflow.spark.types.types import Driver, Executor, SparkConnectInfo
 
@@ -30,12 +29,12 @@ class RuntimeBackend(abc.ABC):
     @abc.abstractmethod
     def connect(
         self,
-        num_executors: Optional[int] = None,
-        resources_per_executor: Optional[dict[str, str]] = None,
-        spark_conf: Optional[dict[str, str]] = None,
-        driver: Optional[Driver] = None,
-        executor: Optional[Executor] = None,
-        options: Optional[list] = None,
+        num_executors: int | None = None,
+        resources_per_executor: dict[str, str] | None = None,
+        spark_conf: dict[str, str] | None = None,
+        driver: Driver | None = None,
+        executor: Executor | None = None,
+        options: list | None = None,
     ) -> SparkConnectInfo:
         """Create a new SparkConnect session (INTERNAL USE ONLY).
 

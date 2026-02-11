@@ -20,7 +20,6 @@ BaseContainerClientAdapter interface for Docker runtime.
 """
 
 from collections.abc import Iterator
-from typing import Optional
 
 from kubeflow.trainer.backends.container.adapters.base import BaseContainerClientAdapter
 
@@ -28,7 +27,7 @@ from kubeflow.trainer.backends.container.adapters.base import BaseContainerClien
 class DockerClientAdapter(BaseContainerClientAdapter):
     """Adapter for Docker client."""
 
-    def __init__(self, host: Optional[str] = None):
+    def __init__(self, host: str | None = None):
         """
         Initialize Docker client.
 
@@ -160,7 +159,7 @@ class DockerClientAdapter(BaseContainerClientAdapter):
         except Exception as e:
             raise RuntimeError(f"One-off container failed to run: {e}") from e
 
-    def container_status(self, container_id: str) -> tuple[str, Optional[int]]:
+    def container_status(self, container_id: str) -> tuple[str, int | None]:
         """Get Docker container status."""
         try:
             container = self.get_container(container_id)
@@ -174,7 +173,7 @@ class DockerClientAdapter(BaseContainerClientAdapter):
         except Exception:
             return ("unknown", None)
 
-    def get_container_ip(self, container_id: str, network_id: str) -> Optional[str]:
+    def get_container_ip(self, container_id: str, network_id: str) -> str | None:
         """Get container's IP address on a specific network."""
         try:
             container = self.get_container(container_id)
@@ -197,7 +196,7 @@ class DockerClientAdapter(BaseContainerClientAdapter):
         except Exception:
             return None
 
-    def list_containers(self, filters: Optional[dict[str, list[str]]] = None) -> list[dict]:
+    def list_containers(self, filters: dict[str, list[str]] | None = None) -> list[dict]:
         """List Docker containers with optional filters."""
         try:
             containers = self.client.containers.list(all=True, filters=filters)
@@ -216,7 +215,7 @@ class DockerClientAdapter(BaseContainerClientAdapter):
         except Exception:
             return []
 
-    def get_network(self, network_id: str) -> Optional[dict]:
+    def get_network(self, network_id: str) -> dict | None:
         """Get Docker network information."""
         try:
             network = self.client.networks.get(network_id)
@@ -228,7 +227,7 @@ class DockerClientAdapter(BaseContainerClientAdapter):
         except Exception:
             return None
 
-    def wait_for_container(self, container_id: str, timeout: Optional[int] = None) -> int:
+    def wait_for_container(self, container_id: str, timeout: int | None = None) -> int:
         """
         Wait for a Docker container to exit and return its exit code.
 
