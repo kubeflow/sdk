@@ -206,11 +206,11 @@ Kubeflow SDK is a community project and is still under active development. We we
 
 ## Documentation
 
+- **[Documentation](https://sdk.kubeflow.org/en/latest/)**: Kubeflow SDK Official Documentation
 - **[Blog Post Announcement](https://blog.kubeflow.org/sdk/intro/)**: Introducing the Kubeflow SDK:
   A Pythonic API to Run AI Workloads at Scale
 - **[Design Document](https://docs.google.com/document/d/1rX7ELAHRb_lvh0Y7BK1HBYAbA0zi9enB0F_358ZC58w/edit)**: Kubeflow SDK design proposal
 - **[Component Guides](https://www.kubeflow.org/docs/components/)**: Individual component documentation
-- **[Documentation](https://sdk.kubeflow.org/en/latest/)**: Kubeflow SDK Official Documentation
 - **[DeepWiki](https://deepwiki.com/kubeflow/sdk)**: AI-powered repository documentation
 
 ## ✨ Contributors
