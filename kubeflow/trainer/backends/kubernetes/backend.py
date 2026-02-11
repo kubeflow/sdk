@@ -57,6 +57,12 @@ class KubernetesBackend(RuntimeBackend):
         self.namespace = cfg.namespace
 
     def list_runtimes(self) -> list[types.Runtime]:
+        """List available runtimes, preferring namespaced over cluster-scoped for duplicates.
+
+        If a TrainingRuntime with the same name exists in both the namespace and cluster scope,
+        only the namespaced runtime is returned. Cluster-scoped runtimes are still returned
+        when there is no namespaced runtime with the same name.
+        """
         result: list[types.Runtime] = []
 
         cluster_err = None
@@ -122,8 +128,14 @@ class KubernetesBackend(RuntimeBackend):
         runtimes = []
         if namespace_runtime_list:
             runtimes.extend(namespace_runtime_list.items)
+            ns_names = {r.metadata.name for r in runtimes}
+
         if cluster_runtime_list:
-            runtimes.extend(cluster_runtime_list.items)
+            runtimes.extend(
+                runtimes.extend(
+                    r for r in cluster_runtime_list.items if r.metadata.name not in ns_names
+                )
+            )
 
         try:
             for runtime in runtimes:
