@@ -582,6 +582,7 @@ def get_container() -> models.IoK8sApiCoreV1Container:
 
 def create_runtime_type(
     name: str,
+    scope: str,
 ) -> types.Runtime:
     """Create a mock Runtime object for testing."""
     trainer = types.RuntimeTrainer(
@@ -595,7 +596,6 @@ def create_runtime_type(
     trainer.set_command(constants.TORCH_COMMAND)
     # Namespaced TrainingRuntime objects and default torch runtime use project scope;
     # other runtimes created as cluster-scoped use cluster scope.
-    scope = "project" if name.startswith("ns-") or name == TORCH_RUNTIME else "cluster"
     return types.Runtime(
         name=name,
         trainer=trainer,
@@ -662,7 +662,7 @@ def get_train_job_data_type(
             name="valid flow with all defaults",
             expected_status=SUCCESS,
             config={"name": TORCH_RUNTIME},
-            expected_output=create_runtime_type(name=TORCH_RUNTIME),
+            expected_output=create_runtime_type(name=TORCH_RUNTIME, scope="project"),
         ),
         TestCase(
             name="timeout error when getting runtime",
@@ -701,10 +701,10 @@ def test_get_runtime(kubernetes_backend, test_case):
             expected_status=SUCCESS,
             config={"name": LIST_RUNTIMES},
             expected_output=[
-                create_runtime_type(name="ns-runtime-1"),
-                create_runtime_type(name="ns-runtime-2"),
-                create_runtime_type(name="runtime-1"),
-                create_runtime_type(name="runtime-2"),
+                create_runtime_type(name="ns-runtime-1", scope="project"),
+                create_runtime_type(name="ns-runtime-2", scope="project"),
+                create_runtime_type(name="runtime-1", scope="cluster"),
+                create_runtime_type(name="runtime-2", scope="cluster"),
             ],
         ),
     ],
@@ -732,7 +732,7 @@ def test_list_runtimes(kubernetes_backend, test_case):
         TestCase(
             name="valid flow with custom trainer runtime",
             expected_status=SUCCESS,
-            config={"runtime": create_runtime_type(name=TORCH_RUNTIME)},
+            config={"runtime": create_runtime_type(name=TORCH_RUNTIME, scope="project")},
         ),
         TestCase(
             name="value error with builtin trainer runtime",

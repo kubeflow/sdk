@@ -496,12 +496,11 @@ class KubernetesBackend(RuntimeBackend):
             models.TrainerV1alpha1ClusterTrainingRuntime, models.TrainerV1alpha1TrainingRuntime
         ],
     ) -> types.Runtime:
-        crd_kind = getattr(runtime_cr, "kind", "UnknownKind")
-        crd_name = getattr(runtime_cr.metadata, "name", "UnknownName")
-
-        scope = None
-        if crd_kind != "UnknownKind":
-            scope = "cluster" if crd_kind == constants.CLUSTER_TRAINING_RUNTIME_KIND else "project"
+        scope = (
+            "cluster"
+            if isinstance(runtime_cr, models.TrainerV1alpha1ClusterTrainingRuntime)
+            else "project"
+        )
 
         if not (
             runtime_cr.metadata
@@ -512,9 +511,8 @@ class KubernetesBackend(RuntimeBackend):
             and runtime_cr.spec.template.spec.replicated_jobs
         ):
             raise Exception(
-                f"{crd_kind} '{crd_name}' is invalid — missing one or more required fields: "
+                f"{runtime_cr}' is invalid — missing one or more required fields: "
                 f"metadata.name, spec.mlPolicy, spec.template.spec.replicatedJobs.\n"
-                f"Full object: {runtime_cr}"
             )
 
         if not (
