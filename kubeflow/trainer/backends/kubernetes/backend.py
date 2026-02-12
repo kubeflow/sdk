@@ -132,9 +132,7 @@ class KubernetesBackend(RuntimeBackend):
 
         if cluster_runtime_list:
             runtimes.extend(
-                runtimes.extend(
-                    r for r in cluster_runtime_list.items if r.metadata.name not in ns_names
-                )
+                r for r in cluster_runtime_list.items if r.metadata.name not in ns_names
             )
 
         try:
