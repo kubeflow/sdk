@@ -96,13 +96,11 @@ def spark_client(mock_backend):
             name="default backend initialization",
             expected_status=SUCCESS,
             config={},
-            expected_output="backend_created",
         ),
         TestCase(
             name="custom namespace initialization",
             expected_status=SUCCESS,
             config={"namespace": "spark"},
-            expected_output="backend_created",
         ),
         TestCase(
             name="invalid backend config",
@@ -114,24 +112,35 @@ def spark_client(mock_backend):
 )
 def test_spark_client_initialization(test_case: TestCase):
     """Test SparkClient initialization scenarios."""
-    print(f"Running test: {test_case.name}")
 
-    if test_case.expected_status == SUCCESS:
+    try:
         if "namespace" in test_case.config:
             with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock:
                 SparkClient(
                     backend_config=KubernetesBackendConfig(namespace=test_case.config["namespace"])
                 )
                 mock.assert_called_once()
+        elif "backend_config" in test_case.config:
+            SparkClient(backend_config=test_case.config["backend_config"])
         else:
             with patch("kubeflow.spark.api.spark_client.KubernetesBackend"):
                 client = SparkClient()
                 assert client.backend is not None
-        print(f"✓ {test_case.name} succeeded")
-    else:
-        with pytest.raises(ValueError):
-            SparkClient(backend_config=test_case.config["backend_config"])
-        print(f"✓ {test_case.name} failed as expected")
+
+        # If we reach here but expected an exception, fail
+        assert test_case.expected_status == SUCCESS, (
+            f"Expected exception but none was raised for {test_case.name}"
+        )
+    except Exception as e:
+        # If we got an exception but expected success, fail
+        assert test_case.expected_status == EXCEPTION, (
+            f"Unexpected exception in {test_case.name}: {e}"
+        )
+        # Validate the exception type/message if specified
+        if test_case.expected_error:
+            assert test_case.expected_error in str(e), (
+                f"Expected error '{test_case.expected_error}' but got '{str(e)}'"
+            )
 
 
 @pytest.mark.parametrize(
@@ -153,15 +162,13 @@ def test_spark_client_initialization(test_case: TestCase):
             name="connect create session verification",
             expected_status=SUCCESS,
             config={},
-            expected_output="backend_not_called",
         ),
     ],
 )
 def test_spark_client_connect(test_case: TestCase, spark_client):
     """Test SparkClient connect method scenarios."""
-    print(f"Running test: {test_case.name}")
 
-    if test_case.expected_status == SUCCESS:
+    try:
         if "url" in test_case.config:
             from kubeflow.spark.backends.kubernetes.utils import validate_spark_connect_url
 
@@ -171,13 +178,21 @@ def test_spark_client_connect(test_case: TestCase, spark_client):
             # Verify backend methods are not called initially
             spark_client.backend.create_session.assert_not_called()
             spark_client.backend.wait_for_session_ready.assert_not_called()
-        print(f"✓ {test_case.name} succeeded")
-    else:
-        from kubeflow.spark.backends.kubernetes.utils import validate_spark_connect_url
 
-        with pytest.raises(ValueError):
-            validate_spark_connect_url(test_case.config["url"])
-        print(f"✓ {test_case.name} failed as expected")
+        # If we reach here but expected an exception, fail
+        assert test_case.expected_status == SUCCESS, (
+            f"Expected exception but none was raised for {test_case.name}"
+        )
+    except Exception as e:
+        # If we got an exception but expected success, fail
+        assert test_case.expected_status == EXCEPTION, (
+            f"Unexpected exception in {test_case.name}: {e}"
+        )
+        # Validate the exception type/message if specified
+        if test_case.expected_error:
+            assert test_case.expected_error in str(e), (
+                f"Expected error '{test_case.expected_error}' but got '{str(e)}'"
+            )
 
 
 @pytest.mark.parametrize(
@@ -202,7 +217,6 @@ def test_spark_client_connect(test_case: TestCase, spark_client):
             name="delete session",
             expected_status=SUCCESS,
             config={"session_name": "test", "operation": "delete"},
-            expected_output="deleted",
         ),
         TestCase(
             name="get session logs",
@@ -214,9 +228,8 @@ def test_spark_client_connect(test_case: TestCase, spark_client):
 )
 def test_spark_client_session_management(test_case: TestCase, spark_client, mock_backend):
     """Test SparkClient session management operations."""
-    print(f"Running test: {test_case.name}")
 
-    if test_case.expected_status == SUCCESS:
+    try:
         if "operation" in test_case.config:
             if test_case.config["operation"] == "delete":
                 spark_client.delete_session(test_case.config["session_name"])
@@ -237,12 +250,21 @@ def test_spark_client_session_management(test_case: TestCase, spark_client, mock
             result = spark_client.list_sessions()
             assert len(result) == test_case.expected_output
             mock_backend.list_sessions.assert_called_once()
-        print(f"✓ {test_case.name} succeeded")
-    else:
-        with pytest.raises(Exception) as exc_info:
-            spark_client.get_session(test_case.config["session_name"])
-        assert test_case.expected_error in str(exc_info.value)
-        print(f"✓ {test_case.name} failed as expected")
+
+        # If we reach here but expected an exception, fail
+        assert test_case.expected_status == SUCCESS, (
+            f"Expected exception but none was raised for {test_case.name}"
+        )
+    except Exception as e:
+        # If we got an exception but expected success, fail
+        assert test_case.expected_status == EXCEPTION, (
+            f"Unexpected exception in {test_case.name}: {e}"
+        )
+        # Validate the exception type/message if specified
+        if test_case.expected_error:
+            assert test_case.expected_error in str(e), (
+                f"Expected error '{test_case.expected_error}' but got '{str(e)}'"
+            )
 
 
 @pytest.mark.parametrize(
@@ -252,33 +274,44 @@ def test_spark_client_session_management(test_case: TestCase, spark_client, mock
             name="connect with name option",
             expected_status=SUCCESS,
             config={"options": [Name("custom-session")]},
-            expected_output="options_passed",
         ),
         TestCase(
             name="connect without options auto-generates",
             expected_status=SUCCESS,
             config={},
-            expected_output="no_options",
         ),
     ],
 )
 def test_spark_client_connect_with_options(test_case: TestCase, spark_client, mock_backend):
     """Test SparkClient connect method with Name option scenarios."""
-    print(f"Running test: {test_case.name}")
 
     mock_session = Mock()
     mock_backend.create_and_connect.return_value = mock_session
 
-    if "options" in test_case.config:
-        options = test_case.config["options"]
-        spark_client.connect(options=options)
-        mock_backend.create_and_connect.assert_called_once()
-        call_args = mock_backend.create_and_connect.call_args
-        assert call_args.kwargs["options"] == options
-    else:
-        spark_client.connect()
-        mock_backend.create_and_connect.assert_called_once()
-        call_args = mock_backend.create_and_connect.call_args
-        assert call_args.kwargs["options"] is None
+    try:
+        if "options" in test_case.config:
+            options = test_case.config["options"]
+            spark_client.connect(options=options)
+            mock_backend.create_and_connect.assert_called_once()
+            call_args = mock_backend.create_and_connect.call_args
+            assert call_args.kwargs["options"] == options
+        else:
+            spark_client.connect()
+            mock_backend.create_and_connect.assert_called_once()
+            call_args = mock_backend.create_and_connect.call_args
+            assert call_args.kwargs["options"] is None
 
-    print(f"✓ {test_case.name} succeeded")
+        # If we reach here but expected an exception, fail
+        assert test_case.expected_status == SUCCESS, (
+            f"Expected exception but none was raised for {test_case.name}"
+        )
+    except Exception as e:
+        # If we got an exception but expected success, fail
+        assert test_case.expected_status == EXCEPTION, (
+            f"Unexpected exception in {test_case.name}: {e}"
+        )
+        # Validate the exception type/message if specified
+        if test_case.expected_error:
+            assert test_case.expected_error in str(e), (
+                f"Expected error '{test_case.expected_error}' but got '{str(e)}'"
+            )
