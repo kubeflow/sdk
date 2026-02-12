@@ -61,6 +61,7 @@ from kubeflow.trainer.backends.container.runtime_loader import (
 from kubeflow.trainer.backends.container.types import ContainerBackendConfig
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = logging.getLogger(__name__)
 
@@ -529,35 +530,51 @@ class ContainerBackend(RuntimeBackend):
         Raises:
             RuntimeError: If initializer fails to complete successfully.
         """
-        # Run dataset initializer if configured
-        if initializer.dataset:
-            dataset_init = container_utils.get_dataset_initializer(initializer.dataset, self.cfg)
-            container_utils.maybe_pull_image(
-                self._adapter, dataset_init.image, self.cfg.pull_policy
-            )
+        futures = []
 
-            logger.debug("Running dataset initializer")
-            self._run_single_initializer(
-                job_name=job_name,
-                container_init=dataset_init,
-                workdir=workdir,
-                network_id=network_id,
-            )
-            logger.debug("Dataset initializer completed")
+        with ThreadPoolExecutor(max_workers=2) as executor:
 
-        # Run model initializer if configured
-        if initializer.model:
-            model_init = container_utils.get_model_initializer(initializer.model, self.cfg)
-            container_utils.maybe_pull_image(self._adapter, model_init.image, self.cfg.pull_policy)
+            # Dataset initializer
+            if initializer.dataset:
+                dataset_init = container_utils.get_dataset_initializer(initializer.dataset, self.cfg)
+                container_utils.maybe_pull_image(
+                    self._adapter, dataset_init.image, self.cfg.pull_policy
+                )
 
-            logger.debug("Running model initializer")
-            self._run_single_initializer(
-                job_name=job_name,
-                container_init=model_init,
-                workdir=workdir,
-                network_id=network_id,
-            )
-            logger.debug("Model initializer completed")
+                logger.debug("Running dataset initializer")
+                futures.append(
+                    executor.submit(
+                        self._run_single_initializer,
+                        job_name=job_name,
+                        container_init=dataset_init,
+                        workdir=workdir,
+                        network_id=network_id,
+                    )
+                )
+
+            # Model initializer
+            if initializer.model:
+                model_init = container_utils.get_model_initializer(initializer.model, self.cfg)
+                container_utils.maybe_pull_image(
+                    self._adapter, model_init.image, self.cfg.pull_policy
+                )
+
+                logger.debug("Running model initializer")
+                futures.append(
+                    executor.submit(
+                        self._run_single_initializer,
+                        job_name=job_name,
+                        container_init=model_init,
+                        workdir=workdir,
+                        network_id=network_id,
+                    )
+                )
+
+            # Wait for all initializers to complete and propagate errors
+            for future in as_completed(futures):
+                future.result()
+            
+            logger.debug("All initializers completed successfully")
 
     def _run_single_initializer(
         self,
