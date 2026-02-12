@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 from dataclasses import fields
 import inspect
 import os
 import textwrap
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 from urllib.parse import urlparse
 
 from kubeflow_trainer_api import models

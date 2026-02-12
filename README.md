@@ -8,6 +8,7 @@
 
 Latest News 🔥
 
+- [2026/01] We have our official documentation here at [Kubeflow SDK Documentation](https://sdk.kubeflow.org/en/latest/)
 - [2025/11] Please fill [this survey](https://docs.google.com/forms/d/e/1FAIpQLSet_IAFQzMMDWolzFt5LI9lhzqOOStjIGHxgYqKBnVcRtDfrw/viewform)
   to shape the future of Kubeflow SDK.
 - [2025/11] The Kubeflow SDK v0.2 is officially released. Check out
@@ -205,8 +206,7 @@ Kubeflow SDK is a community project and is still under active development. We we
 
 ## Documentation
 
-<!-- TODO(kramaranya): add kubeflow sdk docs -->
-
+- **[Documentation](https://sdk.kubeflow.org/en/latest/)**: Kubeflow SDK Official Documentation
 - **[Blog Post Announcement](https://blog.kubeflow.org/sdk/intro/)**: Introducing the Kubeflow SDK:
   A Pythonic API to Run AI Workloads at Scale
 - **[Design Document](https://docs.google.com/document/d/1rX7ELAHRb_lvh0Y7BK1HBYAbA0zi9enB0F_358ZC58w/edit)**: Kubeflow SDK design proposal

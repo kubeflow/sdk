@@ -1,3 +1,4 @@
+from collections.abc import Callable
 import inspect
 import os
 from pathlib import Path
@@ -5,7 +6,7 @@ import re
 import shutil
 from string import Template
 import textwrap
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 from kubeflow.trainer.backends.localprocess import constants as local_exec_constants
 from kubeflow.trainer.backends.localprocess.types import LocalRuntimeTrainer

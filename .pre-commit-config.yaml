@@ -8,7 +8,7 @@ repos:
       - id: trailing-whitespace
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Pin to the latest release as of today
-    rev: v0.12.10
+    rev: v0.14.14
     hooks:
       # Lint + auto-fix (must run before format)
       - id: ruff-check

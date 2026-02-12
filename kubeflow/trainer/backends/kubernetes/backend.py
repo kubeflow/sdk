@@ -16,6 +16,7 @@ from collections.abc import Callable, Iterator
 import copy
 import logging
 import multiprocessing
+import os
 import random
 import re
 import string
@@ -55,6 +56,33 @@ class KubernetesBackend(RuntimeBackend):
         self.core_api = client.CoreV1Api(k8s_client)
 
         self.namespace = cfg.namespace
+
+        # Perform control-plane version metadata verification.
+        self.verify_backend()
+
+    def verify_backend(self) -> None:
+        """Verify that the Trainer control plane exposes version metadata.
+
+        This check only ensures that the public control-plane ConfigMap exists
+        and contains a ``kubeflow_trainer_version`` field. It does not
+        enforce version compatibility and never raises.
+        """
+
+        system_namespace = os.getenv("KUBEFLOW_SYSTEM_NAMESPACE", "kubeflow-system")
+        config_map_name = "kubeflow-trainer-public"
+
+        try:
+            _ = self.core_api.read_namespaced_config_map(
+                name=config_map_name,
+                namespace=system_namespace,
+            ).data["kubeflow_trainer_version"]
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "Trainer control-plane version info is not available: "
+                f"unable to read 'kubeflow_trainer_version' from ConfigMap "
+                f"'{config_map_name}' in namespace '{system_namespace}': {e}"
+            )
+            return
 
     def list_runtimes(self) -> list[types.Runtime]:
         result = []

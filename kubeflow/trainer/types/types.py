@@ -13,10 +13,11 @@
 # limitations under the License.
 
 import abc
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 from urllib.parse import urlparse
 
 import kubeflow.common.constants as common_constants
