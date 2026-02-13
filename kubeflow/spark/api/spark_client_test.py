@@ -14,33 +14,15 @@
 
 """Unit tests for SparkClient API."""
 
-from dataclasses import dataclass
-from typing import Any, Optional
 from unittest.mock import Mock, patch
 
 import pytest
 
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.api.spark_client import SparkClient
+from kubeflow.spark.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.spark.types.options import Name
 from kubeflow.spark.types.types import SparkConnectInfo, SparkConnectState
-
-
-@dataclass
-class TestCase:
-    """Test case structure for parametrized SparkClient tests."""
-
-    name: str
-    expected_status: str
-    config: dict[str, Any]
-    expected_output: Optional[Any] = None
-    expected_error: Optional[str] = None
-    # Prevent pytest from collecting this dataclass as a test
-    __test__ = False
-
-
-SUCCESS = "SUCCESS"
-EXCEPTION = "EXCEPTION"
 
 
 @pytest.fixture
@@ -104,9 +86,9 @@ def spark_client(mock_backend):
         ),
         TestCase(
             name="invalid backend config",
-            expected_status=EXCEPTION,
+            expected_status=FAILED,
             config={"backend_config": "invalid"},
-            expected_error="ValueError",
+            expected_error=ValueError,
         ),
     ],
 )
@@ -133,13 +115,11 @@ def test_spark_client_initialization(test_case: TestCase):
         )
     except Exception as e:
         # If we got an exception but expected success, fail
-        assert test_case.expected_status == EXCEPTION, (
-            f"Unexpected exception in {test_case.name}: {e}"
-        )
-        # Validate the exception type/message if specified
+        assert test_case.expected_status == FAILED, f"Unexpected exception in {test_case.name}: {e}"
+        # Validate the exception type if specified
         if test_case.expected_error:
-            assert test_case.expected_error in str(e), (
-                f"Expected error '{test_case.expected_error}' but got '{str(e)}'"
+            assert isinstance(e, test_case.expected_error), (
+                f"Expected exception type '{test_case.expected_error.__name__}' but got '{type(e).__name__}: {str(e)}'"
             )
 
 
@@ -154,14 +134,14 @@ def test_spark_client_initialization(test_case: TestCase):
         ),
         TestCase(
             name="connect with invalid URL validation",
-            expected_status=EXCEPTION,
+            expected_status=FAILED,
             config={"url": "http://localhost:15002"},
-            expected_error="ValueError",
+            expected_error=ValueError,
         ),
         TestCase(
             name="connect create session verification",
             expected_status=SUCCESS,
-            config={},
+            config={"test_connect": True},
         ),
     ],
 )
@@ -174,6 +154,18 @@ def test_spark_client_connect(test_case: TestCase, spark_client):
 
             result = validate_spark_connect_url(test_case.config["url"])
             assert result == test_case.expected_output
+        elif "test_connect" in test_case.config:
+            # Actually test the connect method for session creation
+            with patch("kubeflow.spark.api.spark_client.SparkSession") as mock_spark_session:
+                mock_session = Mock()
+                mock_spark_session.builder.remote.return_value.config.return_value.getOrCreate.return_value = mock_session
+                mock_spark_session.builder.getOrCreate.return_value = mock_session
+
+                # Call connect without base_url to trigger create mode
+                result = spark_client.connect()
+
+                # Verify the session was created
+                assert result is not None
         else:
             # Verify backend methods are not called initially
             spark_client.backend.create_session.assert_not_called()
@@ -185,13 +177,11 @@ def test_spark_client_connect(test_case: TestCase, spark_client):
         )
     except Exception as e:
         # If we got an exception but expected success, fail
-        assert test_case.expected_status == EXCEPTION, (
-            f"Unexpected exception in {test_case.name}: {e}"
-        )
-        # Validate the exception type/message if specified
+        assert test_case.expected_status == FAILED, f"Unexpected exception in {test_case.name}: {e}"
+        # Validate the exception type if specified
         if test_case.expected_error:
-            assert test_case.expected_error in str(e), (
-                f"Expected error '{test_case.expected_error}' but got '{str(e)}'"
+            assert isinstance(e, test_case.expected_error), (
+                f"Expected exception type '{test_case.expected_error.__name__}' but got '{type(e).__name__}: {str(e)}'"
             )
 
 
@@ -209,9 +199,9 @@ def test_spark_client_connect(test_case: TestCase, spark_client):
         ),
         TestCase(
             name="get non-existent session",
-            expected_status=EXCEPTION,
+            expected_status=FAILED,
             config={"session_name": "nonexistent"},
-            expected_error="Session not found",
+            expected_error=ValueError,
         ),
         TestCase(
             name="delete session",
@@ -257,13 +247,11 @@ def test_spark_client_session_management(test_case: TestCase, spark_client, mock
         )
     except Exception as e:
         # If we got an exception but expected success, fail
-        assert test_case.expected_status == EXCEPTION, (
-            f"Unexpected exception in {test_case.name}: {e}"
-        )
-        # Validate the exception type/message if specified
+        assert test_case.expected_status == FAILED, f"Unexpected exception in {test_case.name}: {e}"
+        # Validate the exception type if specified
         if test_case.expected_error:
-            assert test_case.expected_error in str(e), (
-                f"Expected error '{test_case.expected_error}' but got '{str(e)}'"
+            assert isinstance(e, test_case.expected_error), (
+                f"Expected exception type '{test_case.expected_error.__name__}' but got '{type(e).__name__}: {str(e)}'"
             )
 
 
@@ -307,11 +295,9 @@ def test_spark_client_connect_with_options(test_case: TestCase, spark_client, mo
         )
     except Exception as e:
         # If we got an exception but expected success, fail
-        assert test_case.expected_status == EXCEPTION, (
-            f"Unexpected exception in {test_case.name}: {e}"
-        )
-        # Validate the exception type/message if specified
+        assert test_case.expected_status == FAILED, f"Unexpected exception in {test_case.name}: {e}"
+        # Validate the exception type if specified
         if test_case.expected_error:
-            assert test_case.expected_error in str(e), (
-                f"Expected error '{test_case.expected_error}' but got '{str(e)}'"
+            assert isinstance(e, test_case.expected_error), (
+                f"Expected exception type '{test_case.expected_error.__name__}' but got '{type(e).__name__}: {str(e)}'"
             )
