@@ -70,15 +70,24 @@ class KubernetesBackend(RuntimeBackend):
         cluster_runtime_list = None
         namespace_runtime_list = None
 
+        cluster_thread = self.custom_api.list_cluster_custom_object(
+            constants.GROUP,
+            constants.VERSION,
+            constants.CLUSTER_TRAINING_RUNTIME_PLURAL,
+            async_req=True,
+        )
+
+        namespace_thread = self.custom_api.list_namespaced_custom_object(
+            constants.GROUP,
+            constants.VERSION,
+            self.namespace,
+            constants.TRAINING_RUNTIME_PLURAL,
+            async_req=True,
+        )
+
         try:
-            thread = self.custom_api.list_cluster_custom_object(
-                constants.GROUP,
-                constants.VERSION,
-                constants.CLUSTER_TRAINING_RUNTIME_PLURAL,
-                async_req=True,
-            )
             cluster_runtime_list = models.TrainerV1alpha1ClusterTrainingRuntimeList.from_dict(
-                thread.get(common_constants.DEFAULT_TIMEOUT)
+                cluster_thread.get(common_constants.DEFAULT_TIMEOUT)
             )
         except multiprocessing.TimeoutError as e:
             cluster_err = e
@@ -88,15 +97,8 @@ class KubernetesBackend(RuntimeBackend):
             logger.warning("Cluster runtimes failed", exc_info=True)
 
         try:
-            thread = self.custom_api.list_namespaced_custom_object(
-                constants.GROUP,
-                constants.VERSION,
-                self.namespace,
-                constants.TRAINING_RUNTIME_PLURAL,
-                async_req=True,
-            )
             namespace_runtime_list = models.TrainerV1alpha1TrainingRuntimeList.from_dict(
-                thread.get(common_constants.DEFAULT_TIMEOUT)
+                namespace_thread.get(common_constants.DEFAULT_TIMEOUT)
             )
         except multiprocessing.TimeoutError as e:
             namespace_err = e
@@ -574,8 +576,8 @@ class KubernetesBackend(RuntimeBackend):
             and runtime_cr.spec.template.spec.replicated_jobs
         ):
             raise Exception(
-                f"{runtime_cr}' is invalid — missing one or more required fields: "
-                f"metadata.name, spec.mlPolicy, spec.template.spec.replicatedJobs.\n"
+                f"{runtime_cr} is invalid — missing one or more required fields: "
+                f"metadata.name, spec.ml_policy, spec.template.spec.replicated_jobs.\n"
             )
 
         if not (
