@@ -3,7 +3,7 @@ name: "Check OWNERS"
 on:
   pull_request:
     paths:
-      - 'kubeflow/hub/OWNERS'
+      - 'OWNERS'
   workflow_dispatch:
 
 permissions:
@@ -53,23 +53,14 @@ jobs:
           # -------------------------------------------------------------------
 
           echo "Checking sync with model-registry OWNERS..."
-          base_approvers=$(curl -s https://raw.githubusercontent.com/kubeflow/model-registry/main/OWNERS | yq eval '.approvers[]')
+          local_owners_path="kubeflow/hub/OWNERS"
+          remote_owners_url="https://raw.githubusercontent.com/kubeflow/model-registry/main/OWNERS"
 
-          # Sort both lists
-          sorted_approvers=$(echo "$approvers" | sort)
-          sorted_base_approvers=$(echo "$base_approvers" | sort)
-
-          # Find differences
-          diff_out=$(comm -3 <(echo "$sorted_approvers") <(echo "$sorted_base_approvers"))
-
-          if [ -n "$diff_out" ]; then
-            # Format the output for better readability (replace tabs with spaces or something)
-            # comm -3 output: col1 (unique to file1), col2 (unique to file2)
-            # We can just show the raw diff or format it.
-            diff_msg=$(echo "$diff_out" | tr '\n' ' ' | xargs)
-            echo "::warning file=kubeflow/hub/OWNERS,line=1::Approvers out of sync with model-registry/OWNERS. Differences: $diff_msg"
+          if ! diff -u "$local_owners_path" <(curl -s "$remote_owners_url"); then
+            echo "❌ Error: OWNERS files out of sync for kubeflow hub!"
+            exit 1
           else
-             echo "✅ Approvers are in sync with model-registry!"
+            echo "✅ OWNERS files in sync for kubeflow hub!"
           fi
 
 
