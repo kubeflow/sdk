@@ -3,7 +3,7 @@ name: "Check OWNERS"
 on:
   pull_request:
     paths:
-      - 'OWNERS'
+      - 'kubeflow/hub/OWNERS'
   workflow_dispatch:
 
 permissions:
