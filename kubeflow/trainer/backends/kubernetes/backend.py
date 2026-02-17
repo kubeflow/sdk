@@ -578,7 +578,7 @@ class KubernetesBackend(RuntimeBackend):
         ):
             raise Exception(
                 f"{runtime_cr} is invalid — missing one or more required fields: "
-                f"metadata.name, spec.ml_policy, spec.template.spec.replicated_jobs.\n"
+                f"metadata.name, spec.ml_policy, spec.template.spec.replicated_jobs."
             )
 
         if not (
