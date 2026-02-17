@@ -587,9 +587,8 @@ class KubernetesBackend(RuntimeBackend):
 
     def __get_runtime_from_cr(
         self,
-        runtime_cr: Union[
-            models.TrainerV1alpha1ClusterTrainingRuntime, models.TrainerV1alpha1TrainingRuntime
-        ],
+        runtime_cr: models.TrainerV1alpha1ClusterTrainingRuntime
+        | models.TrainerV1alpha1TrainingRuntime,
     ) -> types.Runtime:
         scope = (
             types.RuntimeScope.CLUSTER

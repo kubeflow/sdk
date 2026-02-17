@@ -277,7 +277,7 @@ class Runtime:
     name: str
     trainer: RuntimeTrainer
     pretrained_model: str | None = None
-    scope: Optional[RuntimeScope] = None
+    scope: RuntimeScope | None = None
 
     def __post_init__(self):
         if self.scope is not None and not isinstance(self.scope, RuntimeScope):
