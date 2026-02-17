@@ -239,7 +239,7 @@ class KubernetesBackend(RuntimeBackend):
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(f"Timeout while getting cluster TrainingRuntime '{name}'") from e
         except Exception as e:
-            raise RuntimeError(f"Failed while retrieving cluster TrainingRuntime: '{name}'") from e
+            raise RuntimeError(f"Failed to get cluster TrainingRuntime: '{name}'") from e
 
     def get_runtime_packages(self, runtime: types.Runtime):
         if runtime.trainer.trainer_type == types.TrainerType.BUILTIN_TRAINER:
