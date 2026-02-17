@@ -128,6 +128,7 @@ class KubernetesBackend(RuntimeBackend):
             ) from (cluster_err or namespace_err)
 
         runtimes = []
+        ns_names = {}
         if namespace_runtime_list:
             runtimes.extend(namespace_runtime_list.items)
             ns_names = {r.metadata.name for r in runtimes}
