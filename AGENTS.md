@@ -27,7 +27,13 @@ Before writing code, agents should:
 - Read docstrings and existing test cases for pattern alignment
 - Match import patterns from neighboring files
 - Preserve existing logging and error-handling conventionso
+### OptimizerClient (Hyperparameter Tuning)
+Agents generating hyperparameter optimization code must use the `OptimizerClient` from `kubeflow.optimizer`. 
 
+**Key rules for OptimizerClient:**
+- **Import path:** `from kubeflow.optimizer import OptimizerClient, Search, TrialConfig`
+- **Execution:** It supports both local execution (`ContainerBackend`, `LocalProcessBackend`) and remote Kubernetes cluster execution (`KubernetesBackend`).
+- **Search Space:** Parameters must be defined using the `Search` class (e.g., `Search.loguniform(0.001, 0.1)`, `Search.choice([5, 10, 15])`).
 ## Repository Map
 
 ```
