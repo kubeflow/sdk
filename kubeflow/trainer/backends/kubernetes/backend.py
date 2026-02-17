@@ -92,9 +92,6 @@ class KubernetesBackend(RuntimeBackend):
         when there is no namespaced runtime with the same name.
         """
         result: list[types.Runtime] = []
-
-        cluster_err = None
-        namespace_err = None
         cluster_runtime_list = None
         namespace_runtime_list = None
 
@@ -118,53 +115,38 @@ class KubernetesBackend(RuntimeBackend):
                 cluster_thread.get(common_constants.DEFAULT_TIMEOUT)
             )
         except multiprocessing.TimeoutError as e:
-            cluster_err = e
-            logger.warning("Cluster runtimes timed out", exc_info=True)
+            raise TimeoutError(f"Timeout to list {constants.CLUSTER_TRAINING_RUNTIME_KIND}s") from e
         except Exception as e:
-            cluster_err = e
-            logger.warning("Cluster runtimes failed", exc_info=True)
+            raise RuntimeError(f"Failed to list {constants.CLUSTER_TRAINING_RUNTIME_KIND}s") from e
 
         try:
             namespace_runtime_list = models.TrainerV1alpha1TrainingRuntimeList.from_dict(
                 namespace_thread.get(common_constants.DEFAULT_TIMEOUT)
             )
         except multiprocessing.TimeoutError as e:
-            namespace_err = e
-            logger.warning(
-                f"Namespace runtimes timed out in namespace: {self.namespace}", exc_info=True
-            )
+            raise TimeoutError(f"Timeout to list {constants.TRAINING_RUNTIME_KIND}s") from e
         except Exception as e:
-            namespace_err = e
-            logger.warning(
-                f"Namespace runtimes failed in namespace: {self.namespace}", exc_info=True
-            )
-
-        if cluster_runtime_list is None and namespace_runtime_list is None:
-            # If both timed out → timeout
-            if isinstance(cluster_err, multiprocessing.TimeoutError) and isinstance(
-                namespace_err, multiprocessing.TimeoutError
-            ):
-                raise TimeoutError(
-                    f"Timeout while retrieving both cluster and namespace runtimes "
-                    f"(namespace={self.namespace})"
-                ) from cluster_err
-
-            raise RuntimeError(
-                f"Failed to retrieve runtimes.\n"
-                f"Cluster error: {repr(cluster_err)}\n"
-                f"Namespace error: {repr(namespace_err)}"
-            ) from (cluster_err or namespace_err)
+            raise RuntimeError(f"Failed to list {constants.TRAINING_RUNTIME_KIND}s") from e
 
         runtimes = []
-        ns_names = {}
+        _seen = set()
         if namespace_runtime_list:
             runtimes.extend(namespace_runtime_list.items)
-            ns_names = {r.metadata.name for r in runtimes}
+            _seen.update(
+                {
+                    r.metadata.name
+                    for r in namespace_runtime_list.items
+                    if r.metadata and r.metadata.name
+                }
+            )
 
         if cluster_runtime_list:
-            runtimes.extend(
-                r for r in cluster_runtime_list.items if r.metadata.name not in ns_names
-            )
+            for item in cluster_runtime_list.items:
+                if item.metadata and item.metadata.name not in _seen:
+                    runtimes.append(item)
+
+        # Clear seen
+        _seen.clear()
 
         try:
             for runtime in runtimes:

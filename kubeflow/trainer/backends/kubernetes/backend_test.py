@@ -883,30 +883,23 @@ def test_get_runtime(kubernetes_backend, test_case):
                 create_runtime_type(name="runtime-3", scope=types.RuntimeScope.CLUSTER),
             ],
         ),
-        # namespace retrieval fails (timeout) but cluster succeeds -> return cluster-only
+        # namespace retrieval fails (timeout) but cluster succeeds -> expect TimeoutError
         TestCase(
             name="namespace fails but cluster succeeds",
-            expected_status=SUCCESS,
+            expected_status=FAILED,
             config={"namespace": TIMEOUT, "name": LIST_RUNTIMES},
-            expected_output=[
-                create_runtime_type(name="runtime-1", scope=types.RuntimeScope.CLUSTER),
-                create_runtime_type(name="runtime-2", scope=types.RuntimeScope.CLUSTER),
-                create_runtime_type(name="runtime-3", scope=types.RuntimeScope.CLUSTER),
-            ],
+            expected_error=TimeoutError,
         ),
-        # cluster retrieval fails but namespace succeeds -> return namespace-only
+        # cluster retrieval fails but namespace succeeds -> expect TimeoutError
         TestCase(
             name="cluster fails but namespace succeeds",
-            expected_status=SUCCESS,
+            expected_status=FAILED,
             config={
                 "namespace": DEFAULT_NAMESPACE,
                 "name": LIST_RUNTIMES,
                 "cluster_error": TIMEOUT,
             },
-            expected_output=[
-                create_runtime_type(name="runtime-1", scope=types.RuntimeScope.NAMESPACE),
-                create_runtime_type(name="ns-runtime-2", scope=types.RuntimeScope.NAMESPACE),
-            ],
+            expected_error=TimeoutError,
         ),
         # both fail with timeout -> expect TimeoutError
         TestCase(
