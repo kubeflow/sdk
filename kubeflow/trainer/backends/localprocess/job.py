@@ -16,7 +16,6 @@ import logging
 import os
 import subprocess
 import threading
-from typing import Union
 
 from kubeflow.trainer.constants import constants
 
@@ -27,7 +26,7 @@ class LocalJob(threading.Thread):
     def __init__(
         self,
         name,
-        command: Union[list, tuple[str], str],
+        command: list | tuple[str] | str,
         execution_dir: str = None,
         env: dict[str, str] = None,
         dependencies: list = None,

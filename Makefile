@@ -96,7 +96,7 @@ release: install-dev
  # make test-python will produce html coverage by default. Run with `make test-python report=xml` to produce xml report.
 .PHONY: test-python
 test-python: uv-venv  ## Run Python unit tests
-	@uv sync
+	@uv sync --extra spark
 	@uv run coverage run --source=kubeflow -m pytest ./kubeflow/
 	@uv run coverage report --omit='*_test.py' --skip-covered --skip-empty
 ifeq ($(report),xml)
@@ -104,6 +104,22 @@ ifeq ($(report),xml)
 else
 	@uv run coverage html
 endif
+
+##@ E2E Testing
+
+.PHONY: test-e2e-setup-cluster
+test-e2e-setup-cluster:  ## Setup Kind cluster for Spark E2E tests
+	@echo "Setting up E2E test cluster..."
+	@K8S_VERSION=$(K8S_VERSION) \
+	 SPARK_TEST_CLUSTER=$(SPARK_TEST_CLUSTER) \
+	 SPARK_TEST_NAMESPACE=$(SPARK_TEST_NAMESPACE) \
+	 SPARK_OPERATOR_VERSION=$(SPARK_OPERATOR_VERSION) \
+	 KIND=$(KIND) \
+	 ./hack/e2e-setup-cluster.sh
+.PHONY: test-scripts
+test-scripts: uv-venv  ## Run GitHub Actions script tests
+	@uv sync
+	@uv run pytest .github/scripts/test_scripts.py -v
 
 
 .PHONY: install-dev

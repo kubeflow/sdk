@@ -24,7 +24,6 @@ import os
 from pathlib import Path
 import shutil
 import tempfile
-from typing import Optional
 from unittest.mock import Mock, patch
 
 import pytest
@@ -123,29 +122,29 @@ class MockContainerAdapter(BaseContainerClientAdapter):
         return "local" in image or image in self.images_pulled
 
     def run_oneoff_container(self, image: str, command: list[str]) -> str:
-        return "Python 3.9.0\npip 21.0.1\nnvidia-smi not found\n"
+        return "Python 3.10.0\npip 21.0.1\nnvidia-smi not found\n"
 
-    def container_status(self, container_id: str) -> tuple[str, Optional[int]]:
+    def container_status(self, container_id: str) -> tuple[str, int | None]:
         for container in self.containers_created:
             if container["id"] == container_id:
                 return (container["status"], container.get("exit_code"))
         return ("unknown", None)
 
-    def set_container_status(self, container_id: str, status: str, exit_code: Optional[int] = None):
+    def set_container_status(self, container_id: str, status: str, exit_code: int | None = None):
         """Helper method to set container status for testing."""
         for container in self.containers_created:
             if container["id"] == container_id:
                 container["status"] = status
                 container["exit_code"] = exit_code
 
-    def get_container_ip(self, container_id: str, network_id: str) -> Optional[str]:
+    def get_container_ip(self, container_id: str, network_id: str) -> str | None:
         """Get container IP address on a specific network."""
         for container in self.containers_created:
             if container["id"] == container_id:
                 return f"192.168.1.{len(self.containers_created)}"
         return None
 
-    def list_containers(self, filters: Optional[dict[str, list[str]]] = None) -> list[dict]:
+    def list_containers(self, filters: dict[str, list[str]] | None = None) -> list[dict]:
         """List containers with optional filters."""
         if not filters:
             return [
@@ -186,7 +185,7 @@ class MockContainerAdapter(BaseContainerClientAdapter):
                     )
         return result
 
-    def get_network(self, network_id: str) -> Optional[dict]:
+    def get_network(self, network_id: str) -> dict | None:
         """Get network information."""
         for network in self.networks_created:
             if network["id"] == network_id or network["name"] == network_id:
@@ -196,6 +195,31 @@ class MockContainerAdapter(BaseContainerClientAdapter):
                     "labels": network["labels"],
                 }
         return None
+
+    def wait_for_container(self, container_id: str, timeout: int | None = None) -> int:
+        """
+        Wait for a container to exit and return its exit code.
+
+        For testing, immediately returns the container's exit code if it has exited,
+        or raises TimeoutError if the container is still running.
+
+        Args:
+            container_id: Container ID
+            timeout: Maximum time to wait in seconds (not used in mock)
+
+        Returns:
+            Container exit code
+
+        Raises:
+            TimeoutError: If container is still running
+        """
+        for container in self.containers_created:
+            if container["id"] == container_id:
+                if container["status"] == "exited":
+                    return container.get("exit_code", 0)
+                # In mock, if not exited, simulate timeout
+                raise TimeoutError(f"Container {container_id} did not exit within timeout")
+        raise RuntimeError(f"Container {container_id} not found")
 
 
 # Fixtures
@@ -440,6 +464,112 @@ def test_get_runtime_packages(container_backend):
                 "expected_nproc_per_node": 1,
             },
         ),
+        TestCase(
+            name="train with HuggingFace dataset initializer",
+            expected_status=SUCCESS,
+            config={
+                "num_nodes": 1,
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(
+                        storage_uri="hf://username/dataset-repo",
+                        access_token="hf_token_123",
+                    )
+                ),
+                "expected_containers": 2,  # 1 dataset-initializer + 1 training node
+                "expected_initializer_type": "dataset",
+            },
+        ),
+        TestCase(
+            name="train with S3 dataset initializer",
+            expected_status=SUCCESS,
+            config={
+                "num_nodes": 1,
+                "initializer": types.Initializer(
+                    dataset=types.S3DatasetInitializer(
+                        storage_uri="s3://my-bucket/dataset",
+                        endpoint="https://s3.amazonaws.com",
+                        region="us-west-2",
+                    )
+                ),
+                "expected_containers": 2,  # 1 dataset-initializer + 1 training node
+                "expected_initializer_type": "dataset",
+            },
+        ),
+        TestCase(
+            name="train with HuggingFace model initializer",
+            expected_status=SUCCESS,
+            config={
+                "num_nodes": 1,
+                "initializer": types.Initializer(
+                    model=types.HuggingFaceModelInitializer(
+                        storage_uri="hf://username/model-repo",
+                        access_token="hf_token_456",
+                        ignore_patterns=["*.bin", "*.h5"],
+                    )
+                ),
+                "expected_containers": 2,  # 1 model-initializer + 1 training node
+                "expected_initializer_type": "model",
+            },
+        ),
+        TestCase(
+            name="train with S3 model initializer",
+            expected_status=SUCCESS,
+            config={
+                "num_nodes": 1,
+                "initializer": types.Initializer(
+                    model=types.S3ModelInitializer(
+                        storage_uri="s3://my-bucket/model",
+                        endpoint="https://s3.amazonaws.com",
+                        access_key_id="my_access_key",
+                        secret_access_key="my_secret_key",
+                    )
+                ),
+                "expected_containers": 2,  # 1 model-initializer + 1 training node
+                "expected_initializer_type": "model",
+            },
+        ),
+        TestCase(
+            name="train with both dataset and model initializers",
+            expected_status=SUCCESS,
+            config={
+                "num_nodes": 2,
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(
+                        storage_uri="hf://username/dataset-repo"
+                    ),
+                    model=types.HuggingFaceModelInitializer(storage_uri="hf://username/model-repo"),
+                ),
+                "expected_containers": 4,  # 1 dataset + 1 model + 2 training nodes
+            },
+        ),
+        TestCase(
+            name="initializer fails with non-zero exit code",
+            expected_status=FAILED,
+            config={
+                "num_nodes": 1,
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(
+                        storage_uri="hf://user/invalid-dataset"
+                    )
+                ),
+                "expected_containers": 1,  # Only initializer created before failure
+                "initializer_exit_code": 1,
+            },
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="initializer timeout",
+            expected_status=FAILED,
+            config={
+                "num_nodes": 1,
+                "initializer": types.Initializer(
+                    model=types.S3ModelInitializer(storage_uri="s3://bucket/model")
+                ),
+                "expected_containers": 1,  # Only initializer created before timeout
+                "initializer_timeout": True,
+            },
+            expected_error=TimeoutError,
+        ),
     ],
 )
 def test_train(container_backend, test_case):
@@ -455,7 +585,38 @@ def test_train(container_backend, test_case):
         )
         runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
 
-        job_name = container_backend.train(runtime=runtime, trainer=trainer)
+        # Set up mocking for initializer tests
+        initializer = test_case.config.get("initializer")
+        if initializer:
+            original_create = container_backend._adapter.create_and_start_container
+
+            def mock_create_with_status(*args, **kwargs):
+                container_id = original_create(*args, **kwargs)
+                # If it's an initializer container, set status based on test config
+                if "initializer" in kwargs.get("name", ""):
+                    if "initializer_exit_code" in test_case.config:
+                        container_backend._adapter.set_container_status(
+                            container_id, "exited", test_case.config["initializer_exit_code"]
+                        )
+                    else:
+                        # Mark as completed successfully
+                        container_backend._adapter.set_container_status(container_id, "exited", 0)
+                return container_id
+
+            container_backend._adapter.create_and_start_container = mock_create_with_status
+
+        # Handle timeout test case
+        if test_case.config.get("initializer_timeout"):
+            with patch(
+                "kubeflow.trainer.backends.container.backend."
+                "ContainerBackend._run_single_initializer"
+            ) as mock_run:
+                mock_run.side_effect = TimeoutError("Initializer timeout")
+                container_backend.train(runtime=runtime, trainer=trainer, initializer=initializer)
+        else:
+            job_name = container_backend.train(
+                runtime=runtime, trainer=trainer, initializer=initializer
+            )
 
         assert test_case.expected_status == SUCCESS
         assert job_name is not None
@@ -488,6 +649,44 @@ def test_train(container_backend, test_case):
             assert f"--nproc_per_node={expected_nproc}" in command_str, (
                 f"Expected --nproc_per_node={expected_nproc} in command, but got: {command_str}"
             )
+
+        # Check initializer assertions
+        if initializer:
+            # Check that initializer containers have correct labels
+            initializer_containers = [
+                c
+                for c in container_backend._adapter.containers_created
+                if "initializer" in c["labels"].get(f"{container_backend.label_prefix}/step", "")
+            ]
+
+            if "expected_initializer_type" in test_case.config:
+                expected_type = test_case.config["expected_initializer_type"]
+                assert any(expected_type in c["name"] for c in initializer_containers)
+
+            # Check that initializer containers have correct environment variables
+            for container in initializer_containers:
+                assert "STORAGE_URI" in container["environment"]
+                assert "OUTPUT_PATH" in container["environment"]
+
+                # Verify OUTPUT_PATH is correct based on initializer type
+                if "dataset-initializer" in container["name"]:
+                    assert container["environment"]["OUTPUT_PATH"] == constants.DATASET_PATH
+                elif "model-initializer" in container["name"]:
+                    assert container["environment"]["OUTPUT_PATH"] == constants.MODEL_PATH
+
+            # Verify the job can be retrieved and has correct steps
+            job = container_backend.get_job(job_name)
+            assert job.name == job_name
+
+            # Check that initializer steps are included
+            step_names = [step.name for step in job.steps]
+            if initializer.dataset:
+                assert "dataset-initializer" in step_names
+            if initializer.model:
+                assert "model-initializer" in step_names
+
+            # Check that num_nodes only counts training nodes, not initializers
+            assert job.num_nodes == test_case.config.get("num_nodes", 1)
 
     except Exception as e:
         assert type(e) is test_case.expected_error
@@ -590,6 +789,41 @@ def test_get_job(container_backend, test_case):
             expected_status=SUCCESS,
             config={"follow": True},
         ),
+        TestCase(
+            name="get logs from dataset initializer",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+                "step": "dataset-initializer",
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(storage_uri="hf://user/dataset"),
+                    model=types.HuggingFaceModelInitializer(storage_uri="hf://user/model"),
+                ),
+            },
+        ),
+        TestCase(
+            name="get logs from model initializer",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+                "step": "model-initializer",
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(storage_uri="hf://user/dataset"),
+                    model=types.HuggingFaceModelInitializer(storage_uri="hf://user/model"),
+                ),
+            },
+        ),
+        TestCase(
+            name="get logs from training node excludes initializers",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+                "step": constants.NODE + "-0",
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(storage_uri="hf://user/dataset"),
+                ),
+            },
+        ),
     ],
 )
 def test_get_job_logs(container_backend, test_case):
@@ -598,16 +832,43 @@ def test_get_job_logs(container_backend, test_case):
     try:
         trainer = types.CustomTrainer(func=simple_train_func, num_nodes=1)
         runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
-        job_name = container_backend.train(runtime=runtime, trainer=trainer)
 
-        logs = list(container_backend.get_job_logs(job_name, follow=test_case.config["follow"]))
+        initializer = test_case.config.get("initializer")
+
+        # Set up mocking for initializer tests
+        if initializer:
+            original_create = container_backend._adapter.create_and_start_container
+
+            def mock_create_with_status(*args, **kwargs):
+                container_id = original_create(*args, **kwargs)
+                if "initializer" in kwargs.get("name", ""):
+                    container_backend._adapter.set_container_status(container_id, "exited", 0)
+                return container_id
+
+            container_backend._adapter.create_and_start_container = mock_create_with_status
+
+        job_name = container_backend.train(
+            runtime=runtime, trainer=trainer, initializer=initializer
+        )
+
+        step = test_case.config.get("step")
+        if step:
+            logs = list(
+                container_backend.get_job_logs(
+                    job_name, follow=test_case.config["follow"], step=step
+                )
+            )
+        else:
+            logs = list(container_backend.get_job_logs(job_name, follow=test_case.config["follow"]))
 
         assert test_case.expected_status == SUCCESS
         assert len(logs) > 0
-        if test_case.config["follow"]:
-            assert any("Log line" in log for log in logs)
-        else:
-            assert any("Complete log" in log for log in logs)
+
+        if not initializer:
+            if test_case.config["follow"]:
+                assert any("Log line" in log for log in logs)
+            else:
+                assert any("Complete log" in log for log in logs)
 
     except Exception as e:
         assert type(e) is test_case.expected_error

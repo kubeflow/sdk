@@ -1,0 +1,187 @@
+name: Cleanup Dependency Overrides
+
+on:
+  schedule:
+    - cron: '0 3 1 * *'  # Monthly on the 1st at 3 AM UTC
+  workflow_dispatch:
+
+jobs:
+  cleanup-overrides:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Check and Clean Overrides
+        id: cleanup
+        run: |
+          # Check if override-dependencies exists
+          if ! grep -q "override-dependencies = \[" pyproject.toml; then
+            echo "No override-dependencies found. Nothing to clean up."
+            echo "changes_made=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Extract all overrides (handle both single-line and multi-line arrays)
+          OVERRIDES=$(grep -A100 "override-dependencies = \[" pyproject.toml | \
+            sed -n '/override-dependencies = \[/,/\]/p' | \
+            grep -oP '"\K[^"]+' || true)
+
+          if [ -z "$OVERRIDES" ]; then
+            echo "override-dependencies array is empty."
+            echo "changes_made=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Found overrides to test:"
+          echo "$OVERRIDES"
+
+          # Use temp files to track results (arrays don't persist across pipe subshells)
+          rm -f removed.txt kept.txt
+
+          # Test each override
+          while read -r TARGET; do
+            [ -z "$TARGET" ] && continue
+
+            PACKAGE=$(echo "$TARGET" | cut -d'=' -f1)
+            OVERRIDE_VER=$(echo "$TARGET" | sed 's/.*==//')
+
+            echo ""
+            echo "Testing override: $TARGET"
+            echo "Current override version: $OVERRIDE_VER"
+
+            # Backup current state
+            cp pyproject.toml pyproject.toml.backup
+            cp uv.lock uv.lock.backup
+
+            # Temporarily remove this override from pyproject.toml
+            # Use grep -v with -F for fixed string matching to avoid regex issues
+            grep -vF "\"$TARGET\"" pyproject.toml > pyproject.toml.tmp && mv pyproject.toml.tmp pyproject.toml
+            # Clean up any trailing commas before closing bracket
+            sed -i '/override-dependencies = \[/,/\]/{s/,\s*\]/]/g}' pyproject.toml
+            # Remove comment line for this package (look for security fix comment specifically)
+            grep -vF "# $TARGET - Added" pyproject.toml > pyproject.toml.tmp && mv pyproject.toml.tmp pyproject.toml || true
+
+            # Try natural upgrade
+            echo "Attempting natural upgrade for $PACKAGE..."
+            LOCK_OUTPUT=$(uv lock --upgrade-package "$PACKAGE" 2>&1) || LOCK_FAILED=$?
+            if [ "${LOCK_FAILED:-0}" -ne 0 ]; then
+              echo "Warning: uv lock failed, keeping override"
+              echo "Error output: $LOCK_OUTPUT"
+              mv pyproject.toml.backup pyproject.toml
+              mv uv.lock.backup uv.lock
+              echo "- $TARGET (uv lock failed)" >> kept.txt
+              continue
+            fi
+
+            # Check the resulting version
+            NATURAL_VER=$(uv tree --package "$PACKAGE" | uv run python3 .github/scripts/extract_version.py "$PACKAGE")
+
+            if [ -z "$NATURAL_VER" ]; then
+              echo "Warning: Could not determine natural version, keeping override"
+              mv pyproject.toml.backup pyproject.toml
+              mv uv.lock.backup uv.lock
+              echo "- $TARGET (could not determine version)" >> kept.txt
+              continue
+            fi
+
+            echo "Natural upgrade resulted in version: $NATURAL_VER"
+
+            # Compare versions: if natural version >= override version, we can remove override
+            # compare_versions.py exits 0 if first arg < second arg, so we need to check if NATURAL_VER < OVERRIDE_VER
+            if uv run python3 .github/scripts/compare_versions.py "$NATURAL_VER" "$OVERRIDE_VER"; then
+              # NATURAL_VER < OVERRIDE_VER, so we need to keep the override
+              echo "SKIP: Natural upgrade insufficient. Version $NATURAL_VER < $OVERRIDE_VER"
+              echo "  Keeping override for $TARGET"
+              mv pyproject.toml.backup pyproject.toml
+              mv uv.lock.backup uv.lock
+              echo "- $TARGET (natural upgrade only reached $NATURAL_VER, need $OVERRIDE_VER)" >> kept.txt
+            else
+              # NATURAL_VER >= OVERRIDE_VER, we can remove the override
+              echo "SUCCESS: Natural upgrade now works! Version $NATURAL_VER >= $OVERRIDE_VER"
+              echo "  Removing override for $TARGET"
+              echo "- $TARGET (upgraded to $NATURAL_VER)" >> removed.txt
+              # Keep the modified files (override removed)
+              rm -f pyproject.toml.backup uv.lock.backup
+            fi
+          done <<< "$OVERRIDES"
+
+          # After testing all, check if override-dependencies is now empty and clean up
+          REMAINING=$(grep -A100 "override-dependencies = \[" pyproject.toml | \
+            sed -n '/override-dependencies = \[/,/\]/p' | \
+            grep -oP '"\K[^"]+' || true)
+
+          if [ -z "$REMAINING" ]; then
+            echo ""
+            echo "All overrides removed! Cleaning up empty override-dependencies..."
+            # Remove the header comment
+            sed -i '/# Security overrides - Review periodically/d' pyproject.toml
+            # Remove override-dependencies array (handles both single-line [] and multi-line)
+            sed -i '/override-dependencies = \[/,/\]/d' pyproject.toml
+          fi
+
+          # Load arrays from subshell
+          REMOVED_LIST=$(cat removed.txt 2>/dev/null || echo "")
+          KEPT_LIST=$(cat kept.txt 2>/dev/null || echo "")
+
+          # Determine if changes were made
+          if [ -n "$REMOVED_LIST" ]; then
+            echo "changes_made=true" >> $GITHUB_OUTPUT
+
+            # Create summary for PR body
+            echo "removed_overrides<<EOF" >> $GITHUB_OUTPUT
+            echo "$REMOVED_LIST" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+
+            if [ -n "$KEPT_LIST" ]; then
+              echo "kept_overrides<<EOF" >> $GITHUB_OUTPUT
+              echo "$KEPT_LIST" >> $GITHUB_OUTPUT
+              echo "EOF" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "changes_made=false" >> $GITHUB_OUTPUT
+            echo "No overrides could be removed at this time."
+          fi
+
+      - name: Create Pull Request
+        if: steps.cleanup.outputs.changes_made == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: remove unnecessary dependency overrides"
+          title: "chore: cleanup dependency overrides"
+          add-paths: |
+            pyproject.toml
+            uv.lock
+          body: |
+            ## Dependency Override Cleanup
+
+            This is an automated monthly cleanup of `override-dependencies` in `pyproject.toml`.
+
+            ### Removed Overrides (Natural Upgrade Now Works)
+            The following overrides were removed because parent constraints now allow natural upgrades:
+
+            ${{ steps.cleanup.outputs.removed_overrides }}
+
+            ### Kept Overrides (Still Required)
+            ${{ steps.cleanup.outputs.kept_overrides }}
+
+            These overrides are still needed because parent dependency constraints prevent natural upgrades to the required security versions.
+
+            ---
+            **Next Steps:**
+            - Review the changes and verify tests pass
+            - Consider investigating why kept overrides are still blocked (check parent dependency versions)
+          branch: cleanup-overrides-${{ github.run_id }}
+          delete-branch: true
+          labels: |
+            "area/security"

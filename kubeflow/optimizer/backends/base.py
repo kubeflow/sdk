@@ -14,7 +14,7 @@
 
 import abc
 from collections.abc import Callable, Iterator
-from typing import Any, Optional
+from typing import Any
 
 from kubeflow.optimizer.constants import constants
 from kubeflow.optimizer.types.algorithm_types import RandomSearch
@@ -34,9 +34,9 @@ class RuntimeBackend(abc.ABC):
         trial_template: TrainJobTemplate,
         *,
         search_space: dict[str, Any],
-        trial_config: Optional[TrialConfig] = None,
-        objectives: Optional[list[Objective]] = None,
-        algorithm: Optional[RandomSearch] = None,
+        trial_config: TrialConfig | None = None,
+        objectives: list[Objective] | None = None,
+        algorithm: RandomSearch | None = None,
     ) -> str:
         raise NotImplementedError()
 
@@ -52,13 +52,13 @@ class RuntimeBackend(abc.ABC):
     def get_job_logs(
         self,
         name: str,
-        trial_name: Optional[str],
+        trial_name: str | None,
         follow: bool,
     ) -> Iterator[str]:
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_best_results(self, name: str) -> Optional[Result]:
+    def get_best_results(self, name: str) -> Result | None:
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -68,7 +68,7 @@ class RuntimeBackend(abc.ABC):
         status: set[str] = {constants.OPTIMIZATION_JOB_COMPLETE},
         timeout: int = 3600,
         polling_interval: int = 2,
-        callbacks: Optional[list[Callable[[OptimizationJob], None]]] = None,
+        callbacks: list[Callable[[OptimizationJob], None]] | None = None,
     ) -> OptimizationJob:
         raise NotImplementedError()
 

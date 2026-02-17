@@ -16,6 +16,7 @@
 Utility functions for the Container backend.
 """
 
+from dataclasses import dataclass
 import logging
 import os
 from pathlib import Path
@@ -211,3 +212,111 @@ def aggregate_container_statuses(adapter, containers: list[dict]) -> str:
     """
     statuses = [get_container_status(adapter, c["id"]) for c in containers]
     return aggregate_status_from_containers(statuses)
+
+
+@dataclass
+class ContainerInitializer:
+    """Internal type for container initializer configuration."""
+
+    name: str
+    image: str
+    command: list[str]
+    env: dict[str, str]
+
+
+def get_optional_initializer_envs(
+    initializer: types.BaseInitializer, required_fields: set[str]
+) -> dict[str, str]:
+    """
+    Get optional environment variables from the initializer config.
+
+    Iterates over dataclass fields and converts non-required, non-None values
+    to environment variables with uppercase names.
+
+    Args:
+        initializer: Dataset or model initializer configuration.
+        required_fields: Set of field names to skip (already handled).
+
+    Returns:
+        Dictionary of environment variables.
+    """
+    from dataclasses import fields
+
+    env = {}
+    for f in fields(initializer):
+        if f.name not in required_fields:
+            value = getattr(initializer, f.name)
+            if value is not None:
+                # Convert list values (like ignore_patterns) to comma-separated strings
+                if isinstance(value, list):
+                    value = ",".join(str(item) for item in value)
+                env[f.name.upper()] = str(value)
+    return env
+
+
+def get_dataset_initializer(dataset: types.BaseInitializer, config) -> ContainerInitializer:
+    """
+    Get container initializer configuration for dataset initialization.
+
+    Args:
+        dataset: Dataset initializer configuration (HuggingFace or S3).
+        config: ContainerBackendConfig with initializer image settings.
+
+    Returns:
+        ContainerInitializer with image, command, and environment variables.
+
+    Raises:
+        ValueError: If the dataset initializer type is not supported.
+    """
+    if not isinstance(dataset, (types.HuggingFaceDatasetInitializer, types.S3DatasetInitializer)):
+        raise ValueError(
+            f"Unsupported dataset initializer type: {type(dataset).__name__}. "
+            "Supported types: HuggingFaceDatasetInitializer, S3DatasetInitializer"
+        )
+
+    env = {
+        "STORAGE_URI": dataset.storage_uri,
+        "OUTPUT_PATH": constants.DATASET_PATH,
+    }
+    env.update(get_optional_initializer_envs(dataset, required_fields={"storage_uri"}))
+
+    return ContainerInitializer(
+        name="dataset-initializer",
+        image=config.dataset_initializer_image,
+        command=["bash", "-c", "python -m pkg.initializers.dataset"],
+        env=env,
+    )
+
+
+def get_model_initializer(model: types.BaseInitializer, config) -> ContainerInitializer:
+    """
+    Get container initializer configuration for model initialization.
+
+    Args:
+        model: Model initializer configuration (HuggingFace or S3).
+        config: ContainerBackendConfig with initializer image settings.
+
+    Returns:
+        ContainerInitializer with image, command, and environment variables.
+
+    Raises:
+        ValueError: If the model initializer type is not supported.
+    """
+    if not isinstance(model, (types.HuggingFaceModelInitializer, types.S3ModelInitializer)):
+        raise ValueError(
+            f"Unsupported model initializer type: {type(model).__name__}. "
+            "Supported types: HuggingFaceModelInitializer, S3ModelInitializer"
+        )
+
+    env = {
+        "STORAGE_URI": model.storage_uri,
+        "OUTPUT_PATH": constants.MODEL_PATH,
+    }
+    env.update(get_optional_initializer_envs(model, required_fields={"storage_uri"}))
+
+    return ContainerInitializer(
+        name="model-initializer",
+        image=config.model_initializer_image,
+        command=["bash", "-c", "python -m pkg.initializers.model"],
+        env=env,
+    )

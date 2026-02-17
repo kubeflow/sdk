@@ -12,19 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Unit tests for the KubernetesBackend class in the Kubeflow Trainer SDK.
+"""Unit tests for the KubernetesBackend class in the Kubeflow Trainer SDK.
 
 This module uses pytest and unittest.mock to simulate Kubernetes API interactions.
-It tests KubernetesBackend's behavior across job listing, resource creation etc
+It tests KubernetesBackend's behavior across job listing, resource creation etc.
 """
 
 from dataclasses import asdict
 import datetime
+import logging
 import multiprocessing
 import random
 import string
-from typing import Optional
 from unittest.mock import Mock, patch
 import uuid
 
@@ -215,10 +214,10 @@ def get_resource_requirements() -> models.IoK8sApiCoreV1ResourceRequirements:
 
 
 def get_custom_trainer(
-    env: Optional[list[models.IoK8sApiCoreV1EnvVar]] = None,
-    pip_index_urls: Optional[list[str]] = constants.DEFAULT_PIP_INDEX_URLS,
+    env: list[models.IoK8sApiCoreV1EnvVar] | None = None,
+    pip_index_urls: list[str] | None = constants.DEFAULT_PIP_INDEX_URLS,
     packages_to_install: list[str] = ["torch", "numpy"],
-    image: Optional[str] = None,
+    image: str | None = None,
 ) -> models.TrainerV1alpha1Trainer:
     """
     Get the custom trainer for the TrainJob.
@@ -268,6 +267,22 @@ def get_custom_trainer_container(
     )
 
 
+def _build_core_api_mock(
+    config_map_data: dict | None = None,
+    error: Exception | None = None,
+):
+    """Helper to construct a CoreV1Api mock for version checks."""
+
+    core_api = Mock()
+
+    if error is not None:
+        core_api.read_namespaced_config_map.side_effect = error
+    else:
+        core_api.read_namespaced_config_map.return_value = Mock(data=config_map_data)
+
+    return core_api
+
+
 def get_builtin_trainer(
     args: list[str],
 ) -> models.TrainerV1alpha1Trainer:
@@ -284,11 +299,11 @@ def get_builtin_trainer(
 def get_train_job(
     runtime_name: str,
     train_job_name: str = BASIC_TRAIN_JOB_NAME,
-    train_job_trainer: Optional[models.TrainerV1alpha1Trainer] = None,
-    labels: Optional[dict[str, str]] = None,
-    annotations: Optional[dict[str, str]] = None,
-    spec_labels: Optional[dict[str, str]] = None,
-    spec_annotations: Optional[dict[str, str]] = None,
+    train_job_trainer: models.TrainerV1alpha1Trainer | None = None,
+    labels: dict[str, str] | None = None,
+    annotations: dict[str, str] | None = None,
+    spec_labels: dict[str, str] | None = None,
+    spec_annotations: dict[str, str] | None = None,
 ) -> models.TrainerV1alpha1TrainJob:
     """
     Create a mock TrainJob object with optional trainer configurations.
@@ -531,9 +546,9 @@ def create_train_job(
     train_job_name: str = random.choice(string.ascii_lowercase) + uuid.uuid4().hex[:11],
     namespace: str = "default",
     image: str = "pytorch/pytorch:latest",
-    initializer: Optional[types.Initializer] = None,
-    command: Optional[list] = None,
-    args: Optional[list] = None,
+    initializer: types.Initializer | None = None,
+    command: list | None = None,
+    args: list | None = None,
 ) -> models.TrainerV1alpha1TrainJob:
     """Create a mock TrainJob object."""
     return models.TrainerV1alpha1TrainJob(
@@ -716,6 +731,93 @@ def get_train_job_data_type(
         num_nodes=2,
         status="Complete",
     )
+
+
+def _run_verify_backend_with_core_api(core_api: Mock) -> tuple[list[str], int]:
+    """Helper to run verify_backend and capture warning logs."""
+
+    logger_name = "kubeflow.trainer.backends.kubernetes.backend"
+    logger_obj = logging.getLogger(logger_name)
+
+    class _ListHandler(logging.Handler):
+        def __init__(self) -> None:
+            super().__init__()
+            self.records: list[logging.LogRecord] = []
+
+        def emit(self, record: logging.LogRecord) -> None:  # type: ignore[override]
+            self.records.append(record)
+
+    handler = _ListHandler()
+    logger_obj.addHandler(handler)
+    previous_level = logger_obj.level
+    logger_obj.setLevel(logging.WARNING)
+
+    try:
+        with (
+            patch("kubernetes.config.load_kube_config", return_value=None),
+            patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
+            patch("kubernetes.client.ApiClient", return_value=Mock()),
+            patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
+            patch("kubernetes.client.CoreV1Api", return_value=core_api),
+        ):
+            KubernetesBackend(KubernetesBackendConfig())
+    finally:
+        logger_obj.removeHandler(handler)
+        logger_obj.setLevel(previous_level)
+
+    messages = [record.getMessage() for record in handler.records]
+    call_count = core_api.read_namespaced_config_map.call_count
+    return messages, call_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="version metadata present",
+            expected_status=SUCCESS,
+            config={
+                "core_api": _build_core_api_mock({"kubeflow_trainer_version": "1.2.3"}),
+                "expect_warning": False,
+            },
+        ),
+        TestCase(
+            name="ConfigMap read error logs warning",
+            expected_status=SUCCESS,
+            config={
+                "core_api": _build_core_api_mock(None, Exception("ConfigMap not found")),
+                "expect_warning": True,
+                "must_contain": [
+                    "Trainer control-plane version info is not available",
+                    "kubeflow-trainer-public",
+                    "ConfigMap not found",
+                ],
+            },
+        ),
+    ],
+)
+def test_verify_backend(test_case):
+    """Test KubernetesBackend.verify_backend across version metadata scenarios."""
+
+    print("Executing test:", test_case.name)
+
+    core_api: Mock = test_case.config["core_api"]
+    expect_warning: bool = test_case.config.get("expect_warning", False)
+    must_contain: list[str] = test_case.config.get("must_contain", [])
+
+    warnings, call_count = _run_verify_backend_with_core_api(core_api)
+    combined = "\n".join(warnings)
+
+    assert call_count >= 1
+
+    if expect_warning:
+        assert warnings, "Expected warning logs but found none"
+        for text in must_contain:
+            assert text in combined
+    else:
+        assert "Trainer control-plane version info is not available" not in combined
+
+    print("test execution complete")
 
 
 # --------------------------

@@ -1,7 +1,7 @@
 [project]
 name = "kubeflow"
 dynamic = ["version"]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
   { name = "The Kubeflow Authors", email = "kubeflow-discuss@googlegroups.com" },
 ]
@@ -14,7 +14,6 @@ classifiers = [
   "Intended Audience :: Developers",
   "Intended Audience :: Education",
   "Intended Audience :: Science/Research",
-  "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -40,8 +39,13 @@ docker = [
 podman = [
   "podman>=5.6.0"
 ]
+spark = [
+    # Match major.minor to SparkConnect server image (see kubeflow.spark.backends.kubernetes.constants)
+    # Use [connect] extra to get compatible grpcio, pandas, pyarrow versions automatically
+    "pyspark[connect]==3.4.1",
+]
 hub = [
-  "model-registry>=0.3.0",
+  "model-registry>=0.3.6",
 ]
 
 [dependency-groups]
@@ -54,7 +58,7 @@ docs = [
   "sphinx-design>=0.6",
 ]
 dev = [
-  "kubeflow[hub]",
+  "kubeflow[hub,spark]",
   "pytest>=7.0",
   "pytest-mock>=3.10",
   "coverage>=7.0",
@@ -64,6 +68,7 @@ dev = [
   "pre-commit>=4.2.0",
   "PyGithub>=2.7.0",
   "git-cliff>=2.11.0",
+  "setuptools>=80.9.0",
   "ty>=0.0.11",
 ]
 
@@ -89,7 +94,7 @@ allow-direct-references = true
 [tool.ruff]
 # Formatting + lint coordination
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 src = ["kubeflow"]
 extend-exclude = [
   ".venv",
@@ -98,6 +103,7 @@ extend-exclude = [
   "dist",
   "__pycache__",
   "docs/_build",
+  "spark-operator",
 ]
 
 [tool.ruff.format]
@@ -124,8 +130,6 @@ select = [
 
 ignore = [
   "B006",  # mutable-argument-default
-  "UP007", # Use X | Y instead of Union[X, Y] (requires Python 3.10+)
-  "UP045", # Use X | None instead of Optional[X] (requires Python 3.10+)
   "E501",  # Embedded HTML/SVG has long lines
 ]
 
@@ -135,6 +139,18 @@ ignore = [
 known-first-party = ["kubeflow"]
 combine-as-imports = true
 force-sort-within-sections = true
+
+[tool.pytest.ini_options]
+markers = [
+  "integration: marks tests as integration tests (requires Kind cluster)",
+  "slow: marks tests as slow running",
+  "smoke: CRD-only smoke test (Kind + CRD, no operator)",
+  "timeout: marks tests with timeout limit",
+  "options: marks tests for Spark options pattern",
+]
+filterwarnings = [
+  "ignore::pydantic.warnings.PydanticDeprecatedSince20",
+]
 
 [tool.ty.environment]
 python-version = "3.10"

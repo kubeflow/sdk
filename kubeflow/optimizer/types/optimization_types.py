@@ -15,7 +15,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Union
 
 import kubeflow.common.constants as common_constants
 from kubeflow.optimizer.types.algorithm_types import GridSearch, RandomSearch
@@ -62,7 +61,7 @@ class TrialConfig:
 
     num_trials: int = 10
     parallel_trials: int = 1
-    max_failed_trials: Optional[int] = None
+    max_failed_trials: int | None = None
 
 
 @dataclass
@@ -123,9 +122,9 @@ class OptimizationJob:
     """
 
     name: str
-    search_space: dict[str, Union[ContinuousSearchSpace, CategoricalSearchSpace]]
+    search_space: dict[str, ContinuousSearchSpace | CategoricalSearchSpace]
     objectives: list[Objective]
-    algorithm: Union[GridSearch, RandomSearch]
+    algorithm: GridSearch | RandomSearch
     trial_config: TrialConfig
     trials: list[Trial]
     creation_timestamp: datetime

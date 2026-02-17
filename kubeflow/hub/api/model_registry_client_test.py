@@ -97,8 +97,12 @@ def test_init_import_error(test_case, monkeypatch):
                 "author": "test",
             },
             expected_output={
+                "server_address": "http://localhost",
                 "port": 8080,
+                "author": "test",
                 "is_secure": False,
+                "user_token": None,
+                "custom_ca": None,
             },
         ),
         TestCase(
@@ -109,8 +113,12 @@ def test_init_import_error(test_case, monkeypatch):
                 "author": "test",
             },
             expected_output={
+                "server_address": "https://registry.example.com",
                 "port": 443,
+                "author": "test",
                 "is_secure": True,
+                "user_token": None,
+                "custom_ca": None,
             },
         ),
         TestCase(
@@ -122,8 +130,44 @@ def test_init_import_error(test_case, monkeypatch):
                 "author": "test-author",
             },
             expected_output={
+                "server_address": "http://localhost",
                 "port": 9080,
+                "author": "test-author",
                 "is_secure": False,
+                "user_token": None,
+                "custom_ca": None,
+            },
+        ),
+        TestCase(
+            name="https URL with explicit port parses port",
+            expected_status=SUCCESS,
+            config={
+                "base_url": "https://example.org:456",
+                "author": "test",
+            },
+            expected_output={
+                "server_address": "https://example.org:456",
+                "port": 443,
+                "author": "test",
+                "is_secure": True,
+                "user_token": None,
+                "custom_ca": None,
+            },
+        ),
+        TestCase(
+            name="http URL with explicit port parses port",
+            expected_status=SUCCESS,
+            config={
+                "base_url": "http://example.org:456",
+                "author": "test",
+            },
+            expected_output={
+                "server_address": "http://example.org:456",
+                "port": 8080,
+                "author": "test",
+                "is_secure": False,
+                "user_token": None,
+                "custom_ca": None,
             },
         ),
     ],
@@ -144,9 +188,7 @@ def test_init(test_case, monkeypatch):
 
         assert test_case.expected_status == SUCCESS
         mock_registry_class.assert_called_once()
-        call_kwargs = mock_registry_class.call_args[1]
-        assert call_kwargs["port"] == test_case.expected_output["port"]
-        assert call_kwargs["is_secure"] is test_case.expected_output["is_secure"]
+        assert mock_registry_class.call_args[1] == test_case.expected_output
         assert client._registry == mock_registry_instance
 
     except Exception as e:

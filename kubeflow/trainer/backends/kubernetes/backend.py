@@ -16,11 +16,12 @@ from collections.abc import Callable, Iterator
 import copy
 import logging
 import multiprocessing
+import os
 import random
 import re
 import string
 import time
-from typing import Any, Optional, Union
+from typing import Any
 import uuid
 
 from kubeflow_trainer_api import models
@@ -55,6 +56,33 @@ class KubernetesBackend(RuntimeBackend):
         self.core_api = client.CoreV1Api(k8s_client)
 
         self.namespace = cfg.namespace
+
+        # Perform control-plane version metadata verification.
+        self.verify_backend()
+
+    def verify_backend(self) -> None:
+        """Verify that the Trainer control plane exposes version metadata.
+
+        This check only ensures that the public control-plane ConfigMap exists
+        and contains a ``kubeflow_trainer_version`` field. It does not
+        enforce version compatibility and never raises.
+        """
+
+        system_namespace = os.getenv("KUBEFLOW_SYSTEM_NAMESPACE", "kubeflow-system")
+        config_map_name = "kubeflow-trainer-public"
+
+        try:
+            _ = self.core_api.read_namespaced_config_map(
+                name=config_map_name,
+                namespace=system_namespace,
+            ).data["kubeflow_trainer_version"]
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "Trainer control-plane version info is not available: "
+                f"unable to read 'kubeflow_trainer_version' from ConfigMap "
+                f"'{config_map_name}' in namespace '{system_namespace}': {e}"
+            )
+            return
 
     def list_runtimes(self) -> list[types.Runtime]:
         """List available runtimes, preferring namespaced over cluster-scoped for duplicates.
@@ -264,12 +292,13 @@ class KubernetesBackend(RuntimeBackend):
 
     def train(
         self,
-        runtime: Optional[Union[str, types.Runtime]] = None,
-        initializer: Optional[types.Initializer] = None,
-        trainer: Optional[
-            Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
-        ] = None,
-        options: Optional[list] = None,
+        runtime: str | types.Runtime | None = None,
+        initializer: types.Initializer | None = None,
+        trainer: types.CustomTrainer
+        | types.CustomTrainerContainer
+        | types.BuiltinTrainer
+        | None = None,
+        options: list | None = None,
     ) -> str:
         # Process options to extract configuration
         job_spec = {}
@@ -348,7 +377,7 @@ class KubernetesBackend(RuntimeBackend):
 
         return train_job_name
 
-    def list_jobs(self, runtime: Optional[types.Runtime] = None) -> list[types.TrainJob]:
+    def list_jobs(self, runtime: types.Runtime | None = None) -> list[types.TrainJob]:
         result = []
         try:
             thread = self.custom_api.list_namespaced_custom_object(
@@ -445,7 +474,7 @@ class KubernetesBackend(RuntimeBackend):
         status: set[str] = {constants.TRAINJOB_COMPLETE},
         timeout: int = 600,
         polling_interval: int = 2,
-        callbacks: Optional[list[Callable[[types.TrainJob], None]]] = None,
+        callbacks: list[Callable[[types.TrainJob], None]] | None = None,
     ) -> types.TrainJob:
         job_statuses = {
             constants.TRAINJOB_CREATED,
@@ -747,15 +776,16 @@ class KubernetesBackend(RuntimeBackend):
 
     def _get_trainjob_spec(
         self,
-        runtime: Optional[Union[str, types.Runtime]] = None,
-        initializer: Optional[types.Initializer] = None,
-        trainer: Optional[
-            Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
-        ] = None,
-        trainer_overrides: Optional[dict[str, Any]] = None,
-        spec_labels: Optional[dict[str, str]] = None,
-        spec_annotations: Optional[dict[str, str]] = None,
-        pod_template_overrides: Optional[models.IoK8sApiCoreV1PodTemplateSpec] = None,
+        runtime: str | types.Runtime | None = None,
+        initializer: types.Initializer | None = None,
+        trainer: types.CustomTrainer
+        | types.CustomTrainerContainer
+        | types.BuiltinTrainer
+        | None = None,
+        trainer_overrides: dict[str, Any] | None = None,
+        spec_labels: dict[str, str] | None = None,
+        spec_annotations: dict[str, str] | None = None,
+        pod_template_overrides: models.IoK8sApiCoreV1PodTemplateSpec | None = None,
     ) -> models.TrainerV1alpha1TrainJobSpec:
         """Get TrainJob spec from the given parameters"""
 

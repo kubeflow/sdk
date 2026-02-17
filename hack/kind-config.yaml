@@ -1,0 +1,9 @@
+# Kind cluster config for Spark E2E: extra worker nodes for allocatable CPU/memory.
+# Single-node Kind often has "Insufficient cpu" when scheduling driver + executors.
+# 1 control-plane + 2 workers gives 3x capacity for multiple sessions or larger examples.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+  - role: worker
+  - role: worker

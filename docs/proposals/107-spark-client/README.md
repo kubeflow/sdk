@@ -159,7 +159,7 @@ resources_per_executor = {
 ### Structured Types
 
 ```python
-from kubeflow.spark.types import Driver, Executor
+from kubeflow.spark import Driver, Executor
 
 @dataclass
 class Driver:

@@ -8,6 +8,7 @@
 
 Latest News 🔥
 
+- [2026/01] We have our official documentation here at [Kubeflow SDK Documentation](https://sdk.kubeflow.org/en/latest/)
 - [2025/11] Please fill [this survey](https://docs.google.com/forms/d/e/1FAIpQLSet_IAFQzMMDWolzFt5LI9lhzqOOStjIGHxgYqKBnVcRtDfrw/viewform)
   to shape the future of Kubeflow SDK.
 - [2025/11] The Kubeflow SDK v0.2 is officially released. Check out
@@ -156,6 +157,14 @@ for version in client.list_model_versions("my-model"):
     print(f"Version: {version.name}")
 ```
 
+You can also initialize the client using different port configurations:
+
+```python
+ModelRegistryClient("https://example.org", port=456)  # Explicit port argument
+ModelRegistryClient("https://example.org:456")        # Port parsed from base_url
+ModelRegistryClient("https://example.org")            # Default port (443 for https, 8080 for http)
+```
+
 ## Local Development
 
 Kubeflow Trainer client supports local development without needing a Kubernetes cluster.
@@ -205,8 +214,7 @@ Kubeflow SDK is a community project and is still under active development. We we
 
 ## Documentation
 
-<!-- TODO(kramaranya): add kubeflow sdk docs -->
-
+- **[Documentation](https://sdk.kubeflow.org/en/latest/)**: Kubeflow SDK Official Documentation
 - **[Blog Post Announcement](https://blog.kubeflow.org/sdk/intro/)**: Introducing the Kubeflow SDK:
   A Pythonic API to Run AI Workloads at Scale
 - **[Design Document](https://docs.google.com/document/d/1rX7ELAHRb_lvh0Y7BK1HBYAbA0zi9enB0F_358ZC58w/edit)**: Kubeflow SDK design proposal

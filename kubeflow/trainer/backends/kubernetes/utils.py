@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 from dataclasses import fields
 import inspect
 import os
 import textwrap
-from typing import Any, Callable, Optional, Union
+from typing import Any
 from urllib.parse import urlparse
 
 from kubeflow_trainer_api import models
@@ -26,8 +27,8 @@ from kubeflow.trainer.types import types
 
 
 def get_container_devices(
-    resources: Optional[models.IoK8sApiCoreV1ResourceRequirements],
-) -> Optional[tuple[str, str]]:
+    resources: models.IoK8sApiCoreV1ResourceRequirements | None,
+) -> tuple[str, str] | None:
     """
     Get the device type and device count for the given container.
     """
@@ -66,7 +67,7 @@ def get_container_devices(
 
 def get_runtime_trainer_container(
     replicated_jobs: list[models.JobsetV1alpha2ReplicatedJob],
-) -> Optional[models.IoK8sApiCoreV1Container]:
+) -> models.IoK8sApiCoreV1Container | None:
     """
     Get the runtime node container from the given replicated jobs.
     """
@@ -149,7 +150,7 @@ def get_runtime_trainer(
 def get_trainjob_initializer_step(
     pod_name: str,
     pod_spec: models.IoK8sApiCoreV1PodSpec,
-    pod_status: Optional[models.IoK8sApiCoreV1PodStatus],
+    pod_status: models.IoK8sApiCoreV1PodStatus | None,
 ) -> types.Step:
     """
     Get the TrainJob initializer step from the given Pod name, spec, and status.
@@ -176,7 +177,7 @@ def get_trainjob_initializer_step(
 def get_trainjob_node_step(
     pod_name: str,
     pod_spec: models.IoK8sApiCoreV1PodSpec,
-    pod_status: Optional[models.IoK8sApiCoreV1PodStatus],
+    pod_status: models.IoK8sApiCoreV1PodStatus | None,
     trainjob_runtime: types.Runtime,
     replicated_job_name: str,
     job_index: int,
@@ -299,9 +300,9 @@ def get_script_for_python_packages(
 def get_command_using_train_func(
     runtime: types.Runtime,
     train_func: Callable,
-    train_func_parameters: Optional[dict[str, Any]],
+    train_func_parameters: dict[str, Any] | None,
     pip_index_urls: list[str],
-    packages_to_install: Optional[list[str]],
+    packages_to_install: list[str] | None,
 ) -> list[str]:
     """
     Get the Trainer container command from the given training function and parameters.
@@ -369,7 +370,7 @@ def get_command_using_train_func(
 
 def get_trainer_cr_from_custom_trainer(
     runtime: types.Runtime,
-    trainer: Union[types.CustomTrainer, types.CustomTrainerContainer],
+    trainer: types.CustomTrainer | types.CustomTrainerContainer,
 ) -> models.TrainerV1alpha1Trainer:
     """
     Get the Trainer CR from the custom trainer.
@@ -414,7 +415,7 @@ def get_trainer_cr_from_custom_trainer(
 def get_trainer_cr_from_builtin_trainer(
     runtime: types.Runtime,
     trainer: types.BuiltinTrainer,
-    initializer: Optional[types.Initializer] = None,
+    initializer: types.Initializer | None = None,
 ) -> models.TrainerV1alpha1Trainer:
     """
     Get the Trainer CR from the builtin trainer.
@@ -443,7 +444,7 @@ def get_trainer_cr_from_builtin_trainer(
 
 def get_args_using_torchtune_config(
     fine_tuning_config: types.TorchTuneConfig,
-    initializer: Optional[types.Initializer] = None,
+    initializer: types.Initializer | None = None,
 ) -> list[str]:
     """
     Get the Trainer args from the TorchTuneConfig.
@@ -589,11 +590,9 @@ def get_optional_initializer_envs(
 
 
 def get_dataset_initializer(
-    dataset: Union[
-        types.HuggingFaceDatasetInitializer,
-        types.S3DatasetInitializer,
-        types.DataCacheInitializer,
-    ],
+    dataset: types.HuggingFaceDatasetInitializer
+    | types.S3DatasetInitializer
+    | types.DataCacheInitializer,
 ) -> models.TrainerV1alpha1DatasetInitializer:
     """
     Get the TrainJob dataset initializer from the given config.
@@ -623,7 +622,7 @@ def get_dataset_initializer(
 
 
 def get_model_initializer(
-    model: Union[types.HuggingFaceModelInitializer, types.S3ModelInitializer],
+    model: types.HuggingFaceModelInitializer | types.S3ModelInitializer,
 ) -> models.TrainerV1alpha1ModelInitializer:
     """
     Get the TrainJob model initializer from the given config.

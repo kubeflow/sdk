@@ -35,7 +35,7 @@ Configuration options:
    Built-in runtimes packaged with kubeflow-trainer are used as default fallback.
 """
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -59,9 +59,21 @@ class TrainingRuntimeSource(BaseModel):
 class ContainerBackendConfig(BaseModel):
     pull_policy: str = Field(default="IfNotPresent")
     auto_remove: bool = Field(default=True)
-    container_host: Optional[str] = Field(default=None)
-    container_runtime: Optional[Literal["docker", "podman"]] = Field(default=None)
+    container_host: str | None = Field(default=None)
+    container_runtime: Literal["docker", "podman"] | None = Field(default=None)
     runtime_source: TrainingRuntimeSource = Field(
         default_factory=TrainingRuntimeSource,
         description="Configuration for training runtime sources",
+    )
+    dataset_initializer_image: str = Field(
+        default="ghcr.io/kubeflow/trainer/dataset-initializer:latest",
+        description="Container image for dataset initializers",
+    )
+    model_initializer_image: str = Field(
+        default="ghcr.io/kubeflow/trainer/model-initializer:latest",
+        description="Container image for model initializers",
+    )
+    initializer_timeout: int = Field(
+        default=600,
+        description="Timeout in seconds for initializer containers (default 10 minutes)",
     )

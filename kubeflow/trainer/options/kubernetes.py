@@ -15,7 +15,7 @@
 """Kubernetes-specific training options for the Kubeflow Trainer SDK."""
 
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any
 
 from kubeflow.trainer.backends.base import RuntimeBackend
 from kubeflow.trainer.types.types import BuiltinTrainer, CustomTrainer, CustomTrainerContainer
@@ -34,8 +34,8 @@ class ContainerOverride:
     """
 
     name: str
-    env: Optional[list[dict]] = None
-    volume_mounts: Optional[list[dict]] = None
+    env: list[dict] | None = None
+    volume_mounts: list[dict] | None = None
 
     def __post_init__(self):
         """Validate the container override configuration."""
@@ -105,15 +105,15 @@ class PodSpecOverride:
         image_pull_secrets: Image pull secrets for the pods.
     """
 
-    service_account_name: Optional[str] = None
-    node_selector: Optional[dict[str, str]] = None
-    affinity: Optional[dict] = None
-    tolerations: Optional[list[dict]] = None
-    volumes: Optional[list[dict]] = None
-    init_containers: Optional[list[ContainerOverride]] = None
-    containers: Optional[list[ContainerOverride]] = None
-    scheduling_gates: Optional[list[dict]] = None
-    image_pull_secrets: Optional[list[dict]] = None
+    service_account_name: str | None = None
+    node_selector: dict[str, str] | None = None
+    affinity: dict | None = None
+    tolerations: list[dict] | None = None
+    volumes: list[dict] | None = None
+    init_containers: list[ContainerOverride] | None = None
+    containers: list[ContainerOverride] | None = None
+    scheduling_gates: list[dict] | None = None
+    image_pull_secrets: list[dict] | None = None
 
 
 @dataclass
@@ -127,8 +127,8 @@ class PodTemplateOverride:
     """
 
     target_jobs: list[str]
-    metadata: Optional[dict] = None
-    spec: Optional[PodSpecOverride] = None
+    metadata: dict | None = None
+    spec: PodSpecOverride | None = None
 
 
 @dataclass
@@ -147,7 +147,7 @@ class Labels:
     def __call__(
         self,
         job_spec: dict[str, Any],
-        trainer: Optional[Union[CustomTrainer, BuiltinTrainer]],
+        trainer: CustomTrainer | BuiltinTrainer | None,
         backend: RuntimeBackend,
     ) -> None:
         """Apply labels to the job specification.
@@ -188,7 +188,7 @@ class Annotations:
     def __call__(
         self,
         job_spec: dict[str, Any],
-        trainer: Optional[Union[CustomTrainer, BuiltinTrainer]],
+        trainer: CustomTrainer | BuiltinTrainer | None,
         backend: RuntimeBackend,
     ) -> None:
         """Apply annotations to the job specification.
@@ -232,7 +232,7 @@ class SpecLabels:
     def __call__(
         self,
         job_spec: dict[str, Any],
-        trainer: Optional[Union[CustomTrainer, BuiltinTrainer]],
+        trainer: CustomTrainer | BuiltinTrainer | None,
         backend: RuntimeBackend,
     ) -> None:
         """Apply spec-level labels to the job specification.
@@ -276,7 +276,7 @@ class SpecAnnotations:
     def __call__(
         self,
         job_spec: dict[str, Any],
-        trainer: Optional[Union[CustomTrainer, BuiltinTrainer]],
+        trainer: CustomTrainer | BuiltinTrainer | None,
         backend: RuntimeBackend,
     ) -> None:
         """Apply spec-level annotations to the job specification.
@@ -320,7 +320,7 @@ class PodTemplateOverrides:
     def __call__(
         self,
         job_spec: dict[str, Any],
-        trainer: Optional[Union[CustomTrainer, BuiltinTrainer]],
+        trainer: CustomTrainer | BuiltinTrainer | None,
         backend: RuntimeBackend,
     ) -> None:
         """Apply pod template overrides to the job specification.
@@ -413,7 +413,7 @@ class TrainerCommand:
     def __call__(
         self,
         job_spec: dict[str, Any],
-        trainer: Optional[Union[CustomTrainer, BuiltinTrainer, CustomTrainerContainer]],
+        trainer: CustomTrainer | BuiltinTrainer | CustomTrainerContainer | None,
         backend: RuntimeBackend,
     ) -> None:
         """Apply trainer command override to the job specification.
@@ -465,7 +465,7 @@ class TrainerArgs:
     def __call__(
         self,
         job_spec: dict[str, Any],
-        trainer: Optional[Union[CustomTrainer, BuiltinTrainer, CustomTrainerContainer]],
+        trainer: CustomTrainer | BuiltinTrainer | CustomTrainerContainer | None,
         backend: RuntimeBackend,
     ) -> None:
         """Apply trainer args override to the job specification.

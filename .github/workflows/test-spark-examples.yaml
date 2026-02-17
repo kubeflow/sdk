@@ -1,0 +1,100 @@
+name: Spark Examples E2E Test
+
+on:
+  pull_request:
+    paths:
+      - 'examples/spark/**'
+      - 'kubeflow/spark/**'
+      - 'test/e2e/spark/**'
+      - 'hack/crds/**'
+      - 'hack/e2e-setup-cluster.sh'
+      - '.github/workflows/test-spark-examples.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  example-validation:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kubernetes-version: ["1.32.0"]
+
+    steps:
+      - name: Free disk space (Ubuntu runner)
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/share/boost
+          sudo apt-get clean
+          docker system prune -af || true
+          df -h
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv and dependencies
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install project and test deps
+        run: |
+          uv sync --extra spark
+          uv pip install pytest pytest-timeout
+
+      - name: Install Kind, kubectl, and Helm
+        run: |
+          curl -Lo ./kind "https://kind.sigs.k8s.io/dl/v0.26.0/kind-linux-amd64" && chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind
+          curl -Lo ./kubectl "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && chmod +x ./kubectl && sudo mv ./kubectl /usr/local/bin/kubectl
+          curl -sSfL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - name: Checkout spark-operator
+        uses: actions/checkout@v6
+        with:
+          repository: kubeflow/spark-operator
+          path: spark-operator
+          fetch-depth: 1
+
+      - name: Build Spark Operator image
+        run: |
+          docker build -t ghcr.io/kubeflow/spark-operator/controller:local ./spark-operator
+        timeout-minutes: 10
+
+      - name: Setup Kind cluster with Spark Operator
+        run: |
+          make test-e2e-setup-cluster K8S_VERSION=${{ matrix.kubernetes-version }}
+        env:
+          SPARK_TEST_CLUSTER: spark-test
+          SPARK_TEST_NAMESPACE: spark-test
+          SPARK_OPERATOR_IMAGE_TAG: local
+        timeout-minutes: 15
+
+      - name: Build and load Spark E2E runner image (in-cluster)
+        run: |
+          docker build -f hack/Dockerfile.spark-e2e-runner -t spark-e2e-runner:local .
+          kind load docker-image spark-e2e-runner:local --name spark-test
+        timeout-minutes: 5
+
+      - name: Run example validation tests
+        run: uv run pytest test/e2e/spark/test_spark_examples.py -v --tb=short
+        env:
+          SPARK_TEST_CLUSTER: spark-test
+          SPARK_TEST_NAMESPACE: spark-test
+          SPARK_E2E_DEBUG: "1"
+          SPARK_E2E_RUN_IN_CLUSTER: "1"
+          SPARK_E2E_RUNNER_IMAGE: spark-e2e-runner:local
+        timeout-minutes: 10
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          kubectl get pods -n spark-test
+          kubectl get sparkconnect -n spark-test 2>/dev/null || true
+          kubectl logs -n spark-test -l app.kubernetes.io/component=server --tail=100 || true
