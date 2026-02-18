@@ -1,0 +1,236 @@
+name: Validate Lockfile Security
+
+on:
+  pull_request:
+    paths:
+      - 'uv.lock'
+      - 'pyproject.toml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check-security-regressions:
+    runs-on: ubuntu-latest
+    # Only run on PRs from the main repository, not forks
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          path: pr-code
+
+      - name: Checkout base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          path: base-code
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Verify lockfile is in sync with pyproject.toml
+        run: |
+          cd pr-code
+          echo "Checking if uv.lock is in sync with pyproject.toml..."
+          if ! uv lock --check; then
+            echo ""
+            echo "ERROR: uv.lock is out of sync with pyproject.toml"
+            echo ""
+            echo "This means pyproject.toml was modified but 'uv lock' was not run."
+            echo ""
+            echo "To fix this:"
+            echo "  1. Run: uv lock"
+            echo "  2. Commit the updated uv.lock file"
+            echo "  3. Push your changes"
+            echo ""
+            exit 1
+          fi
+          echo "Lockfile is in sync"
+
+      - name: Scan PR branch lockfile for vulnerabilities
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: 'fs'
+          scan-ref: 'pr-code/uv.lock'
+          scanners: 'vuln'
+          format: 'json'
+          output: 'trivy-pr.json'
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+          exit-code: 0
+
+      - name: Scan base branch lockfile for vulnerabilities
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: 'fs'
+          scan-ref: 'base-code/uv.lock'
+          scanners: 'vuln'
+          format: 'json'
+          output: 'trivy-base.json'
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+          exit-code: 0
+
+      - name: Compare scans and detect regressions
+        id: compare
+        run: |
+          echo "=== Comparing CVE scans ==="
+
+          # Extract CVE+Package pairs from base branch (version not included in comparison)
+          # A CVE is identified by its ID + affected package, regardless of version
+          # Use // [] to provide empty array default if Results or Vulnerabilities is null
+          BASE_CVES=$(jq -r '.Results[].Vulnerabilities // [] | .[] | "\(.VulnerabilityID)|\(.PkgName)"' trivy-base.json 2>/dev/null | sort -u || true)
+
+          # Extract CVE+Package pairs from PR branch
+          PR_CVES=$(jq -r '.Results[].Vulnerabilities // [] | .[] | "\(.VulnerabilityID)|\(.PkgName)"' trivy-pr.json 2>/dev/null | sort -u || true)
+
+          # Count CVEs
+          if [ -z "$BASE_CVES" ]; then
+            BASE_COUNT=0
+          else
+            BASE_COUNT=$(echo "$BASE_CVES" | wc -l)
+          fi
+
+          if [ -z "$PR_CVES" ]; then
+            PR_COUNT=0
+          else
+            PR_COUNT=$(echo "$PR_CVES" | wc -l)
+          fi
+
+          echo "Base branch CVEs: $BASE_COUNT"
+          echo "PR branch CVEs: $PR_COUNT"
+
+          # Find NEW CVEs (in PR but not in base)
+          if [ -n "$PR_CVES" ]; then
+            NEW_CVES=$(comm -13 <(echo "$BASE_CVES") <(echo "$PR_CVES") || echo "")
+          else
+            NEW_CVES=""
+          fi
+
+          if [ -n "$NEW_CVES" ]; then
+            echo ""
+            echo "NEW CVEs DETECTED:"
+            echo "$NEW_CVES"
+            echo ""
+
+            # Format for PR comment
+            echo "new_cves_found=true" >> $GITHUB_OUTPUT
+            echo "new_cves<<EOF" >> $GITHUB_OUTPUT
+
+            # Create markdown table
+            echo "| CVE ID | Package | Version |" >> $GITHUB_OUTPUT
+            echo "| :--- | :--- | :--- |" >> $GITHUB_OUTPUT
+
+            while IFS='|' read -r cve pkg; do
+              [ -z "$cve" ] && continue
+              # Look up version and advisory URL from PR scan results
+              CVE_DATA=$(jq -r --arg cve "$cve" --arg pkg "$pkg" '.Results[].Vulnerabilities // [] | .[] | select(.VulnerabilityID == $cve and .PkgName == $pkg) | "\(.InstalledVersion)|\(.PrimaryURL)"' trivy-pr.json | head -1 || true)
+              VERSION=$(echo "$CVE_DATA" | cut -d'|' -f1)
+              ADVISORY=$(echo "$CVE_DATA" | cut -d'|' -f2)
+
+              if [ -n "$ADVISORY" ] && [ "$ADVISORY" != "null" ]; then
+                echo "| [$cve]($ADVISORY) | $pkg | $VERSION |" >> $GITHUB_OUTPUT
+              else
+                echo "| $cve | $pkg | $VERSION |" >> $GITHUB_OUTPUT
+              fi
+            done <<< "$NEW_CVES"
+
+            echo "EOF" >> $GITHUB_OUTPUT
+
+            exit 1
+          else
+            echo "No new HIGH/CRITICAL CVEs introduced by this PR"
+            echo "new_cves_found=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment on PR with CVE regression details
+        if: always() && steps.compare.outputs.new_cves_found == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const newCves = `${{ steps.compare.outputs.new_cves }}`;
+            const commentMarker = '<!-- lockfile-security-check -->';
+            const body = `${commentMarker}
+            ## Security Regression Detected
+
+            This PR introduces new **HIGH or CRITICAL** vulnerabilities that are not present in the base branch:
+
+            ${newCves}
+
+            ### Why This Failed
+            The lockfile changes in this PR would introduce security vulnerabilities. The base branch (\`${{ github.base_ref }}\`) does not have these CVEs.
+
+            ### How to Fix
+            1. Run \`uv lock --upgrade-package <package>\` for each affected package
+            2. If the package is a transitive dependency, try upgrading its parent packages
+            3. If upgrades don't resolve it, consider:
+               - Finding an alternative dependency without CVEs
+               - Consulting with the security team for risk assessment
+
+            ### Need Help?
+            If you believe this is a false positive or have questions, please comment below or contact the security team.
+            `;
+
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+
+            const existingComment = comments.find(comment =>
+              comment.body.includes(commentMarker)
+            );
+
+            // Update existing comment or create new one
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                comment_id: existingComment.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            }
+
+      - name: Delete security comment when CVEs are resolved
+        if: success() && steps.compare.outputs.new_cves_found == 'false'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const commentMarker = '<!-- lockfile-security-check -->';
+
+            // Find existing security comment
+            const { data: comments } = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+
+            const existingComment = comments.find(comment =>
+              comment.body.includes(commentMarker)
+            );
+
+            // Delete it if found (CVEs have been resolved)
+            if (existingComment) {
+              await github.rest.issues.deleteComment({
+                comment_id: existingComment.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+              console.log('Security comment deleted - CVEs resolved!');
+            }
