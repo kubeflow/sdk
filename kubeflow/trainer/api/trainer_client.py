@@ -63,10 +63,13 @@ class TrainerClient:
             raise ValueError(f"Invalid backend config '{backend_config}'")
 
     def list_runtimes(self) -> list[types.Runtime]:
-        """List of the available runtimes.
+        """List of the available runtimes, preferring namespaced over cluster-scoped for duplicates.
 
         Returns:
-            A list of available training runtimes. If no runtimes exist, an empty list is returned.
+            A list of training runtimes from both namespace-scoped and
+            cluster-scoped resources. If duplicates exist, the
+            namespace-scoped runtime is preferred. Returns an empty list
+            if no runtimes are found.
 
         Raises:
             TimeoutError: Timeout to list runtimes.
