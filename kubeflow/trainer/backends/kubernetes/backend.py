@@ -184,21 +184,12 @@ class KubernetesBackend(RuntimeBackend):
 
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(
-                f"Timeout while getting namespaced TrainingRuntime {self.namespace}/{name}"
+                f"Timeout to get {constants.TRAINING_RUNTIME_KIND}: {self.namespace}/{name}"
             ) from e
-
-        except client.exceptions.ApiException as e:
-            if e.status != 404:
-                raise RuntimeError(
-                    f"Failed to get namespaced TrainingRuntime "
-                    f"{self.namespace}/{name}: {e.status} {e.reason}"
-                ) from e
-
-            logger.info(
-                "Namespaced TrainingRuntime %s/%s not found, falling back to cluster-scoped",
-                self.namespace,
-                name,
-            )
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to get {constants.TRAINING_RUNTIME_KIND}: {self.namespace}/{name}"
+            ) from e
 
         try:
             cluster_thread = self.custom_api.get_cluster_custom_object(
@@ -214,9 +205,13 @@ class KubernetesBackend(RuntimeBackend):
             return self.__get_runtime_from_cr(runtime)
 
         except multiprocessing.TimeoutError as e:
-            raise TimeoutError(f"Timeout while getting cluster TrainingRuntime '{name}'") from e
+            raise TimeoutError(
+                f"Timeout to get {constants.CLUSTER_TRAINING_RUNTIME_KIND}: {self.namespace}/{name}"
+            ) from e
         except Exception as e:
-            raise RuntimeError(f"Failed to get cluster TrainingRuntime: '{name}'") from e
+            raise RuntimeError(
+                f"Failed to get {constants.CLUSTER_TRAINING_RUNTIME_KIND}: {self.namespace}/{name}"
+            ) from e
 
     def get_runtime_packages(self, runtime: types.Runtime):
         if runtime.trainer.trainer_type == types.TrainerType.BUILTIN_TRAINER:
