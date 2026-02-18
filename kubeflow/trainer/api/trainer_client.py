@@ -83,7 +83,9 @@ class TrainerClient:
             name: Name of the runtime.
 
         Returns:
-            A runtime object.
+            A runtime object. If both namespace-scoped and
+            cluster-scoped runtimes exist with the same name, the
+            namespace-scoped runtime is returned.
         """
         return self.backend.get_runtime(name=name)
 
