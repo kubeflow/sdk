@@ -245,13 +245,6 @@ class TrainerType(Enum):
     BUILTIN_TRAINER = BuiltinTrainer.__name__
 
 
-class RuntimeScope(Enum):
-    """Scope for training runtimes."""
-
-    NAMESPACE = "project"
-    CLUSTER = "cluster"
-
-
 # Representation for the Trainer of the runtime.
 @dataclass
 class RuntimeTrainer:
@@ -277,11 +270,6 @@ class Runtime:
     name: str
     trainer: RuntimeTrainer
     pretrained_model: str | None = None
-    scope: RuntimeScope | None = None
-
-    def __post_init__(self):
-        if self.scope is not None and not isinstance(self.scope, RuntimeScope):
-            raise ValueError(f"Scope must be a 'RuntimeScope' or None, got '{type(self.scope)}'")
 
 
 # Representation for the TrainJob steps.

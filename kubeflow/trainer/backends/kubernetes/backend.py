@@ -567,12 +567,6 @@ class KubernetesBackend(RuntimeBackend):
         runtime_cr: models.TrainerV1alpha1ClusterTrainingRuntime
         | models.TrainerV1alpha1TrainingRuntime,
     ) -> types.Runtime:
-        scope = (
-            types.RuntimeScope.CLUSTER
-            if isinstance(runtime_cr, models.TrainerV1alpha1ClusterTrainingRuntime)
-            else types.RuntimeScope.NAMESPACE
-        )
-
         if not (
             runtime_cr.metadata
             and runtime_cr.metadata.name
@@ -602,7 +596,6 @@ class KubernetesBackend(RuntimeBackend):
                 runtime_cr.spec.template.spec.replicated_jobs,
                 runtime_cr.spec.ml_policy,
             ),
-            scope=scope,
         )
 
     def _read_pod_logs(self, pod_name: str, container_name: str, follow: bool) -> Iterator[str]:

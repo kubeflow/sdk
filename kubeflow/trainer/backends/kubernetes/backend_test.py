@@ -665,7 +665,6 @@ def get_container() -> models.IoK8sApiCoreV1Container:
 
 def create_runtime_type(
     name: str,
-    scope: types.RuntimeScope,
 ) -> types.Runtime:
     """Create a mock Runtime object for testing."""
     trainer = types.RuntimeTrainer(
@@ -679,7 +678,7 @@ def create_runtime_type(
     trainer.set_command(constants.TORCH_COMMAND)
     # Namespaced TrainingRuntime objects and default torch runtime use namespace scope;
     # other runtimes created as cluster-scoped use cluster scope.
-    return types.Runtime(name=name, trainer=trainer, scope=scope)
+    return types.Runtime(name=name, trainer=trainer)
 
 
 def get_train_job_data_type(
@@ -703,7 +702,6 @@ def get_train_job_data_type(
         runtime=types.Runtime(
             name=runtime_name,
             trainer=trainer,
-            scope=types.RuntimeScope.NAMESPACE,
         ),
         steps=[
             types.Step(
@@ -834,7 +832,6 @@ def test_verify_backend(test_case):
             config={"name": TORCH_RUNTIME},
             expected_output=create_runtime_type(
                 name=TORCH_RUNTIME,
-                scope=types.RuntimeScope.NAMESPACE,
             ),
         ),
         TestCase(
@@ -877,10 +874,10 @@ def test_get_runtime(kubernetes_backend, test_case):
             expected_status=SUCCESS,
             config={"name": LIST_RUNTIMES},
             expected_output=[
-                create_runtime_type(name="runtime-1", scope=types.RuntimeScope.NAMESPACE),
-                create_runtime_type(name="ns-runtime-2", scope=types.RuntimeScope.NAMESPACE),
-                create_runtime_type(name="runtime-2", scope=types.RuntimeScope.CLUSTER),
-                create_runtime_type(name="runtime-3", scope=types.RuntimeScope.CLUSTER),
+                create_runtime_type(name="runtime-1"),
+                create_runtime_type(name="ns-runtime-2"),
+                create_runtime_type(name="runtime-2"),
+                create_runtime_type(name="runtime-3"),
             ],
         ),
         # namespace retrieval fails (timeout) but cluster succeeds -> expect TimeoutError
@@ -975,7 +972,6 @@ def test_list_runtimes(kubernetes_backend, test_case):
             config={
                 "runtime": create_runtime_type(
                     name=TORCH_RUNTIME,
-                    scope=types.RuntimeScope.NAMESPACE,
                 )
             },
         ),
