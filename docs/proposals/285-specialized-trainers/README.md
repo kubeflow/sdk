@@ -2,7 +2,7 @@
 
 <!--
 This proposal targets the kubeflow/sdk repository.
-Directory: proposals/specialized-trainers/README.md
+Directory: docs/proposals/285-specialized-trainers/README.md
 -->
 
 |                |                                                              |
