@@ -128,7 +128,7 @@ This proposal benefits all three personas defined in KEP-2170:
    `JAXTrainer`, `XGBoostTrainer`) that auto-discover runtimes by the
    `trainer.kubeflow.org/framework` label and validate runtime compatibility.
 3. Provide a clear extension point (Tier 2) for community-contributed, application-level
-   trainers (e.g., `HuggingFaceTrainer`, `DeepSpeedTrainer`).
+   trainers (e.g., `TransformersTrainer`, `DeepSpeedTrainer`).
 4. Introduce a `RuntimeConfig` dataclass to cleanly separate per-job runtime environment
    settings from training-loop and scaling configuration.
 5. Maintain 100% backward compatibility with the existing `CustomTrainer`,
