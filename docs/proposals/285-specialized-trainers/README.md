@@ -239,7 +239,7 @@ polymorphically through a single, stable interface.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from typing import Callable, Optional, ClassVar
 
 @dataclass
 class BaseTrainer(ABC):
