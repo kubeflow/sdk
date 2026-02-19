@@ -483,7 +483,7 @@ concrete implementations are deferred to follow-up proposals.
 # Example: future HuggingFaceTrainer (NOT part of this proposal's implementation scope)
 
 @dataclass
-class HuggingFaceTrainer(BaseTrainer):
+class TransformersTrainer(BaseTrainer):
     """Trainer for HuggingFace Transformers training.
 
     Wraps HuggingFace's Trainer API and maps to a PyTorch runtime.
