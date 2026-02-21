@@ -1,11 +1,20 @@
 import abc
+from typing import Dict, Type, Any
 
-# 1. The Registry: This is the core idea for Project 10
-BACKEND_REGISTRY = {}
+# 1. The Registry: Now with Type Hinting as requested by review
+BACKEND_REGISTRY: Dict[str, Type['BaseBackend']] = {}
 
-def register_backend(name):
-    """Decorator to register new backends dynamically."""
-    def wrapper(cls):
+def register_backend(name: str):
+    """Decorator to register new backends dynamically with validation."""
+    def wrapper(cls: Type[Any]):
+        # Validation: Ensure we don't overwrite existing backends
+        if name in BACKEND_REGISTRY:
+            raise ValueError(f"Backend '{name}' is already registered.")
+        
+        # Validation: Ensure the class inherits from BaseBackend
+        if not issubclass(cls, BaseBackend):
+            raise TypeError(f"Class {cls.__name__} must inherit from BaseBackend")
+            
         BACKEND_REGISTRY[name] = cls
         return cls
     return wrapper
@@ -13,33 +22,34 @@ def register_backend(name):
 # 2. The Base Class template
 class BaseBackend(abc.ABC):
     @abc.abstractmethod
-    def train(self):
+    def train(self) -> str:
         pass
 
-# 3. Dynamic Implementation (How we will add new LLM backends)
+# 3. Dynamic Implementation
 @register_backend("kubernetes")
 class KubernetesBackend(BaseBackend):
-    def train(self):
+    def train(self) -> str:
         return "Training on Kubernetes Cluster..."
 
 @register_backend("local")
 class LocalBackend(BaseBackend):
-    def train(self):
+    def train(self) -> str:
         return "Training on Local Process..."
 
-# 4. The Refactored Client that uses the Registry
+# 4. The Refactored Client
 class TrainerClient:
-    def __init__(self, backend_type):
+    def __init__(self, backend_type: str):
         backend_class = BACKEND_REGISTRY.get(backend_type)
         if not backend_class:
-            raise ValueError(f"Backend {backend_type} not found!")
+            raise ValueError(f"Backend '{backend_type}' not found in registry!")
         self.backend = backend_class()
 
-    def train(self):
-        print(self.backend.train())
+    def train(self) -> str:
+        # Returning value instead of printing for better API design
+        return self.backend.train()
 
 # --- Test the Logic ---
 if __name__ == "__main__":
     print("Available Backends:", list(BACKEND_REGISTRY.keys()))
     client = TrainerClient("kubernetes")
-    client.train()
+    print(f"Result: {client.train()}")
