@@ -22,6 +22,7 @@ from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.api.spark_client import SparkClient
 from kubeflow.spark.types.options import Name
 from kubeflow.spark.types.types import SparkConnectInfo, SparkConnectState
+from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 
 
 @pytest.fixture
@@ -62,25 +63,38 @@ def spark_client(mock_backend):
         yield client
 
 
-class TestSparkClientInit:
-    """Tests for SparkClient initialization."""
-
-    def test_default_backend(self):
-        """C01: Init with default creates KubernetesBackendConfig."""
-        with patch("kubeflow.spark.api.spark_client.KubernetesBackend"):
-            client = SparkClient()
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="Init with default creates KubernetesBackendConfig",
+            config={"backend_config": None},
+            expected_status=SUCCESS,
+        ),
+        TestCase(
+            name="Init with custom namespace",
+            config={"backend_config": KubernetesBackendConfig(namespace="spark")},
+            expected_status=SUCCESS,
+        ),
+        TestCase(
+            name="Init with invalid backend raises ValueError",
+            config={"backend_config": "invalid"},
+            expected_status=FAILED,
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_spark_client_init(test_case: TestCase):
+    """Test SparkClient initialization."""
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
+        if test_case.expected_status == SUCCESS:
+            client = SparkClient(backend_config=test_case.config["backend_config"])
             assert client.backend is not None
-
-    def test_custom_namespace(self):
-        """C02: Init with custom namespace."""
-        with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock:
-            SparkClient(backend_config=KubernetesBackendConfig(namespace="spark"))
-            mock.assert_called_once()
-
-    def test_invalid_backend(self):
-        """C03: Init with invalid backend raises ValueError."""
-        with pytest.raises(ValueError):
-            SparkClient(backend_config="invalid")
+            if test_case.config["backend_config"]:
+                mock_backend.assert_called_once_with(test_case.config["backend_config"])
+        else:
+            with pytest.raises(test_case.expected_error):
+                SparkClient(backend_config=test_case.config["backend_config"])
 
 
 class TestSparkClientConnect:
@@ -121,31 +135,49 @@ class TestSparkClientConnect:
         mock_backend.wait_for_session_ready.assert_not_called()
 
 
-class TestSparkClientSessionManagement:
-    """Tests for session management methods."""
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="list_sessions delegates to backend",
+            config={"method": "list_sessions", "args": []},
+            expected_output=1,  # Number of sessions in mock
+        ),
+        TestCase(
+            name="get_session delegates to backend",
+            config={"method": "get_session", "args": ["test"]},
+            expected_output="test",
+        ),
+        TestCase(
+            name="delete_session delegates to backend",
+            config={"method": "delete_session", "args": ["test"]},
+        ),
+        TestCase(
+            name="get_session_logs delegates to backend",
+            config={"method": "get_session_logs", "args": ["test"]},
+            expected_output=["log1", "log2"],
+        ),
+    ],
+)
+def test_spark_client_session_management(spark_client, mock_backend, test_case: TestCase):
+    """Test session management methods."""
+    method_name = test_case.config["method"]
+    args = test_case.config["args"]
+    method = getattr(spark_client, method_name)
 
-    def test_list_sessions(self, spark_client, mock_backend):
-        """C14: list_sessions delegates to backend."""
-        result = spark_client.list_sessions()
-        mock_backend.list_sessions.assert_called_once()
-        assert len(result) == 1
-
-    def test_get_session(self, spark_client, mock_backend):
-        """C15: get_session delegates to backend."""
-        result = spark_client.get_session("test")
-        mock_backend.get_session.assert_called_once_with("test")
-        assert result.name == "test"
-
-    def test_delete_session(self, spark_client, mock_backend):
-        """C16: delete_session delegates to backend."""
-        spark_client.delete_session("test")
-        mock_backend.delete_session.assert_called_once_with("test")
-
-    def test_get_session_logs(self, spark_client, mock_backend):
-        """C17: get_session_logs delegates to backend."""
-        mock_backend.get_session_logs.return_value = iter(["log1", "log2"])
-        list(spark_client.get_session_logs("test"))
-        mock_backend.get_session_logs.assert_called_once_with("test", follow=False)
+    if method_name == "get_session_logs":
+        mock_backend.get_session_logs.return_value = iter(test_case.expected_output)
+        result = list(method(*args))
+        assert result == test_case.expected_output
+        mock_backend.get_session_logs.assert_called_once_with(*args, follow=False)
+    else:
+        result = method(*args)
+        getattr(mock_backend, method_name).assert_called_once_with(*args)
+        if test_case.expected_output:
+            if method_name == "list_sessions":
+                assert len(result) == test_case.expected_output
+            elif method_name == "get_session":
+                assert result.name == test_case.expected_output
 
 
 class TestSparkClientConnectWithNameOption:
