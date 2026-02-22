@@ -250,7 +250,7 @@ class ContainerBackend(RuntimeBackend):
         ]
 
         logs = self._adapter.run_oneoff_container(image=runtime.trainer.image, command=command)
-        print(logs)
+        logger.info(logs)
 
     def train(
         self,

@@ -268,7 +268,7 @@ class KubernetesBackend(RuntimeBackend):
         )
 
         self.wait_for_job_status(job_name)
-        print("\n".join(self.get_job_logs(name=job_name)))
+        logger.info("\n".join(self.get_job_logs(name=job_name)))
         self.delete_job(job_name)
 
     def train(
