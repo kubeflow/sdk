@@ -38,6 +38,7 @@ Key behaviors:
 """
 
 from collections.abc import Callable, Iterator
+import concurrent.futures
 from datetime import datetime
 import logging
 import os
@@ -518,7 +519,7 @@ class ContainerBackend(RuntimeBackend):
         network_id: str,
     ):
         """
-        Run dataset and model initializers before training starts.
+        Run dataset and model initializers in parallel before training starts.
 
         Args:
             job_name: Name of the training job.
@@ -529,35 +530,52 @@ class ContainerBackend(RuntimeBackend):
         Raises:
             RuntimeError: If initializer fails to complete successfully.
         """
-        # Run dataset initializer if configured
-        if initializer.dataset:
-            dataset_init = container_utils.get_dataset_initializer(initializer.dataset, self.cfg)
-            container_utils.maybe_pull_image(
-                self._adapter, dataset_init.image, self.cfg.pull_policy
-            )
+        # Use ThreadPoolExecutor to run dataset and model initializers in parallel
+        futures = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            # Dispatch dataset initializer if configured
+            if initializer.dataset:
+                dataset_init = container_utils.get_dataset_initializer(
+                    initializer.dataset, self.cfg
+                )
+                container_utils.maybe_pull_image(
+                    self._adapter, dataset_init.image, self.cfg.pull_policy
+                )
 
-            logger.debug("Running dataset initializer")
-            self._run_single_initializer(
-                job_name=job_name,
-                container_init=dataset_init,
-                workdir=workdir,
-                network_id=network_id,
-            )
-            logger.debug("Dataset initializer completed")
+                logger.debug("Queueing dataset initializer")
+                futures.append(
+                    executor.submit(
+                        self._run_single_initializer,
+                        job_name=job_name,
+                        container_init=dataset_init,
+                        workdir=workdir,
+                        network_id=network_id,
+                    )
+                )
 
-        # Run model initializer if configured
-        if initializer.model:
-            model_init = container_utils.get_model_initializer(initializer.model, self.cfg)
-            container_utils.maybe_pull_image(self._adapter, model_init.image, self.cfg.pull_policy)
+            # Dispatch model initializer if configured
+            if initializer.model:
+                model_init = container_utils.get_model_initializer(initializer.model, self.cfg)
+                container_utils.maybe_pull_image(
+                    self._adapter, model_init.image, self.cfg.pull_policy
+                )
 
-            logger.debug("Running model initializer")
-            self._run_single_initializer(
-                job_name=job_name,
-                container_init=model_init,
-                workdir=workdir,
-                network_id=network_id,
-            )
-            logger.debug("Model initializer completed")
+                logger.debug("Queueing model initializer")
+                futures.append(
+                    executor.submit(
+                        self._run_single_initializer,
+                        job_name=job_name,
+                        container_init=model_init,
+                        workdir=workdir,
+                        network_id=network_id,
+                    )
+                )
+
+            # Wait for all initializers to complete and raise exceptions if any failed
+            for future in concurrent.futures.as_completed(futures):
+                future.result()
+
+        logger.debug("All configured initializers completed in parallel")
 
     def _run_single_initializer(
         self,
