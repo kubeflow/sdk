@@ -14,7 +14,7 @@
 
 from collections.abc import Callable, Iterator
 import copy
-import logging
+from kubeflow.common.logging import get_logger
 import multiprocessing
 import os
 import random
@@ -35,7 +35,7 @@ import kubeflow.trainer.backends.kubernetes.utils as utils
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class KubernetesBackend(RuntimeBackend):
