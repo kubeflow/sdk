@@ -20,11 +20,11 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from kubeflow.trainer.backends.localprocess.job import LocalJob
-from kubeflow.trainer.backends.localprocess.types import LocalBackendStep
 from kubeflow.trainer.backends.localprocess.backend import LocalProcessBackend
 from kubeflow.trainer.backends.localprocess.constants import LOCAL_RUNTIME_IMAGE
+from kubeflow.trainer.backends.localprocess.job import LocalJob
 from kubeflow.trainer.backends.localprocess.types import (
+    LocalBackendStep,
     LocalProcessBackendConfig,
     LocalRuntimeTrainer,
 )
@@ -483,9 +483,7 @@ def test_get_job(local_backend, mock_train_environment, test_case):
                 command=["echo", "test"],
             )
             real_job._status = step_status
-            registered_job.steps.append(
-                LocalBackendStep(step_name=f"extra-step-{i}", job=real_job)
-            )
+            registered_job.steps.append(LocalBackendStep(step_name=f"extra-step-{i}", job=real_job))
     else:
         # Mutate the existing LocalJob's internal status directly
         registered_job.steps[0].job._status = single_status
