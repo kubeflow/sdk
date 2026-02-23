@@ -16,7 +16,7 @@
 Unit tests for the LocalProcessBackend class in the Kubeflow Trainer SDK.
 """
 
-from unittest.mock import Mock, patch, create_autospec
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -473,27 +473,22 @@ def test_get_job(local_backend, mock_train_environment, test_case):
     single_status = test_case.config.get("mock_step_status")
 
     if mock_step_statuses:
-        # Replace first step and add extra steps with proper LocalJob mocks
-        first_mock = create_autospec(LocalJob, instance=True)
-        first_mock.status = mock_step_statuses[0]
-        registered_job.steps[0] = LocalBackendStep(
-            step_name=registered_job.steps[0].step_name,
-            job=first_mock,
-        )
+        # Set first step's status directly on the real LocalJob instance
+        registered_job.steps[0].job._status = mock_step_statuses[0]
+
+        # Create real LocalJob instances for additional steps
         for i, step_status in enumerate(mock_step_statuses[1:], start=1):
-            extra_mock = create_autospec(LocalJob, instance=True)
-            extra_mock.status = step_status
+            real_job = LocalJob(
+                name=f"extra-step-{i}",
+                command=["echo", "test"],
+            )
+            real_job._status = step_status
             registered_job.steps.append(
-                LocalBackendStep(step_name=f"extra-step-{i}", job=extra_mock)
+                LocalBackendStep(step_name=f"extra-step-{i}", job=real_job)
             )
     else:
-        # Replace the single step's job with a properly-typed mock
-        mock_job = create_autospec(LocalJob, instance=True)
-        mock_job.status = single_status
-        registered_job.steps[0] = LocalBackendStep(
-            step_name=registered_job.steps[0].step_name,
-            job=mock_job,
-        )
+        # Mutate the existing LocalJob's internal status directly
+        registered_job.steps[0].job._status = single_status
 
     job = local_backend.get_job(job_name)
 
