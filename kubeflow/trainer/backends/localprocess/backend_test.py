@@ -16,10 +16,12 @@
 Unit tests for the LocalProcessBackend class in the Kubeflow Trainer SDK.
 """
 
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, create_autospec
 
 import pytest
 
+from kubeflow.trainer.backends.localprocess.job import LocalJob
+from kubeflow.trainer.backends.localprocess.types import LocalBackendStep
 from kubeflow.trainer.backends.localprocess.backend import LocalProcessBackend
 from kubeflow.trainer.backends.localprocess.constants import LOCAL_RUNTIME_IMAGE
 from kubeflow.trainer.backends.localprocess.types import (
@@ -377,6 +379,55 @@ def test_train(local_backend, mock_train_environment, test_case):
     "test_case",
     [
         TestCase(
+            name="get_existing_job_has_created_status",
+            expected_status=SUCCESS,
+            config={
+                "job_name": BASIC_TRAIN_JOB_NAME,
+                "mock_step_status": constants.TRAINJOB_CREATED,
+                "expected_job_status": constants.TRAINJOB_CREATED,
+            },
+        ),
+        TestCase(
+            name="get_existing_job_has_running_status",
+            expected_status=SUCCESS,
+            config={
+                "job_name": BASIC_TRAIN_JOB_NAME,
+                "mock_step_status": constants.TRAINJOB_RUNNING,
+                "expected_job_status": constants.TRAINJOB_RUNNING,
+            },
+        ),
+        TestCase(
+            name="get_existing_job_has_complete_status",
+            expected_status=SUCCESS,
+            config={
+                "job_name": BASIC_TRAIN_JOB_NAME,
+                "mock_step_status": constants.TRAINJOB_COMPLETE,
+                "expected_job_status": constants.TRAINJOB_COMPLETE,
+            },
+        ),
+        TestCase(
+            name="get_existing_job_has_failed_status",
+            expected_status=SUCCESS,
+            config={
+                "job_name": BASIC_TRAIN_JOB_NAME,
+                "mock_step_status": constants.TRAINJOB_FAILED,
+                "expected_job_status": constants.TRAINJOB_FAILED,
+            },
+        ),
+        TestCase(
+            name="get_existing_job_failed_takes_precedence_over_running",
+            expected_status=SUCCESS,
+            config={
+                "job_name": BASIC_TRAIN_JOB_NAME,
+                # Simulates a multi-step job where one step failed and another is still running
+                "mock_step_statuses": [
+                    constants.TRAINJOB_FAILED,
+                    constants.TRAINJOB_RUNNING,
+                ],
+                "expected_job_status": constants.TRAINJOB_FAILED,
+            },
+        ),
+        TestCase(
             name="get_nonexistent_job",
             expected_status=FAILED,
             config={"job_name": "nonexistent-job"},
@@ -384,13 +435,71 @@ def test_train(local_backend, mock_train_environment, test_case):
         ),
     ],
 )
-def test_get_job(local_backend, test_case):
-    """Test LocalProcessBackend.get_job()."""
+def test_get_job(local_backend, mock_train_environment, test_case):
+    """Test LocalProcessBackend.get_job() covering all status transitions."""
     job_name = test_case.config.get("job_name")
 
     if test_case.expected_status == FAILED:
         with pytest.raises(test_case.expected_error):
             local_backend.get_job(job_name)
+        return
+
+    # Submit a real job first so it's registered in the backend
+    runtime = types.Runtime(
+        name=TORCH_RUNTIME,
+        trainer=types.RuntimeTrainer(
+            trainer_type=types.TrainerType.CUSTOM_TRAINER,
+            framework="torch",
+            num_nodes=1,
+            image=LOCAL_RUNTIME_IMAGE,
+        ),
+    )
+    trainer = types.CustomTrainer(func=dummy_training_function)
+
+    local_backend.train(
+        runtime=runtime,
+        trainer=trainer,
+        options=[Name(name=job_name)],
+    )
+
+    # Now reach into the registered job and override step statuses
+    # so we can test __get_job_status() deterministically without
+    # waiting for real subprocesses to change state.
+    registered_job = next(
+        j for j in local_backend._LocalProcessBackend__local_jobs if j.name == job_name
+    )
+
+    mock_step_statuses = test_case.config.get("mock_step_statuses")
+    single_status = test_case.config.get("mock_step_status")
+
+    if mock_step_statuses:
+        # Replace first step and add extra steps with proper LocalJob mocks
+        first_mock = create_autospec(LocalJob, instance=True)
+        first_mock.status = mock_step_statuses[0]
+        registered_job.steps[0] = LocalBackendStep(
+            step_name=registered_job.steps[0].step_name,
+            job=first_mock,
+        )
+        for i, step_status in enumerate(mock_step_statuses[1:], start=1):
+            extra_mock = create_autospec(LocalJob, instance=True)
+            extra_mock.status = step_status
+            registered_job.steps.append(
+                LocalBackendStep(step_name=f"extra-step-{i}", job=extra_mock)
+            )
+    else:
+        # Replace the single step's job with a properly-typed mock
+        mock_job = create_autospec(LocalJob, instance=True)
+        mock_job.status = single_status
+        registered_job.steps[0] = LocalBackendStep(
+            step_name=registered_job.steps[0].step_name,
+            job=mock_job,
+        )
+
+    job = local_backend.get_job(job_name)
+
+    assert job is not None
+    assert job.name == job_name
+    assert job.status == test_case.config.get("expected_job_status")
 
 
 @pytest.mark.parametrize(
