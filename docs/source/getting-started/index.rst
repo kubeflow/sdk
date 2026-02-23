@@ -69,3 +69,9 @@ Next Steps
       :link-type: doc
 
       Train your first model step-by-step.
+
+   .. grid-item-card:: Local Development
+      :link: /local-development-guide
+      :link-type: doc
+
+      Run training jobs on your laptop using processes or containers.
