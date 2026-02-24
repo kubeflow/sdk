@@ -21,21 +21,21 @@ _DEFAULT_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 def get_logger(name: str) -> logging.Logger:
     """Get a configured logger for the given module name.
 
-    The log level can be configured via the KUBEFLOW_LOG_LEVEL environment
-    variable. Defaults to INFO if not set.
+        The log level can be configured via the KUBEFLOW_LOG_LEVEL environment
+        variable. Defaults to INFO if not set.
 
-    Example:
-```python
-        from kubeflow.common.logging import get_logger
-        logger = get_logger(__name__)
-        logger.info("Training started")
-```
+        Example:
+    ```python
+            from kubeflow.common.logging import get_logger
+            logger = get_logger(__name__)
+            logger.info("Training started")
+    ```
 
-    Args:
-        name: The logger name, typically __name__ of the calling module.
+        Args:
+            name: The logger name, typically __name__ of the calling module.
 
-    Returns:
-        A configured logging.Logger instance.
+        Returns:
+            A configured logging.Logger instance.
     """
     logger = logging.getLogger(name)
 

@@ -39,13 +39,13 @@ Key behaviors:
 
 from collections.abc import Callable, Iterator
 from datetime import datetime
-from kubeflow.common.logging import get_logger
 import os
 import random
 import shutil
 import string
 import uuid
 
+from kubeflow.common.logging import get_logger
 from kubeflow.trainer.backends.base import RuntimeBackend
 from kubeflow.trainer.backends.container import utils as container_utils
 from kubeflow.trainer.backends.container.adapters.base import (

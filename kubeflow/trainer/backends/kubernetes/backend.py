@@ -14,7 +14,6 @@
 
 from collections.abc import Callable, Iterator
 import copy
-from kubeflow.common.logging import get_logger
 import multiprocessing
 import os
 import random
@@ -28,6 +27,7 @@ from kubeflow_trainer_api import models
 from kubernetes import client, config, watch
 
 import kubeflow.common.constants as common_constants
+from kubeflow.common.logging import get_logger
 from kubeflow.common.types import KubernetesBackendConfig
 import kubeflow.common.utils as common_utils
 from kubeflow.trainer.backends.base import RuntimeBackend
