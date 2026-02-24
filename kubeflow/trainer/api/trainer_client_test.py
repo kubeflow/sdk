@@ -79,23 +79,17 @@ def test_wait_for_job_status_mutable_default():
         
         client = TrainerClient()
         
-        # Mock the underlying backend's wait_for_job_status
         client.backend.wait_for_job_status = Mock()
         
-        # First call without passing status
         client.wait_for_job_status("job1")
-        
-        # Verify the underlying backend was called with the correct default
+    
         mock_args_1, mock_kwargs_1 = client.backend.wait_for_job_status.call_args
         passed_status_1 = mock_kwargs_1.get("status")
-        
-        # Mutate the set that was passed (simulating what a bad caller might do)
+
         passed_status_1.add("MUTATED_STATUS")
-        
-        # Second call without passing status
+    
         client.wait_for_job_status("job2")
-        
-        # Verify the backend receives a fresh, unmutated set the second time
+  
         mock_args_2, mock_kwargs_2 = client.backend.wait_for_job_status.call_args
         passed_status_2 = mock_kwargs_2.get("status")
         
