@@ -70,3 +70,35 @@ def test_backend_selection(test_case):
         client = TrainerClient(backend_config=test_case["backend_config"])
         backend_name = client.backend.__class__.__name__
         assert backend_name == test_case["expected_backend"]
+
+def test_wait_for_job_status_mutable_default():
+    """Test that wait_for_job_status does not share a mutable default set across calls."""
+    with patch("kubernetes.config.load_kube_config"), \
+         patch("kubernetes.client.CustomObjectsApi"), \
+         patch("kubernetes.client.CoreV1Api"):
+        
+        client = TrainerClient()
+        
+        # Mock the underlying backend's wait_for_job_status
+        client.backend.wait_for_job_status = Mock()
+        
+        # First call without passing status
+        client.wait_for_job_status("job1")
+        
+        # Verify the underlying backend was called with the correct default
+        mock_args_1, mock_kwargs_1 = client.backend.wait_for_job_status.call_args
+        passed_status_1 = mock_kwargs_1.get("status")
+        
+        # Mutate the set that was passed (simulating what a bad caller might do)
+        passed_status_1.add("MUTATED_STATUS")
+        
+        # Second call without passing status
+        client.wait_for_job_status("job2")
+        
+        # Verify the backend receives a fresh, unmutated set the second time
+        mock_args_2, mock_kwargs_2 = client.backend.wait_for_job_status.call_args
+        passed_status_2 = mock_kwargs_2.get("status")
+        
+        assert "MUTATED_STATUS" not in passed_status_2
+        assert len(passed_status_2) == 1
+        assert passed_status_1 is not passed_status_2
