@@ -73,9 +73,11 @@ def test_backend_selection(test_case):
 
 def test_wait_for_job_status_mutable_default():
     """Test that wait_for_job_status does not share a mutable default set across calls."""
-    with patch("kubernetes.config.load_kube_config"), \
-         patch("kubernetes.client.CustomObjectsApi"), \
-         patch("kubernetes.client.CoreV1Api"):
+    with (
+        patch("kubernetes.config.load_kube_config"),
+        patch("kubernetes.client.CustomObjectsApi"),
+        patch("kubernetes.client.CoreV1Api"),
+    ):
         
         client = TrainerClient()
         
