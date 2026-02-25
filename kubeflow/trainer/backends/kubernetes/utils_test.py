@@ -632,3 +632,58 @@ def test_get_model_initializer(test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="lora_dropout=0.0 is not silently dropped",
+            expected_status=SUCCESS,
+            config={
+                "peft_config": types.LoraConfig(lora_dropout=0.0),
+            },
+            expected_output=["model.lora_dropout=0.0", "model.lora_attn_modules=[q_proj,v_proj,output_proj]"],
+        ),
+        TestCase(
+            name="apply_lora_to_mlp=False is not silently dropped",
+            expected_status=SUCCESS,
+            config={
+                "peft_config": types.LoraConfig(apply_lora_to_mlp=False),
+            },
+            expected_output=["model.apply_lora_to_mlp=False", "model.lora_attn_modules=[q_proj,v_proj,output_proj]"],
+        ),
+        TestCase(
+            name="standard lora config with positive values",
+            expected_status=SUCCESS,
+            config={
+                "peft_config": types.LoraConfig(lora_rank=8, lora_alpha=16, lora_dropout=0.1),
+            },
+            expected_output=[
+                "model.lora_rank=8",
+                "model.lora_alpha=16",
+                "model.lora_dropout=0.1",
+                "model.lora_attn_modules=[q_proj,v_proj,output_proj]",
+            ],
+        ),
+        TestCase(
+            name="invalid peft config type raises ValueError",
+            expected_status=FAILED,
+            config={
+                "peft_config": "invalid",
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_get_args_from_peft_config(test_case: TestCase):
+    print("Executing test:", test_case.name)
+    try:
+        args = utils.get_args_from_peft_config(test_case.config["peft_config"])
+
+        assert test_case.expected_status == SUCCESS
+        assert args == test_case.expected_output
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert type(e) is test_case.expected_error
+    print("test execution complete")

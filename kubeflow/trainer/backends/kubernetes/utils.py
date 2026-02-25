@@ -521,7 +521,7 @@ def get_args_from_peft_config(peft_config: types.LoraConfig) -> list[str]:
     # Override the PEFT fields if they are provided.
     for field, arg_name in field_map.items():
         value = getattr(peft_config, field, None)
-        if value:
+        if value is not None:
             args.append(f"{arg_name}={value}")
 
     # Override the LoRA attention modules if they are provided.
