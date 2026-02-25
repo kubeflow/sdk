@@ -60,7 +60,13 @@ pip install -U kubeflow
 ```
 
 ### Run your first PyTorch distributed job
-
+> Design notes (KEP-936 alignment)
+>
+> - **Why SDK-wrapping (vs direct API):** the SDK provides a single Pythonic surface for auth/config, local execution modes, and consistent orchestration across BuiltinTrainer/CustomTrainer workflows.
+> - **Namespace binding (SDK reality):** `TrainerClient` binds namespace via `KubernetesBackendConfig(namespace=...)` (not per-call).  
+>   **MCP suggestion:** expose `namespace` as an explicit tool parameter, and internally create/cache a per-namespace `TrainerClient`.
+> - **CustomTrainer input (today):** pass a Python callable via `func=...` when constructing `CustomTrainer`. **Future/MCP-layer suggestion:** consider a `script_code: str` input (with `ast.parse` validation and denylisted imports) at the tooling layer, not as part of the current SDK.
+> - **Minimal toolset stance (MCP tools, not SDK methods):** start with orchestration tools (e.g. MCP `fine_tune` wrapping `TrainerClient.train`) + observability tools (e.g. MCP `get_training_logs` / `events` wrapping `TrainerClient.get_job_logs` / `TrainerClient.get_job_events`); gate fine-grained list/get tools via persona filtering.
 ```python
 from kubeflow.trainer import TrainerClient, CustomTrainer, TrainJobTemplate
 
