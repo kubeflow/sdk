@@ -633,6 +633,7 @@ def test_get_model_initializer(test_case):
         assert type(e) is test_case.expected_error
     print("test execution complete")
 
+
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -642,7 +643,10 @@ def test_get_model_initializer(test_case):
             config={
                 "peft_config": types.LoraConfig(lora_dropout=0.0),
             },
-            expected_output=["model.lora_dropout=0.0", "model.lora_attn_modules=[q_proj,v_proj,output_proj]"],
+            expected_output=[
+                "model.lora_dropout=0.0",
+                "model.lora_attn_modules=[q_proj,v_proj,output_proj]",
+            ],
         ),
         TestCase(
             name="apply_lora_to_mlp=False is not silently dropped",
@@ -650,7 +654,10 @@ def test_get_model_initializer(test_case):
             config={
                 "peft_config": types.LoraConfig(apply_lora_to_mlp=False),
             },
-            expected_output=["model.apply_lora_to_mlp=False", "model.lora_attn_modules=[q_proj,v_proj,output_proj]"],
+            expected_output=[
+                "model.apply_lora_to_mlp=False",
+                "model.lora_attn_modules=[q_proj,v_proj,output_proj]",
+            ],
         ),
         TestCase(
             name="standard lora config with positive values",
