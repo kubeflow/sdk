@@ -65,11 +65,13 @@ class RuntimeBackend(abc.ABC):
     def wait_for_job_status(
         self,
         name: str,
-        status: set[str] = {constants.OPTIMIZATION_JOB_COMPLETE},
+        status: set[str] | None = None,
         timeout: int = 3600,
         polling_interval: int = 2,
         callbacks: list[Callable[[OptimizationJob], None]] | None = None,
     ) -> OptimizationJob:
+        if status is None:
+            status = {constants.OPTIMIZATION_JOB_COMPLETE}
         raise NotImplementedError()
 
     @abc.abstractmethod

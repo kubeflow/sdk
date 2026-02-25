@@ -452,7 +452,7 @@ class KubernetesBackend(RuntimeBackend):
     def wait_for_job_status(
         self,
         name: str,
-        status: set[str] = {constants.TRAINJOB_COMPLETE},
+        status: set[str] | None = None,
         timeout: int = 600,
         polling_interval: int = 2,
         callbacks: list[Callable[[types.TrainJob], None]] | None = None,
@@ -463,6 +463,8 @@ class KubernetesBackend(RuntimeBackend):
             constants.TRAINJOB_COMPLETE,
             constants.TRAINJOB_FAILED,
         }
+        if status is None:
+            status = {constants.TRAINJOB_COMPLETE}
         if not status.issubset(job_statuses):
             raise ValueError(f"Expected status {status} must be a subset of {job_statuses}")
 
