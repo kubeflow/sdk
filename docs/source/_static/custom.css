@@ -26,9 +26,9 @@
     --kf-api-text: #000;
 }
 
-/* Dark mode overrides */
+/* Dark mode overrides - Furo sets data-theme on body, not :root */
 @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
+    body:not([data-theme="light"]) {
         --kf-blue: #63b3ed;
         --kf-blue-light: #90cdf4;
         --kf-blue-dark: #4299e1;
@@ -43,7 +43,22 @@
     }
 }
 
-[data-theme="dark"] {
+/* Explicit light mode - ensure light vars when user selects Light */
+body[data-theme="light"] {
+    --kf-blue: #4299e1;
+    --kf-blue-light: #63b3ed;
+    --kf-blue-dark: #3182ce;
+    --kf-heading: #2d3748;
+    --kf-text: #4a5568;
+    --kf-text-light: #718096;
+    --kf-bg-subtle: #f7fafc;
+    --kf-border: #e2e8f0;
+    --kf-api-name: #3182ce;
+    --kf-api-param: #4a5568;
+    --kf-api-text: #000;
+}
+
+body[data-theme="dark"] {
     --kf-blue: #63b3ed;
     --kf-blue-light: #90cdf4;
     --kf-blue-dark: #4299e1;
