@@ -76,11 +76,16 @@ class TrainerClient:
 
     def get_runtime(self, name: str) -> types.Runtime:
         """Get the runtime object
+
         Args:
             name: Name of the runtime.
 
         Returns:
             A runtime object.
+
+        Raises:
+            TimeoutError: Timeout to get a runtime.
+            RuntimeError: Failed to get a runtime.
         """
         return self.backend.get_runtime(name=name)
 
