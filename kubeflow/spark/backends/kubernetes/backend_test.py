@@ -547,6 +547,82 @@ def test_get_session_logs_errors(test_case):
                 list(backend.get_session_logs(name="test-session", follow=False))
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        Case(
+            name="valid_spark_connect_url",
+            session_name="sc://localhost:15002",
+            should_raise=False,
+        ),
+        Case(
+            name="invalid_http_url",
+            session_name="http://localhost:15002",
+            should_raise=True,
+            error_match="Invalid",
+        ),
+        Case(
+            name="invalid_empty_url",
+            session_name="",
+            should_raise=True,
+            error_match="Invalid",
+        ),
+    ],
+)
+def test_validate_spark_connect_url(test_case):
+    """Test URL validation for Spark Connect URLs."""
+    from kubeflow.spark.backends.kubernetes.utils import validate_spark_connect_url
+
+    if test_case.should_raise:
+        with pytest.raises(ValueError, match=test_case.error_match):
+            validate_spark_connect_url(test_case.session_name)
+    else:
+        result = validate_spark_connect_url(test_case.session_name)
+        assert result is True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        Case(
+            name="create_and_connect_with_name_option",
+            session_name="custom-session",
+            should_raise=False,
+        ),
+        Case(
+            name="create_and_connect_without_options",
+            session_name=None,
+            should_raise=False,
+        ),
+    ],
+)
+def test_create_and_connect_with_options(spark_backend, test_case):
+    """Test create_and_connect passes Name option correctly to backend."""
+    options = [Name(test_case.session_name)] if test_case.session_name else None
+
+    with patch.object(spark_backend, "_create_session") as mock_create, patch.object(
+        spark_backend, "_wait_for_session_ready"
+    ) as mock_wait, patch.object(spark_backend, "get_connect_url") as mock_url:
+        from kubeflow.spark.types.types import SparkConnectInfo, SparkConnectState
+
+        ready_info = SparkConnectInfo(
+            name=test_case.session_name or "spark-connect-abc",
+            namespace=DEFAULT_NAMESPACE,
+            state=SparkConnectState.READY,
+            service_name="svc",
+        )
+        mock_create.return_value = ready_info
+        mock_wait.return_value = ready_info
+        mock_url.return_value = ("sc://localhost:15002", None)
+
+        with patch("kubeflow.spark.backends.kubernetes.backend.SparkSession"):
+            spark_backend.create_and_connect(options=options)
+
+        mock_create.assert_called_once()
+        call_options = mock_create.call_args.kwargs.get("options")
+        assert call_options == options
+
+
 class TestNameOptionExtraction:
     """Tests for Name option extraction and auto-generation."""
 
