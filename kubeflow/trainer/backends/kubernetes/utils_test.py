@@ -694,3 +694,50 @@ def test_get_args_from_peft_config(test_case: TestCase):
         assert test_case.expected_status == FAILED
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="train_on_input=False is not silently dropped",
+            expected_status=SUCCESS,
+            config={
+                "dataset_preprocess_config": types.TorchTuneInstructDataset(
+                    train_on_input=False,
+                ),
+            },
+            expected_output=[
+                f"dataset={constants.TORCH_TUNE_INSTRUCT_DATASET}",
+                "dataset.train_on_input=False",
+            ],
+        ),
+        TestCase(
+            name="train_on_input=True is included",
+            expected_status=SUCCESS,
+            config={
+                "dataset_preprocess_config": types.TorchTuneInstructDataset(
+                    train_on_input=True,
+                ),
+            },
+            expected_output=[
+                f"dataset={constants.TORCH_TUNE_INSTRUCT_DATASET}",
+                "dataset.train_on_input=True",
+            ],
+        ),
+    ],
+)
+def test_get_args_from_dataset_preprocess_config(test_case: TestCase):
+    print("Executing test:", test_case.name)
+    try:
+        args = utils.get_args_from_dataset_preprocess_config(
+            test_case.config["dataset_preprocess_config"]
+        )
+
+        assert test_case.expected_status == SUCCESS
+        assert args == test_case.expected_output
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert type(e) is test_case.expected_error
+    print("test execution complete")

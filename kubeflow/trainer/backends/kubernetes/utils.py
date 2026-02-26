@@ -559,7 +559,7 @@ def get_args_from_dataset_preprocess_config(
         args.append(f"dataset.split={dataset_preprocess_config.split}")
 
     # Override the train_on_input field if it is provided.
-    if dataset_preprocess_config.train_on_input:
+    if dataset_preprocess_config.train_on_input is not None:
         args.append(f"dataset.train_on_input={dataset_preprocess_config.train_on_input}")
 
     # Override the new_system_prompt field if it is provided.
