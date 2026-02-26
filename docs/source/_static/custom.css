@@ -37,6 +37,7 @@
         --kf-text-light: #a0aec0;
         --kf-bg-subtle: #2d3748;
         --kf-border: #4a5568;
+        --kf-accent: #81e6d9;
         --kf-api-name: #63b3ed;
         --kf-api-param: #a0aec0;
         --kf-api-text: #e2e8f0;
@@ -53,6 +54,7 @@ body[data-theme="light"] {
     --kf-text-light: #718096;
     --kf-bg-subtle: #f7fafc;
     --kf-border: #e2e8f0;
+    --kf-accent: #81e6d9;
     --kf-api-name: #3182ce;
     --kf-api-param: #4a5568;
     --kf-api-text: #000;
@@ -67,6 +69,7 @@ body[data-theme="dark"] {
     --kf-text-light: #a0aec0;
     --kf-bg-subtle: #2d3748;
     --kf-border: #4a5568;
+    --kf-accent: #81e6d9;
     --kf-api-name: #63b3ed;
     --kf-api-param: #a0aec0;
     --kf-api-text: #e2e8f0;
