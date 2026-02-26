@@ -26,7 +26,16 @@
     --kf-api-text: #000;
 }
 
-/* Dark mode overrides - Furo sets data-theme on body, not :root */
+/*
+ * Dark mode overrides — Furo sets data-theme on <body>, not :root.
+ *
+ * Two blocks are needed because they cover different scenarios:
+ *   @media block  → system prefers dark + user has not explicitly chosen Light (auto)
+ *   body[data-theme="dark"] → user explicitly selects Dark while system is light
+ *
+ * Light mode needs no explicit block: when Furo sets data-theme="light" on body,
+ * the media-query selector no longer matches and body inherits :root values.
+ */
 @media (prefers-color-scheme: dark) {
     body:not([data-theme="light"]) {
         --kf-blue: #63b3ed;
@@ -42,22 +51,6 @@
         --kf-api-param: #a0aec0;
         --kf-api-text: #e2e8f0;
     }
-}
-
-/* Explicit light mode - ensure light vars when user selects Light */
-body[data-theme="light"] {
-    --kf-blue: #4299e1;
-    --kf-blue-light: #63b3ed;
-    --kf-blue-dark: #3182ce;
-    --kf-heading: #2d3748;
-    --kf-text: #4a5568;
-    --kf-text-light: #718096;
-    --kf-bg-subtle: #f7fafc;
-    --kf-border: #e2e8f0;
-    --kf-accent: #81e6d9;
-    --kf-api-name: #3182ce;
-    --kf-api-param: #4a5568;
-    --kf-api-text: #000;
 }
 
 body[data-theme="dark"] {
