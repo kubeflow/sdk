@@ -44,7 +44,7 @@ from kubeflow.spark.test.common import FAILED, SUCCESS, TestCase
         ),
     ],
 )
-def test_spark_client_initialization(test_case: TestCase):
+def test_create_and_connect(test_case: TestCase):
     """Test SparkClient initialization scenarios."""
 
     try:
