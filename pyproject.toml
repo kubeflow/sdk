@@ -42,7 +42,7 @@ podman = [
 spark = [
     # Match major.minor to SparkConnect server image (see kubeflow.spark.backends.kubernetes.constants)
     # Use [connect] extra to get compatible grpcio, pandas, pyarrow versions automatically
-    "pyspark[connect]==3.4.1",
+    "pyspark[connect]==4.1.1",
     "kubeflow-spark-api>=2.4.0",
 ]
 hub = [
