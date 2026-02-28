@@ -266,10 +266,8 @@ class LocalProcessBackend(RuntimeBackend):
             status = constants.TRAINJOB_RUNNING
         elif constants.TRAINJOB_CREATED in statuses:
             status = constants.TRAINJOB_CREATED
-        elif all(s == constants.TRAINJOB_COMPLETE for s in statuses):
-            status = constants.TRAINJOB_COMPLETE
         else:
-            status = constants.TRAINJOB_CREATED
+            status = constants.TRAINJOB_COMPLETE
 
         return status
 
