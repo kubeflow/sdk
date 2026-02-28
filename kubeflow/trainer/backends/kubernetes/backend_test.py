@@ -1687,3 +1687,37 @@ def test_get_job_events(kubernetes_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+def test_get_runtime_fallback_to_cluster_on_404(mocker):
+    # Prevent real kube config loading
+    mocker.patch("kubeflow.trainer.backends.kubernetes.backend.config.load_kube_config")
+    mocker.patch("kubeflow.trainer.backends.kubernetes.backend.config.load_incluster_config")
+    mocker.patch("kubeflow.trainer.backends.kubernetes.backend.common_utils.is_running_in_k8s", return_value=False)
+
+    cfg = KubernetesBackendConfig(namespace="default")
+    backend = KubernetesBackend(cfg)
+
+    # Mock custom_api
+    backend.custom_api = mocker.Mock()
+
+    # Namespaced runtime returns 404
+    backend.custom_api.get_namespaced_custom_object.side_effect = client.ApiException(status=404)
+
+    # Cluster runtime returns dummy object
+    backend.custom_api.get_cluster_custom_object.return_value = {}
+
+    # Mock runtime parsing + conversion
+    mock_runtime = mocker.Mock()
+    mocker.patch(
+        "kubeflow.trainer.backends.kubernetes.backend.models.TrainerV1alpha1ClusterTrainingRuntime.from_dict",
+        return_value=mock_runtime,
+    )
+    mocker.patch.object(
+        backend,
+        "_KubernetesBackend__get_runtime_from_cr",
+        return_value="cluster-runtime",
+    )
+
+    result = backend.get_runtime("test-runtime")
+
+    assert result == "cluster-runtime"
