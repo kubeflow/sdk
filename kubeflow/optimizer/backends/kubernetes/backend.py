@@ -223,6 +223,7 @@ class KubernetesBackend(RuntimeBackend):
         name: str,
         trial_name: str | None = None,
         follow: bool = False,
+        strict: bool = False,
     ) -> Iterator[str]:
         """Get the OptimizationJob logs from a Trial"""
         # Determine what trial to get logs from.
@@ -247,6 +248,8 @@ class KubernetesBackend(RuntimeBackend):
                 pod_name = c.pod_name
                 break
         if pod_name is None:
+            if strict:
+                raise RuntimeError(f"No pod found for Trial {trial_name} step={step}")
             return
 
         container_name = constants.METRICS_COLLECTOR_CONTAINER
