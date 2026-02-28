@@ -1449,6 +1449,7 @@ def test_get_job_logs_strict_raises_when_pod_missing(kubernetes_backend, monkeyp
     with pytest.raises(PodNotFoundError):
         list(kubernetes_backend.get_job_logs(BASIC_TRAIN_JOB_NAME, strict=True))
 
+
 @pytest.mark.parametrize(
     "test_case",
     [

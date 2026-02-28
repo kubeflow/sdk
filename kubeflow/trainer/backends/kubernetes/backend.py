@@ -37,9 +37,12 @@ from kubeflow.trainer.types import types
 
 logger = logging.getLogger(__name__)
 
+
 class PodNotFoundError(RuntimeError):
     """No pod resolved for the requested job/step."""
+
     pass
+
 
 class KubernetesBackend(RuntimeBackend):
     def __init__(self, cfg: KubernetesBackendConfig):
