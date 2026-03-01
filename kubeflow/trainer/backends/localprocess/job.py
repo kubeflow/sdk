@@ -32,7 +32,7 @@ class LocalJob(threading.Thread):
     def __init__(
         self,
         name: str,
-        command: list[str] | tuple[str, ...] | str,
+        command: list[str] | tuple[str, ...],
         execution_dir: str | None = None,
         env: dict[str, str] | None = None,
         dependencies: list[LocalJob] | None = None,
@@ -184,10 +184,11 @@ class LocalJob(threading.Thread):
         return self._stdout.splitlines()
 
     def stream_logs(self) -> Iterator[str]:
-        """Generate new output lines as they come in.
+        """Generate new output chunks of stdout as they come in.
 
         Yields:
-            New output chunks from the job.
+            New output chunks from the job (may contain partial or multiple
+            lines).
         """
         last_index = 0
         while self.is_alive() or last_index < len(self._stdout):
