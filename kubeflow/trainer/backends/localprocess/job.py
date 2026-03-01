@@ -11,6 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from __future__ import annotations
+
+from collections.abc import Iterator
 from datetime import datetime
 import logging
 import os
@@ -23,24 +27,29 @@ logger = logging.getLogger(__name__)
 
 
 class LocalJob(threading.Thread):
+    """A local subprocess job with threading support for background execution."""
+
     def __init__(
         self,
-        name,
-        command: list | tuple[str] | str,
-        execution_dir: str = None,
-        env: dict[str, str] = None,
-        dependencies: list = None,
-    ):
-        """Creates a LocalJob.
+        name: str,
+        command: list[str] | tuple[str, ...] | str,
+        execution_dir: str | None = None,
+        env: dict[str, str] | None = None,
+        dependencies: list[LocalJob] | None = None,
+    ) -> None:
+        """Create a LocalJob.
 
-        Creates a local subprocess with threading to allow users to create background jobs.
+        Creates a local subprocess with threading to allow users to create
+        background jobs.
 
         Args:
-            name (str): The name of the job.
-            command (str): The command to run.
-            execution_dir (str): The execution directory.
-            env (Dict[str, str], optional): Environment variables. Defaults to None.
-            dependencies (List[str], optional): List of dependencies. Defaults to None.
+            name: The name of the job.
+            command: The command to run.
+            execution_dir: The execution directory. Defaults to current working
+                directory.
+            env: Environment variables to set for the subprocess.
+            dependencies: List of LocalJob dependencies that must complete
+                successfully before this job runs.
         """
         super().__init__()
         self.name = name
@@ -59,7 +68,7 @@ class LocalJob(threading.Thread):
         self.dependencies = dependencies or []
         self.execution_dir = execution_dir or os.getcwd()
 
-    def run(self):
+    def run(self) -> None:
         for dep in self.dependencies:
             dep.join()
             if not dep.success:
@@ -130,26 +139,39 @@ class LocalJob(threading.Thread):
             os.chdir(current_dir)
 
     @property
-    def stdout(self):
+    def stdout(self) -> str:
+        """Return the current stdout output of the job."""
         with self._lock:
             return self._stdout
 
     @property
-    def success(self):
+    def success(self) -> bool:
+        """Return whether the job completed successfully."""
         return self._success
 
     @property
-    def status(self):
+    def status(self) -> str:
+        """Return the current status of the job."""
         return self._status
 
-    def cancel(self):
+    def cancel(self) -> None:
+        """Request cancellation of the running job."""
         self._cancel_requested.set()
 
     @property
-    def returncode(self):
+    def returncode(self) -> int | None:
+        """Return the process return code, or None if not yet exited."""
         return self._returncode
 
-    def logs(self, follow=False) -> list[str]:
+    def logs(self, follow: bool = False) -> list[str]:
+        """Return the job logs as a list of lines.
+
+        Args:
+            follow: If True, stream logs to console as they arrive.
+
+        Returns:
+            List of log lines from the job output.
+        """
         if not follow:
             return self._stdout.splitlines()
 
@@ -161,8 +183,12 @@ class LocalJob(threading.Thread):
 
         return self._stdout.splitlines()
 
-    def stream_logs(self):
-        """Generator that yields new output lines as they come in."""
+    def stream_logs(self) -> Iterator[str]:
+        """Generate new output lines as they come in.
+
+        Yields:
+            New output chunks from the job.
+        """
         last_index = 0
         while self.is_alive() or last_index < len(self._stdout):
             self._output_updated.wait(timeout=1)
@@ -175,9 +201,11 @@ class LocalJob(threading.Thread):
                 yield new_data
 
     @property
-    def creation_time(self):
+    def creation_time(self) -> datetime | None:
+        """Return the job start time, or None if not yet started."""
         return self._start_time
 
     @property
-    def completion_time(self):
+    def completion_time(self) -> datetime | None:
+        """Return the job completion time, or None if not yet completed."""
         return self._end_time
