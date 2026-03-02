@@ -121,20 +121,6 @@ class KubernetesBackend(RuntimeBackend):
         options: list | None = None,
     ) -> SparkConnectInfo:
         """Create a new SparkConnect session (INTERNAL USE ONLY)."""
-        # Validate input types
-        if resources_per_executor is not None and not isinstance(resources_per_executor, dict):
-            raise TypeError(
-                f"resources_per_executor must be a dict, got {type(resources_per_executor)}"
-            )
-        if spark_conf is not None and not isinstance(spark_conf, dict):
-            raise TypeError(f"spark_conf must be a dict, got {type(spark_conf)}")
-        if num_executors is not None and not isinstance(num_executors, int):
-            raise TypeError(f"num_executors must be an int, got {type(num_executors)}")
-        if driver is not None and not isinstance(driver, Driver):
-            raise TypeError(f"driver must be a Driver instance, got {type(driver)}")
-        if executor is not None and not isinstance(executor, Executor):
-            raise TypeError(f"executor must be an Executor instance, got {type(executor)}")
-
         # Extract Name option if present, or auto-generate
         name, filtered_options = self._extract_name_option(options)
 
