@@ -497,3 +497,36 @@ def test_name_option_sets_job_name(local_backend, mock_train_environment):
     )
 
     assert job_name == custom_name
+
+
+def test_get_job_status(local_backend):
+    """Test LocalProcessBackend.__get_job_status()."""
+
+    step1 = Mock()
+    step2 = Mock()
+    job = Mock()
+    job.steps = [step1, step2]
+
+    # Test Complete (when all steps are complete)
+    step1.job.status = constants.TRAINJOB_COMPLETE
+    step2.job.status = constants.TRAINJOB_COMPLETE
+    status = local_backend._LocalProcessBackend__get_job_status(job)
+    assert status == constants.TRAINJOB_COMPLETE
+
+    # Test Running (if any step is running)
+    step1.job.status = constants.TRAINJOB_COMPLETE
+    step2.job.status = constants.TRAINJOB_RUNNING
+    status = local_backend._LocalProcessBackend__get_job_status(job)
+    assert status == constants.TRAINJOB_RUNNING
+
+    # Test Failed (if any step is failed)
+    step1.job.status = constants.TRAINJOB_FAILED
+    step2.job.status = constants.TRAINJOB_RUNNING
+    status = local_backend._LocalProcessBackend__get_job_status(job)
+    assert status == constants.TRAINJOB_FAILED
+
+    # Test Created (if any step is created and none are running/failed)
+    step1.job.status = constants.TRAINJOB_CREATED
+    step2.job.status = constants.TRAINJOB_COMPLETE
+    status = local_backend._LocalProcessBackend__get_job_status(job)
+    assert status == constants.TRAINJOB_CREATED
