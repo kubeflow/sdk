@@ -37,7 +37,8 @@ from kubeflow.spark.test.common import (
     TestCase,
 )
 from kubeflow.spark.types.options import Labels, Name
-from kubeflow.spark.types.types import SparkConnectInfo, SparkConnectState
+from kubeflow.spark.types.types import Driver, Executor, SparkConnectInfo, SparkConnectState
+from kubeflow.spark.types.validation import ValidationError
 
 # --------------------------
 # Fixtures
@@ -733,6 +734,118 @@ def test_extract_name_option(kubernetes_backend, test_case):
         assert len(filtered) == test_case.expected_output["remaining_count"]
         if "remaining_type" in test_case.expected_output:
             assert isinstance(filtered[0], test_case.expected_output["remaining_type"])
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        # Invalid types
+        TestCase(
+            name="invalid resources_per_executor type",
+            expected_status=FAILED,
+            config={"resources_per_executor": "not-a-dict"},
+            expected_error=ValidationError,
+        ),
+        TestCase(
+            name="invalid spark_conf type",
+            expected_status=FAILED,
+            config={"spark_conf": "not-a-dict"},
+            expected_error=ValidationError,
+        ),
+        TestCase(
+            name="invalid num_executors type",
+            expected_status=FAILED,
+            config={"num_executors": "3"},
+            expected_error=ValidationError,
+        ),
+        TestCase(
+            name="invalid driver type",
+            expected_status=FAILED,
+            config={"driver": {"image": "spark:3.4"}},
+            expected_error=ValidationError,
+        ),
+        TestCase(
+            name="invalid executor type",
+            expected_status=FAILED,
+            config={"executor": {"num_instances": 2}},
+            expected_error=ValidationError,
+        ),
+        # Invalid values
+        TestCase(
+            name="negative num_executors",
+            expected_status=FAILED,
+            config={"num_executors": -1},
+            expected_error=ValidationError,
+        ),
+        TestCase(
+            name="bad memory format in resources_per_executor",
+            expected_status=FAILED,
+            config={"resources_per_executor": {"memory": "lots"}},
+            expected_error=ValidationError,
+        ),
+        TestCase(
+            name="bad cpu format in resources_per_executor",
+            expected_status=FAILED,
+            config={"resources_per_executor": {"cpu": "fast"}},
+            expected_error=ValidationError,
+        ),
+        # Invalid nested fields in Driver/Executor
+        TestCase(
+            name="driver with invalid service account",
+            expected_status=FAILED,
+            config={"driver": Driver(service_account="INVALID ACCOUNT")},
+            expected_error=ValidationError,
+        ),
+        TestCase(
+            name="executor with negative num_instances",
+            expected_status=FAILED,
+            config={"executor": Executor(num_instances=-5)},
+            expected_error=ValidationError,
+        ),
+        # Valid inputs
+        TestCase(
+            name="all valid params",
+            expected_status=SUCCESS,
+            config={
+                "num_executors": 3,
+                "resources_per_executor": {"cpu": "4", "memory": "8Gi"},
+                "spark_conf": {"spark.sql.adaptive.enabled": "true"},
+                "driver": Driver(image="spark:3.4", service_account="spark-sa"),
+                "executor": Executor(
+                    num_instances=2, resources_per_executor={"cpu": "2"}
+                ),
+                "session_name": "valid-session",
+            },
+        ),
+        TestCase(
+            name="all none params",
+            expected_status=SUCCESS,
+            config={},
+        ),
+    ],
+)
+def test_create_session_validation(kubernetes_backend, test_case):
+    """Test _create_session input validation via validation.py functions."""
+    print("Executing test:", test_case.name)
+    try:
+        kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
+        session_name = test_case.config.get("session_name")
+        options = [Name(session_name)] if session_name else None
+
+        kubernetes_backend._create_session(
+            num_executors=test_case.config.get("num_executors"),
+            resources_per_executor=test_case.config.get("resources_per_executor"),
+            spark_conf=test_case.config.get("spark_conf"),
+            driver=test_case.config.get("driver"),
+            executor=test_case.config.get("executor"),
+            options=options,
+        )
+
+        assert test_case.expected_status == SUCCESS
 
     except Exception as e:
         assert type(e) is test_case.expected_error

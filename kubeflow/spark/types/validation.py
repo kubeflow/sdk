@@ -195,3 +195,50 @@ def validate_service_account(sa: str | None) -> None:
 
     if len(sa) > 253:
         raise ValidationError(f"service_account name too long ({len(sa)} chars, max 253)")
+
+
+def validate_driver(driver) -> None:
+    """Validate Driver configuration and its nested fields.
+
+    Args:
+        driver: Driver instance to validate.
+
+    Raises:
+        ValidationError: If validation fails.
+    """
+    if driver is None:
+        return
+
+    from kubeflow.spark.types.types import Driver
+
+    if not isinstance(driver, Driver):
+        raise ValidationError(f"driver must be a Driver instance, got {type(driver).__name__}")
+
+    validate_image_name(driver.image)
+    validate_resource_dict(driver.resources, param_name="driver.resources")
+    validate_service_account(driver.service_account)
+
+
+def validate_executor(executor) -> None:
+    """Validate Executor configuration and its nested fields.
+
+    Args:
+        executor: Executor instance to validate.
+
+    Raises:
+        ValidationError: If validation fails.
+    """
+    if executor is None:
+        return
+
+    from kubeflow.spark.types.types import Executor
+
+    if not isinstance(executor, Executor):
+        raise ValidationError(
+            f"executor must be an Executor instance, got {type(executor).__name__}"
+        )
+
+    validate_num_instances(executor.num_instances, param_name="executor.num_instances")
+    validate_resource_dict(
+        executor.resources_per_executor, param_name="executor.resources_per_executor"
+    )

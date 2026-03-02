@@ -42,6 +42,13 @@ from kubeflow.spark.backends.kubernetes.utils import (
 )
 from kubeflow.spark.types.options import Name
 from kubeflow.spark.types.types import Driver, Executor, SparkConnectInfo, SparkConnectState
+from kubeflow.spark.types.validation import (
+    validate_driver,
+    validate_executor,
+    validate_num_instances,
+    validate_resource_dict,
+    validate_spark_conf,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -121,19 +128,11 @@ class KubernetesBackend(RuntimeBackend):
         options: list | None = None,
     ) -> SparkConnectInfo:
         """Create a new SparkConnect session (INTERNAL USE ONLY)."""
-        # Validate input types
-        if resources_per_executor is not None and not isinstance(resources_per_executor, dict):
-            raise TypeError(
-                f"resources_per_executor must be a dict, got {type(resources_per_executor)}"
-            )
-        if spark_conf is not None and not isinstance(spark_conf, dict):
-            raise TypeError(f"spark_conf must be a dict, got {type(spark_conf)}")
-        if num_executors is not None and not isinstance(num_executors, int):
-            raise TypeError(f"num_executors must be an int, got {type(num_executors)}")
-        if driver is not None and not isinstance(driver, Driver):
-            raise TypeError(f"driver must be a Driver instance, got {type(driver)}")
-        if executor is not None and not isinstance(executor, Executor):
-            raise TypeError(f"executor must be an Executor instance, got {type(executor)}")
+        validate_resource_dict(resources_per_executor, param_name="resources_per_executor")
+        validate_spark_conf(spark_conf)
+        validate_num_instances(num_executors, param_name="num_executors")
+        validate_driver(driver)
+        validate_executor(executor)
 
         # Extract Name option if present, or auto-generate
         name, filtered_options = self._extract_name_option(options)
