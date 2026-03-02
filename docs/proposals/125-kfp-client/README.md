@@ -1,10 +1,10 @@
 # KEP-125: PipelinesClient for Kubeflow SDK
 
-|                     |                                             |
-| ------------------- | ------------------------------------------- |
-| **Authors**         | [MStokluska](https://github.com/MStokluska) |
-| **Created**         | 2026-03-02                                  |
-| **Relevant Issues** | https://github.com/kubeflow/sdk/issues/125  |
+| | |
+| --- | --- |
+| **Authors** | [MStokluska](https://github.com/MStokluska) |
+| **Created** | 2026-03-02 |
+| **Relevant Issues** | https://github.com/kubeflow/sdk/issues/125 |
 
 ## Table of Contents
 
@@ -508,10 +508,12 @@ Re-exporting (including `kfp.kubernetes`) gives users a single namespace for
 the entire author → configure → upload → run flow without any direct `kfp`
 imports.
 
-If `kfp` is not installed, the re-exports are silently unavailable. Attempting
-`from kubeflow.pipelines import dsl` without kfp installed produces an
-`ImportError` — the message should be improved to suggest
-`pip install 'kubeflow[pipelines]'`.
+If `kfp` is not installed, the re-exports are not defined — the `try/except
+ImportError` block in `__init__.py` silently skips the imports. Attempting
+`from kubeflow.pipelines import dsl` then raises an `ImportError` because the
+name `dsl` does not exist in the module. The error message from Python is
+generic (`cannot import name 'dsl'`), so Phase 3 includes improving it to
+suggest `pip install 'kubeflow[pipelines]'`.
 
 ### Exposed API
 
@@ -911,7 +913,7 @@ Rationale:
 ### Package Structure
 
 ```
-sdk/kubeflow/
+kubeflow/
 ├── pipelines/
 │   ├── __init__.py                    # PipelinesClient + dsl/compiler/components/kubernetes
 │   └── api/
@@ -1000,7 +1002,7 @@ wrapper only calls high-level Client methods and doesn't depend on
 
 ### Phase 1: Core wrapper and constructor
 
-1. Add `pipelines = ["kfp[kubernetes]>=2.0.0"]` to `sdk/pyproject.toml`
+1. Add `pipelines = ["kfp[kubernetes]>=2.0.0"]` to `pyproject.toml`
 2. Create `kubeflow/pipelines/__init__.py` with `PipelinesClient` export and `dsl`/`compiler`/`components`/`kubernetes` re-exports
 3. Implement `PipelinesClient` constructor with `base_url`→`host` mapping, `user_token`→`existing_token`, `namespace` defaulting to `None`
 4. Add `_resolve_pipeline_id`, `_resolve_experiment_id`, `_resolve_latest_version_id` internal helpers
