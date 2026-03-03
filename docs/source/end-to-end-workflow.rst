@@ -11,6 +11,14 @@ Kubeflow SDK clients together:
 By the end, you'll understand how these components connect and how to build
 reproducible, end-to-end ML pipelines with the Kubeflow SDK.
 
+.. note::
+
+   **Steps 1–2** (training) can run locally using Docker or Podman — no
+   Kubernetes cluster required. **Steps 3–4** (optimization and model
+   registration) require a Kubernetes cluster with Kubeflow Katib and
+   Model Registry deployed. See the
+   :doc:`installation guide <getting-started/installation>` for cluster setup.
+
 ----
 
 Prerequisites
@@ -21,7 +29,7 @@ Prerequisites
    # Install the Kubeflow SDK with all components
    pip install 'kubeflow[hub]'
 
-For local development (no Kubernetes cluster required):
+For **local training** (Steps 1–2) without a Kubernetes cluster:
 
 .. code-block:: bash
 
@@ -72,8 +80,8 @@ this function and runs it inside containers — no Dockerfiles required.
 
 ----
 
-Step 2: Train the Model
-------------------------
+Step 2: Train the Model (Local or Kubernetes)
+----------------------------------------------
 
 Use ``TrainerClient`` to run your training function. For local development, use
 ``ContainerBackendConfig`` to run in Docker/Podman containers without a Kubernetes
@@ -124,8 +132,14 @@ cluster.
 
 ----
 
-Step 3: Optimize Hyperparameters
----------------------------------
+Step 3: Optimize Hyperparameters (Kubernetes)
+----------------------------------------------
+
+.. important::
+
+   ``OptimizerClient`` requires a Kubernetes cluster with
+   `Kubeflow Katib <https://www.kubeflow.org/docs/components/katib/>`_
+   deployed. This step cannot run locally.
 
 Now use ``OptimizerClient`` to find the best hyperparameters. The same
 ``TrainJobTemplate`` is reused — the optimizer overrides ``func_args`` values
@@ -148,6 +162,10 @@ according to the search space.
    )
    print(f"OptimizationJob created: {optimization_id}")
 
+   # Wait for the OptimizationJob to complete
+   opt_client.wait_for_job_status(optimization_id)
+   print("Optimization complete!")
+
 The optimizer runs multiple training trials in parallel, each with different
 hyperparameter combinations. It finds the best combination by comparing the
 reported ``loss`` metric.
@@ -158,10 +176,26 @@ reported ``loss`` metric.
    how the optimizer collects metrics. Kubeflow Katib parses stdout to extract
    metric values.
 
+After optimization completes, retrieve the best results:
+
+.. code-block:: python
+
+   # Get the best hyperparameters and metrics
+   best = opt_client.get_best_results(optimization_id)
+   if best:
+       print(f"Best hyperparameters: {best.parameters}")
+       for metric in best.metrics:
+           print(f"  {metric.name}: {metric.latest}")
+
 ----
 
-Step 4: Register the Best Model
---------------------------------
+Step 4: Register the Best Model (Kubernetes)
+----------------------------------------------
+
+.. important::
+
+   ``ModelRegistryClient`` requires a
+   `Model Registry server <https://www.kubeflow.org/docs/components/model-registry/installation/>`_.
 
 After training and optimization, register the best model in Model Registry for
 versioning, sharing, and deployment.
@@ -175,7 +209,10 @@ versioning, sharing, and deployment.
        author="Your Name",
    )
 
-   # Register the model
+   # Retrieve the best trial's hyperparameters
+   best = opt_client.get_best_results(optimization_id)
+
+   # Register the best model with its hyperparameters
    model = mr_client.register_model(
        name="my-optimized-model",
        uri="s3://my-bucket/models/best-checkpoint",
@@ -184,7 +221,7 @@ versioning, sharing, and deployment.
        model_format_version="2.0",
        version_description=(
            f"Best model from optimization job {optimization_id}. "
-           "Trained with learning_rate=0.03, num_epochs=10."
+           f"Hyperparameters: {best.parameters}"
        ),
    )
 
@@ -207,16 +244,12 @@ You can then query the registry to retrieve or list your models:
 Putting It All Together
 -----------------------
 
-Here's the complete workflow in a single script:
+Here's the complete workflow in a single script. This script requires a
+**Kubernetes cluster** with Kubeflow Trainer, Katib, and Model Registry deployed.
 
 .. code-block:: python
 
-   from kubeflow.trainer import (
-       TrainerClient,
-       ContainerBackendConfig,
-       CustomTrainer,
-       TrainJobTemplate,
-   )
+   from kubeflow.trainer import TrainerClient, CustomTrainer, TrainJobTemplate
    from kubeflow.optimizer import OptimizerClient, Search, TrialConfig
    from kubeflow.hub import ModelRegistryClient
 
@@ -254,7 +287,7 @@ Here's the complete workflow in a single script:
        ),
    )
 
-   trainer_client = TrainerClient(backend_config=ContainerBackendConfig())
+   trainer_client = TrainerClient()
    job_id = trainer_client.train(**template)
    trainer_client.wait_for_job_status(job_id)
    print(f"Training complete: {job_id}")
@@ -269,9 +302,11 @@ Here's the complete workflow in a single script:
            "num_epochs": Search.choice([5, 10, 15]),
        },
    )
+   opt_client.wait_for_job_status(optimization_id)
    print(f"Optimization complete: {optimization_id}")
 
-   # --- Step 3: Register ---
+   # --- Step 3: Register Best Model ---
+   best = opt_client.get_best_results(optimization_id)
    mr_client = ModelRegistryClient(
        "https://model-registry.kubeflow.svc.cluster.local",
        author="Your Name",
@@ -282,9 +317,19 @@ Here's the complete workflow in a single script:
        version="v1.0.0",
        model_format_name="pytorch",
        model_format_version="2.0",
-       version_description=f"From optimization {optimization_id}",
+       version_description=(
+           f"Best model from optimization {optimization_id}. "
+           f"Hyperparameters: {best.parameters}"
+       ),
    )
    print(f"Model registered: {model.name}")
+
+.. tip::
+
+   For local-only training (no Kubernetes), use Steps 1–2 with
+   ``ContainerBackendConfig()``::
+
+      client = TrainerClient(backend_config=ContainerBackendConfig())
 
 ----
 
