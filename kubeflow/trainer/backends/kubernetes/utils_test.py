@@ -815,3 +815,172 @@ def test_get_args_from_dataset_preprocess_config(test_case: TestCase):
         assert test_case.expected_status == FAILED
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="dataset-initializer container with Running status returns correct Step",
+            expected_status=SUCCESS,
+            config={
+                "pod_name": "test-pod",
+                "pod_spec": models.IoK8sApiCoreV1PodSpec(
+                    containers=[models.IoK8sApiCoreV1Container(name=constants.DATASET_INITIALIZER)]
+                ),
+                "pod_status": models.IoK8sApiCoreV1PodStatus(phase="Running"),
+            },
+            expected_output=types.Step(
+                name=constants.DATASET_INITIALIZER,
+                status="Running",
+                pod_name="test-pod",
+            ),
+        ),
+        TestCase(
+            name="model-initializer container with no status returns Step with None status",
+            expected_status=SUCCESS,
+            config={
+                "pod_name": "test-pod",
+                "pod_spec": models.IoK8sApiCoreV1PodSpec(
+                    containers=[models.IoK8sApiCoreV1Container(name=constants.MODEL_INITIALIZER)]
+                ),
+                "pod_status": None,
+            },
+            expected_output=types.Step(
+                name=constants.MODEL_INITIALIZER,
+                status=None,
+                pod_name="test-pod",
+            ),
+        ),
+        TestCase(
+            name="pod with no initializer container raises ValueError",
+            expected_status=FAILED,
+            config={
+                "pod_name": "test-pod",
+                "pod_spec": models.IoK8sApiCoreV1PodSpec(
+                    containers=[models.IoK8sApiCoreV1Container(name="unrelated-container")]
+                ),
+                "pod_status": None,
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="pod with empty container list raises ValueError",
+            expected_status=FAILED,
+            config={
+                "pod_name": "test-pod",
+                "pod_spec": models.IoK8sApiCoreV1PodSpec(containers=[]),
+                "pod_status": None,
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_get_trainjob_initializer_step(test_case: TestCase):
+    print("Executing test:", test_case.name)
+    try:
+        step = utils.get_trainjob_initializer_step(
+            pod_name=test_case.config["pod_name"],
+            pod_spec=test_case.config["pod_spec"],
+            pod_status=test_case.config["pod_status"],
+        )
+
+        assert test_case.expected_status == SUCCESS
+        assert step == test_case.expected_output
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="node container with Running status returns Step name node-0",
+            expected_status=SUCCESS,
+            config={
+                "pod_name": "test-pod",
+                "pod_spec": models.IoK8sApiCoreV1PodSpec(
+                    containers=[models.IoK8sApiCoreV1Container(name=constants.NODE)]
+                ),
+                "pod_status": models.IoK8sApiCoreV1PodStatus(phase="Running"),
+                "trainjob_runtime": _build_runtime(),
+                "replicated_job_name": constants.NODE,
+                "job_index": 0,
+            },
+            expected_output=types.Step(
+                name="node-0",
+                status="Running",
+                pod_name="test-pod",
+            ),
+        ),
+        TestCase(
+            name="node container with no status returns Step with None status",
+            expected_status=SUCCESS,
+            config={
+                "pod_name": "test-pod",
+                "pod_spec": models.IoK8sApiCoreV1PodSpec(
+                    containers=[models.IoK8sApiCoreV1Container(name=constants.NODE)]
+                ),
+                "pod_status": None,
+                "trainjob_runtime": _build_runtime(),
+                "replicated_job_name": constants.NODE,
+                "job_index": 0,
+            },
+            expected_output=types.Step(
+                name="node-0",
+                status=None,
+                pod_name="test-pod",
+            ),
+        ),
+        TestCase(
+            name="pod with no node container raises ValueError",
+            expected_status=FAILED,
+            config={
+                "pod_name": "test-pod",
+                "pod_spec": models.IoK8sApiCoreV1PodSpec(
+                    containers=[models.IoK8sApiCoreV1Container(name="unrelated-container")]
+                ),
+                "pod_status": None,
+                "trainjob_runtime": _build_runtime(),
+                "replicated_job_name": constants.NODE,
+                "job_index": 0,
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="pod with empty container list raises ValueError",
+            expected_status=FAILED,
+            config={
+                "pod_name": "test-pod",
+                "pod_spec": models.IoK8sApiCoreV1PodSpec(containers=[]),
+                "pod_status": None,
+                "trainjob_runtime": _build_runtime(),
+                "replicated_job_name": constants.NODE,
+                "job_index": 0,
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_get_trainjob_node_step(test_case: TestCase):
+    print("Executing test:", test_case.name)
+    try:
+        step = utils.get_trainjob_node_step(
+            pod_name=test_case.config["pod_name"],
+            pod_spec=test_case.config["pod_spec"],
+            pod_status=test_case.config["pod_status"],
+            trainjob_runtime=test_case.config["trainjob_runtime"],
+            replicated_job_name=test_case.config["replicated_job_name"],
+            job_index=test_case.config["job_index"],
+        )
+
+        assert test_case.expected_status == SUCCESS
+        assert step == test_case.expected_output
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert type(e) is test_case.expected_error
+    print("test execution complete")

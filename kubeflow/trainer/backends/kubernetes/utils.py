@@ -155,13 +155,26 @@ def get_trainjob_initializer_step(
 ) -> types.Step:
     """
     Get the TrainJob initializer step from the given Pod name, spec, and status.
+
+    Raises:
+        ValueError: If the pod has no container named dataset-initializer or model-initializer.
     """
 
     container = next(
-        c
-        for c in pod_spec.containers
-        if c.name in {constants.DATASET_INITIALIZER, constants.MODEL_INITIALIZER}
+        (
+            c
+            for c in pod_spec.containers
+            if c.name in {constants.DATASET_INITIALIZER, constants.MODEL_INITIALIZER}
+        ),
+        None,
     )
+    if container is None:
+        raise ValueError(
+            f"Pod '{pod_name}' has no initializer container. "
+            f"Expected a container named '{constants.DATASET_INITIALIZER}' or "
+            f"'{constants.MODEL_INITIALIZER}', but found: "
+            f"{[c.name for c in pod_spec.containers]}"
+        )
 
     step = types.Step(
         name=container.name,
@@ -185,9 +198,21 @@ def get_trainjob_node_step(
 ) -> types.Step:
     """
     Get the TrainJob trainer node step from the given Pod name, spec, and status.
+
+    Raises:
+        ValueError: If the pod has no container named node.
     """
 
-    container = next(c for c in pod_spec.containers if c.name == constants.NODE)
+    container = next(
+        (c for c in pod_spec.containers if c.name == constants.NODE),
+        None,
+    )
+    if container is None:
+        raise ValueError(
+            f"Pod '{pod_name}' has no node container. "
+            f"Expected a container named '{constants.NODE}', but found: "
+            f"{[c.name for c in pod_spec.containers]}"
+        )
 
     step = types.Step(
         name=f"{constants.NODE}-{job_index}",
