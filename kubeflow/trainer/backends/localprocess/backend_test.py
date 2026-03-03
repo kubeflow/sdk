@@ -530,3 +530,8 @@ def test_get_job_status(local_backend):
     step2.job.status = constants.TRAINJOB_COMPLETE
     status = local_backend._LocalProcessBackend__get_job_status(job)
     assert status == constants.TRAINJOB_CREATED
+
+    # Test Created (if no steps have been registered yet)
+    job.steps = []
+    status = local_backend._LocalProcessBackend__get_job_status(job)
+    assert status == constants.TRAINJOB_CREATED
