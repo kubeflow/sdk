@@ -322,6 +322,8 @@ def get_command_using_train_func(
     train_func_parameters: dict[str, Any] | None,
     pip_index_urls: list[str],
     packages_to_install: list[str] | None,
+    enable_profiler: bool = False,
+    profiler_dir: str = "/artifacts/profile",
 ) -> list[str]:
     """
     Get the Trainer container command from the given training function and parameters.
@@ -358,7 +360,24 @@ def get_command_using_train_func(
         func_call = f"{train_func.__name__}(**{train_func_parameters})"
 
     # Combine everything into the final code string.
-    func_code = f"{func_code}\n{func_call}\n"
+    if enable_profiler:
+        profiler_code = textwrap.dedent(f"""\
+            import torch
+            from torch.profiler import profile, record_function, ProfilerActivity
+
+            with profile(
+                activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+                record_shapes=True,
+                profile_memory=True,
+                with_stack=True,
+                on_trace_ready=torch.profiler.tensorboard_trace_handler("{profiler_dir}")
+            ) as prof:
+                with record_function("model_training"):
+                    {func_call}
+            """)
+        func_code = f"{func_code}\n{profiler_code}\n"
+    else:
+        func_code = f"{func_code}\n{func_call}\n"
 
     is_mpi = runtime.trainer.command[0] == "mpirun"
     # The default file location for OpenMPI is: /home/mpiuser/<FILE_NAME>.py
@@ -420,14 +439,16 @@ def get_trainer_cr_from_custom_trainer(
             trainer.func_args,
             trainer.pip_index_urls,
             trainer.packages_to_install,
+            trainer.enable_profiler,
+            trainer.profiler_dir,
         )
 
     # Set the TrainJob trainer image if that is set.
-    if trainer.image:
+    if getattr(trainer, "image", None):
         trainer_cr.image = trainer.image
 
     # Add environment variables to the Trainer.
-    if trainer.env:
+    if getattr(trainer, "env", None):
         trainer_cr.env = [
             models.IoK8sApiCoreV1EnvVar(name=key, value=value) for key, value in trainer.env.items()
         ]

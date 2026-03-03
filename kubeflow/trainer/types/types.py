@@ -61,6 +61,8 @@ class CustomTrainer:
     num_nodes: int | None = None
     resources_per_node: dict | None = None
     env: dict[str, str] | None = None
+    enable_profiler: bool = False
+    profiler_dir: str = "/artifacts/profile"
 
 
 # Configuration for the Custom Trainer Container.

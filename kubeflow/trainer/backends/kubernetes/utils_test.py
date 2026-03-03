@@ -477,6 +477,39 @@ def test_get_script_for_python_packages(test_case):
                 ),
             ],
         ),
+        TestCase(
+            name="with profiler enabled",
+            expected_status=SUCCESS,
+            config={
+                "func": (lambda: print("Hello World")),
+                "func_args": None,
+                "runtime": _build_runtime(),
+                "enable_profiler": True,
+                "profiler_dir": "/custom/profile/dir",
+            },
+            expected_output=[
+                "bash",
+                "-c",
+                (
+                    "\nread -r -d '' SCRIPT << EOM\n\n"
+                    '"func": (lambda: print("Hello World")),\n\n'
+                    "import torch\n"
+                    "from torch.profiler import profile, record_function, ProfilerActivity\n\n"
+                    "with profile(\n"
+                    "    activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],\n"
+                    "    record_shapes=True,\n"
+                    "    profile_memory=True,\n"
+                    "    with_stack=True,\n"
+                    '    on_trace_ready=torch.profiler.tensorboard_trace_handler("/custom/profile/dir")\n'
+                    ") as prof:\n"
+                    '    with record_function("model_training"):\n'
+                    "        <lambda>()\n\n\n"
+                    "EOM\n"
+                    'printf "%s" "$SCRIPT" > "utils_test.py"\n'
+                    'python "utils_test.py"'
+                ),
+            ],
+        ),
     ],
 )
 def test_get_command_using_train_func(test_case: TestCase):
@@ -487,6 +520,8 @@ def test_get_command_using_train_func(test_case: TestCase):
             train_func_parameters=test_case.config.get("func_args"),
             pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
             packages_to_install=test_case.config.get("packages_to_install", []),
+            enable_profiler=test_case.config.get("enable_profiler", False),
+            profiler_dir=test_case.config.get("profiler_dir", "/artifacts/profile"),
         )
 
         assert test_case.expected_status == SUCCESS
