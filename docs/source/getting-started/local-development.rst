@@ -1,14 +1,14 @@
-Local Development with SDK Backends
-====================================
+Local Development
+==================
 
-This guide explains how to run Kubeflow training jobs locally using the SDK's
+This guide explains how to run Kubeflow TrainJobs locally using the SDK's
 different backends, helping you iterate faster before deploying to a Kubernetes
 cluster.
 
 Overview
 --------
 
-The Kubeflow Trainer SDK provides three backends for running training jobs:
+The Kubeflow Trainer SDK provides three backends for running TrainJobs:
 
 .. list-table:: Backend Comparison
    :header-rows: 1
@@ -143,18 +143,6 @@ because the default socket path differs across operating systems.
    verify the socket path by running ``docker context inspect`` and check
    the ``Host`` value in the output.
 
-**Choosing Docker vs Podman:**
-
-.. list-table::
-   :header-rows: 1
-   :widths: 30 70
-
-   * - Runtime
-     - Recommended For
-   * - Docker
-     - General use, especially on macOS/Windows
-   * - Podman
-     - Linux servers, rootless/security-focused environments
 
 Switching Between Backends
 --------------------------
