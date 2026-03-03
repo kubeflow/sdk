@@ -38,6 +38,7 @@ Key behaviors:
 """
 
 from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import logging
 import os
@@ -520,6 +521,15 @@ class ContainerBackend(RuntimeBackend):
         """
         Run dataset and model initializers before training starts.
 
+        When both dataset and model initializers are configured, they run in
+        parallel using a thread pool since Docker and Podman support multiple
+        containers mounting the same volume simultaneously. This reduces total
+        initialization time, especially when downloading large datasets and
+        models.
+
+        When only a single initializer is configured, it runs directly without
+        thread pool overhead.
+
         Args:
             job_name: Name of the training job.
             initializer: Initializer configuration.
@@ -527,37 +537,71 @@ class ContainerBackend(RuntimeBackend):
             network_id: Network ID for containers.
 
         Raises:
-            RuntimeError: If initializer fails to complete successfully.
+            RuntimeError: If any initializer fails to complete successfully.
         """
-        # Run dataset initializer if configured
+        # Collect initializers to run, pulling images upfront (serialized to
+        # avoid potential race conditions in the container runtime API).
+        initializer_tasks: list[tuple[str, container_utils.ContainerInitializer]] = []
+
         if initializer.dataset:
             dataset_init = container_utils.get_dataset_initializer(initializer.dataset, self.cfg)
             container_utils.maybe_pull_image(
                 self._adapter, dataset_init.image, self.cfg.pull_policy
             )
+            initializer_tasks.append(("dataset", dataset_init))
 
-            logger.debug("Running dataset initializer")
-            self._run_single_initializer(
-                job_name=job_name,
-                container_init=dataset_init,
-                workdir=workdir,
-                network_id=network_id,
-            )
-            logger.debug("Dataset initializer completed")
-
-        # Run model initializer if configured
         if initializer.model:
             model_init = container_utils.get_model_initializer(initializer.model, self.cfg)
             container_utils.maybe_pull_image(self._adapter, model_init.image, self.cfg.pull_policy)
+            initializer_tasks.append(("model", model_init))
 
-            logger.debug("Running model initializer")
+        if not initializer_tasks:
+            return
+
+        # Single initializer — run directly without thread pool overhead.
+        if len(initializer_tasks) == 1:
+            name, container_init = initializer_tasks[0]
+            logger.debug(f"Running {name} initializer")
             self._run_single_initializer(
                 job_name=job_name,
-                container_init=model_init,
+                container_init=container_init,
                 workdir=workdir,
                 network_id=network_id,
             )
-            logger.debug("Model initializer completed")
+            logger.debug(f"{name.capitalize()} initializer completed")
+            return
+
+        # Multiple initializers — run in parallel.
+        logger.debug(
+            f"Running {len(initializer_tasks)} initializers in parallel: "
+            f"{', '.join(name for name, _ in initializer_tasks)}"
+        )
+
+        with ThreadPoolExecutor(max_workers=len(initializer_tasks)) as executor:
+            futures = {
+                executor.submit(
+                    self._run_single_initializer,
+                    job_name=job_name,
+                    container_init=container_init,
+                    workdir=workdir,
+                    network_id=network_id,
+                ): name
+                for name, container_init in initializer_tasks
+            }
+
+            errors: list[tuple[str, Exception]] = []
+            for future in as_completed(futures):
+                name = futures[future]
+                try:
+                    future.result()
+                    logger.debug(f"{name.capitalize()} initializer completed")
+                except Exception as e:
+                    logger.error(f"{name.capitalize()} initializer failed: {e}")
+                    errors.append((name, e))
+
+        if errors:
+            error_details = "; ".join(f"{name}: {e}" for name, e in errors)
+            raise RuntimeError(f"Initializer(s) failed: {error_details}") from errors[0][1]
 
     def _run_single_initializer(
         self,
