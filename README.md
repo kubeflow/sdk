@@ -121,9 +121,56 @@ optimization_id = OptimizerClient().optimize(
 print(f"OptimizationJob created: {optimization_id}")
 ```
 
+### Run data processing with Spark Connect
+
+**Install Kubeflow Spark support:**
+
+```bash
+pip install 'kubeflow[spark]'
+```
+
+To install the Spark Operator, see the [installation guide](https://www.kubeflow.org/docs/components/spark-operator/getting-started/).
+
+```python
+from kubeflow.spark import KubernetesBackendConfig, SparkClient
+
+client = SparkClient(KubernetesBackendConfig(namespace="spark-test"))
+spark = client.connect()
+
+df = spark.range(5)
+df.show()
+```
+
+You should see the DataFrame:
+
+```sh
++---+
+| id|
++---+
+|  0|
+|  1|
+|  2|
+|  3|
+|  4|
++---+
+```
+
+You can also configure number of executors and resources:
+
+```python
+spark = client.connect(
+    num_executors=5,
+    resources_per_executor={"cpu": "5", "memory": "1Gi"},
+)
+
+df = spark.range(5)
+df.show()
+```
+
 ### Manage models with Model Registry
 
 **Install Model Registry support:**
+
 ```bash
 pip install 'kubeflow[hub]'
 ```
@@ -195,8 +242,8 @@ job_id = client.train(trainer=CustomTrainer(func=train_fn))
 | **Kubeflow Trainer**        | ✅ **Available** | v2.0.0+         | Train and fine-tune AI models with various frameworks                 |
 | **Kubeflow Katib**          | ✅ **Available** | v0.19.0+        | Hyperparameter optimization                                           |
 | **Kubeflow Model Registry** | ✅ **Available** | v0.3.0+         | Manage model artifacts, versions and ML artifacts metadata            |
+| **Kubeflow Spark Operator** | ✅ **Available** | v2.5.0+         | Manage Spark applications for data processing and feature engineering |
 | **Kubeflow Pipelines**      | 🚧 Planned       | TBD             | Build, run, and track AI workflows                                    |
-| **Kubeflow Spark Operator** | 🚧 Planned       | TBD             | Manage Spark applications for data processing and feature engineering |
 | **Feast**                   | 🚧 Planned       | TBD             | Feature store for machine learning                                    |
 
 ## Community
