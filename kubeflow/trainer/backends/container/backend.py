@@ -596,10 +596,16 @@ class ContainerBackend(RuntimeBackend):
                     future.result()
                     logger.debug(f"{name.capitalize()} initializer completed")
                 except Exception as e:
-                    logger.error(f"{name.capitalize()} initializer failed: {e}")
+                    logger.exception(f"{name.capitalize()} initializer failed")
                     errors.append((name, e))
 
         if errors:
+            # If exactly one initializer failed, re-raise its original exception
+            # to match the behavior of the single-initializer path; aggregate
+            # into a RuntimeError only when multiple initializers fail.
+            if len(errors) == 1:
+                _, exc = errors[0]
+                raise exc
             error_details = "; ".join(f"{name}: {e}" for name, e in errors)
             raise RuntimeError(f"Initializer(s) failed: {error_details}") from errors[0][1]
 
