@@ -140,6 +140,13 @@ Getting Involved
 .. toctree::
    :maxdepth: 2
    :hidden:
+   :caption: Tutorials
+
+   end-to-end-workflow
+
+.. toctree::
+   :maxdepth: 2
+   :hidden:
    :caption: Trainer
 
    train/index
