@@ -37,3 +37,10 @@ Backend Configurations
 .. autoclass:: kubeflow.trainer.ContainerBackendConfig
    :members:
    :show-inheritance:
+
+SparkClient
+-----------
+
+.. autoclass:: kubeflow.spark.SparkClient
+   :members:
+   :show-inheritance:
