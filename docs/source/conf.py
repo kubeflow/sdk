@@ -57,7 +57,10 @@ autodoc_default_options = {
     "undoc-members": False,
     "exclude-members": "__weakref__,__init__",
     "show-inheritance": True,
+   
 }
+
+autodoc_mock_imports = ["pyspark"]
 
 # Generate autosummary pages automatically
 autosummary_generate = True
