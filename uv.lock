@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -678,7 +678,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -1007,7 +1007,7 @@ podman = [
 ]
 spark = [
     { name = "kubeflow-spark-api" },
-    { name = "pyspark", extra = ["connect"] },
+    { name = "pyspark-connect" },
 ]
 
 [package.dev-dependencies]
@@ -1051,7 +1051,7 @@ requires-dist = [
     { name = "model-registry", marker = "extra == 'hub'", specifier = ">=0.3.6" },
     { name = "podman", marker = "extra == 'podman'", specifier = ">=5.6.0" },
     { name = "pydantic", specifier = ">=2.10.0" },
-    { name = "pyspark", extras = ["connect"], marker = "extra == 'spark'", specifier = "==3.4.1" },
+    { name = "pyspark-connect", marker = "extra == 'spark'", specifier = "==4.0.1" },
 ]
 provides-extras = ["docker", "hub", "podman", "spark"]
 
@@ -1978,11 +1978,11 @@ wheels = [
 
 [[package]]
 name = "py4j"
-version = "0.10.9.7"
+version = "0.10.9.9"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/1e/f2/b34255180c72c36ff7097f7c2cdca02abcbd89f5eebf7c7c41262a9a0637/py4j-0.10.9.7.tar.gz", hash = "sha256:0b6e5315bb3ada5cf62ac651d107bb2ebc02def3dee9d9548e3baac644ea8dbb", size = 1508234, upload-time = "2022-08-12T22:49:09.792Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/38/31/0b210511177070c8d5d3059556194352e5753602fa64b85b7ab81ec1a009/py4j-0.10.9.9.tar.gz", hash = "sha256:f694cad19efa5bd1dee4f3e5270eb406613c974394035e5bfc4ec1aba870b879", size = 761089, upload-time = "2025-01-15T03:53:18.624Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/10/30/a58b32568f1623aaad7db22aa9eafc4c6c194b429ff35bdc55ca2726da47/py4j-0.10.9.7-py2.py3-none-any.whl", hash = "sha256:85defdfd2b2376eb3abf5ca6474b51ab7e0de341c75a02f46dc9b5976f5a5c1b", size = 200481, upload-time = "2022-08-12T22:49:07.05Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/db/ea0203e495be491c85af87b66e37acfd3bf756fd985f87e46fc5e3bf022c/py4j-0.10.9.9-py2.py3-none-any.whl", hash = "sha256:c7c26e4158defb37b0bb124933163641a2ff6e3a3913f7811b0ddbe07ed61533", size = 203008, upload-time = "2025-01-15T03:53:15.648Z" },
 ]
 
 [[package]]
@@ -2260,15 +2260,18 @@ wheels = [
 
 [[package]]
 name = "pyspark"
-version = "3.4.1"
+version = "4.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "py4j" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0c/66/3cf748ba7cd7c6a4a46ffcc8d062f11ddc24b786c5b82936c857dc13b7bd/pyspark-3.4.1.tar.gz", hash = "sha256:72cd66ab8cf61a75854e5a753f75bea35ee075c3a96f9de4e2a66d02ec7fc652", size = 310780928, upload-time = "2023-06-23T08:30:15.636Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ae/40/1414582f16c1d7b051c668c2e19c62d21a18bd181d944cb24f5ddbb2423f/pyspark-4.0.1.tar.gz", hash = "sha256:9d1f22d994f60369228397e3479003ffe2dd736ba79165003246ff7bd48e2c73", size = 434204896, upload-time = "2025-09-06T07:15:57.091Z" }
 
-[package.optional-dependencies]
-connect = [
+[[package]]
+name = "pyspark-connect"
+version = "4.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
     { name = "googleapis-common-protos" },
     { name = "grpcio" },
     { name = "grpcio-status" },
@@ -2277,7 +2280,9 @@ connect = [
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pandas", version = "3.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pyarrow" },
+    { name = "pyspark" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/21/e7/001193cd04f4558d2226f84094f1eef83bb879b7847c5b626fa77cdeec6a/pyspark_connect-4.0.1.tar.gz", hash = "sha256:b3f7e469ba1a929c510f3677ac490bc4c7d0d9c67f63d6eeabb6c54ecdc7e39d", size = 4793, upload-time = "2025-09-06T07:16:20.649Z" }
 
 [[package]]
 name = "pytest"

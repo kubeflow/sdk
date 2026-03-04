@@ -157,7 +157,7 @@ class TestBuildSparkConnectCr:
             spark_conf=spark_conf,
         )
         assert spark_connect.spec.spark_conf["spark.jars"].endswith(
-            f"spark-connect_2.12-{constants.DEFAULT_SPARK_VERSION}.jar"
+            f"spark-connect_{constants.SPARK_CONNECT_PACKAGE_SCALA_VERSION}-{constants.DEFAULT_SPARK_VERSION}.jar"
         )
         assert spark_connect.spec.spark_conf["spark.sql.adaptive.enabled"] == "true"
 
@@ -224,7 +224,7 @@ class TestBuildSparkConnectCr:
             spark_conf={"spark.app.name": "my-spark-app"},
         )
         assert spark_connect.spec.spark_conf["spark.jars"].endswith(
-            f"spark-connect_2.12-{constants.DEFAULT_SPARK_VERSION}.jar"
+            f"spark-connect_{constants.SPARK_CONNECT_PACKAGE_SCALA_VERSION}-{constants.DEFAULT_SPARK_VERSION}.jar"
         )
         assert spark_connect.spec.spark_conf["spark.app.name"] == "my-spark-app"
 
