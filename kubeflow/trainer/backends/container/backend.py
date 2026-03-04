@@ -543,11 +543,11 @@ class ContainerBackend(RuntimeBackend):
 
         # Use ThreadPoolExecutor to run configured initializers in parallel
         futures = {}
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(initializer_configs) or 1) as executor:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=len(initializer_configs) or 1
+        ) as executor:
             for name, init in initializer_configs:
-                container_utils.maybe_pull_image(
-                    self._adapter, init.image, self.cfg.pull_policy
-                )
+                container_utils.maybe_pull_image(self._adapter, init.image, self.cfg.pull_policy)
                 logger.debug("Queueing %s initializer", name)
                 future = executor.submit(
                     self._run_single_initializer,
