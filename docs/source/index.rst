@@ -87,8 +87,8 @@ Supported Projects
    * - Pipelines
      - 🚧 Planned
      - Build, run, and track AI workflows
-   * - Spark Operator
-     - 🚧 Planned
+   * - :doc:`Spark <spark/index>`
+     - ✅ Available
      - Data processing and feature engineering
    * - Feast
      - 🚧 Planned
@@ -147,6 +147,15 @@ Getting Involved
    train/distributed
    train/runtimes
    train/api
+
+   
+.. toctree::
+   :maxdepth: 2
+   :hidden:
+   :caption: Spark
+
+   spark/index
+   spark/api
 
 .. toctree::
    :maxdepth: 2
