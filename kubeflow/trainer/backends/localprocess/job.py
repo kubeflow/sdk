@@ -72,7 +72,6 @@ class LocalJob(threading.Thread):
             _c = " ".join(self.command)
             logger.debug(f"[{self.name}] Started at {self._start_time} with command: \n {_c}")
 
-
             self._process = subprocess.Popen(
                 self.command,
                 cwd=self.execution_dir,
