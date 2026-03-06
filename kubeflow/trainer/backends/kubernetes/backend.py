@@ -441,7 +441,7 @@ class KubernetesBackend(RuntimeBackend):
         # Get the TrainJob Pod name.
         pod_name = None
         for c in self.get_job(name).steps:
-            if c.status != constants.POD_PENDING and c.name == step:
+            if c.name == step and c.pod_name:
                 pod_name = c.pod_name
                 break
 

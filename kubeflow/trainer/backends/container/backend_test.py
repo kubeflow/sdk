@@ -874,6 +874,9 @@ def test_get_job_logs(container_backend, test_case):
         assert type(e) is test_case.expected_error
     print("test execution complete")
 
+def test_get_job_logs_strict_raises_when_step_missing(container_backend):
+    with pytest.raises(ValueError):
+        list(container_backend.get_job_logs("missing-job", step="missing-step", strict=True))
 
 @pytest.mark.parametrize(
     "test_case",

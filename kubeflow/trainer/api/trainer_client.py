@@ -210,6 +210,7 @@ class TrainerClient:
         Raises:
             TimeoutError: Timeout to get a TrainJob.
             RuntimeError: Failed to get a TrainJob.
+            PodNotFoundError: Raised when strict=True and no pod is found for the requested step.
         """
         return self.backend.get_job_logs(name=name, follow=follow, step=step, strict=strict)
 

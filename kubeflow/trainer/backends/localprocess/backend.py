@@ -202,13 +202,16 @@ class LocalProcessBackend(RuntimeBackend):
             raise ValueError(f"No TrainJob with name {name}")
 
         want_all_steps = step == constants.NODE + "-0"
+        matched = False
 
         for _step in _job[0].steps:
             if not want_all_steps and _step.step_name != step:
                 continue
-            # Flatten the generator and pass through flags so it behaves as expected
-            # (adjust args if stream_logs has different signature)
+            matched = True
             yield from _step.job.logs(follow=follow)
+
+        if strict and not matched:
+            raise ValueError(f"No log source found for TrainJob {name} step={step}")
 
     def get_job_events(self, name: str) -> list[types.Event]:
         raise NotImplementedError()

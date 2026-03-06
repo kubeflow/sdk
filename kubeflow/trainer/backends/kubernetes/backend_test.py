@@ -1437,8 +1437,7 @@ def test_get_job_logs(kubernetes_backend, test_case):
 
 def test_get_job_logs_strict_raises_when_pod_missing(kubernetes_backend, monkeypatch):
     tj = get_train_job_data_type(runtime_name=TORCH_RUNTIME, train_job_name=BASIC_TRAIN_JOB_NAME)
-    for s in tj.steps:
-        s.status = constants.POD_PENDING
+    tj.steps = []
 
     monkeypatch.setattr(kubernetes_backend, "get_job", lambda name: tj)
 
