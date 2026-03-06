@@ -64,6 +64,7 @@ class RuntimeBackend(abc.ABC):
         name: str,
         follow: bool = False,
         step: str = constants.NODE + "-0",
+        strict: bool = False,
     ) -> Iterator[str]:
         raise NotImplementedError()
 

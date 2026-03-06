@@ -32,7 +32,7 @@ from kubernetes import client
 import pytest
 
 from kubeflow.common.types import KubernetesBackendConfig
-from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
+from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend, PodNotFoundError
 import kubeflow.trainer.backends.kubernetes.utils as utils
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.options import (
@@ -1434,6 +1434,16 @@ def test_get_job_logs(kubernetes_backend, test_case):
         assert type(e) is test_case.expected_error
     print("test execution complete")
 
+
+def test_get_job_logs_strict_raises_when_pod_missing(kubernetes_backend, monkeypatch):
+    tj = get_train_job_data_type(runtime_name=TORCH_RUNTIME, train_job_name=BASIC_TRAIN_JOB_NAME)
+    for s in tj.steps:
+        s.status = constants.POD_PENDING
+
+    monkeypatch.setattr(kubernetes_backend, "get_job", lambda name: tj)
+
+    with pytest.raises(PodNotFoundError):
+        list(kubernetes_backend.get_job_logs(BASIC_TRAIN_JOB_NAME, strict=True))
 
 @pytest.mark.parametrize(
     "test_case",
