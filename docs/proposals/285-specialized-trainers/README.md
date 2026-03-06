@@ -143,7 +143,7 @@ This proposal benefits all three personas defined in KEP-2170:
 3. **Deprecating `CustomTrainer` or `BuiltinTrainer`.** Both remain supported.
    Specialized trainers are an additional option, not a replacement.
 4. **Tier 2 trainer implementations.** This proposal defines the extension mechanism
-   and interface. Concrete Tier 2 implementations (HuggingFace, DeepSpeed, Unsloth,
+   and interface. Concrete Tier 2 implementations (Transformers, DeepSpeed, Unsloth,
    Axolotl) will be proposed in follow-up KEPs.
 5. **Changes to the `TrainJobTemplate` dataclass.** Template support for specialized
    trainers can be added incrementally.
@@ -480,13 +480,13 @@ higher-level, application-specific APIs. This proposal defines the extension poi
 concrete implementations are deferred to follow-up proposals.
 
 ```python
-# Example: future HuggingFaceTrainer (NOT part of this proposal's implementation scope)
+# Example: future TransformersTrainer (NOT part of this proposal's implementation scope)
 
 @dataclass
 class TransformersTrainer(BaseTrainer):
     """Trainer for HuggingFace Transformers training.
 
-    Wraps HuggingFace's Trainer API and maps to a PyTorch runtime.
+    Wraps Transformer's Trainer API and maps to a PyTorch runtime.
     """
 
     supported_frameworks: ClassVar[list[str]] = ["torch"]
@@ -498,7 +498,7 @@ class TransformersTrainer(BaseTrainer):
     resources_per_node: Optional[dict] = None
 
     def get_train_func(self) -> Optional[Callable]:
-        # Returns a generated function that uses HF Trainer internally
+        # Returns a generated function that uses Transformers Trainer internally
         ...
 
     def get_train_func_args(self) -> Optional[dict]:
@@ -738,7 +738,7 @@ init container, environment variables are set on all training pods.
           │
     ┌─────┴──────────┐
     │                │
-HuggingFace     DeepSpeed
+Transformers     DeepSpeed
   Trainer        Trainer
 
 
