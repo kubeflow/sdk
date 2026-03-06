@@ -148,7 +148,7 @@ Getting Involved
    train/runtimes
    train/api
 
-   
+
 .. toctree::
    :maxdepth: 2
    :hidden:
