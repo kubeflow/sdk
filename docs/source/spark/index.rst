@@ -22,6 +22,15 @@ Spark is commonly used for:
 - Dataset generation
 - Large-scale batch analytics
 
+Installation
+------------
+
+To use Spark with the Kubeflow SDK, install the Spark dependencies:
+
+.. code-block:: bash
+
+   pip install "kubeflow[spark]"
+
 Quick Example
 -------------
 
