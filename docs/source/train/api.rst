@@ -64,3 +64,8 @@ Backend Configurations
 .. autoclass:: kubeflow.trainer.ContainerBackendConfig
    :members:
    :show-inheritance:
+
+Utilities
+---------
+
+.. autofunction:: kubeflow.trainer.utils.update_runtime_status

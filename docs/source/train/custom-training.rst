@@ -118,6 +118,36 @@ Tips and Best Practices
    def train():
        model = torch.nn.Linear(10, 1)
 
+**Report progress to the controller:**
+
+When running with TrainJobProgress enabled, you can report real-time progress:
+
+.. code-block:: python
+
+   def train():
+       from kubeflow.trainer.utils import update_runtime_status
+
+       total_steps = 1000
+       update_runtime_status(progress_percent=0, force=True)  # Start
+
+       for step in range(total_steps):
+           # ... training ...
+           progress = int((step / total_steps) * 100)
+           update_runtime_status(
+               progress_percent=progress,
+               metrics={"loss": loss, "step": step}
+           )
+
+       update_runtime_status(progress_percent=100, force=True)  # End
+
+This function is safe to call in any environment - it returns ``False`` silently
+if not running inside a Kubeflow TrainJob. Includes automatic throttling to avoid
+overwhelming the controller.
+
+.. note::
+
+   For HuggingFace Transformers, use ``KubeflowCallback`` which reports progress automatically.
+
 **Print progress for monitoring:**
 
 Your ``print()`` statements appear in the job logs:
