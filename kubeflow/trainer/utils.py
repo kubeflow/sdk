@@ -31,8 +31,7 @@ Example:
     for step in range(total_steps):
         loss = train_step(batch)
         update_runtime_status(
-            progress_percent=int((step / total_steps) * 100),
-            metrics={"loss": loss, "step": step}
+            progress_percent=int((step / total_steps) * 100), metrics={"loss": loss, "step": step}
         )  # SDK handles throttling
 
     update_runtime_status(progress_percent=100, force=True)  # End
@@ -45,11 +44,11 @@ Note:
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 import logging
 import os
 import threading
 import time
-from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 import requests
