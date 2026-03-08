@@ -152,7 +152,7 @@ class TorchTuneInstructDataset:
 @dataclass
 class LoraConfig:
     """Configuration for the LoRA/QLoRA/DoRA.
-    REF: https://meta-pytorch.org/torchtune/main/tutorials/memory_optimizations.html
+    REF: https://pytorch.org/torchtune/main/tutorials/lora_finetune.html
 
     Args:
         apply_lora_to_mlp (`Optional[bool]`):

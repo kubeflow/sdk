@@ -4,10 +4,10 @@ This guide explains how to contribute to the Kubeflow SDK project.
 For the Kubeflow SDK documentation, please check [the official Kubeflow documentation](https://www.kubeflow.org/docs/components/).
 
 ## Requirements
+
 - [Supported Python version](./pyproject.toml#L4)
 - [pre-commit](https://pre-commit.com/)
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)
-
 
 ## Development
 
@@ -20,6 +20,7 @@ make install-dev
 ```
 
 ### Coding Style
+
 Make sure to install [pre-commit](https://pre-commit.com/) (`uv pip install pre-commit`) and run `pre-commit install` from the root of the repository at least once before creating git commits.
 
 The pre-commit hooks ensure code quality and consistency. They are executed in CI. PRs that fail to comply with the hooks will not be able to pass the corresponding CI gate. The hooks are only executed against staged files unless you run `pre-commit run --all`, in which case, they'll be executed against every file in the repository.
@@ -37,6 +38,7 @@ make verify
 The Kubeflow SDK project includes several types of tests to ensure code quality and functionality.
 
 ### Unit Testing
+
 To run unit tests locally use the following make command:
 
 ```shell
@@ -44,10 +46,10 @@ make test-python
 ```
 
 ### E2E Tests
+
 E2E test run in CI on a kind cluster using [Kubeflow Trainer E2E Scripts](https://github.com/kubeflow/trainer/blob/master/CONTRIBUTING.md#e2e-tests).
 Clone the `Kubeflow Trainer` repo and run the provided commands against `Trainer` Makefile.
 For more details check [the Kubeflow Trainer Contributing Guide](https://github.com/kubeflow/trainer/blob/master/CONTRIBUTING.md#e2e-tests).
-
 
 ## Best Practices
 

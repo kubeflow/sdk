@@ -75,7 +75,7 @@ class TrainerClient:
         return self.backend.list_runtimes()
 
     def get_runtime(self, name: str) -> types.Runtime:
-        """Get the runtime object
+        """Get the runtime object.
 
         Args:
             name: Name of the runtime.
@@ -203,7 +203,6 @@ class TrainerClient:
 
         Returns:
             Iterator of log lines.
-
 
         Raises:
             TimeoutError: Timeout to get a TrainJob.
