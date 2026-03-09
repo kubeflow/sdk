@@ -90,12 +90,19 @@ class CustomTrainerContainer:
     env: dict[str, str] | None = None
 
 
-# TODO(Electronic-Waste): Add more loss functions.
 # Loss function for the TorchTune LLM Trainer.
 class Loss(Enum):
-    """Loss function for the TorchTune LLM Trainer."""
+    """Loss function for the TorchTune LLM Trainer.
+
+    Supported loss functions from torchtune.modules.loss:
+        - CEWithChunkedOutputLoss: Memory-efficient cross-entropy via chunked output.
+        - ForwardKLLoss: Forward KL divergence for knowledge distillation.
+        - ForwardKLWithChunkedOutputLoss: Memory-efficient forward KL via chunked output.
+    """
 
     CEWithChunkedOutputLoss = "torchtune.modules.loss.CEWithChunkedOutputLoss"
+    ForwardKLLoss = "torchtune.modules.loss.ForwardKLLoss"
+    ForwardKLWithChunkedOutputLoss = "torchtune.modules.loss.ForwardKLWithChunkedOutputLoss"
 
 
 # Data type for the TorchTune LLM Trainer.
@@ -201,8 +208,9 @@ class TorchTuneConfig:
             The number of samples processed before updating model weights.
         epochs (`Optional[int]`):
             The number of samples processed before updating model weights.
-        loss (`Optional[Loss]`): The loss algorithm we use to fine-tune the LLM,
-            e.g. `torchtune.modules.loss.CEWithChunkedOutputLoss`.
+        loss (`Optional[Loss]`): The loss algorithm we use to fine-tune the LLM.
+            Supported values: `Loss.CEWithChunkedOutputLoss`, `Loss.ForwardKLLoss`,
+            `Loss.ForwardKLWithChunkedOutputLoss`.
         num_nodes (`Optional[int]`): The number of nodes to use for training.
         peft_config (`Optional[LoraConfig]`):
             Configuration for the PEFT(Parameter-Efficient Fine-Tuning),
