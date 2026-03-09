@@ -706,3 +706,99 @@ def test_get_model_initializer(test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="get_args_from_peft_config drops no Falsy values",
+            expected_status=SUCCESS,
+            config={
+                "peft_config": types.LoraConfig(
+                    lora_rank=8,
+                    apply_lora_to_mlp=False,
+                    lora_dropout=0.0,
+                    quantize_base=False,
+                ),
+            },
+            expected_output=[
+                "model.lora_rank=8",
+                "model.lora_dropout=0.0",
+                "model.quantize_base=False",
+                "model.apply_lora_to_mlp=False",
+                "model.lora_attn_modules=[q_proj,v_proj,output_proj]",
+            ],
+        ),
+        TestCase(
+            name="get_args_from_peft_config omits None values",
+            expected_status=SUCCESS,
+            config={
+                "peft_config": types.LoraConfig(
+                    lora_rank=16,
+                    apply_lora_to_mlp=True,
+                ),
+            },
+            expected_output=[
+                "model.lora_rank=16",
+                "model.apply_lora_to_mlp=True",
+                "model.lora_attn_modules=[q_proj,v_proj,output_proj]",
+            ],
+        ),
+    ],
+)
+def test_get_args_from_peft_config(test_case):
+    print("Executing test:", test_case.name)
+    try:
+        args = utils.get_args_from_peft_config(test_case.config["peft_config"])
+        assert test_case.expected_status == SUCCESS
+        assert set(args) == set(test_case.expected_output)
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="get_args_from_dataset_preprocess_config drops no Falsy values",
+            expected_status=SUCCESS,
+            config={
+                "dataset_config": types.TorchTuneInstructDataset(
+                    source=types.DataFormat.JSON,
+                    train_on_input=False,
+                ),
+            },
+            expected_output=[
+                "dataset=torchtune.datasets.instruct_dataset",
+                "dataset.source=json",
+                "dataset.train_on_input=False",
+            ],
+        ),
+        TestCase(
+            name="get_args_from_dataset_preprocess_config with train_on_input None",
+            expected_status=SUCCESS,
+            config={
+                "dataset_config": types.TorchTuneInstructDataset(
+                    source=types.DataFormat.JSON,
+                ),
+            },
+            expected_output=[
+                "dataset=torchtune.datasets.instruct_dataset",
+                "dataset.source=json",
+            ],
+        ),
+    ],
+)
+def test_get_args_from_dataset_preprocess_config(test_case):
+    print("Executing test:", test_case.name)
+    try:
+        args = utils.get_args_from_dataset_preprocess_config(test_case.config["dataset_config"])
+        assert test_case.expected_status == SUCCESS
+        assert set(args) == set(test_case.expected_output)
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
