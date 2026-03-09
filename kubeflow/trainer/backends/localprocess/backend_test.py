@@ -16,12 +16,17 @@
 Unit tests for the LocalProcessBackend class in the Kubeflow Trainer SDK.
 """
 
+import os
+import shutil
+import tempfile
+import threading
 from unittest.mock import Mock, patch
 
 import pytest
 
 from kubeflow.trainer.backends.localprocess.backend import LocalProcessBackend
 from kubeflow.trainer.backends.localprocess.constants import LOCAL_RUNTIME_IMAGE
+from kubeflow.trainer.backends.localprocess.job import LocalJob
 from kubeflow.trainer.backends.localprocess.types import (
     LocalProcessBackendConfig,
     LocalRuntimeTrainer,
@@ -575,14 +580,8 @@ def test_get_job_status(local_backend, test_case):
         ),
     ],
 )
-def test_concurrent_localjobs_do_not_change_cwd(local_backend, test_case):
+def test_concurrent_localjobs_do_not_change_cwd(test_case):
     """Concurrent LocalJob threads must not mutate the parent process cwd."""
-    import os
-    import shutil
-    import tempfile
-    import threading
-
-    from kubeflow.trainer.backends.localprocess.job import LocalJob
 
     original_cwd = os.getcwd()
     errors = []
