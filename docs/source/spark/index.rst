@@ -31,8 +31,7 @@ To use Spark with the Kubeflow SDK, install the Spark dependencies:
 
    pip install "kubeflow[spark]"
 
-For full setup instructions, see the Spark installation guide in the
-`Kubeflow SDK README <https://github.com/kubeflow/sdk?tab=readme-ov-file#run-data-processing-with-spark-connect>`_
+For full setup instructions, see `the Spark installation guide. <https://www.kubeflow.org/docs/components/spark-operator/getting-started/>` _
 
 Quick Example
 -------------
