@@ -417,7 +417,7 @@ class SparkClient:
     def wait_for_job_status(
         self,
         name: str,
-        status: Set[SparkJobStatus] = {SparkJobStatus.COMPLETED},
+        status: Set[SparkJobStatus] | None = None,
         timeout: int = 600,
     ) -> SparkJob:
         """Wait for a job to reach desired status."""

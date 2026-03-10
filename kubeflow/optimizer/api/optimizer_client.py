@@ -182,7 +182,7 @@ class OptimizerClient:
     def wait_for_job_status(
         self,
         name: str,
-        status: set[str] = {constants.OPTIMIZATION_JOB_COMPLETE},
+        status: set[str] | None = None,
         timeout: int = 3600,
         polling_interval: int = 2,
         callbacks: list[Callable[[OptimizationJob], None]] | None = None,
@@ -208,6 +208,9 @@ class OptimizerClient:
                 Failed status.
             TimeoutError: Timeout to wait for OptimizationJob status.
         """
+        if status is None:
+            status = {constants.OPTIMIZATION_JOB_COMPLETE}
+
         return self.backend.wait_for_job_status(
             name=name,
             status=status,

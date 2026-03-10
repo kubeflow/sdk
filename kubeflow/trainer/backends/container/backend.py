@@ -803,11 +803,14 @@ class ContainerBackend(RuntimeBackend):
     def wait_for_job_status(
         self,
         name: str,
-        status: set[str] = {constants.TRAINJOB_COMPLETE},
+        status: set[str] | None = None,
         timeout: int = 600,
         polling_interval: int = 2,
         callbacks: list[Callable[[types.TrainJob], None]] | None = None,
     ) -> types.TrainJob:
+        if status is None:
+            status = {constants.TRAINJOB_COMPLETE}
+
         import time
 
         end = time.time() + timeout
