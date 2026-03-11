@@ -8,7 +8,7 @@ cluster.
 Overview
 --------
 
-The Kubeflow Trainer SDK provides three backends for running TrainJobs:
+The Kubeflow SDK provides three backends for running TrainJobs:
 
 .. list-table:: Backend Comparison
    :header-rows: 1
