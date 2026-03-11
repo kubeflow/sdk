@@ -1,10 +1,7 @@
 Local Development
 ==================
 
-This guide explains how to run Kubeflow TrainJobs locally using the SDK's
-different backends, helping you iterate faster before deploying to a Kubernetes
-cluster.
-
+This guide explains how to run Kubeflow TrainJobs locally using various Kubeflow SDK backends, allowing for faster iteration before deploying to a Kubernetes cluster.
 Overview
 --------
 
