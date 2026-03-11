@@ -134,7 +134,7 @@ def get_runtime_trainer(
     # Set the Trainer entrypoint.
     if framework == types.TORCH_TUNE:
         trainer.set_command(constants.TORCH_TUNE_COMMAND)
-    elif ml_policy.torch:
+    elif ml_policy.torch is not None:
         trainer.set_command(constants.TORCH_COMMAND)
     elif ml_policy.mpi:
         trainer.set_command(constants.MPI_COMMAND)

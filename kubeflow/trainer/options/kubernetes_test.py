@@ -20,15 +20,21 @@ from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.trainer.backends.localprocess.backend import LocalProcessBackend
 from kubeflow.trainer.options import (
     Annotations,
-    ContainerOverride,
+    ContainerPatch,
+    JobSetSpecPatch,
+    JobSetTemplatePatch,
+    JobSpecPatch,
+    JobTemplatePatch,
     Labels,
     Name,
-    PodTemplateOverride,
-    PodTemplateOverrides,
-    SpecAnnotations,
-    SpecLabels,
+    PodSpecPatch,
+    PodTemplatePatch,
+    ReplicatedJobPatch,
+    RuntimePatch,
+    RuntimePatches,
     TrainerArgs,
     TrainerCommand,
+    TrainingRuntimeSpecPatch,
 )
 
 
@@ -62,8 +68,6 @@ class TestKubernetesOptionBackendValidation:
         [
             (Labels, {"app": "test", "version": "v1"}),
             (Annotations, {"description": "test job"}),
-            (SpecLabels, {"app": "training"}),
-            (SpecAnnotations, {"prometheus.io/scrape": "true"}),
             (TrainerCommand, ["python", "train.py"]),
             (TrainerArgs, ["--epochs", "10"]),
         ],
@@ -87,10 +91,10 @@ class TestKubernetesOptionBackendValidation:
         assert "not compatible with" in str(exc_info.value)
         assert "LocalProcessBackend" in str(exc_info.value)
 
-    def test_pod_template_overrides_rejects_wrong_backend(self, mock_localprocess_backend):
-        """Test PodTemplateOverrides rejects non-Kubernetes backends."""
-        override = PodTemplateOverride(target_jobs=["node"])
-        option = PodTemplateOverrides(override)
+    def test_runtime_patches_rejects_wrong_backend(self, mock_localprocess_backend):
+        """Test RuntimePatches rejects non-Kubernetes backends."""
+        patch = RuntimePatch(manager="test-manager")
+        option = RuntimePatches(patch)
 
         job_spec = {}
 
@@ -115,16 +119,6 @@ class TestKubernetesOptionApplication:
                 Annotations,
                 {"description": "test job"},
                 {"metadata": {"annotations": {"description": "test job"}}},
-            ),
-            (
-                SpecLabels,
-                {"app": "training", "version": "v1.0"},
-                {"spec": {"labels": {"app": "training", "version": "v1.0"}}},
-            ),
-            (
-                SpecAnnotations,
-                {"prometheus.io/scrape": "true"},
-                {"spec": {"annotations": {"prometheus.io/scrape": "true"}}},
             ),
             (Name, "custom-job-name", {"metadata": {"name": "custom-job-name"}}),
             (
@@ -217,8 +211,8 @@ class TestTrainerOptionValidation:
                 assert job_spec["spec"]["trainer"]["args"] == option_args
 
 
-class TestContainerOverride:
-    """Test ContainerOverride validation."""
+class TestContainerPatch:
+    """Test ContainerPatch validation."""
 
     @pytest.mark.parametrize(
         "kwargs,expected_error",
@@ -234,26 +228,241 @@ class TestContainerOverride:
             ),
         ],
     )
-    def test_container_override_validation(self, kwargs, expected_error):
-        """Test ContainerOverride validates inputs correctly."""
+    def test_container_patch_validation(self, kwargs, expected_error):
+        """Test ContainerPatch validates inputs correctly."""
         with pytest.raises(ValueError) as exc_info:
-            ContainerOverride(**kwargs)
+            ContainerPatch(**kwargs)
         assert expected_error in str(exc_info.value)
 
 
-class TestPodTemplateOverrides:
-    """Test PodTemplateOverrides functionality."""
+class TestRuntimePatch:
+    """Test RuntimePatch validation."""
 
-    def test_pod_template_overrides_basic(self, mock_kubernetes_backend):
-        """Test basic PodTemplateOverrides application."""
+    def test_runtime_patch_requires_manager(self):
+        """Test RuntimePatch validates manager is non-empty."""
+        with pytest.raises(ValueError) as exc_info:
+            RuntimePatch(manager="")
+        assert "manager must be a non-empty string" in str(exc_info.value)
 
-        override = PodTemplateOverride(target_jobs=["node"])
-        option = PodTemplateOverrides(override)
+    def test_runtime_patch_valid(self):
+        """Test RuntimePatch with valid manager."""
+        patch = RuntimePatch(manager="trainer.kubeflow.org/kubeflow-sdk")
+        assert patch.manager == "trainer.kubeflow.org/kubeflow-sdk"
+
+
+class TestRuntimePatches:
+    """Test RuntimePatches functionality."""
+
+    def test_runtime_patches_requires_at_least_one(self):
+        """Test RuntimePatches requires at least one patch."""
+        with pytest.raises(ValueError) as exc_info:
+            RuntimePatches()
+        assert "At least one RuntimePatch must be provided" in str(exc_info.value)
+
+    def test_runtime_patches_basic(self, mock_kubernetes_backend):
+        """Test basic RuntimePatches application with manager only."""
+        patch = RuntimePatch(manager="test-manager")
+        option = RuntimePatches(patch)
 
         job_spec = {}
         option(job_spec, None, mock_kubernetes_backend)
 
         assert "spec" in job_spec
-        assert "podTemplateOverrides" in job_spec["spec"]
-        assert len(job_spec["spec"]["podTemplateOverrides"]) == 1
-        assert job_spec["spec"]["podTemplateOverrides"][0]["targetJobs"] == [{"name": "node"}]
+        assert "runtimePatches" in job_spec["spec"]
+        assert len(job_spec["spec"]["runtimePatches"]) == 1
+        assert job_spec["spec"]["runtimePatches"][0] == {"manager": "test-manager"}
+
+    def test_runtime_patches_with_node_selector(self, mock_kubernetes_backend):
+        """Test RuntimePatches with node selector configuration."""
+        patch = RuntimePatch(
+            manager="trainer.kubeflow.org/kubeflow-sdk",
+            training_runtime_spec=TrainingRuntimeSpecPatch(
+                template=JobSetTemplatePatch(
+                    spec=JobSetSpecPatch(
+                        replicated_jobs=[
+                            ReplicatedJobPatch(
+                                name="node",
+                                template=JobTemplatePatch(
+                                    spec=JobSpecPatch(
+                                        template=PodTemplatePatch(
+                                            spec=PodSpecPatch(
+                                                node_selector={"node-type": "gpu-a100"},
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ],
+                    ),
+                ),
+            ),
+        )
+        option = RuntimePatches(patch)
+
+        job_spec = {}
+        option(job_spec, None, mock_kubernetes_backend)
+
+        expected = {
+            "spec": {
+                "runtimePatches": [
+                    {
+                        "manager": "trainer.kubeflow.org/kubeflow-sdk",
+                        "trainingRuntimeSpec": {
+                            "template": {
+                                "spec": {
+                                    "replicatedJobs": [
+                                        {
+                                            "name": "node",
+                                            "template": {
+                                                "spec": {
+                                                    "template": {
+                                                        "spec": {
+                                                            "nodeSelector": {
+                                                                "node-type": "gpu-a100"
+                                                            },
+                                                        },
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    ],
+                                },
+                            },
+                        },
+                    },
+                ],
+            },
+        }
+
+        assert job_spec == expected
+
+    def test_runtime_patches_with_volume_and_container(self, mock_kubernetes_backend):
+        """Test RuntimePatches with volumes and container patches."""
+        patch = RuntimePatch(
+            manager="trainer.kubeflow.org/kubeflow-sdk",
+            training_runtime_spec=TrainingRuntimeSpecPatch(
+                template=JobSetTemplatePatch(
+                    spec=JobSetSpecPatch(
+                        replicated_jobs=[
+                            ReplicatedJobPatch(
+                                name="node",
+                                template=JobTemplatePatch(
+                                    spec=JobSpecPatch(
+                                        template=PodTemplatePatch(
+                                            spec=PodSpecPatch(
+                                                volumes=[
+                                                    {
+                                                        "name": "user-volume",
+                                                        "persistentVolumeClaim": {
+                                                            "claimName": "user-pvc"
+                                                        },
+                                                    }
+                                                ],
+                                                containers=[
+                                                    ContainerPatch(
+                                                        name="trainer",
+                                                        volume_mounts=[
+                                                            {
+                                                                "name": "user-volume",
+                                                                "mountPath": "/workspace",
+                                                            }
+                                                        ],
+                                                    ),
+                                                ],
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ],
+                    ),
+                ),
+            ),
+        )
+        option = RuntimePatches(patch)
+
+        job_spec = {}
+        option(job_spec, None, mock_kubernetes_backend)
+
+        runtime_patch = job_spec["spec"]["runtimePatches"][0]
+        pod_spec = runtime_patch["trainingRuntimeSpec"]["template"]["spec"]["replicatedJobs"][0][
+            "template"
+        ]["spec"]["template"]["spec"]
+
+        assert pod_spec["volumes"] == [
+            {"name": "user-volume", "persistentVolumeClaim": {"claimName": "user-pvc"}}
+        ]
+        assert pod_spec["containers"] == [
+            {
+                "name": "trainer",
+                "volumeMounts": [{"name": "user-volume", "mountPath": "/workspace"}],
+            }
+        ]
+
+    def test_runtime_patches_with_jobset_metadata(self, mock_kubernetes_backend):
+        """Test RuntimePatches with JobSet-level metadata."""
+        patch = RuntimePatch(
+            manager="trainer.kubeflow.org/kubeflow-sdk",
+            training_runtime_spec=TrainingRuntimeSpecPatch(
+                template=JobSetTemplatePatch(
+                    metadata={"labels": {"app": "training"}},
+                ),
+            ),
+        )
+        option = RuntimePatches(patch)
+
+        job_spec = {}
+        option(job_spec, None, mock_kubernetes_backend)
+
+        assert job_spec["spec"]["runtimePatches"][0] == {
+            "manager": "trainer.kubeflow.org/kubeflow-sdk",
+            "trainingRuntimeSpec": {
+                "template": {
+                    "metadata": {"labels": {"app": "training"}},
+                },
+            },
+        }
+
+    def test_runtime_patches_multiple_managers(self, mock_kubernetes_backend):
+        """Test RuntimePatches with multiple manager patches."""
+        option = RuntimePatches(
+            RuntimePatch(
+                manager="trainer.kubeflow.org/kubeflow-sdk",
+                training_runtime_spec=TrainingRuntimeSpecPatch(
+                    template=JobSetTemplatePatch(
+                        metadata={"labels": {"app": "training"}},
+                    ),
+                ),
+            ),
+            RuntimePatch(
+                manager="kueue.x-k8s.io/manager",
+                training_runtime_spec=TrainingRuntimeSpecPatch(
+                    template=JobSetTemplatePatch(
+                        spec=JobSetSpecPatch(
+                            replicated_jobs=[
+                                ReplicatedJobPatch(
+                                    name="node",
+                                    template=JobTemplatePatch(
+                                        spec=JobSpecPatch(
+                                            template=PodTemplatePatch(
+                                                spec=PodSpecPatch(
+                                                    node_selector={"zone": "us-west-1b"},
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        job_spec = {}
+        option(job_spec, None, mock_kubernetes_backend)
+
+        patches = job_spec["spec"]["runtimePatches"]
+        assert len(patches) == 2
+        assert patches[0]["manager"] == "trainer.kubeflow.org/kubeflow-sdk"
+        assert patches[1]["manager"] == "kueue.x-k8s.io/manager"
