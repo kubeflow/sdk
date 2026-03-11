@@ -144,7 +144,7 @@ because the default socket path differs across operating systems.
 Switching Between Backends
 --------------------------
 
-The key benefit of the SDK is seamless backend switching. Your training code
+A key benefit of the Kubeflow SDK is seamless backend switching. Your training code
 stays the same - only the backend configuration changes:
 
 .. code-block:: python
