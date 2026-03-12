@@ -70,8 +70,6 @@ class RuntimeBackend(abc.ABC):
         polling_interval: int = 2,
         callbacks: list[Callable[[OptimizationJob], None]] | None = None,
     ) -> OptimizationJob:
-        if status is None:
-            status = {constants.OPTIMIZATION_JOB_COMPLETE}
         raise NotImplementedError()
 
     @abc.abstractmethod

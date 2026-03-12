@@ -87,8 +87,6 @@ class RuntimeBackend(abc.ABC):
         polling_interval: int = 2,
         callbacks: list[Callable[[types.TrainJob], None]] | None = None,
     ) -> types.TrainJob:
-        if status is None:
-            status = {constants.TRAINJOB_COMPLETE}
         raise NotImplementedError()
 
     @abc.abstractmethod
