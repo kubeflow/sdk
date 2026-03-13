@@ -1701,14 +1701,11 @@ def test_get_job_logs_follow(kubernetes_backend, test_case):
         step_status = constants.POD_PENDING
         job_status = constants.TRAINJOB_RUNNING
 
-        if test_case.name == "pod ready immediately, follow=True":
+        if (test_case.name == "pod ready immediately, follow=True" or
+            (test_case.name == "pod pending then running, follow=True" and call_count[0] > 1)):
             step_status = "Running"
-        elif test_case.name == "pod pending then running, follow=True":
-            if call_count[0] > 1:
-                step_status = "Running"
-        elif test_case.name == "job fails while waiting":
-            if call_count[0] > 1:
-                job_status = constants.TRAINJOB_FAILED
+        elif test_case.name == "job fails while waiting" and call_count[0] > 1:
+            job_status = constants.TRAINJOB_FAILED
 
         step = Mock()
         step.name = constants.NODE + "-0"
