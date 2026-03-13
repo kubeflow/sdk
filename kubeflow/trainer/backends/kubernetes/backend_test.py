@@ -1618,3 +1618,117 @@ def test_get_job_events(kubernetes_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="pod ready immediately, follow=True",
+            expected_status=SUCCESS,
+            config={"name": BASIC_TRAIN_JOB_NAME, "follow": True},
+            expected_output=["test log content"],
+        ),
+        TestCase(
+            name="pod pending then running, follow=True",
+            expected_status=SUCCESS,
+            config={
+                "name": BASIC_TRAIN_JOB_NAME,
+                "follow": True,
+                "timeout": 10,
+                "polling_interval": 1,
+            },
+            expected_output=["test log content"],
+        ),
+        TestCase(
+            name="pod pending, follow=False",
+            expected_status=SUCCESS,
+            config={"name": BASIC_TRAIN_JOB_NAME},
+            expected_output=[],
+        ),
+        TestCase(
+            name="timeout error waiting for pod",
+            expected_status=FAILED,
+            config={
+                "name": BASIC_TRAIN_JOB_NAME,
+                "follow": True,
+                "timeout": 2,
+                "polling_interval": 1,
+            },
+            expected_error=TimeoutError,
+        ),
+        TestCase(
+            name="job fails while waiting",
+            expected_status=FAILED,
+            config={
+                "name": BASIC_TRAIN_JOB_NAME,
+                "follow": True,
+                "timeout": 10,
+                "polling_interval": 1,
+            },
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="polling interval zero raises ValueError",
+            expected_status=FAILED,
+            config={
+                "name": BASIC_TRAIN_JOB_NAME,
+                "follow": True,
+                "polling_interval": 0,
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="polling interval greater than timeout raises ValueError",
+            expected_status=FAILED,
+            config={
+                "name": BASIC_TRAIN_JOB_NAME,
+                "follow": True,
+                "timeout": 1,
+                "polling_interval": 2,
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_get_job_logs_follow(kubernetes_backend, test_case):
+    """Test get_job_logs with follow=True to verify pod-ready polling."""
+    print("Executing test:", test_case.name)
+    call_count = [0]
+
+    def mock_get_job(name):
+        call_count[0] += 1
+        step_status = constants.POD_PENDING
+        job_status = constants.TRAINJOB_RUNNING
+
+        if test_case.name == "pod ready immediately, follow=True":
+            step_status = "Running"
+        elif test_case.name == "pod pending then running, follow=True":
+            if call_count[0] > 1:
+                step_status = "Running"
+        elif test_case.name == "job fails while waiting":
+            if call_count[0] > 1:
+                job_status = constants.TRAINJOB_FAILED
+
+        step = Mock()
+        step.name = constants.NODE + "-0"
+        step.status = step_status
+        step.pod_name = "node-0-pod"
+
+        job = Mock()
+        job.steps = [step]
+        job.status = job_status
+        return job
+
+    kubernetes_backend.get_job = mock_get_job
+
+    # Patch Watch.stream so follow=True log streaming works without a live cluster.
+    with patch("kubernetes.watch.Watch.stream", return_value=iter(["test log content"])):
+        try:
+            logs = kubernetes_backend.get_job_logs(**test_case.config)
+            logs_list = list(logs)
+            assert test_case.expected_status == SUCCESS
+            assert logs_list == test_case.expected_output
+        except Exception as e:
+            assert type(e) is test_case.expected_error
+    print("test execution complete")
