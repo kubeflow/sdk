@@ -180,6 +180,21 @@ class TrainerClient:
 
         return self.backend.get_job(name=name)
 
+    def job_exists(self, name: str) -> bool:
+        """Check if a TrainJob exists.
+
+        Args:
+            name: Name of the TrainJob.
+
+        Returns:
+            True if the TrainJob exists, False otherwise.
+        """
+        try:
+            self.get_job(name=name)
+            return True
+        except (RuntimeError, ValueError):
+            return False
+
     def get_job_logs(
         self,
         name: str,

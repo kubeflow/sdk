@@ -23,6 +23,7 @@ import pytest
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.trainer.api.trainer_client import TrainerClient
 from kubeflow.trainer.backends.localprocess.types import LocalProcessBackendConfig
+from kubeflow.trainer.test.common import TestCase
 
 
 @pytest.mark.parametrize(
@@ -70,3 +71,40 @@ def test_backend_selection(test_case):
         client = TrainerClient(backend_config=test_case["backend_config"])
         backend_name = client.backend.__class__.__name__
         assert backend_name == test_case["expected_backend"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="job exists returns True",
+            config={"job_name": "existing-job"},
+            expected_output=True,
+        ),
+        TestCase(
+            name="job not found raises RuntimeError returns False",
+            config={"job_name": "missing-k8s-job"},
+            expected_error=RuntimeError,
+            expected_output=False,
+        ),
+        TestCase(
+            name="job not found raises ValueError returns False",
+            config={"job_name": "missing-local-job"},
+            expected_error=ValueError,
+            expected_output=False,
+        ),
+    ],
+)
+def test_job_exists(test_case: TestCase):
+    """Test job_exists method handles success and expected backend exceptions."""
+    client = TrainerClient(backend_config=LocalProcessBackendConfig())
+
+    with patch.object(client, "get_job") as mock_get_job:
+        if test_case.expected_error:
+            mock_get_job.side_effect = test_case.expected_error("Job not found")
+        else:
+            mock_get_job.return_value = Mock()
+
+        result = client.job_exists(test_case.config["job_name"])
+        assert result == test_case.expected_output
+        mock_get_job.assert_called_with(name=test_case.config["job_name"])
