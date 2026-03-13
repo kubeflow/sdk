@@ -104,7 +104,7 @@ def build_pip_install_cmd(trainer: types.CustomTrainer) -> str:
     extras = " ".join(f"--extra-index-url {u}" for u in index_urls[1:])
     quoted = " ".join(f'"{p}"' for p in pkgs)
     return (
-        "PIP_DISABLE_PIP_VERSION_CHECK=1 pip install --no-warn-script-location "
+        "PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 pip install --no-warn-script-location "
         f"--index-url {main_idx} {extras} {quoted} && "
     )
 

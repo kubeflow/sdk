@@ -294,10 +294,10 @@ def get_script_for_python_packages(
         LOG_FILE="{install_log_file}"
         rm -f "$LOG_FILE"
 
-        if PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet \\
+        if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\
             --no-warn-script-location $PIP_OPTS --user $PACKAGES >"$LOG_FILE" 2>&1; then
             echo "Successfully installed Python packages: $PACKAGES"
-        elif PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet \\
+        elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\
             --no-warn-script-location $PIP_OPTS $PACKAGES >>"$LOG_FILE" 2>&1; then
             echo "Successfully installed Python packages: $PACKAGES"
         else

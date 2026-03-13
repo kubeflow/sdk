@@ -209,10 +209,10 @@ def test_get_resources_per_node(test_case: TestCase):
                 'LOG_FILE="pip_install.log"\n'
                 'rm -f "$LOG_FILE"\n'
                 "\n"
-                "if PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet \\\n"
+                "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                 '    --no-warn-script-location $PIP_OPTS --user $PACKAGES >"$LOG_FILE" 2>&1; then\n'
                 '    echo "Successfully installed Python packages: $PACKAGES"\n'
-                "elif PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet \\\n"
+                "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                 '    --no-warn-script-location $PIP_OPTS $PACKAGES >>"$LOG_FILE" 2>&1; then\n'
                 '    echo "Successfully installed Python packages: $PACKAGES"\n'
                 "else\n"
@@ -239,10 +239,10 @@ def test_get_resources_per_node(test_case: TestCase):
                 'LOG_FILE="pip_install.log"\n'
                 'rm -f "$LOG_FILE"\n'
                 "\n"
-                "if PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet \\\n"
+                "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                 '    --no-warn-script-location $PIP_OPTS --user $PACKAGES >"$LOG_FILE" 2>&1; then\n'
                 '    echo "Successfully installed Python packages: $PACKAGES"\n'
-                "elif PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet \\\n"
+                "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                 '    --no-warn-script-location $PIP_OPTS $PACKAGES >>"$LOG_FILE" 2>&1; then\n'
                 '    echo "Successfully installed Python packages: $PACKAGES"\n'
                 "else\n"
@@ -273,10 +273,10 @@ def test_get_resources_per_node(test_case: TestCase):
                 'LOG_FILE="pip_install.log"\n'
                 'rm -f "$LOG_FILE"\n'
                 "\n"
-                "if PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet \\\n"
+                "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                 '    --no-warn-script-location $PIP_OPTS --user $PACKAGES >"$LOG_FILE" 2>&1; then\n'
                 '    echo "Successfully installed Python packages: $PACKAGES"\n'
-                "elif PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet \\\n"
+                "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                 '    --no-warn-script-location $PIP_OPTS $PACKAGES >>"$LOG_FILE" 2>&1; then\n'
                 '    echo "Successfully installed Python packages: $PACKAGES"\n'
                 "else\n"
@@ -303,10 +303,10 @@ def test_get_resources_per_node(test_case: TestCase):
                 'LOG_FILE="pip_install.log"\n'
                 'rm -f "$LOG_FILE"\n'
                 "\n"
-                "if PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet \\\n"
+                "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                 '    --no-warn-script-location $PIP_OPTS --user $PACKAGES >"$LOG_FILE" 2>&1; then\n'
                 '    echo "Successfully installed Python packages: $PACKAGES"\n'
-                "elif PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet \\\n"
+                "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                 '    --no-warn-script-location $PIP_OPTS $PACKAGES >>"$LOG_FILE" 2>&1; then\n'
                 '    echo "Successfully installed Python packages: $PACKAGES"\n'
                 "else\n"
@@ -457,10 +457,10 @@ def test_get_script_for_python_packages(test_case):
                     'LOG_FILE="pip_install.log"\n'
                     'rm -f "$LOG_FILE"\n'
                     "\n"
-                    "if PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet \\\n"
+                    "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                     '    --no-warn-script-location $PIP_OPTS --user $PACKAGES >"$LOG_FILE" 2>&1; then\n'
                     '    echo "Successfully installed Python packages: $PACKAGES"\n'
-                    "elif PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet \\\n"
+                    "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                     '    --no-warn-script-location $PIP_OPTS $PACKAGES >>"$LOG_FILE" 2>&1; then\n'
                     '    echo "Successfully installed Python packages: $PACKAGES"\n'
                     "else\n"
