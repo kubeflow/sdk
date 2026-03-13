@@ -46,7 +46,6 @@ from kubeflow.trainer.options import (
     PodTemplatePatch,
     ReplicatedJobPatch,
     RuntimePatch,
-    RuntimePatches,
     TrainingRuntimeSpecPatch,
 )
 from kubeflow.trainer.test.common import (
@@ -1252,29 +1251,24 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             expected_status=SUCCESS,
             config={
                 "options": [
-                    RuntimePatches(
-                        RuntimePatch(
-                            manager="trainer.kubeflow.org/kubeflow-sdk",
-                            training_runtime_spec=TrainingRuntimeSpecPatch(
-                                template=JobSetTemplatePatch(
-                                    spec=JobSetSpecPatch(
-                                        replicated_jobs=[
-                                            ReplicatedJobPatch(
-                                                name="node",
-                                                template=JobTemplatePatch(
-                                                    spec=JobSpecPatch(
-                                                        template=PodTemplatePatch(
-                                                            spec=PodSpecPatch(
-                                                                node_selector={
-                                                                    "node-type": "gpu-a100"
-                                                                },
-                                                            ),
+                    RuntimePatch(
+                        training_runtime_spec=TrainingRuntimeSpecPatch(
+                            template=JobSetTemplatePatch(
+                                spec=JobSetSpecPatch(
+                                    replicated_jobs=[
+                                        ReplicatedJobPatch(
+                                            name="node",
+                                            template=JobTemplatePatch(
+                                                spec=JobSpecPatch(
+                                                    template=PodTemplatePatch(
+                                                        spec=PodSpecPatch(
+                                                            node_selector={"node-type": "gpu-a100"},
                                                         ),
                                                     ),
                                                 ),
                                             ),
-                                        ],
-                                    ),
+                                        ),
+                                    ],
                                 ),
                             ),
                         ),
@@ -1285,32 +1279,28 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                 runtime_name=TORCH_RUNTIME,
                 train_job_name=BASIC_TRAIN_JOB_NAME,
                 runtime_patches=[
-                    models.TrainerV1alpha1RuntimePatch.from_dict(
-                        {
-                            "manager": "trainer.kubeflow.org/kubeflow-sdk",
-                            "trainingRuntimeSpec": {
-                                "template": {
-                                    "spec": {
-                                        "replicatedJobs": [
-                                            {
-                                                "name": "node",
-                                                "template": {
-                                                    "spec": {
-                                                        "template": {
-                                                            "spec": {
-                                                                "nodeSelector": {
-                                                                    "node-type": "gpu-a100"
-                                                                },
-                                                            },
-                                                        },
-                                                    },
-                                                },
-                                            },
-                                        ],
-                                    },
-                                },
-                            },
-                        }
+                    models.TrainerV1alpha1RuntimePatch(
+                        manager="trainer.kubeflow.org/kubeflow-sdk",
+                        training_runtime_spec=models.TrainerV1alpha1TrainingRuntimeSpecPatch(
+                            template=models.TrainerV1alpha1JobSetTemplatePatch(
+                                spec=models.TrainerV1alpha1JobSetSpecPatch(
+                                    replicated_jobs=[
+                                        models.TrainerV1alpha1ReplicatedJobPatch(
+                                            name="node",
+                                            template=models.TrainerV1alpha1JobTemplatePatch(
+                                                spec=models.TrainerV1alpha1JobSpecPatch(
+                                                    template=models.TrainerV1alpha1PodTemplatePatch(
+                                                        spec=models.TrainerV1alpha1PodSpecPatch(
+                                                            node_selector={"node-type": "gpu-a100"},
+                                                        ),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
                     ),
                 ],
             ),
@@ -1322,17 +1312,14 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                 "options": [
                     Labels({"owner": "ml-team"}),
                     Annotations({"description": "Fine-tuning job"}),
-                    RuntimePatches(
-                        RuntimePatch(
-                            manager="trainer.kubeflow.org/kubeflow-sdk",
-                            training_runtime_spec=TrainingRuntimeSpecPatch(
-                                template=JobSetTemplatePatch(
-                                    metadata={
-                                        "labels": {
-                                            "app": "training",
-                                        },
+                    RuntimePatch(
+                        training_runtime_spec=TrainingRuntimeSpecPatch(
+                            template=JobSetTemplatePatch(
+                                metadata={
+                                    "labels": {
+                                        "app": "training",
                                     },
-                                ),
+                                },
                             ),
                         ),
                     ),
@@ -1344,19 +1331,17 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                 labels={"owner": "ml-team"},
                 annotations={"description": "Fine-tuning job"},
                 runtime_patches=[
-                    models.TrainerV1alpha1RuntimePatch.from_dict(
-                        {
-                            "manager": "trainer.kubeflow.org/kubeflow-sdk",
-                            "trainingRuntimeSpec": {
-                                "template": {
-                                    "metadata": {
-                                        "labels": {
-                                            "app": "training",
-                                        },
+                    models.TrainerV1alpha1RuntimePatch(
+                        manager="trainer.kubeflow.org/kubeflow-sdk",
+                        training_runtime_spec=models.TrainerV1alpha1TrainingRuntimeSpecPatch(
+                            template=models.TrainerV1alpha1JobSetTemplatePatch(
+                                metadata={
+                                    "labels": {
+                                        "app": "training",
                                     },
                                 },
-                            },
-                        }
+                            ),
+                        ),
                     ),
                 ],
             ),

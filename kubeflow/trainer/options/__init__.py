@@ -15,7 +15,7 @@
 """Training options for the Kubeflow Trainer SDK.
 
 All options are available from this single import location:
-    from kubeflow.trainer.options import Name, Labels, RuntimePatches, ...
+    from kubeflow.trainer.options import Name, Labels, RuntimePatch, ...
 
 Options self-validate their backend compatibility at runtime.
 Check each option's docstring for supported backends.
@@ -34,7 +34,6 @@ from kubeflow.trainer.options.kubernetes import (
     PodTemplatePatch,
     ReplicatedJobPatch,
     RuntimePatch,
-    RuntimePatches,
     TrainerArgs,
     TrainerCommand,
     TrainingRuntimeSpecPatch,
@@ -55,7 +54,6 @@ __all__ = [
     "PodTemplatePatch",
     "ReplicatedJobPatch",
     "RuntimePatch",
-    "RuntimePatches",
     "TrainerArgs",
     "TrainerCommand",
     "TrainingRuntimeSpecPatch",

@@ -32,7 +32,6 @@ from kubeflow.trainer.options import (
     Labels,
     Name,
     RuntimePatch,
-    RuntimePatches,
 )
 from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.types import types
@@ -290,13 +289,7 @@ def test_get_runtime_packages(local_backend, test_case):
                 "trainer": types.CustomTrainer(
                     func=dummy_training_function,
                 ),
-                "options": [
-                    RuntimePatches(
-                        RuntimePatch(
-                            manager="test-manager",
-                        )
-                    )
-                ],
+                "options": [RuntimePatch()],
             },
             expected_error=ValueError,
         ),

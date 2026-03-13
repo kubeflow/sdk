@@ -31,7 +31,6 @@ from kubeflow.trainer.options import (
     PodTemplatePatch,
     ReplicatedJobPatch,
     RuntimePatch,
-    RuntimePatches,
     TrainerArgs,
     TrainerCommand,
     TrainingRuntimeSpecPatch,
@@ -91,15 +90,14 @@ class TestKubernetesOptionBackendValidation:
         assert "not compatible with" in str(exc_info.value)
         assert "LocalProcessBackend" in str(exc_info.value)
 
-    def test_runtime_patches_rejects_wrong_backend(self, mock_localprocess_backend):
-        """Test RuntimePatches rejects non-Kubernetes backends."""
-        patch = RuntimePatch(manager="test-manager")
-        option = RuntimePatches(patch)
+    def test_runtime_patch_rejects_wrong_backend(self, mock_localprocess_backend):
+        """Test RuntimePatch rejects non-Kubernetes backends."""
+        patch = RuntimePatch()
 
         job_spec = {}
 
         with pytest.raises(ValueError) as exc_info:
-            option(job_spec, None, mock_localprocess_backend)
+            patch(job_spec, None, mock_localprocess_backend)
 
         assert "not compatible with" in str(exc_info.value)
 
@@ -238,44 +236,44 @@ class TestContainerPatch:
 class TestRuntimePatch:
     """Test RuntimePatch validation."""
 
-    def test_runtime_patch_requires_manager(self):
-        """Test RuntimePatch validates manager is non-empty."""
-        with pytest.raises(ValueError) as exc_info:
-            RuntimePatch(manager="")
-        assert "manager must be a non-empty string" in str(exc_info.value)
-
-    def test_runtime_patch_valid(self):
-        """Test RuntimePatch with valid manager."""
-        patch = RuntimePatch(manager="trainer.kubeflow.org/kubeflow-sdk")
+    def test_runtime_patch_auto_sets_manager(self):
+        """Test RuntimePatch automatically sets manager."""
+        patch = RuntimePatch()
         assert patch.manager == "trainer.kubeflow.org/kubeflow-sdk"
 
+    def test_runtime_patch_with_training_runtime_spec(self):
+        """Test RuntimePatch with training runtime spec."""
+        patch = RuntimePatch(
+            training_runtime_spec=TrainingRuntimeSpecPatch(
+                template=JobSetTemplatePatch(
+                    metadata={"labels": {"app": "training"}},
+                ),
+            ),
+        )
+        assert patch.manager == "trainer.kubeflow.org/kubeflow-sdk"
+        assert patch.training_runtime_spec is not None
 
-class TestRuntimePatches:
-    """Test RuntimePatches functionality."""
 
-    def test_runtime_patches_requires_at_least_one(self):
-        """Test RuntimePatches requires at least one patch."""
-        with pytest.raises(ValueError) as exc_info:
-            RuntimePatches()
-        assert "At least one RuntimePatch must be provided" in str(exc_info.value)
+class TestRuntimePatchApplication:
+    """Test RuntimePatch application functionality."""
 
-    def test_runtime_patches_basic(self, mock_kubernetes_backend):
-        """Test basic RuntimePatches application with manager only."""
-        patch = RuntimePatch(manager="test-manager")
-        option = RuntimePatches(patch)
+    def test_runtime_patch_basic(self, mock_kubernetes_backend):
+        """Test basic RuntimePatch application with manager only."""
+        patch = RuntimePatch()
 
         job_spec = {}
-        option(job_spec, None, mock_kubernetes_backend)
+        patch(job_spec, None, mock_kubernetes_backend)
 
         assert "spec" in job_spec
         assert "runtimePatches" in job_spec["spec"]
         assert len(job_spec["spec"]["runtimePatches"]) == 1
-        assert job_spec["spec"]["runtimePatches"][0] == {"manager": "test-manager"}
+        assert job_spec["spec"]["runtimePatches"][0] == {
+            "manager": "trainer.kubeflow.org/kubeflow-sdk"
+        }
 
-    def test_runtime_patches_with_node_selector(self, mock_kubernetes_backend):
-        """Test RuntimePatches with node selector configuration."""
+    def test_runtime_patch_with_node_selector(self, mock_kubernetes_backend):
+        """Test RuntimePatch with node selector configuration."""
         patch = RuntimePatch(
-            manager="trainer.kubeflow.org/kubeflow-sdk",
             training_runtime_spec=TrainingRuntimeSpecPatch(
                 template=JobSetTemplatePatch(
                     spec=JobSetSpecPatch(
@@ -297,10 +295,9 @@ class TestRuntimePatches:
                 ),
             ),
         )
-        option = RuntimePatches(patch)
 
         job_spec = {}
-        option(job_spec, None, mock_kubernetes_backend)
+        patch(job_spec, None, mock_kubernetes_backend)
 
         expected = {
             "spec": {
@@ -336,10 +333,9 @@ class TestRuntimePatches:
 
         assert job_spec == expected
 
-    def test_runtime_patches_with_volume_and_container(self, mock_kubernetes_backend):
-        """Test RuntimePatches with volumes and container patches."""
+    def test_runtime_patch_with_volume_and_container(self, mock_kubernetes_backend):
+        """Test RuntimePatch with volumes and container patches."""
         patch = RuntimePatch(
-            manager="trainer.kubeflow.org/kubeflow-sdk",
             training_runtime_spec=TrainingRuntimeSpecPatch(
                 template=JobSetTemplatePatch(
                     spec=JobSetSpecPatch(
@@ -379,10 +375,9 @@ class TestRuntimePatches:
                 ),
             ),
         )
-        option = RuntimePatches(patch)
 
         job_spec = {}
-        option(job_spec, None, mock_kubernetes_backend)
+        patch(job_spec, None, mock_kubernetes_backend)
 
         runtime_patch = job_spec["spec"]["runtimePatches"][0]
         pod_spec = runtime_patch["trainingRuntimeSpec"]["template"]["spec"]["replicatedJobs"][0][
@@ -399,20 +394,18 @@ class TestRuntimePatches:
             }
         ]
 
-    def test_runtime_patches_with_jobset_metadata(self, mock_kubernetes_backend):
-        """Test RuntimePatches with JobSet-level metadata."""
+    def test_runtime_patch_with_jobset_metadata(self, mock_kubernetes_backend):
+        """Test RuntimePatch with JobSet-level metadata."""
         patch = RuntimePatch(
-            manager="trainer.kubeflow.org/kubeflow-sdk",
             training_runtime_spec=TrainingRuntimeSpecPatch(
                 template=JobSetTemplatePatch(
                     metadata={"labels": {"app": "training"}},
                 ),
             ),
         )
-        option = RuntimePatches(patch)
 
         job_spec = {}
-        option(job_spec, None, mock_kubernetes_backend)
+        patch(job_spec, None, mock_kubernetes_backend)
 
         assert job_spec["spec"]["runtimePatches"][0] == {
             "manager": "trainer.kubeflow.org/kubeflow-sdk",
@@ -422,47 +415,3 @@ class TestRuntimePatches:
                 },
             },
         }
-
-    def test_runtime_patches_multiple_managers(self, mock_kubernetes_backend):
-        """Test RuntimePatches with multiple manager patches."""
-        option = RuntimePatches(
-            RuntimePatch(
-                manager="trainer.kubeflow.org/kubeflow-sdk",
-                training_runtime_spec=TrainingRuntimeSpecPatch(
-                    template=JobSetTemplatePatch(
-                        metadata={"labels": {"app": "training"}},
-                    ),
-                ),
-            ),
-            RuntimePatch(
-                manager="kueue.x-k8s.io/manager",
-                training_runtime_spec=TrainingRuntimeSpecPatch(
-                    template=JobSetTemplatePatch(
-                        spec=JobSetSpecPatch(
-                            replicated_jobs=[
-                                ReplicatedJobPatch(
-                                    name="node",
-                                    template=JobTemplatePatch(
-                                        spec=JobSpecPatch(
-                                            template=PodTemplatePatch(
-                                                spec=PodSpecPatch(
-                                                    node_selector={"zone": "us-west-1b"},
-                                                ),
-                                            ),
-                                        ),
-                                    ),
-                                ),
-                            ],
-                        ),
-                    ),
-                ),
-            ),
-        )
-
-        job_spec = {}
-        option(job_spec, None, mock_kubernetes_backend)
-
-        patches = job_spec["spec"]["runtimePatches"]
-        assert len(patches) == 2
-        assert patches[0]["manager"] == "trainer.kubeflow.org/kubeflow-sdk"
-        assert patches[1]["manager"] == "kueue.x-k8s.io/manager"

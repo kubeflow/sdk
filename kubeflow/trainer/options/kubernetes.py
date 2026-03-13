@@ -205,25 +205,52 @@ class TrainingRuntimeSpecPatch:
 
 @dataclass
 class RuntimePatch:
-    """A custom patch applied to the TrainJob's training runtime template.
+    """Add runtime patches to the TrainJob (.spec.runtimePatches).
 
-    Patches are keyed by manager to provide clear ownership and avoid conflicts
-    between controllers.
+    Runtime patches allow controllers, admission webhooks, and custom clients to
+    attach structured patches to a TrainJob without conflicting with each other.
+    Each patch is keyed by a unique manager field, which is automatically set to
+    "trainer.kubeflow.org/kubeflow-sdk" by the SDK.
+
+    Supported backends:
+        - Kubernetes
 
     Args:
-        manager: Who owns this patch entry. Used to track ownership and avoid
-                 conflicts. For example, Kueue sets this to "kueue.x-k8s.io/manager".
         training_runtime_spec: Allowed patches for ClusterTrainingRuntime or
                                TrainingRuntime-based jobs.
     """
 
-    manager: str
     training_runtime_spec: TrainingRuntimeSpecPatch | None = None
+    manager: str = dataclasses.field(
+        default="trainer.kubeflow.org/kubeflow-sdk", init=False, repr=False
+    )
 
-    def __post_init__(self):
-        """Validate the runtime patch configuration."""
-        if not self.manager or not self.manager.strip():
-            raise ValueError("manager must be a non-empty string")
+    def __call__(
+        self,
+        job_spec: dict[str, Any],
+        trainer: CustomTrainer | BuiltinTrainer | None,
+        backend: RuntimeBackend,
+    ) -> None:
+        """Apply runtime patch to the job specification.
+
+        Args:
+            job_spec: Job specification dictionary to modify.
+            trainer: Optional trainer instance for context.
+            backend: Backend instance for validation.
+
+        Raises:
+            ValueError: If backend does not support runtime patches.
+        """
+        from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
+
+        if not isinstance(backend, KubernetesBackend):
+            raise ValueError(
+                f"RuntimePatch option is not compatible with {type(backend).__name__}. "
+                f"Supported backends: KubernetesBackend"
+            )
+        spec = job_spec.setdefault("spec", {})
+        runtime_patches = spec.setdefault("runtimePatches", [])
+        runtime_patches.append(_patch_to_dict(self))
 
 
 def _to_camel_case(snake_str: str) -> str:
@@ -343,56 +370,6 @@ class Annotations:
 
         metadata = job_spec.setdefault("metadata", {})
         metadata["annotations"] = self.annotations
-
-
-class RuntimePatches:
-    """Add runtime patches to the TrainJob (.spec.runtimePatches).
-
-    Runtime patches allow controllers, admission webhooks, and custom clients to
-    attach structured patches to a TrainJob without conflicting with each other.
-    Each patch is keyed by a unique manager field.
-
-    Supported backends:
-        - Kubernetes
-
-    Args:
-        *patches: One or more RuntimePatch objects.
-    """
-
-    def __init__(self, *patches: RuntimePatch):
-        """Initialize with variable number of RuntimePatch objects."""
-        if not patches:
-            raise ValueError("At least one RuntimePatch must be provided")
-        self.patches = list(patches)
-
-    def __call__(
-        self,
-        job_spec: dict[str, Any],
-        trainer: CustomTrainer | BuiltinTrainer | None,
-        backend: RuntimeBackend,
-    ) -> None:
-        """Apply runtime patches to the job specification.
-
-        Args:
-            job_spec: Job specification dictionary to modify.
-            trainer: Optional trainer instance for context.
-            backend: Backend instance for validation.
-
-        Raises:
-            ValueError: If backend does not support runtime patches.
-        """
-        from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
-
-        if not isinstance(backend, KubernetesBackend):
-            raise ValueError(
-                f"RuntimePatches option is not compatible with {type(backend).__name__}. "
-                f"Supported backends: KubernetesBackend"
-            )
-        spec = job_spec.setdefault("spec", {})
-        runtime_patches = spec.setdefault("runtimePatches", [])
-
-        for patch in self.patches:
-            runtime_patches.append(_patch_to_dict(patch))
 
 
 @dataclass
