@@ -64,6 +64,8 @@ class RuntimeBackend(abc.ABC):
         name: str,
         follow: bool = False,
         step: str = constants.NODE + "-0",
+        timeout: int = 600,
+        polling_interval: int = 2,
     ) -> Iterator[str]:
         raise NotImplementedError()
 

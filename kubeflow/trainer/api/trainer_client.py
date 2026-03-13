@@ -185,6 +185,8 @@ class TrainerClient:
         name: str,
         step: str = constants.NODE + "-0",
         follow: bool | None = False,
+        timeout: int = 600,
+        polling_interval: int = 2,
     ) -> Iterator[str]:
         """Get logs from a specific step of a TrainJob.
 
@@ -200,16 +202,24 @@ class TrainerClient:
             name: Name of the TrainJob.
             step: Step of the TrainJob to collect logs from, like dataset-initializer or node-0.
             follow: Whether to stream logs in realtime as they are produced.
+            timeout: Max seconds to wait for pod to be ready (when follow=True).
+            polling_interval: Seconds between pod status checks (when follow=True).
 
         Returns:
             Iterator of log lines.
 
-
         Raises:
-            TimeoutError: Timeout to get a TrainJob.
-            RuntimeError: Failed to get a TrainJob.
+            ValueError: Invalid timeout or polling_interval.
+            TimeoutError: Timeout waiting for pod or timeout to get a TrainJob.
+            RuntimeError: Failed to get a TrainJob or job failed while waiting.
         """
-        return self.backend.get_job_logs(name=name, follow=follow, step=step)
+        return self.backend.get_job_logs(
+            name=name,
+            follow=follow,
+            step=step,
+            timeout=timeout,
+            polling_interval=polling_interval,
+        )
 
     def get_job_events(self, name: str) -> list[types.Event]:
         """Get events for a TrainJob.

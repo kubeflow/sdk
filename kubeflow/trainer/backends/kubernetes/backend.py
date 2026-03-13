@@ -439,16 +439,20 @@ class KubernetesBackend(RuntimeBackend):
         step: str,
         timeout: int = 600,
         polling_interval: int = 2,
-    ) -> str | None:
-        import time
+    ) -> str:
+        """Wait for the pod to be ready."""
+        if polling_interval <= 0:
+            raise ValueError(f"Polling interval must be > 0, got {polling_interval}")
+        if polling_interval > timeout:
+            raise ValueError(f"Polling interval {polling_interval} > timeout {timeout}")
 
-        # TODO: add tests to validate the fix
         for _ in range(round(timeout / polling_interval)):
-            pod_name = self._resolve_pod_name(name, step)
-            if pod_name is not None:
-                return pod_name
-
             job = self.get_job(name)
+
+            for c in job.steps:
+                if c.status != constants.POD_PENDING and c.name == step:
+                    return c.pod_name
+
             if job.status == constants.TRAINJOB_FAILED:
                 raise RuntimeError(f"TrainJob {name} failed while waiting for pod {step}")
 
@@ -466,7 +470,7 @@ class KubernetesBackend(RuntimeBackend):
         timeout: int = 600,
         polling_interval: int = 2,
     ) -> Iterator[str]:
-        """Get the TrainJob logs"""
+        """Get logs from a training job. Waits for pod if follow=True."""
         pod_name = self._resolve_pod_name(name, step)
 
         if pod_name is None and follow:
