@@ -14,7 +14,12 @@
 
 """Utility functions for Kubernetes Spark backend."""
 
+import hashlib
+import logging
+import os
 import re
+import shutil
+import tempfile
 from typing import Any
 from urllib.parse import urlparse
 import uuid
@@ -22,7 +27,16 @@ import uuid
 from kubeflow_spark_api import models
 
 from kubeflow.spark.backends.kubernetes import constants
-from kubeflow.spark.types.types import Driver, Executor, SparkConnectInfo, SparkConnectState
+from kubeflow.spark.types.types import (
+    Driver,
+    Executor,
+    SparkConnectInfo,
+    SparkConnectState,
+    SparkJob,
+    SparkJobStatus,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def generate_session_name() -> str:
@@ -302,4 +316,179 @@ def get_spark_connect_info_from_cr(
         pod_ip=server_status.pod_ip if server_status else None,
         service_name=server_status.service_name if server_status else None,
         creation_timestamp=spark_connect_cr.metadata.creation_timestamp,
+    )
+
+def generate_job_name() -> str:
+    """Generate a unique batch job name.
+
+    Returns:
+        Job name in format: spark-job-{uuid}.
+    """
+    short_uuid = str(uuid.uuid4())[:8]
+    return f"{constants.JOB_NAME_PREFIX}-{short_uuid}"
+
+
+def _is_local_main_file(main_file: str) -> bool:
+    """Return True if main_file is a local filesystem path (not a remote URI)."""
+    return not any(main_file.startswith(scheme) for scheme in constants.REMOTE_URI_SCHEMES)
+
+
+def _build_job_image(main_file: str, base_image: str) -> str:
+    """Build a Docker image containing the user's Python script.
+
+    The image tag is derived from the SHA-256 hash of the script content so that
+    identical scripts produce the same tag.
+
+    Dockerfile generated:
+        FROM <base_image>
+        COPY <script_name> <JOB_SCRIPT_MOUNT_PATH>/<script_name>
+
+    Args:
+        main_file: Local path to the Python script.
+        base_image: Base Spark image to build FROM.
+
+    Returns:
+        Built image tag (e.g., "spark-job-abc12345:latest").
+
+    Raises:
+        FileNotFoundError: If main_file does not exist.
+        ImportError: If the docker Python package is not installed.
+        RuntimeError: If the Docker build fails.
+    """
+    try:
+        import docker as docker_sdk  # type: ignore
+    except ImportError as e:
+        raise ImportError(
+            "The 'docker' Python package is required to build Spark job images. "
+            "Install it with: pip install kubeflow[docker]"
+        ) from e
+
+    if not os.path.isfile(main_file):
+        raise FileNotFoundError(f"main_file not found: {main_file}")
+
+    # Derive deterministic image tag from file content hash
+    with open(main_file, "rb") as f:
+        content_hash = hashlib.sha256(f.read()).hexdigest()[:8]
+    image_tag = f"{constants.JOB_IMAGE_PREFIX}-{content_hash}:latest"
+
+    try:
+        docker_sdk.from_env().images.get(image_tag)
+        logger.info("Image '%s' already exists for same file content, reusing it", image_tag)
+        return image_tag
+    except Exception:
+        pass  # Image not found locally, build it
+
+    script_name = os.path.basename(main_file)
+    dockerfile_content = (
+        f"FROM {base_image}\n"
+        f"COPY {script_name} {constants.JOB_SCRIPT_MOUNT_PATH}/{script_name}\n"
+    )
+
+    tmpdir = tempfile.mkdtemp(prefix="spark-job-build-")
+    try:
+        with open(os.path.join(tmpdir, "Dockerfile"), "w") as f:
+            f.write(dockerfile_content)
+        shutil.copy2(main_file, os.path.join(tmpdir, script_name))
+
+        client = docker_sdk.from_env()
+        _, build_logs = client.images.build(path=tmpdir, tag=image_tag, rm=True)
+
+    except docker_sdk.errors.BuildError as e:
+        raise RuntimeError(f"Docker build failed for '{main_file}': {e}") from e
+    except docker_sdk.errors.DockerException as e:
+        raise RuntimeError(
+            f"Docker daemon error while building image for '{main_file}': {e}. "
+            "Is Docker running?"
+        ) from e
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+    return image_tag
+
+
+def build_spark_application_cr(
+    name: str,
+    namespace: str,
+    main_file: str,
+    image: str,
+    arguments: list[str] | None = None,
+    spark_conf: dict[str, str] | None = None,
+) -> models.SparkV1beta2SparkApplication:
+    """Build a SparkApplication CR using typed API models.
+
+    Args:
+        name: Job name (used as the Kubernetes resource name).
+        namespace: Kubernetes namespace.
+        main_file: Path to the main Python file (local:// or remote URI).
+        image: Docker image for driver and executors.
+        arguments: Optional list of arguments passed to the application.
+        spark_conf: Optional Spark configuration properties.
+
+    Returns:
+        SparkV1beta2SparkApplication model ready for submission.
+    """
+    driver_spec = models.SparkV1beta2DriverSpec(
+        cores=constants.DEFAULT_DRIVER_CPU,
+        memory=_memory_kubernetes_to_spark(constants.DEFAULT_DRIVER_MEMORY),
+    )
+    executor_spec = models.SparkV1beta2ExecutorSpec(
+        instances=constants.DEFAULT_NUM_EXECUTORS,
+        cores=constants.DEFAULT_EXECUTOR_CPU,
+        memory=_memory_kubernetes_to_spark(constants.DEFAULT_EXECUTOR_MEMORY),
+    )
+
+    return models.SparkV1beta2SparkApplication(
+        api_version=f"{constants.SPARK_APPLICATION_GROUP}/{constants.SPARK_APPLICATION_VERSION}",
+        kind=constants.SPARK_APPLICATION_KIND,
+        metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+            name=name,
+            namespace=namespace,
+        ),
+        spec=models.SparkV1beta2SparkApplicationSpec(
+            type=constants.SPARK_APPLICATION_TYPE_PYTHON,
+            image=image,
+            spark_version=constants.DEFAULT_SPARK_VERSION,
+            main_application_file=main_file,
+            arguments=arguments or None,
+            spark_conf=spark_conf or None,
+            driver=driver_spec,
+            executor=executor_spec,
+        ),
+    )
+
+
+def get_spark_application_info_from_cr(
+    cr: models.SparkV1beta2SparkApplication,
+) -> SparkJob:
+    """Convert API SparkApplication model to SDK SparkJob.
+
+    Args:
+        cr: SparkV1beta2SparkApplication model from the Kubernetes API.
+
+    Returns:
+        SDK SparkJob dataclass.
+    """
+    if not (cr.metadata and cr.metadata.name):
+        raise ValueError(f"SparkApplication CR is invalid: {cr}")
+
+    status = SparkJobStatus.NEW
+    error_message = None
+    if cr.status and cr.status.application_state:
+        raw_state = cr.status.application_state.state or ""
+        try:
+            status = SparkJobStatus(raw_state)
+        except ValueError:
+            status = SparkJobStatus.UNKNOWN
+        error_message = cr.status.application_state.error_message
+
+    driver_pod_name = None
+    if cr.status and cr.status.driver_info:
+        driver_pod_name = cr.status.driver_info.pod_name
+
+    return SparkJob(
+        name=cr.metadata.name,
+        namespace=cr.metadata.namespace or "",
+        status=status,
+        driver_pod_name=driver_pod_name,
+        error_message=error_message,
     )
