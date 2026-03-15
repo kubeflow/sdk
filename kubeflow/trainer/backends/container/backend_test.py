@@ -24,6 +24,7 @@ import os
 from pathlib import Path
 import shutil
 import tempfile
+import threading
 from unittest.mock import Mock, patch
 
 import pytest
@@ -691,6 +692,35 @@ def test_train(container_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+def test_run_initializers_parallel_when_both_configured(container_backend):
+    """Test that dataset and model initializers are executed in parallel."""
+    initializer = types.Initializer(
+        dataset=types.HuggingFaceDatasetInitializer(storage_uri="hf://user/dataset"),
+        model=types.HuggingFaceModelInitializer(storage_uri="hf://user/model"),
+    )
+    barrier = threading.Barrier(2, timeout=30)
+
+    def _run_with_barrier(job_name, container_init, workdir, network_id):
+        # This wait enforces parallel execution for both initializers.
+        barrier.wait()
+
+    with patch.object(
+        container_backend,
+        "_run_single_initializer",
+        side_effect=_run_with_barrier,
+    ) as mock_run_single_initializer:
+        container_backend._run_initializers(
+            job_name="test-job",
+            initializer=initializer,
+            workdir="/tmp/test-workdir",
+            network_id="test-network",
+        )
+
+    assert mock_run_single_initializer.call_count == 2
+    init_names = {call.args[1].name for call in mock_run_single_initializer.call_args_list}
+    assert init_names == {"dataset-initializer", "model-initializer"}
 
 
 @pytest.mark.parametrize(
