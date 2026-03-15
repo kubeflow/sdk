@@ -14,6 +14,32 @@
 
 """Constants for Kubernetes Spark backend."""
 
+# SparkApplication CRD (batch jobs via Spark Operator v1beta2)
+SPARK_APPLICATION_GROUP = "sparkoperator.k8s.io"
+SPARK_APPLICATION_VERSION = "v1beta2"
+SPARK_APPLICATION_PLURAL = "sparkapplications"
+SPARK_APPLICATION_KIND = "SparkApplication"
+SPARK_APPLICATION_TYPE_PYTHON = "Python"
+SPARK_APPLICATION_MODE = "cluster"
+
+# Batch job naming and image defaults
+JOB_NAME_PREFIX = "spark-job"
+JOB_IMAGE_PREFIX = "spark-job"
+JOB_SCRIPT_MOUNT_PATH = "/opt/spark/scripts"
+
+# Container names inside Spark pods (set by Spark itself, not configurable via CR)
+SPARK_DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
+SPARK_EXECUTOR_CONTAINER_NAME = "spark-kubernetes-executor"
+
+# Maps user-friendly container alias → actual container name
+SPARK_CONTAINER_NAME_MAP: dict[str, str] = {
+    "driver": SPARK_DRIVER_CONTAINER_NAME,
+    "executor": SPARK_EXECUTOR_CONTAINER_NAME,
+}
+
+# Polling interval for wait_for_job
+SPARK_JOB_POLLING_INTERVAL_SEC = 5
+
 # SparkConnect CRD
 SPARK_CONNECT_GROUP = "sparkoperator.k8s.io"
 SPARK_CONNECT_VERSION = "v1alpha1"
@@ -37,6 +63,9 @@ SPARK_CONNECT_PORT = 15002
 
 # Session name prefix
 SESSION_NAME_PREFIX = "spark-connect"
+
+# Remote URI schemes
+REMOTE_URI_SCHEMES = ("s3://", "s3a://", "gs://", "gcs://", "http://", "https://", "hdfs://")
 
 # Spark Connect Maven package (required for Connect server main class on classpath)
 SPARK_CONNECT_PACKAGE_SCALA_VERSION = "2.13"
