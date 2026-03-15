@@ -672,7 +672,7 @@ class KubernetesBackend(RuntimeBackend):
             raise FileNotFoundError(f"main_file not found: {main_file}")
 
         if loader is None:
-            loader = KindImageLoader()
+            loader = KindImageLoader(cluster_name=os.environ.get("SPARK_TEST_CLUSTER"))
         elif not isinstance(loader, KindImageLoader):
             raise NotImplementedError(
                 f"Loader type '{type(loader).__name__}' is not yet supported. "
