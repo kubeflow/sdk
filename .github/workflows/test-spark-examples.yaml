@@ -39,7 +39,7 @@ jobs:
           enable-cache: true
       - name: Install project and test deps
         run: |
-          uv sync --extra spark
+          uv sync --extra spark --extra docker
           uv pip install pytest pytest-timeout
 
       - name: Install Kind, kubectl, and Helm
