@@ -16,7 +16,6 @@
 
 from kubeflow.spark.image.loaders import (
     ImageLoader,
-    K3dImageLoader,
     KindImageLoader,
     MinikubeImageLoader,
     RegistryImageLoader,
@@ -25,7 +24,6 @@ from kubeflow.spark.image.loaders import (
 __all__ = [
     "ImageLoader",
     "KindImageLoader",
-    "K3dImageLoader",
     "MinikubeImageLoader",
     "RegistryImageLoader",
 ]
