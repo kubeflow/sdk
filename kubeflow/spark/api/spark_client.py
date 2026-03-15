@@ -14,15 +14,16 @@
 
 """SparkClient for Kubeflow SDK."""
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 import logging
+from typing import Any
 
 from pyspark.sql import SparkSession
 
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.backends.kubernetes import KubernetesBackend
 from kubeflow.spark.backends.kubernetes.utils import validate_spark_connect_url
-from kubeflow.spark.types.types import Driver, Executor, SparkConnectInfo
+from kubeflow.spark.types.types import Driver, Executor, SparkConnectInfo, SparkJob, SparkJobStatus
 
 logger = logging.getLogger(__name__)
 
@@ -141,3 +142,82 @@ class SparkClient:
     def get_session_logs(self, name: str, follow: bool = False) -> Iterator[str]:
         """Get logs from a session."""
         return self.backend.get_session_logs(name, follow=follow)
+
+    def submit_job(
+        self,
+        func: Callable[[SparkSession], Any] | None = None,
+        func_args: dict[str, Any] | None = None,
+        main_file: str | None = None,
+        main_class: str | None = None,
+        arguments: list[str] | None = None,
+        name: str | None = None,
+    ) -> str:
+        """Submit a batch Spark job.
+
+        Supports two modes based on parameters:
+        - Function mode: Pass `func` to submit a Python function with Spark transformations.
+        - File mode: Pass `main_file` to submit an existing Python/Jar file.
+
+        Args:
+            func: Python function that receives SparkSession (function mode).
+            func_args: Arguments to pass to the function.
+            main_file: Path to Python/Jar file (file mode).
+            main_class: Main class for Jar files.
+            arguments: Command-line arguments for the job.
+            name: Optional job name.
+
+        Returns:
+            The job name (string) for tracking.
+
+        Raises:
+            ValueError: If neither `func` nor `main_file` is provided, or both are provided.
+        """
+        if func is not None and main_file is not None:
+            raise ValueError("Provide either `func` or `main_file`, not both.")
+        if func is None and main_file is None:
+            raise ValueError("Either `func` or `main_file` must be provided.")
+
+        if func is not None and main_file is None:
+            raise NotImplementedError("Function mode is not yet implemented.")
+
+        return self.backend.submit_job(
+            main_file=main_file,
+            name=name,
+            arguments=arguments,
+        ).name
+
+    def list_jobs(
+        self,
+        status: SparkJobStatus | None = None,
+    ) -> list[SparkJob]:
+        """List batch Spark jobs."""
+        jobs = self.backend.list_jobs()
+        if status is not None:
+            jobs = [j for j in jobs if j.status == status]
+        return jobs
+
+    def get_job(self, name: str) -> SparkJob:
+        """Get a specific Spark job by name."""
+        return self.backend.get_job(name)
+
+    def get_job_logs(
+        self,
+        name: str,
+        container: str = "spark-kubernetes-driver",
+        follow: bool = False,
+    ) -> Iterator[str]:
+        """Get logs from a Spark job (driver or executor)."""
+        return self.backend.get_job_logs(name, container=container, follow=follow)
+
+    def wait_for_job_status(
+        self,
+        name: str,
+        status: set[SparkJobStatus] = {SparkJobStatus.COMPLETED},
+        timeout: int = 600,
+    ) -> SparkJob:
+        """Wait for a job to reach desired status."""
+        return self.backend.wait_for_job(name, status=status, timeout=timeout)
+
+    def delete_job(self, name: str) -> None:
+        """Delete a Spark job."""
+        self.backend.delete_job(name)

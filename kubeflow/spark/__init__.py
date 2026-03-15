@@ -16,6 +16,7 @@
 
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.api.spark_client import SparkClient
+from kubeflow.spark.image.loaders import ImageLoader, KindImageLoader
 from kubeflow.spark.types.options import (
     Annotations,
     Labels,
@@ -29,6 +30,8 @@ from kubeflow.spark.types.types import (
     Executor,
     SparkConnectInfo,
     SparkConnectState,
+    SparkJob,
+    SparkJobStatus,
 )
 
 __all__ = [
@@ -46,6 +49,12 @@ __all__ = [
     "NodeSelector",
     "PodTemplateOverride",
     "Toleration",
+    # Batch job types
+    "SparkJob",
+    "SparkJobStatus",
+    # Image loaders
+    "ImageLoader",
+    "KindImageLoader",
     # Configuration
     "KubernetesBackendConfig",
 ]
