@@ -19,6 +19,43 @@ from datetime import datetime
 from enum import Enum
 
 
+
+class SparkJobStatus(str, Enum):
+    """State of a batch Spark job (SparkApplication CRD).
+    """
+
+    NEW = ""  # Initial state before the operator processes the resource
+    SUBMITTED = "SUBMITTED"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    SUBMISSION_FAILED = "SUBMISSION_FAILED"
+    PENDING_RERUN = "PENDING_RERUN"
+    INVALIDATING = "INVALIDATING"
+    SUCCEEDING = "SUCCEEDING"
+    FAILING = "FAILING"
+    UNKNOWN = "UNKNOWN"
+
+
+@dataclass
+class SparkJob:
+    """Information about a batch Spark job (SparkApplication CRD).
+
+    Args:
+        name: Name of the SparkApplication resource.
+        namespace: Kubernetes namespace.
+        status: Current application state.
+        driver_pod_name: Name of the driver pod.
+        error_message: Error message from the operator if the job failed.
+    """
+
+    name: str
+    namespace: str
+    status: SparkJobStatus
+    driver_pod_name: str | None = None
+    error_message: str | None = None
+
+
 class SparkConnectState(str, Enum):
     """State of a SparkConnect session."""
 
