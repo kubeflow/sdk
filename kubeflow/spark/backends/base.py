@@ -17,7 +17,7 @@
 import abc
 from collections.abc import Iterator
 
-from kubeflow.spark.types.types import Driver, Executor, SparkConnectInfo
+from kubeflow.spark.types.types import Driver, Executor, SparkConnectInfo, SparkJob, SparkJobStatus
 
 
 class RuntimeBackend(abc.ABC):
@@ -146,5 +146,116 @@ class RuntimeBackend(abc.ABC):
         Raises:
             TimeoutError: If reading logs times out.
             RuntimeError: If the session/pod is not found or reading fails.
+        """
+        raise NotImplementedError()
+
+    # ------------------------------------------------------------------
+    # Batch job methods (SparkApplication CRD)
+    # ------------------------------------------------------------------
+
+    @abc.abstractmethod
+    def submit_job(
+        self,
+        main_file: str,
+        name: str | None = None,
+        arguments: list[str] | None = None,
+    ) -> SparkJob:
+        """Submit a batch Spark job.
+
+        Args:
+            main_file: Local path to the Python script.
+            name: Optional job name; auto-generated if not provided.
+            arguments: Arguments to pass to the application.
+
+        Returns:
+            SparkJob with job details.
+
+        Raises:
+            FileNotFoundError: If main_file does not exist.
+            RuntimeError: If image build, load, or submission fails.
+            TimeoutError: If the submission request times out.
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def list_jobs(self) -> list[SparkJob]:
+        """List all batch Spark jobs in the namespace.
+
+        Returns:
+            List of SparkJob objects.
+
+        Raises:
+            TimeoutError: If the request times out.
+            RuntimeError: If listing fails.
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_job(self, name: str) -> SparkJob:
+        """Get information about a batch Spark job.
+
+        Args:
+            name: Job name.
+
+        Returns:
+            SparkJob with job details.
+
+        Raises:
+            TimeoutError: If the request times out.
+            RuntimeError: If the job is not found or request fails.
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def delete_job(self, name: str) -> None:
+        """Delete a batch Spark job.
+
+        Args:
+            name: Job name.
+
+        Raises:
+            TimeoutError: If the deletion request times out.
+            RuntimeError: If the job is not found or deletion fails.
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_job_logs(self, name: str, container: str = "spark-kubernetes-driver", follow: bool = False) -> Iterator[str]:
+        """Get logs from a batch Spark job pod.
+
+        Args:
+            name: Job name.
+            container: Container name to read logs from. Default ``"driver"``.
+            follow: If True, stream logs continuously.
+
+        Returns:
+            Iterator of log lines.
+
+        Raises:
+            TimeoutError: If reading logs times out.
+            RuntimeError: If the job/pod is not found or reading fails.
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def wait_for_job(
+        self,
+        name: str,
+        status: set[SparkJobStatus] = {SparkJobStatus.COMPLETED},
+        timeout: int = 600,
+    ) -> SparkJob:
+        """Wait for a batch Spark job to reach one of the desired statuses.
+
+        Args:
+            name: Job name.
+            status: Set of statuses to wait for. Default ``{COMPLETED}``.
+            timeout: Maximum wait time in seconds.
+
+        Returns:
+            SparkJob when it reaches one of the desired statuses.
+
+        Raises:
+            TimeoutError: If job does not reach desired status within timeout.
+            RuntimeError: If the job is not found or status check fails.
         """
         raise NotImplementedError()
