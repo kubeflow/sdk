@@ -210,3 +210,26 @@ class TestSparkExamples:
             pytest.skip("Requires in-cluster execution (SPARK_E2E_RUN_IN_CLUSTER=1)")
 
         self._run_example("connect_existing_session.py", namespace)
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+@pytest.mark.timeout(EXAMPLE_TIMEOUT_SEC + 120)
+class TestSparkJobExamples:
+    """Validate Spark batch job examples execute successfully."""
+
+    def test_spark_job_simple_example(self):
+        """EX04: Validate spark_job_simple.py submits and completes batch jobs."""
+        namespace = os.environ.get("SPARK_TEST_NAMESPACE", "spark-test")
+        returncode, stdout, stderr, _ = _run_example_with_watcher(
+            EXAMPLES_DIR / "spark_job_simple.py",
+            namespace,
+            timeout_sec=EXAMPLE_TIMEOUT_SEC,
+        )
+        fail_msg = (
+            f"spark_job_simple.py exited with code {returncode} (expected 0).\n"
+            f"--- stdout ---\n{stdout or '(empty)'}\n"
+            f"--- stderr ---\n{stderr or '(empty)'}"
+        )
+        assert returncode == 0, fail_msg
+        assert "ALL EXAMPLES COMPLETE" in stdout, f"Expected completion message. stdout:\n{stdout}"

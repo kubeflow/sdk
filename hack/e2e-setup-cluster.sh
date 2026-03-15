@@ -292,26 +292,26 @@ subjects:
     name: default
     namespace: $NAMESPACE
 ---
-# E2E in-cluster runner: default SA can create/get SparkConnect so Job pods use in-cluster URL (no port-forward).
+# E2E in-cluster runner: default SA can create/get SparkConnect/SparkApplication so Job pods use in-cluster URL (no port-forward).
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: e2e-sparkconnect-client
+  name: e2e-spark-client
   namespace: $NAMESPACE
 rules:
   - apiGroups: ["sparkoperator.k8s.io"]
-    resources: ["sparkconnects", "sparkconnects/status"]
+    resources: ["sparkconnects", "sparkconnects/status", "sparkapplications", "sparkapplications/status"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: e2e-sparkconnect-client
+  name: e2e-spark-client
   namespace: $NAMESPACE
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: e2e-sparkconnect-client
+  name: e2e-spark-client
 subjects:
   - kind: ServiceAccount
     name: default
