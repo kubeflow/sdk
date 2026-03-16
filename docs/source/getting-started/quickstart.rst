@@ -81,6 +81,62 @@ Use the :class:`~kubeflow.trainer.TrainerClient` to submit your function to Kube
 
 That's it! Your training function is now running on Kubernetes.
 
+Optional: Configure TrainJob options
+------------------------------------
+
+You can pass ``options`` to :meth:`~kubeflow.trainer.TrainerClient.train`
+to customize metadata or attach ``RuntimePatch`` entries.
+
+.. code-block:: python
+
+   from kubeflow.trainer import TrainerClient
+   from kubeflow.trainer.options import (
+       Labels,
+       RuntimePatch,
+       TrainingRuntimeSpecPatch,
+       JobSetTemplatePatch,
+       JobSetSpecPatch,
+       ReplicatedJobPatch,
+       JobTemplatePatch,
+       JobSpecPatch,
+       PodTemplatePatch,
+       PodSpecPatch,
+   )
+   from kubeflow.trainer.types import CustomTrainer
+
+   client = TrainerClient()
+
+   job_name = client.train(
+       trainer=CustomTrainer(func=train_mnist),
+       options=[
+           Labels({"team": "ml-platform"}),
+           RuntimePatch(
+               training_runtime_spec=TrainingRuntimeSpecPatch(
+                   template=JobSetTemplatePatch(
+                       spec=JobSetSpecPatch(
+                           replicated_jobs=[
+                               ReplicatedJobPatch(
+                                   name="node",
+                                   template=JobTemplatePatch(
+                                       spec=JobSpecPatch(
+                                           template=PodTemplatePatch(
+                                               spec=PodSpecPatch(
+                                                   service_account_name="trainer-sa",
+                                               )
+                                           )
+                                       )
+                                   ),
+                               )
+                           ]
+                       )
+                   )
+               )
+           ),
+       ],
+   )
+
+   print(f"Training job started: {job_name}")
+
 Step 3: Monitor Progress
 ------------------------
 
