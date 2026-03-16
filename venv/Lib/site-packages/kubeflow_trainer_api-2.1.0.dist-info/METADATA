@@ -1,0 +1,30 @@
+Metadata-Version: 2.4
+Name: kubeflow_trainer_api
+Version: 2.1.0
+Summary: Kubeflow Trainer API models for Kubernetes resources to interact with Kubeflow APIs.
+Project-URL: Homepage, https://github.com/kubeflow/trainer
+Project-URL: Documentation, https://www.kubeflow.org/docs/components/trainer/
+Project-URL: Source, https://github.com/kubeflow/trainer
+Author-email: The Kubeflow Authors <kubeflow-discuss@googlegroups.com>
+License-Expression: Apache-2.0
+Keywords: ai,api,kubeflow,llm,model training,trainer
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Education
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Topic :: Scientific/Engineering
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Classifier: Topic :: Software Development
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.9
+Requires-Dist: pydantic>=2.10.0
+Description-Content-Type: text/markdown
+
+# Kubeflow Trainer API
+
+Python package containing Kubeflow Trainer API models.

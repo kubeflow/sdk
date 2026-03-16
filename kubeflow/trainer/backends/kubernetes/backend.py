@@ -47,9 +47,7 @@ class KubernetesBackend(RuntimeBackend):
         if cfg.client_configuration is None:
             # Load kube-config or in-cluster config.
             if cfg.config_file or not common_utils.is_running_in_k8s():
-                config.load_kube_config(
-                    config_file=cfg.config_file, context=cfg.context
-                )
+                config.load_kube_config(config_file=cfg.config_file, context=cfg.context)
             else:
                 config.load_incluster_config()
 
@@ -117,35 +115,23 @@ class KubernetesBackend(RuntimeBackend):
                 namespace_thread.get(common_constants.DEFAULT_TIMEOUT)
             )
         except multiprocessing.TimeoutError as e:
-            raise TimeoutError(
-                f"Timeout to list {constants.TRAINING_RUNTIME_KIND}s"
-            ) from e
+            raise TimeoutError(f"Timeout to list {constants.TRAINING_RUNTIME_KIND}s") from e
         except client.ApiException as e:
             if e.status != 404:
-                raise RuntimeError(
-                    f"Failed to list {constants.TRAINING_RUNTIME_KIND}s"
-                ) from e
+                raise RuntimeError(f"Failed to list {constants.TRAINING_RUNTIME_KIND}s") from e
         except Exception as e:
-            raise RuntimeError(
-                f"Failed to list {constants.TRAINING_RUNTIME_KIND}s"
-            ) from e
+            raise RuntimeError(f"Failed to list {constants.TRAINING_RUNTIME_KIND}s") from e
 
         # Fetch cluster-scoped ClusterTrainingRuntimes.
         cluster_runtimes = None
         try:
-            cluster_runtimes = (
-                models.TrainerV1alpha1ClusterTrainingRuntimeList.from_dict(
-                    cluster_thread.get(common_constants.DEFAULT_TIMEOUT)
-                )
+            cluster_runtimes = models.TrainerV1alpha1ClusterTrainingRuntimeList.from_dict(
+                cluster_thread.get(common_constants.DEFAULT_TIMEOUT)
             )
         except multiprocessing.TimeoutError as e:
-            raise TimeoutError(
-                f"Timeout to list {constants.CLUSTER_TRAINING_RUNTIME_KIND}s"
-            ) from e
+            raise TimeoutError(f"Timeout to list {constants.CLUSTER_TRAINING_RUNTIME_KIND}s") from e
         except Exception as e:
-            raise RuntimeError(
-                f"Failed to list {constants.CLUSTER_TRAINING_RUNTIME_KIND}s"
-            ) from e
+            raise RuntimeError(f"Failed to list {constants.CLUSTER_TRAINING_RUNTIME_KIND}s") from e
 
         # Collect runtimes in a map, preferring namespaced over cluster-scoped
         runtimes_by_name = {}
@@ -257,9 +243,7 @@ class KubernetesBackend(RuntimeBackend):
 
             # Print Python packages.
             if shutil.which("pip"):
-                pip_list = subprocess.run(
-                    ["pip", "list"], capture_output=True, text=True
-                )
+                pip_list = subprocess.run(["pip", "list"], capture_output=True, text=True)
                 print(pip_list.stdout)
             else:
                 print("Unable to get installed packages: pip command not found")
@@ -267,9 +251,7 @@ class KubernetesBackend(RuntimeBackend):
             # Print nvidia-smi if GPUs are available.
             if shutil.which("nvidia-smi"):
                 print("Available GPUs on the single training node")
-                nvidia_smi = subprocess.run(
-                    ["nvidia-smi"], capture_output=True, text=True
-                )
+                nvidia_smi = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
                 print(nvidia_smi.stdout)
 
         # Create the TrainJob and wait until it completes.
@@ -279,9 +261,7 @@ class KubernetesBackend(RuntimeBackend):
             trainer=types.CustomTrainer(
                 func=print_packages,
                 num_nodes=1,
-                resources_per_node=(
-                    {"cpu": 1} if runtime_copy.trainer.device != "gpu" else None
-                ),
+                resources_per_node=({"cpu": 1} if runtime_copy.trainer.device != "gpu" else None),
             ),
         )
 
@@ -294,10 +274,7 @@ class KubernetesBackend(RuntimeBackend):
         runtime: str | types.Runtime | None = None,
         initializer: types.Initializer | None = None,
         trainer: (
-            types.CustomTrainer
-            | types.CustomTrainerContainer
-            | types.BuiltinTrainer
-            | None
+            types.CustomTrainer | types.CustomTrainerContainer | types.BuiltinTrainer | None
         ) = None,
         options: list | None = None,
     ) -> str:
@@ -478,9 +455,7 @@ class KubernetesBackend(RuntimeBackend):
             constants.TRAINJOB_FAILED,
         }
         if not status.issubset(job_statuses):
-            raise ValueError(
-                f"Expected status {status} must be a subset of {job_statuses}"
-            )
+            raise ValueError(f"Expected status {status} must be a subset of {job_statuses}")
 
         if polling_interval > timeout:
             raise ValueError(
@@ -510,9 +485,7 @@ class KubernetesBackend(RuntimeBackend):
 
             time.sleep(polling_interval)
 
-        raise TimeoutError(
-            f"Timeout waiting for TrainJob {name} to reach status: {status} status"
-        )
+        raise TimeoutError(f"Timeout waiting for TrainJob {name} to reach status: {status} status")
 
     def delete_job(self, name: str):
         try:
@@ -532,9 +505,7 @@ class KubernetesBackend(RuntimeBackend):
                 f"Failed to delete {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
             ) from e
 
-        logger.debug(
-            f"{constants.TRAINJOB_KIND} {self.namespace}/{name} has been deleted"
-        )
+        logger.debug(f"{constants.TRAINJOB_KIND} {self.namespace}/{name} has been deleted")
 
     def get_job_events(self, name: str) -> list[types.Event]:
         # Get all pod names related to this TrainJob
@@ -550,26 +521,21 @@ class KubernetesBackend(RuntimeBackend):
         events = []
         try:
             # Retrieve events from the namespace
-            event_response: models.IoK8sApiCoreV1EventList = (
-                self.core_api.list_namespaced_event(
-                    namespace=self.namespace,
-                    async_req=True,
-                ).get(common_constants.DEFAULT_TIMEOUT)
-            )
+            event_response: models.IoK8sApiCoreV1EventList = self.core_api.list_namespaced_event(
+                namespace=self.namespace,
+                async_req=True,
+            ).get(common_constants.DEFAULT_TIMEOUT)
 
             # Filter events related to this TrainJob or its pods
             for event in event_response.items:
-                if not (
-                    event.metadata and event.involved_object and event.first_timestamp
-                ):
+                if not (event.metadata and event.involved_object and event.first_timestamp):
                     continue
 
                 involved_object = event.involved_object
 
                 # Check if event is related to TrainJob resources
                 if (
-                    involved_object.kind
-                    in {constants.TRAINJOB_KIND, "JobSet", "Job", "Pod"}
+                    involved_object.kind in {constants.TRAINJOB_KIND, "JobSet", "Job", "Pod"}
                     and involved_object.name in trainjob_resources
                 ):
                     events.append(
@@ -594,8 +560,7 @@ class KubernetesBackend(RuntimeBackend):
     def __get_runtime_from_cr(
         self,
         runtime_cr: (
-            models.TrainerV1alpha1ClusterTrainingRuntime
-            | models.TrainerV1alpha1TrainingRuntime
+            models.TrainerV1alpha1ClusterTrainingRuntime | models.TrainerV1alpha1TrainingRuntime
         ),
     ) -> types.Runtime:
         if not (
@@ -629,9 +594,7 @@ class KubernetesBackend(RuntimeBackend):
             ),
         )
 
-    def _read_pod_logs(
-        self, pod_name: str, container_name: str, follow: bool
-    ) -> Iterator[str]:
+    def _read_pod_logs(self, pod_name: str, container_name: str, follow: bool) -> Iterator[str]:
         """Read logs from a pod container."""
         try:
             if follow:
@@ -709,12 +672,7 @@ class KubernetesBackend(RuntimeBackend):
             for pod in pod_list.items:
                 # Pod must have labels to detect the TrainJob step.
                 # Every Pod always has a single TrainJob step.
-                if not (
-                    pod.metadata
-                    and pod.metadata.name
-                    and pod.metadata.labels
-                    and pod.spec
-                ):
+                if not (pod.metadata and pod.metadata.name and pod.metadata.labels and pod.spec):
                     raise Exception(f"TrainJob Pod is invalid: {pod}")
 
                 # Get the Initializer step.
@@ -786,10 +744,7 @@ class KubernetesBackend(RuntimeBackend):
         runtime: str | types.Runtime | None = None,
         initializer: types.Initializer | None = None,
         trainer: (
-            types.CustomTrainer
-            | types.CustomTrainerContainer
-            | types.BuiltinTrainer
-            | None
+            types.CustomTrainer | types.CustomTrainerContainer | types.BuiltinTrainer | None
         ) = None,
         trainer_overrides: dict[str, Any] | None = None,
         runtime_patches: list[dict[str, Any]] | None = None,
@@ -808,17 +763,13 @@ class KubernetesBackend(RuntimeBackend):
             # If users choose to use a custom training script.
             if isinstance(trainer, (types.CustomTrainer, types.CustomTrainerContainer)):
                 if runtime.trainer.trainer_type != types.TrainerType.CUSTOM_TRAINER:
-                    raise ValueError(
-                        f"CustomTrainer can't be used with {runtime} runtime"
-                    )
+                    raise ValueError(f"CustomTrainer can't be used with {runtime} runtime")
                 trainer_cr = utils.get_trainer_cr_from_custom_trainer(runtime, trainer)
 
             # If users choose to use a builtin trainer for post-training.
             elif isinstance(trainer, types.BuiltinTrainer):
                 if runtime.trainer.trainer_type != types.TrainerType.BUILTIN_TRAINER:
-                    raise ValueError(
-                        f"BuiltinTrainer can't be used with {runtime} runtime"
-                    )
+                    raise ValueError(f"BuiltinTrainer can't be used with {runtime} runtime")
                 trainer_cr = utils.get_trainer_cr_from_builtin_trainer(
                     runtime, trainer, initializer
                 )
@@ -845,13 +796,8 @@ class KubernetesBackend(RuntimeBackend):
 
         trainjob_spec = models.TrainerV1alpha1TrainJobSpec(
             runtimeRef=models.TrainerV1alpha1RuntimeRef(name=runtime.name),
-            trainer=(
-            trainer_cr if trainer_cr != models.TrainerV1alpha1Trainer() else None
-            ),
+            trainer=(trainer_cr if trainer_cr != models.TrainerV1alpha1Trainer() else None),
             runtimePatches=runtime_patch_models,
-            labels=spec_labels,
-            annotations=spec_annotations,
-            pod_template_overrides=pod_template_overrides,
         )
 
         # Add initializer if users define it.
@@ -863,9 +809,7 @@ class KubernetesBackend(RuntimeBackend):
                     else None
                 ),
                 model=(
-                    utils.get_model_initializer(initializer.model)
-                    if initializer.model
-                    else None
+                    utils.get_model_initializer(initializer.model) if initializer.model else None
                 ),
             )
 

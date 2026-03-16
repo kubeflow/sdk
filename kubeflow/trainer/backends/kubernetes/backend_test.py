@@ -1688,11 +1688,15 @@ def test_get_job_events(kubernetes_backend, test_case):
         assert type(e) is test_case.expected_error
     print("test execution complete")
 
+
 def test_get_runtime_fallback_to_cluster_on_404(mocker):
     # Prevent real kube config loading
     mocker.patch("kubeflow.trainer.backends.kubernetes.backend.config.load_kube_config")
     mocker.patch("kubeflow.trainer.backends.kubernetes.backend.config.load_incluster_config")
-    mocker.patch("kubeflow.trainer.backends.kubernetes.backend.common_utils.is_running_in_k8s", return_value=False)
+    mocker.patch(
+        "kubeflow.trainer.backends.kubernetes.backend.common_utils.is_running_in_k8s",
+        return_value=False,
+    )
 
     cfg = KubernetesBackendConfig(namespace="default")
     backend = KubernetesBackend(cfg)
