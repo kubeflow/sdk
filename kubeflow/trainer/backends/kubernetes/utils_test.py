@@ -205,15 +205,15 @@ def test_get_resources_per_node(test_case: TestCase):
                 "apt-get install python-pip\n"
                 "fi\n\n\n"
                 "PACKAGES=(torch numpy custom-package)\n"
-                'PIP_OPTS="--index-url https://pypi.org/simple --extra-index-url https://private.repo.com/simple --extra-index-url https://internal.company.com/simple"\n'
+                "PIP_OPTS=(--index-url https://pypi.org/simple --extra-index-url https://private.repo.com/simple --extra-index-url https://internal.company.com/simple)\n"
                 'LOG_FILE="pip_install.log"\n'
                 'rm -f "$LOG_FILE"\n'
                 "\n"
                 "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
-                '    --no-warn-script-location $PIP_OPTS --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
+                '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
                 '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
                 "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
-                '    --no-warn-script-location $PIP_OPTS "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
+                '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
                 '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
                 "else\n"
                 '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
@@ -235,15 +235,15 @@ def test_get_resources_per_node(test_case: TestCase):
                 "apt-get install python-pip\n"
                 "fi\n\n\n"
                 "PACKAGES=(torch numpy custom-package)\n"
-                'PIP_OPTS="--index-url https://pypi.org/simple"\n'
+                "PIP_OPTS=(--index-url https://pypi.org/simple)\n"
                 'LOG_FILE="pip_install.log"\n'
                 'rm -f "$LOG_FILE"\n'
                 "\n"
                 "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
-                '    --no-warn-script-location $PIP_OPTS --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
+                '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
                 '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
                 "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
-                '    --no-warn-script-location $PIP_OPTS "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
+                '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
                 '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
                 "else\n"
                 '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
@@ -269,15 +269,15 @@ def test_get_resources_per_node(test_case: TestCase):
                 "apt-get install python-pip\n"
                 "fi\n\n\n"
                 "PACKAGES=(torch numpy custom-package)\n"
-                'PIP_OPTS="--index-url https://pypi.org/simple --extra-index-url https://private.repo.com/simple --extra-index-url https://internal.company.com/simple"\n'
+                "PIP_OPTS=(--index-url https://pypi.org/simple --extra-index-url https://private.repo.com/simple --extra-index-url https://internal.company.com/simple)\n"
                 'LOG_FILE="pip_install.log"\n'
                 'rm -f "$LOG_FILE"\n'
                 "\n"
                 "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
-                '    --no-warn-script-location $PIP_OPTS --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
+                '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
                 '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
                 "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
-                '    --no-warn-script-location $PIP_OPTS "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
+                '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
                 '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
                 "else\n"
                 '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
@@ -299,15 +299,15 @@ def test_get_resources_per_node(test_case: TestCase):
                 "apt-get install python-pip\n"
                 "fi\n\n\n"
                 "PACKAGES=(torch numpy)\n"
-                'PIP_OPTS="--index-url https://pypi.org/simple"\n'
+                "PIP_OPTS=(--index-url https://pypi.org/simple)\n"
                 'LOG_FILE="pip_install.log"\n'
                 'rm -f "$LOG_FILE"\n'
                 "\n"
                 "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
-                '    --no-warn-script-location $PIP_OPTS --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
+                '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
                 '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
                 "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
-                '    --no-warn-script-location $PIP_OPTS "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
+                '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
                 '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
                 "else\n"
                 '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
@@ -329,15 +329,15 @@ def test_get_resources_per_node(test_case: TestCase):
                 "apt-get install python-pip\n"
                 "fi\n\n\n"
                 "PACKAGES=(datasets 'transformers[torch]' 'cloudpathlib[all]')\n"
-                'PIP_OPTS="--index-url https://pypi.org/simple"\n'
+                "PIP_OPTS=(--index-url https://pypi.org/simple)\n"
                 'LOG_FILE="pip_install.log"\n'
                 'rm -f "$LOG_FILE"\n'
                 "\n"
                 "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
-                '    --no-warn-script-location $PIP_OPTS --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
+                '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
                 '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
                 "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
-                '    --no-warn-script-location $PIP_OPTS "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
+                '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
                 '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
                 "else\n"
                 '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
@@ -483,15 +483,15 @@ def test_get_script_for_python_packages(test_case):
                     "apt-get install python-pip\n"
                     "fi\n\n\n"
                     "PACKAGES=(requests)\n"
-                    'PIP_OPTS="--index-url https://pypi.org/simple"\n'
+                    "PIP_OPTS=(--index-url https://pypi.org/simple)\n"
                     'LOG_FILE="pip_install.log"\n'
                     'rm -f "$LOG_FILE"\n'
                     "\n"
                     "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
-                    '    --no-warn-script-location $PIP_OPTS --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
+                    '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
                     '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
                     "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
-                    '    --no-warn-script-location $PIP_OPTS "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
+                    '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
                     '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
                     "else\n"
                     '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
