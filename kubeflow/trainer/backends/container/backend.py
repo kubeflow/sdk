@@ -38,6 +38,8 @@ Key behaviors:
 """
 
 from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import contextlib
 from datetime import datetime
 import logging
 import os
@@ -520,6 +522,9 @@ class ContainerBackend(RuntimeBackend):
         """
         Run dataset and model initializers before training starts.
 
+        If both dataset and model initializers are configured, they are executed
+        in parallel to reduce total initialization time.
+
         Args:
             job_name: Name of the training job.
             initializer: Initializer configuration.
@@ -527,37 +532,73 @@ class ContainerBackend(RuntimeBackend):
             network_id: Network ID for containers.
 
         Raises:
-            RuntimeError: If initializer fails to complete successfully.
+            RuntimeError: If an initializer fails to complete successfully.
+            TimeoutError: If an initializer does not complete within a configured timeout.
+            Exception: Any other exception raised by :meth:`_run_single_initializer`
+                or the underlying container client adapter.
         """
-        # Run dataset initializer if configured
+        initializers: list[container_utils.ContainerInitializer] = []
+
+        # Configure dataset initializer if requested
         if initializer.dataset:
             dataset_init = container_utils.get_dataset_initializer(initializer.dataset, self.cfg)
             container_utils.maybe_pull_image(
                 self._adapter, dataset_init.image, self.cfg.pull_policy
             )
+            initializers.append(dataset_init)
 
-            logger.debug("Running dataset initializer")
-            self._run_single_initializer(
-                job_name=job_name,
-                container_init=dataset_init,
-                workdir=workdir,
-                network_id=network_id,
-            )
-            logger.debug("Dataset initializer completed")
-
-        # Run model initializer if configured
+        # Configure model initializer if requested
         if initializer.model:
             model_init = container_utils.get_model_initializer(initializer.model, self.cfg)
             container_utils.maybe_pull_image(self._adapter, model_init.image, self.cfg.pull_policy)
+            initializers.append(model_init)
 
-            logger.debug("Running model initializer")
+        if not initializers:
+            return
+
+        # Fast path for a single initializer to avoid thread overhead.
+        if len(initializers) == 1:
+            container_init = initializers[0]
+            logger.debug(f"Running {container_init.name}")
             self._run_single_initializer(
                 job_name=job_name,
-                container_init=model_init,
+                container_init=container_init,
                 workdir=workdir,
                 network_id=network_id,
             )
-            logger.debug("Model initializer completed")
+            logger.debug(f"{container_init.name} completed")
+            return
+
+        logger.debug(
+            "Running initializers in parallel: %s",
+            ", ".join(container_init.name for container_init in initializers),
+        )
+        with ThreadPoolExecutor(max_workers=len(initializers)) as executor:
+            future_to_init_name = {
+                executor.submit(
+                    self._run_single_initializer,
+                    job_name,
+                    container_init,
+                    workdir,
+                    network_id,
+                ): container_init.name
+                for container_init in initializers
+            }
+
+            try:
+                for future in as_completed(future_to_init_name):
+                    init_name = future_to_init_name[future]
+                    future.result()
+                    logger.debug(f"{init_name} completed")
+            except Exception:
+                # Best effort cancellation for any not-yet-started initializer tasks.
+                for pending_future in future_to_init_name:
+                    pending_future.cancel()
+                # Ensure all initializer futures have completed before propagating the error.
+                for pending_future in future_to_init_name:
+                    with contextlib.suppress(Exception):
+                        pending_future.result()
+                raise
 
     def _run_single_initializer(
         self,
