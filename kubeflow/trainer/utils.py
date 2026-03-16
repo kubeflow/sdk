@@ -17,10 +17,10 @@
 This module provides utility functions for training scripts running inside
 Kubeflow TrainJobs, including `update_runtime_status()` for reporting progress.
 
-Environment variables (injected by controller when TrainJobProgress feature gate is enabled):
-    - KUBEFLOW_TRAINER_STATUS_URL: HTTPS endpoint URL for status updates
-    - KUBEFLOW_TRAINER_STATUS_CA_CERT: Path to CA certificate for TLS verification
-    - KUBEFLOW_TRAINER_STATUS_TOKEN: Path to projected service account token
+Environment variables (injected by controller when TrainJobRuntimeStatus feature gate is enabled):
+    - KUBEFLOW_TRAINER_SERVER_URL: HTTPS endpoint URL for status updates
+    - KUBEFLOW_TRAINER_SERVER_CA_CERT: Path to CA certificate for TLS verification
+    - KUBEFLOW_TRAINER_SERVER_TOKEN: Path to projected service account token
 
 Example:
     ```python
@@ -61,9 +61,9 @@ __all__ = ["update_runtime_status"]
 logger = logging.getLogger(__name__)
 
 # Environment variable names injected by the controller
-_ENV_STATUS_URL = "KUBEFLOW_TRAINER_STATUS_URL"
-_ENV_CA_CERT = "KUBEFLOW_TRAINER_STATUS_CA_CERT"
-_ENV_TOKEN_PATH = "KUBEFLOW_TRAINER_STATUS_TOKEN"
+_ENV_SERVER_URL = "KUBEFLOW_TRAINER_SERVER_URL"
+_ENV_CA_CERT = "KUBEFLOW_TRAINER_SERVER_CA_CERT"
+_ENV_TOKEN_PATH = "KUBEFLOW_TRAINER_SERVER_TOKEN"
 
 # Module-level state for throttling and caching
 _lock = threading.Lock()
@@ -138,7 +138,7 @@ def update_runtime_status(
         True if update was sent successfully, False otherwise.
     """
     try:
-        url = os.environ.get(_ENV_STATUS_URL)
+        url = os.environ.get(_ENV_SERVER_URL)
         if not url:
             return False
 

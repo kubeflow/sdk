@@ -34,7 +34,7 @@ class TestUpdateRuntimeStatus:
         utils._session = None
 
     def test_returns_false_when_not_in_kubeflow(self):
-        """Should return False when KUBEFLOW_TRAINER_STATUS_URL is not set."""
+        """Should return False when KUBEFLOW_TRAINER_SERVER_URL is not set."""
         with patch.dict(os.environ, {}, clear=True):
             result = update_runtime_status(progress_percent=50)
             assert result is False
@@ -44,8 +44,8 @@ class TestUpdateRuntimeStatus:
         with patch.dict(
             os.environ,
             {
-                "KUBEFLOW_TRAINER_STATUS_URL": "https://test",
-                "KUBEFLOW_TRAINER_STATUS_TOKEN": "/nonexistent/token",
+                "KUBEFLOW_TRAINER_SERVER_URL": "https://test",
+                "KUBEFLOW_TRAINER_SERVER_TOKEN": "/nonexistent/token",
             },
             clear=True,
         ):
@@ -63,8 +63,8 @@ class TestUpdateRuntimeStatus:
                 patch.dict(
                     os.environ,
                     {
-                        "KUBEFLOW_TRAINER_STATUS_URL": "https://test",
-                        "KUBEFLOW_TRAINER_STATUS_TOKEN": token_path,
+                        "KUBEFLOW_TRAINER_SERVER_URL": "https://test",
+                        "KUBEFLOW_TRAINER_SERVER_TOKEN": token_path,
                     },
                     clear=True,
                 ),
@@ -99,8 +99,8 @@ class TestUpdateRuntimeStatus:
                 patch.dict(
                     os.environ,
                     {
-                        "KUBEFLOW_TRAINER_STATUS_URL": "https://test",
-                        "KUBEFLOW_TRAINER_STATUS_TOKEN": token_path,
+                        "KUBEFLOW_TRAINER_SERVER_URL": "https://test",
+                        "KUBEFLOW_TRAINER_SERVER_TOKEN": token_path,
                     },
                     clear=True,
                 ),
@@ -134,8 +134,8 @@ class TestUpdateRuntimeStatus:
                 patch.dict(
                     os.environ,
                     {
-                        "KUBEFLOW_TRAINER_STATUS_URL": "https://test",
-                        "KUBEFLOW_TRAINER_STATUS_TOKEN": token_path,
+                        "KUBEFLOW_TRAINER_SERVER_URL": "https://test",
+                        "KUBEFLOW_TRAINER_SERVER_TOKEN": token_path,
                     },
                     clear=True,
                 ),
@@ -172,8 +172,8 @@ class TestUpdateRuntimeStatus:
                 patch.dict(
                     os.environ,
                     {
-                        "KUBEFLOW_TRAINER_STATUS_URL": "https://test",
-                        "KUBEFLOW_TRAINER_STATUS_TOKEN": token_path,
+                        "KUBEFLOW_TRAINER_SERVER_URL": "https://test",
+                        "KUBEFLOW_TRAINER_SERVER_TOKEN": token_path,
                     },
                     clear=True,
                 ),
@@ -205,8 +205,8 @@ class TestUpdateRuntimeStatus:
         with patch.dict(
             os.environ,
             {
-                "KUBEFLOW_TRAINER_STATUS_URL": "https://test",
-                "KUBEFLOW_TRAINER_STATUS_TOKEN": "/nonexistent",
+                "KUBEFLOW_TRAINER_SERVER_URL": "https://test",
+                "KUBEFLOW_TRAINER_SERVER_TOKEN": "/nonexistent",
             },
             clear=True,
         ):
@@ -224,8 +224,8 @@ class TestUpdateRuntimeStatus:
                 patch.dict(
                     os.environ,
                     {
-                        "KUBEFLOW_TRAINER_STATUS_URL": "https://test",
-                        "KUBEFLOW_TRAINER_STATUS_TOKEN": token_path,
+                        "KUBEFLOW_TRAINER_SERVER_URL": "https://test",
+                        "KUBEFLOW_TRAINER_SERVER_TOKEN": token_path,
                     },
                     clear=True,
                 ),
