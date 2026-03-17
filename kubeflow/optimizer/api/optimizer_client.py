@@ -18,7 +18,6 @@ from typing import Any
 
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.optimizer.backends.kubernetes.backend import KubernetesBackend
-from kubeflow.optimizer.constants import constants
 from kubeflow.optimizer.types.algorithm_types import BaseAlgorithm
 from kubeflow.optimizer.types.optimization_types import (
     Objective,
@@ -182,7 +181,7 @@ class OptimizerClient:
     def wait_for_job_status(
         self,
         name: str,
-        status: set[str] = {constants.OPTIMIZATION_JOB_COMPLETE},
+        status: set[str] | None = None,
         timeout: int = 3600,
         polling_interval: int = 2,
         callbacks: list[Callable[[OptimizationJob], None]] | None = None,
