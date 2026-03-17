@@ -11,9 +11,9 @@ TrainerClient
 Using ``options`` with TrainerClient
 ------------------------------------
 
-The ``options`` parameter in ``TrainerClient.train()`` allows passing backend-specific configuration for job execution, such as environment variables and runtime settings.
+The ``options`` parameter in ``TrainerClient.train()`` allows passing backend-specific configuration for job execution (for example, job name, labels, or Kubernetes runtime / pod-spec patches for compatible backends).
 
-Example:
+Example (Container backend, configuring env vars via an option instead of ``CustomTrainer.env``):
 
 .. code-block:: python
 
@@ -39,10 +39,10 @@ Example:
 
 Notes:
 
-- ``options`` is a list of backend-specific option callables passed at job submission time
-- When using ``ContainerBackendConfig``, environment variables can be configured using the ``env`` option:
+- ``options`` is a list of backend-specific option callables passed at job submission time (for example, to tweak job naming, labels, or apply backend-specific runtime / pod-spec patches)
+- Environment variables are primarily configured on the trainer itself via ``CustomTrainer.env``; for some backends you can also use an ``env`` option:
 
-  - ``trainer_options.env({...})``: injects the given environment variables into the training container
+  - ``trainer_options.env({...})`` (with ``ContainerBackendConfig``): injects the given environment variables into the training container
 
 - ``image`` in ``CustomTrainer`` is required — it specifies the Docker image for execution
 
