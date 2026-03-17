@@ -18,6 +18,7 @@ Example:
 .. code-block:: python
 
     from kubeflow.trainer import TrainerClient, ContainerBackendConfig, CustomTrainer
+    from kubeflow.trainer import options as trainer_options
     import os
     client = TrainerClient(
         backend_config=ContainerBackendConfig()
@@ -31,17 +32,17 @@ Example:
             func=train_simple,
             image="python:3.10"
         ),
-        options={
-            "env": {"MY_VAR": "value"}
-        }
+        options=[
+            trainer_options.env({"MY_VAR": "value"})
+        ]
     )
 
 Notes:
 
-- ``options`` is a dict of backend-specific settings passed at job submission time
-- Supported keys when using ``ContainerBackendConfig``:
+- ``options`` is a list of backend-specific option callables passed at job submission time
+- When using ``ContainerBackendConfig``, environment variables can be configured using the ``env`` option:
 
-  - ``env``: A dict of environment variables injected into the training container
+  - ``trainer_options.env({...})``: injects the given environment variables into the training container
 
 - ``image`` in ``CustomTrainer`` is required — it specifies the Docker image for execution
 
