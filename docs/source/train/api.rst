@@ -18,13 +18,13 @@ Example:
 .. code-block:: python
 
     from kubeflow.trainer import TrainerClient, ContainerBackendConfig, CustomTrainer
-
+    import os
     client = TrainerClient(
         backend_config=ContainerBackendConfig()
     )
 
     def train_simple():
-        print("we can put our test code here")
+        print("ENV VAR:", os.getenv("MY_VAR"))
 
     job_id = client.train(
         trainer=CustomTrainer(
@@ -32,7 +32,7 @@ Example:
             image="python:3.10"
         ),
         options={
-            "env": {"EXAMPLE_VAR": "value"}
+            "env": {"MY_VAR": "value"}
         }
     )
 
