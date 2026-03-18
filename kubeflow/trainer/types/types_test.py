@@ -113,3 +113,9 @@ def test_data_cache_initializer(test_case: TestCase):
         assert test_case.expected_status == FAILED
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+def test_initializer_default_ignore_patterns_contains_pt_and_pth():
+    from kubeflow.trainer.constants.constants import INITIALIZER_DEFAULT_IGNORE_PATTERNS
+
+    assert "*.pt" in INITIALIZER_DEFAULT_IGNORE_PATTERNS
+    assert "*.pth" in INITIALIZER_DEFAULT_IGNORE_PATTERNS
