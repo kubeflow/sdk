@@ -1567,6 +1567,12 @@ def test_get_job_logs(kubernetes_backend, test_case):
             },
             expected_error=TimeoutError,
         ),
+        TestCase(
+            name="polling_interval equal to timeout raises ValueError",
+            expected_status=FAILED,
+            config={"name": "basic-job", "timeout": 10, "polling_interval": 10},
+            expected_error=ValueError,
+        ),
     ],
 )
 def test_wait_for_job_status(kubernetes_backend, test_case):
