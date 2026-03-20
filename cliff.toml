@@ -10,7 +10,7 @@ header = """
 body = """
 {%- if version %}
 ## [{{ version }}](https://github.com/kubeflow/sdk/releases/tag/{{ version }}) ({{ timestamp | date(format="%Y-%m-%d") }})
-{%- else %}
+{% else %}
 ## [Unreleased]
 {%- endif %}
 
@@ -39,16 +39,13 @@ body = """
 {%- if github -%}
 {%- set new_contributors = github.contributors | filter(attribute="is_first_time", value=true) -%}
 {%- if new_contributors | length != 0 %}
-
 ### New Contributors
-{%- for contributor in new_contributors %}
-* @{{ contributor.username }} made their first contribution in \
+{% for contributor in new_contributors %}
+- @{{ contributor.username }} made their first contribution in \
   [#{{ contributor.pr_number }}](https://github.com/kubeflow/sdk/pull/{{ contributor.pr_number }})
 {%- endfor %}
 {%- endif %}
 {%- endif -%}
-
-{% raw %}\n{% endraw %}
 """
 
 trim = true
@@ -66,9 +63,9 @@ ignore_tags = ".*-(alpha|beta|rc).*"
 
 # Manually define groups based on conventional patterns
 commit_parsers = [
-    { message = "^feat(\\(.*\\))?:", group = "🚀 Features" },
-    { message = "^fix(\\(.*\\))?:", group = "🐛 Bug Fixes" },
-    { message = "^chore(\\(.*\\))?:", group = "⚙️ Miscellaneous Tasks" },
-    { message = "^revert(\\(.*\\))?:", group = "⏪ Reverts" },
-    { message = ".*", skip = true },
+   { message = "^feat(\\(.*\\))?:", group = "🚀 Features" },
+   { message = "^fix(\\(.*\\))?:", group = "🐛 Bug Fixes" },
+   { message = "^chore(\\(.*\\))?:", group = "⚙️ Miscellaneous Tasks" },
+   { message = "^revert(\\(.*\\))?:", group = "⏪ Reverts" },
+   { message = ".*", skip = true },
 ]
