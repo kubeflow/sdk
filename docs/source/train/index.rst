@@ -67,6 +67,12 @@ Guides
 
       Understand pre-configured environments for PyTorch, TensorFlow, etc.
 
+   .. grid-item-card:: Data and Model Initializers
+      :link: initializers
+      :link-type: doc
+
+      Download datasets and pre-trained models before training starts.
+
 Common Patterns
 ---------------
 
