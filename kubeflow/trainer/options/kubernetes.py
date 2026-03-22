@@ -501,7 +501,7 @@ class ActiveDeadlineSeconds:
 
     def __post_init__(self):
         """Validate the active deadline seconds configuration."""
-        if not isinstance(self.seconds, int) or self.seconds < 1:
+        if type(self.seconds) is not int or self.seconds < 1:
             raise ValueError("activeDeadlineSeconds must be a positive integer (minimum 1)")
 
     def __call__(

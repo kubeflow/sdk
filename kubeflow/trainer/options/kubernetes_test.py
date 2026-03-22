@@ -437,6 +437,7 @@ class TestActiveDeadlineSeconds:
             (0, "activeDeadlineSeconds must be a positive integer (minimum 1)"),
             (-1, "activeDeadlineSeconds must be a positive integer (minimum 1)"),
             (-100, "activeDeadlineSeconds must be a positive integer (minimum 1)"),
+            (True, "activeDeadlineSeconds must be a positive integer (minimum 1)"),
         ],
     )
     def test_active_deadline_seconds_rejects_invalid_values(self, seconds, expected_error):
