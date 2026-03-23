@@ -25,3 +25,6 @@ docs/_build/
 
 # Local E2E: cloned for building Spark Operator image (SPARK_OPERATOR_IMAGE_TAG=local)
 spark-operator/
+
+# Local issue tracking (development notes)
+ISSUES_TO_SOLVE.md

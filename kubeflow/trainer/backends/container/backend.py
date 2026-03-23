@@ -816,6 +816,12 @@ class ContainerBackend(RuntimeBackend):
     ) -> types.TrainJob:
         import time
 
+        if polling_interval >= timeout:
+            raise ValueError(
+                f"polling_interval ({polling_interval}) must be strictly less than "
+                f"timeout ({timeout})"
+            )
+
         end = time.time() + timeout
         while time.time() < end:
             tj = self.get_job(name)
