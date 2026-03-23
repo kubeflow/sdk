@@ -10,6 +10,7 @@ training container.
 
    Initializers are supported on the **Container backend** and the
    **Kubernetes backend**. They have no effect on ``LocalProcessBackend``.
+   ``DataCacheInitializer`` is only supported on the **Kubernetes backend**.
 
 Available Initializers
 ----------------------
@@ -29,7 +30,7 @@ Available Initializers
      - ``S3DatasetInitializer``
    * - Dataset
      - Distributed cache
-     - ``DataCacheInitializer``
+     - ``DataCacheInitializer`` *(Kubernetes only)*
    * - Model
      - HuggingFace Hub
      - ``HuggingFaceModelInitializer``
@@ -84,6 +85,30 @@ The dataset is available inside the training container at ``/workspace/dataset``
        trainer=CustomTrainer(func=train),
    )
 
+**Distributed cache (Kubernetes only):**
+
+.. code-block:: python
+
+   from kubeflow.trainer import Initializer, DataCacheInitializer
+
+   client.train(
+       initializer=Initializer(
+           dataset=DataCacheInitializer(
+               storage_uri="cache://my_schema/my_table",
+               metadata_loc="s3://my-bucket/iceberg/my_table/metadata/v1.metadata.json",
+               num_data_nodes=4,          # must be > 1
+               iam_role="arn:aws:iam::123456789012:role/my-role",  # optional
+           )
+       ),
+       trainer=CustomTrainer(func=train),
+   )
+
+.. note::
+
+   ``DataCacheInitializer`` requires the **Kubernetes backend**. The
+   ``storage_uri`` must follow the ``cache://<SCHEMA_NAME>/<TABLE_NAME>``
+   format and ``num_data_nodes`` must be greater than 1.
+
 Model Initializers
 ------------------
 
@@ -103,7 +128,7 @@ Model Initializers
        trainer=CustomTrainer(func=fine_tune),
    )
 
-Model weights are available at ``/workspace/model-weights``. By default,
+Model weights are available at ``/workspace/model``. By default,
 redundant formats (``*.msgpack``, ``*.h5``, ``*.bin``, ``*.pt``, ``*.pth``)
 are skipped. Pass ``ignore_patterns=[]`` to download everything.
 
