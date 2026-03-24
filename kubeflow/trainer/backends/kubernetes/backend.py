@@ -466,6 +466,12 @@ class KubernetesBackend(RuntimeBackend):
                 f"timeout ({timeout})"
             )
 
+        if polling_interval <= 0 or timeout <= 0:
+            raise ValueError(
+                f"polling_interval ({polling_interval}) and timeout ({timeout}) "
+                f"must both be positive"
+            )
+
         for _ in range(round(timeout / polling_interval)):
             # Check the status after event is generated for the TrainJob's Pods.
             trainjob = self.get_job(name)

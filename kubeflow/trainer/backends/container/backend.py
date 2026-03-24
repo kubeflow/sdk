@@ -822,6 +822,12 @@ class ContainerBackend(RuntimeBackend):
                 f"timeout ({timeout})"
             )
 
+        if polling_interval <= 0 or timeout <= 0:
+            raise ValueError(
+                f"polling_interval ({polling_interval}) and timeout ({timeout}) "
+                f"must both be positive"
+            )
+
         end = time.time() + timeout
         while time.time() < end:
             tj = self.get_job(name)

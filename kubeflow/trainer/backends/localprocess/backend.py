@@ -232,6 +232,12 @@ class LocalProcessBackend(RuntimeBackend):
                 f"timeout ({timeout})"
             )
 
+        if polling_interval <= 0 or timeout <= 0:
+            raise ValueError(
+                f"polling_interval ({polling_interval}) and timeout ({timeout}) "
+                f"must both be positive"
+            )
+
         for _ in range(round(timeout / polling_interval)):
             # Get current job status
             trainjob = self.get_job(name)
