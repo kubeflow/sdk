@@ -230,6 +230,40 @@ class TrainerClient:
         """
         return self.backend.get_job_events(name=name)
 
+    def get_job_progress(self, name: str) -> types.JobProgress:
+        """Get progress information for a TrainJob.
+
+        Provides a human-readable summary of the job's progress including
+        completion percentage, running steps, and pod health status.
+
+        Args:
+            name: Name of the TrainJob.
+
+        Returns:
+            A JobProgress object containing progress metrics.
+
+        Raises:
+            TimeoutError: Timeout to get a TrainJob.
+            RuntimeError: Failed to get a TrainJob.
+
+        Example:
+            ```python
+            from kubeflow.trainer import TrainerClient
+
+            client = TrainerClient()
+            progress = client.get_job_progress("my-training-job")
+            print(progress)
+            # Output:
+            # Job: my-training-job
+            # Status: Running
+            # Progress: 50.0% (1/2 steps)
+            # Pods: 2/2 healthy
+            # Running steps: step-2
+            ```
+        """
+        job = self.get_job(name=name)
+        return types.JobProgress.from_job(job)
+
     def wait_for_job_status(
         self,
         name: str,
