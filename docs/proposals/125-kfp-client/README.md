@@ -13,46 +13,66 @@
   - [Goals](#goals)
   - [Non-Goals](#non-goals)
 - [User Stories](#user-stories)
-  - [Story 1: Quick one-off run](#story-1-quick-one-off-run-simplest-path)
+  - [Story 1: Quick one-off run](#story-1-quick-one-off-run)
   - [Story 2: Upload once, run many times](#story-2-upload-once-run-many-times)
-  - [Story 3: Production recurring schedule](#story-3-production-recurring-schedule)
-  - [Story 4: Monitoring and waiting for specific states](#story-4-monitoring-and-waiting-for-specific-states)
-  - [Story 5: Kubernetes-native pipeline with PVC and secrets](#story-5-kubernetes-native-pipeline-with-pvc-and-secrets)
-  - [Story 6: Pipeline versioning](#story-6-pipeline-versioning)
-  - [Story 7: End-to-end ML workflow — Pipelines + Trainer + Model Registry](#story-7-end-to-end-ml-workflow--pipelines--trainer--model-registry)
+  - [Story 3: Monitor and wait for specific states](#story-3-monitor-and-wait-for-specific-states)
+  - [Story 4: Kubernetes-native pipeline with PVC and secrets](#story-4-kubernetes-native-pipeline-with-pvc-and-secrets)
+  - [Story 5: Multi-component pipeline — Spark, Trainer, and Model Registry (simplified)](#story-5-multi-component-pipeline--spark-trainer-and-model-registry-simplified)
+  - [Story 6: Advanced — TorchTune, initializers, and remote checkpoints](#story-6-advanced--torchtune-initializers-and-remote-checkpoints)
 - [Proposal](#proposal)
   - [Architecture](#architecture)
   - [Dependency](#dependency)
   - [Constructor](#constructor)
-  - [DSL Re-exports](#dsl-re-exports)
-  - [Exposed API](#exposed-api)
-  - [Deferred APIs](#deferred-apis)
-  - [Name Resolution Internals](#name-resolution-internals)
-- [Open Questions](#open-questions)
-  - [1. Task logs](#1-task-logs)
-  - [2. Run events](#2-run-events)
-  - [3. Runs tracked by ID after creation](#3-runs-tracked-by-id-after-creation)
-  - [4. wait_for_run_status callbacks](#4-wait_for_run_status-callbacks)
-  - [5. Return types — passthrough vs hand-crafted](#5-return-types--passthrough-vs-hand-crafted)
-  - [6. Upstream KFP improvements](#6-upstream-kfp-improvements)
-  - [7. Ownership and long-term maintenance](#7-ownership-and-long-term-maintenance)
-- [Design Details](#design-details)
-  - [Package Structure](#package-structure)
   - [Deviations from Other SDK Clients](#deviations-from-other-sdk-clients)
+  - [DSL Re-exports](#dsl-re-exports)
+  - [Phased API](#phased-api)
+    - [Phase 1: Core workflow](#phase-1-core-workflow)
+    - [Phase 2: Experiments, scheduling, and run lifecycle](#phase-2-experiments-scheduling-and-run-lifecycle)
+    - [Phase 3: Health, observability, and upstream enhancements](#phase-3-health-observability-and-upstream-enhancements)
+  - [Name Resolution](#name-resolution)
+  - [Current kfp.Client API Reference](#current-kfpclient-api-reference)
+- [Open Questions](#open-questions)
+  - [1. Name-first resolution — client-side or server-side](#1-name-first-resolution--client-side-or-server-side)
+  - [2. Task logs](#2-task-logs)
+  - [3. Run events](#3-run-events)
+  - [4. Runs tracked by ID (decided)](#4-runs-tracked-by-id-decided)
+  - [5. Version auto-generation strategy](#5-version-auto-generation-strategy)
+  - [6. `run()` with callable — implicit upload side-effect](#6-run-with-callable--implicit-upload-side-effect)
+  - [7. `delete` cascading behavior](#7-delete-cascading-behavior)
+  - [8. `upload` return type union](#8-upload-return-type-union)
+  - [9. `wait` default terminal states — `cancelled` and `raise_on_failure`](#9-wait-default-terminal-states--cancelled-and-raise_on_failure)
+- [Design Details](#design-details)
+  - [KFP-side package structure](#kfp-side-package-structure)
+  - [SDK-side package structure](#sdk-side-package-structure)
   - [Error Handling](#error-handling)
   - [Test Plan](#test-plan)
 - [Implementation Plan](#implementation-plan)
+  - [SDK-side implementation](#sdk-side-implementation)
+  - [KFP-side implementation (proposed)](#kfp-side-implementation-proposed)
+- [Implementation History](#implementation-history)
 - [Migration](#migration)
 - [Alternatives](#alternatives)
 
 ## Summary
 
-Add a `PipelinesClient` to the Kubeflow SDK that wraps `kfp.Client`, giving
-users the full author → compile → upload → run → monitor pipeline workflow from
-a single `kubeflow` import. The client follows the same patterns as
-`ModelRegistryClient` (constructor, auth, naming conventions) and re-exports
-KFP's DSL, compiler, and components so users never need to mix `kfp` and
-`kubeflow` imports.
+Add a `PipelinesClient` to the Kubeflow SDK that gives users the full
+author → compile → upload → run → monitor pipeline workflow from a single
+`kubeflow` import.
+
+Following discussions with the KFP team, the client will be **implemented in
+the KFP repository** at a proposed location, **`kfp.kubeflow.client`**, and
+**re-exported** by the Kubeflow SDK. This means:
+
+- **KFP team maintains the client** — they own the implementation, tests, and
+  releases.
+- **Kubeflow SDK re-exports it** — we import from `kfp.kubeflow.client` and
+  expose it at `kubeflow.pipelines.PipelinesClient`.
+- **The client is additive** — `kfp.Client` remains fully supported. The new
+  client provides a simplified, name-first API alongside it.
+
+The API is delivered in phases, starting with the smallest set of methods that
+cover the core upload → run → monitor → clean up workflow, expanding
+incrementally as users adopt it.
 
 ```bash
 pip install 'kubeflow[pipelines]'
@@ -67,35 +87,64 @@ from kubeflow.pipelines import PipelinesClient, dsl, compiler, components, kuber
 Today, Kubeflow users who want to orchestrate ML pipelines must install and use
 `kfp` separately from the Kubeflow SDK. This creates friction:
 
-- **Two SDKs, two import styles** — users mix `from kfp import ...` with `from kubeflow.trainer import ...`.
-- **Inconsistent constructor** — `kfp.Client(host=..., existing_token=..., namespace="kubeflow")` vs `ModelRegistryClient(base_url=..., user_token=...)`.
-- **ID-centric API** — `kfp.Client` requires users to look up pipeline IDs and experiment IDs before they can trigger a run. Other SDK clients are name-first.
-- **Scattered wait semantics** — `kfp.Client.wait_for_run_completion` hardcodes terminal states and cannot wait for intermediate states like `Running`.
+- **Two SDKs, two import styles** — users mix `from kfp import ...` with
+  `from kubeflow.trainer import ...`.
+- **Inconsistent constructor** — `kfp.Client(host=..., existing_token=...,
+  namespace="kubeflow")` vs `ModelRegistryClient(base_url=..., user_token=...)`.
+- **ID-centric API** — `kfp.Client` requires pipeline IDs and experiment IDs
+  before triggering a run. Other SDK clients are name-first.
+- **Too many methods for simple tasks** — uploading a pipeline requires choosing
+  between 4 methods depending on source type and whether it's new or a version.
+  Running a pipeline requires choosing between 3 methods.
+- **Scattered wait semantics** — `kfp.Client.wait_for_run_completion` hardcodes
+  terminal states and cannot wait for intermediate states like `Running`.
 
 ### Goals
 
-1. Expose KFP pipeline management through the Kubeflow SDK with `pip install 'kubeflow[pipelines]'`.
-2. Provide a name-first API for experiments, pipelines, and pipeline versions — matching the conventions of `ModelRegistryClient`, `TrainerClient`, and `OptimizerClient`.
-3. Re-export `kfp.dsl`, `kfp.compiler`, `kfp.components`, and `kfp.kubernetes` at the `kubeflow.pipelines` module level.
-4. Add `wait_for_run_status` with a flexible status set (matching `TrainerClient.wait_for_job_status`).
-5. Align the constructor with `ModelRegistryClient` (`base_url`, `port`, `user_token`, `is_secure`, `custom_ca`) and add `namespace` for KFP's multi-user deployments.
+1. Expose KFP pipeline management through the Kubeflow SDK with
+   `pip install 'kubeflow[pipelines]'`.
+2. Provide a **simplified, name-first API** that unifies upload variants and
+   reduces the number of methods users need to learn.
+3. Re-export `kfp.dsl`, `kfp.compiler`, `kfp.components`, and `kfp.kubernetes`
+   at the `kubeflow.pipelines` module level.
+4. Add `wait` with a flexible status set (matching
+   `TrainerClient.wait_for_job_status`).
+5. Align the constructor with `ModelRegistryClient` (`base_url`, `port`,
+   `user_token`, `is_secure`, `custom_ca`) and add `namespace` for KFP's
+   multi-user deployments.
+6. Deliver the API in **phases** — Phase 1 covers the core workflow with
+   minimal methods; later phases add management, observability, and advanced
+   features.
+7. Have the client **implemented in the KFP repository** and re-exported by
+   the Kubeflow SDK, ensuring KFP team ownership and reducing SDK maintenance
+   burden.
 
 ### Non-Goals
 
-- Replacing `kfp.Client`. Power users who need advanced auth (IAP, cookies, proxy) or raw generated APIs continue to use `kfp` directly.
-- Wrapping the DSL. `dsl`, `compiler`, `components`, and `kubernetes` are re-exported as-is — no additional abstraction layer.
-- Supporting KFP control-plane provisioning. This client is data-plane only, same as `kfp.Client`.
-- Implementing task logs or run events in v1. These are deferred (see [Open Questions](#open-questions)).
+- Replacing `kfp.Client`. It remains fully supported. Power users who need
+  advanced auth (IAP, cookies, proxy) or raw generated APIs continue to use
+  `kfp` directly.
+- Wrapping the DSL. `dsl`, `compiler`, `components`, and `kubernetes` are
+  re-exported as-is — no additional abstraction layer.
+- Supporting KFP control-plane provisioning. This client is data-plane only.
+- Implementing task logs or run events in early phases. These require upstream
+  KFP changes (see [Open Questions](#open-questions)).
+- Building the KFP-side KEP. This KEP covers the SDK perspective. A separate
+  KEP against the KFP repo will propose the `kfp.kubeflow.client`
+  implementation.
+- Thread safety or async support. The client follows the same synchronous,
+  single-threaded model as `kfp.Client` and other SDK clients.
 
 ---
 
 ## User Stories
 
-### Story 1: Quick one-off run (simplest path)
+All examples use the proposed Phase 1 API.
 
-As a data scientist, I want to define a simple pipeline, upload it, and run it
-in as few lines as possible — without dealing with IDs, versions, or experiment
-setup.
+### Story 1: Quick one-off run
+
+As a data scientist, I want to define a pipeline, upload it, and run it with
+minimal boilerplate.
 
 ```python
 from kubeflow.pipelines import PipelinesClient, dsl
@@ -110,20 +159,23 @@ def my_pipeline(epochs: int = 10):
 
 client = PipelinesClient("https://ml-pipeline.example.com")
 
-run = client.run_pipeline_from_func(my_pipeline, arguments={"epochs": 5})
-print(f"Run started: {run.run_id}")
+# Upload (compiles automatically from function)
+client.upload(my_pipeline, name="training-pipeline")
+
+# Run and wait inline
+run = client.run("training-pipeline", params={"epochs": 5}, timeout=3600)
+print(f"Finished: {run.state}")
 ```
 
-`run_pipeline_from_func` compiles, uploads to the default experiment, and
-triggers a run in one call. No experiment creation, no pipeline ID lookup.
+No IDs, no experiment setup, no "which upload/run method do I use?" decisions.
 
 ### Story 2: Upload once, run many times
 
 As an ML engineer, I want to upload a pipeline once, then trigger runs with
-different parameters — referring to the pipeline by name, not by ID.
+different parameters.
 
 ```python
-from kubeflow.pipelines import PipelinesClient, dsl, compiler
+from kubeflow.pipelines import PipelinesClient, dsl
 
 @dsl.component
 def preprocess(data_path: str) -> str:
@@ -141,101 +193,65 @@ def training_pipeline(data_path: str = "/data", lr: float = 0.001, epochs: int =
 client = PipelinesClient("https://ml-pipeline.example.com")
 
 # Upload once
-client.upload_pipeline_from_pipeline_func(
-    training_pipeline,
-    pipeline_name="training-pipeline",
-)
+client.upload(training_pipeline, name="training-pipeline")
 
-# Create experiment
-client.create_experiment("hyperparameter-sweep")
-
-# Run with different parameters — pipeline and experiment resolved by name
-run1 = client.run_pipeline(
-    job_name="lr-0.01",
-    experiment_name="hyperparameter-sweep",
-    pipeline_name="training-pipeline",
+# Run with different parameters
+run1 = client.run(
+    "training-pipeline",
+    name="lr-0.01",
+    experiment="hyperparameter-sweep",
     params={"lr": 0.01, "epochs": 20},
 )
 
-run2 = client.run_pipeline(
-    job_name="lr-0.001",
-    experiment_name="hyperparameter-sweep",
-    pipeline_name="training-pipeline",
+run2 = client.run(
+    "training-pipeline",
+    name="lr-0.001",
+    experiment="hyperparameter-sweep",
     params={"lr": 0.001, "epochs": 50},
 )
 
-# Wait for both — uses run ID returned from run_pipeline
-client.wait_for_run_status(run1.run_id)
-client.wait_for_run_status(run2.run_id)
+# Wait for both
+client.wait(run1, timeout=3600)
+client.wait(run2, timeout=3600)
 ```
 
-No ID juggling — `pipeline_name` and `experiment_name` are resolved internally.
-The latest pipeline version (latest uploaded pipeline) is used automatically; pass `version_id=` to pin a
-specific version.
+No ID juggling. Pipeline and experiment resolved by name. Latest pipeline
+version used automatically.
 
-### Story 3: Production recurring schedule
+**Experiments (Phase 1 vs Phase 2):** Phase 1 `run` accepts an `experiment`
+name; if no experiment with that name exists, it is **auto-created**, aligned
+with `kfp.Client`. Phase 2 adds **experiment management** — explicit
+`create_experiment`, `list_experiments`, filtering `list_runs` by experiment,
+and related lifecycle operations. That split keeps Phase 1 focused on the core
+upload → run workflow while still allowing named grouping of runs. The later
+phase benefits operators and power users who need visibility (what experiments
+exist), governance (create or archive before large campaigns), and
+cross-run discovery without relying on the KFP UI alone.
 
-As a platform engineer, I want a pipeline to run every night at midnight and
-handle failures gracefully.
-
-```python
-from kubeflow.pipelines import PipelinesClient
-
-client = PipelinesClient(
-    "https://ml-pipeline.example.com",
-    user_token="eyJ...",
-)
-
-client.create_recurring_run(
-    job_name="nightly-retrain",
-    experiment_name="production",
-    pipeline_name="training-pipeline",
-    cron_expression="0 0 * * *",
-    params={"data_path": "/data/latest", "epochs": 30},
-    max_concurrency=1,
-    no_catchup=True,
-)
-```
-
-### Story 4: Monitoring and waiting for specific states
+### Story 3: Monitor and wait for specific states
 
 As a data scientist, I want to wait until my run starts executing (not just
 completes) so I can start tailing external logs.
 
 ```python
-from kubeflow.pipelines import PipelinesClient
-
 client = PipelinesClient("https://ml-pipeline.example.com")
 
-run = client.run_pipeline(
-    job_name="train-run",
-    experiment_name="default",
-    pipeline_name="training-pipeline",
-)
+run = client.run("training-pipeline", params={"epochs": 10})
 
 # Wait for the run to start (not complete)
-running = client.wait_for_run_status(
-    run.run_id,
-    status={"running"},
-    timeout=120,
-)
-print(f"Run is now {running.state} — starting log tail...")
+running = client.wait(run, status={"running"}, timeout=120)
+print(f"Run is now {running.state} — starting log tail...") # This is just illustrative
 
-# Later, wait only for success (not failed/skipped/error)
-completed = client.wait_for_run_status(
-    run.run_id,
-    status={"succeeded"},
-    timeout=3600,
-)
+# Later, wait only for success
+completed = client.wait(run, status={"succeeded"}, timeout=3600)
 print(f"Finished with state: {completed.state}")
 ```
 
-KFP's built-in `wait_for_run_completion` can only wait for all terminal states
-at once (`succeeded`, `failed`, `skipped`, `error`). `wait_for_run_status`
-accepts any set of states — terminal or non-terminal — matching the
-`TrainerClient.wait_for_job_status(name, status={...})` pattern.
+`kfp.Client.wait_for_run_completion` can only wait for all terminal states at
+once. `wait` accepts any set of states — terminal or non-terminal — matching
+the `TrainerClient.wait_for_job_status(name, status={...})` pattern.
 
-### Story 5: Kubernetes-native pipeline with PVC and secrets
+### Story 4: Kubernetes-native pipeline with PVC and secrets
 
 As an ML engineer, I want to orchestrate distributed training through a
 pipeline that mounts shared storage and injects K8s secrets.
@@ -250,134 +266,275 @@ def download_dataset(output_dir: str, subset_size: int = 1000):
     ds.save_to_disk(output_dir)
 
 @dsl.component(base_image="quay.io/my-org/training-image:latest")
-def submit_training(model_path: str, num_epochs: int = 3, nproc_per_node: int = 1):
+def submit_training(data_path: str, num_epochs: int = 3):
     from kubeflow.trainer import TrainerClient
+
     client = TrainerClient()
-    client.train(...)
-    client.wait_for_job_status("train-job")
+    # Data is already on the PVC from download_dataset; no dataset Initializer
+    # needed here.
+    job_name = client.train(
+        trainer=...,  # e.g. TorchTrainer configured to read from data_path
+    )
+    client.wait_for_job_status(job_name)
 
 @dsl.pipeline(name="distributed-training")
-def training_pipeline(
-    subset_size: int = 1000,
-    model_path: str = "/mnt/shared/model",
-    num_epochs: int = 3,
-):
-    download_task = download_dataset(output_dir="/mnt/shared/data", subset_size=subset_size)
-    kubernetes.mount_pvc(download_task, pvc_name="shared-pvc", mount_path="/mnt/shared")
+def training_pipeline(subset_size: int = 1000, num_epochs: int = 3):
+    # kubernetes.* helpers return the PipelineTask so PVC and Secret config chain naturally
+    download_task = kubernetes.mount_pvc(
+        download_dataset(output_dir="/mnt/shared/data", subset_size=subset_size),
+        pvc_name="shared-pvc",
+        mount_path="/mnt/shared",
+    )
 
-    train_task = submit_training(model_path=model_path, num_epochs=num_epochs)
-    kubernetes.mount_pvc(train_task, pvc_name="shared-pvc", mount_path="/mnt/shared")
-    kubernetes.use_secret_as_env(train_task, secret_name="k8s-creds",
-                                 secret_key_to_env={"token": "K8S_TOKEN"})
+    train_task = kubernetes.use_secret_as_env(
+        kubernetes.mount_pvc(
+            submit_training(data_path="/mnt/shared/data", num_epochs=num_epochs),
+            pvc_name="shared-pvc",
+            mount_path="/mnt/shared",
+        ),
+        secret_name="k8s-creds",
+        secret_key_to_env={"token": "K8S_TOKEN"},
+    )
     train_task.after(download_task)
 
 client = PipelinesClient("https://ml-pipeline.example.com")
-pipeline = client.upload_pipeline_from_pipeline_func(
-    training_pipeline, pipeline_name="distributed-training"
-)
+client.upload(training_pipeline, name="distributed-training")
 
-run = client.run_pipeline(
-    job_name="training-v1",
-    experiment_name="distributed-experiments",
-    pipeline_name="distributed-training",
+run = client.run(
+    "distributed-training",
+    experiment="distributed-experiments",
     params={"subset_size": 5000, "num_epochs": 5},
 )
 
-completed = client.wait_for_run_status(run.run_id, timeout=7200)
+completed = client.wait(run, timeout=7200)
 print(f"Run finished: {completed.state}")
 ```
 
-The `kfp.kubernetes` helpers (`mount_pvc`, `use_secret_as_env`,
-`add_node_selector`, etc.) are available because `kubeflow[pipelines]` depends
-on `kfp[kubernetes]`.
-
 `kfp.kubernetes` is re-exported at `kubeflow.pipelines.kubernetes` so users
-never need a direct `kfp` import — even for K8s-specific helpers like
-`mount_pvc` and `use_secret_as_env`.
+never need a direct `kfp` import. **`kubernetes.mount_pvc` /
+`kubernetes.use_secret_as_env`** compose by fluent chaining (each helper
+returns the `PipelineTask` it configures).
 
-### Story 6: Pipeline versioning
+**Trainer `Initializer` vs a pipeline download step:** Initializers **pull**
+dataset (or model) artifacts into the TrainJob from remote URIs (`s3://`,
+`hf://`, …). They replace **remote fetch inside the TrainJob**, not arbitrary
+in-pipeline logic. This story keeps **`load_dataset`** as a **pipeline step**
+because it performs custom preprocessing (subset, format) and writes to a
+shared PVC for the training step. If a job only needs “download this S3/HF
+prefix as-is,” `train(..., initializer=Initializer(dataset=...))` can be used
+instead and a separate download component omitted.
 
-As a platform engineer, I want to upload a new version of an existing pipeline
-and pin runs to a specific version.
+### Story 5: Multi-component pipeline — Spark, Trainer, and Model Registry (simplified)
 
-```python
-client = PipelinesClient("https://ml-pipeline.example.com")
+As an ML engineer, I want **`PipelinesClient`** to orchestrate **one pipeline**
+that chains **Spark → Trainer → Model Registry**.
 
-# Upload v2 of an existing pipeline
-client.upload_pipeline_version_from_pipeline_func(
-    training_pipeline_v2,
-    pipeline_version_name="v2-with-caching",
-    pipeline_name="training-pipeline",
-)
-
-# List versions
-versions = client.list_pipeline_versions("training-pipeline")
-for v in versions.pipeline_versions:
-    print(f"  {v.display_name} — {v.pipeline_version_id}")
-
-# Run pinned to a specific version
-run = client.run_pipeline(
-    job_name="pinned-run",
-    experiment_name="production",
-    pipeline_name="training-pipeline",
-    version_id="abc-123-specific-version",
-)
-```
-
-When `version_id` is omitted, the latest version is resolved automatically.
-Pass it explicitly to pin.
-
-### Story 7: End-to-end ML workflow — Pipelines + Trainer + Model Registry
-
-As an ML engineer, I want a single pipeline that trains a model with the
-Kubeflow Trainer, waits for it to finish, and registers the result in Model
-Registry — all from one SDK.
+Component bodies are **stubbed** on purpose, to simplify the example. **Story 6** 
+fills in **BuiltinTrainer**, **TorchTune**, and **Initializers** for LLM-style 
+fine-tuning.
 
 ```python
+from pathlib import Path
+
 from kubeflow.pipelines import PipelinesClient, dsl
 
+@dsl.component(base_image="quay.io/my-org/spark-image:latest")
+def preprocess_data(input_path: str, output_path: str):
+    """Preprocess with Spark (SparkClient + SparkConnect)."""
+    from kubeflow.spark import SparkClient
+
+    # ... SparkConnect session: read/write, then spark.stop() — see Spark SDK docs ...
+    pass
+
+
 @dsl.component(base_image="quay.io/my-org/training-image:latest")
-def train_and_register(model_name: str, version: str, epochs: int = 5):
+def train_model(
+    data_path: str,
+    epochs: int,
+    trained_model_uri: dsl.OutputPath(str),
+):
+    """Submit a TrainJob (TrainerClient). Use CustomTrainer or Story 6’s BuiltinTrainer."""
     from kubeflow.trainer import TrainerClient
+    from kubeflow.trainer.types import CustomTrainer
+
+    def train_fn():
+        pass  # Replace with real training; data_path is Spark output (or PVC).
+
+    trainer = TrainerClient()
+    job_name = trainer.train(trainer=CustomTrainer(func=train_fn))
+    trainer.wait_for_job_status(job_name)
+
+    # KFP OutputPath: write the URI string to disk so the compiler wires it
+    # to downstream tasks (required KFP plumbing — cannot be stubbed).
+    uri = f"s3://my-org-models/{job_name}/checkpoint"
+    Path(trained_model_uri).parent.mkdir(parents=True, exist_ok=True)
+    Path(trained_model_uri).write_text(uri)
+
+
+@dsl.component(base_image="quay.io/my-org/registry-image:latest")
+def register_model(
+    model_name: str,
+    version: str,
+    trained_model_uri: str,
+):
+    """Register in Model Registry (ModelRegistryClient)."""
     from kubeflow.hub import ModelRegistryClient
 
-    # Train
-    trainer = TrainerClient()
-    trainer.train(trainer=..., options=...)
-    trainer.wait_for_job_status("train-job")
-
-    # Register the trained model
-    registry = ModelRegistryClient("https://registry.example.com")
+    registry = ModelRegistryClient(
+        "https://registry.example.com",
+        author="pipeline",
+    )
     registry.register_model(
         name=model_name,
-        uri="s3://models/trained-model",
+        uri=trained_model_uri,
         version=version,
         model_format_name="pytorch",
     )
 
-@dsl.pipeline(name="train-and-register")
-def train_and_register_pipeline(
+
+@dsl.pipeline(name="preprocess-train-register")
+def full_pipeline(
+    input_path: str = "s3://data/raw",
+    output_path: str = "s3://data/processed",
     model_name: str = "my-model",
     version: str = "v1",
     epochs: int = 5,
 ):
-    train_and_register(model_name=model_name, version=version, epochs=epochs)
+    preprocess = preprocess_data(input_path=input_path, output_path=output_path)
+    train = train_model(data_path=output_path, epochs=epochs)
+    train.after(preprocess)
+
+    register_model(
+        model_name=model_name,
+        version=version,
+        trained_model_uri=train.outputs["trained_model_uri"],
+    )
+
 
 client = PipelinesClient("https://ml-pipeline.example.com")
 
-run = client.run_pipeline_from_func(
-    train_and_register_pipeline,
-    arguments={"model_name": "my-model", "version": "v2", "epochs": 10},
+run = client.run(
+    full_pipeline,
+    params={"model_name": "my-model", "version": "v2", "epochs": 10},
 )
 
-completed = client.wait_for_run_status(run.run_id, timeout=3600)
+completed = client.wait(run, timeout=7200)
 print(f"Pipeline finished: {completed.state}")
 ```
 
-One `pip install 'kubeflow[pipelines,hub]'`, one `kubeflow` namespace.
-`TrainerClient` is included in the base `kubeflow` package — only `pipelines`
-and `hub` need extras. The pipeline orchestrates training and model registration
-while the outer script only interacts with `PipelinesClient`.
+One `pip install 'kubeflow[pipelines,spark,hub]'` for this shape. **`TrainerClient`**
+is in the base `kubeflow` package; **`pipelines`**, **`spark`**, and **`hub`**
+are extras.
+
+**SDK surfaces:** `PipelinesClient` (**`run`** with a **callable** = compile →
+upload → run per Phase 1), **`kfp` DSL** (DAG, `dsl.OutputPath`), and **imports**
+for Spark, Trainer, and Model Registry.
+
+### Story 6: Advanced — TorchTune, initializers, and remote checkpoints
+
+Same **preprocess → train → register** DAG as Story 5, with **full** Trainer
+wiring for **LLM-style fine-tuning**: **BuiltinTrainer** + **TorchTune** +
+**dataset and model Initializers** (e.g. Spark output on S3 + Hugging Face base
+model). Refer to this story if Story 5's stubs need concrete detail.
+
+```python
+from pathlib import Path
+
+from kubeflow.pipelines import PipelinesClient, dsl
+
+@dsl.component(base_image="quay.io/my-org/spark-image:latest")
+def preprocess_data(input_path: str, output_path: str):
+    from kubeflow.spark import SparkClient
+
+    client = SparkClient()
+    spark = client.connect(
+        num_executors=4,
+        resources_per_executor={"cpu": "2", "memory": "4Gi"},
+    )
+    df = spark.read.parquet(input_path)
+    df_clean = df.dropna().filter(df["quality"] > 0.5)
+    df_clean.write.parquet(output_path)
+    spark.stop()
+
+@dsl.component(base_image="quay.io/my-org/training-image:latest")
+def train_model(
+    data_path: str,
+    epochs: int,
+    trained_model_uri: dsl.OutputPath(str),
+):
+    from kubeflow.trainer import TrainerClient
+    from kubeflow.trainer.types import types as trainer_types
+
+    trainer = TrainerClient()
+    job_name = trainer.train(
+        trainer=trainer_types.BuiltinTrainer(
+            config=trainer_types.TorchTuneConfig(
+                epochs=epochs,
+                dataset_preprocess_config=trainer_types.TorchTuneInstructDataset(
+                    source=trainer_types.DataFormat.PARQUET,
+                ),
+            ),
+        ),
+        initializer=trainer_types.Initializer(
+            dataset=trainer_types.S3DatasetInitializer(storage_uri=data_path),
+            model=trainer_types.HuggingFaceModelInitializer(
+                storage_uri="hf://google-bert/bert-base-uncased",
+            ),
+        ),
+    )
+    trainer.wait_for_job_status(job_name)
+
+    model_uri = f"s3://my-org-models/{job_name}/checkpoint"
+    Path(trained_model_uri).parent.mkdir(parents=True, exist_ok=True)
+    Path(trained_model_uri).write_text(model_uri)
+
+@dsl.component(base_image="quay.io/my-org/registry-image:latest")
+def register_model(
+    model_name: str,
+    version: str,
+    trained_model_uri: str,
+):
+    from kubeflow.hub import ModelRegistryClient
+
+    registry = ModelRegistryClient("https://registry.example.com")
+    registry.register_model(
+        name=model_name,
+        uri=trained_model_uri,
+        version=version,
+        model_format_name="pytorch",
+    )
+
+@dsl.pipeline(name="preprocess-train-register")
+def full_pipeline(
+    input_path: str = "s3://data/raw",
+    output_path: str = "s3://data/processed",
+    model_name: str = "my-model",
+    version: str = "v1",
+    epochs: int = 5,
+):
+    preprocess = preprocess_data(input_path=input_path, output_path=output_path)
+    train = train_model(data_path=output_path, epochs=epochs)
+    train.after(preprocess)
+
+    register_model(
+        model_name=model_name,
+        version=version,
+        trained_model_uri=train.outputs["trained_model_uri"],
+    )
+
+client = PipelinesClient("https://ml-pipeline.example.com")
+
+run = client.run(
+    full_pipeline,
+    params={"model_name": "my-model", "version": "v2", "epochs": 10},
+)
+
+completed = client.wait(run, timeout=7200)
+print(f"Pipeline finished: {completed.state}")
+```
+
+See Story 5 for the simplified version of this pattern. The pipeline definition
+and `PipelinesClient` usage are identical — only the component bodies differ.
 
 ---
 
@@ -385,65 +542,74 @@ while the outer script only interacts with `PipelinesClient`.
 
 ### Architecture
 
-`PipelinesClient` is a thin wrapper around `kfp.Client`. It does not duplicate
-any KFP logic — every method delegates to the underlying client after resolving
-names to IDs where needed.
+The client is implemented in the **KFP repository** at `kfp.kubeflow.client`
+and re-exported by the Kubeflow SDK.
 
 ```
-kubeflow.pipelines
-├── __init__.py          # exports PipelinesClient, dsl, compiler, components, kubernetes
-└── api/
-    └── pipelines_client.py   # PipelinesClient wrapping kfp.Client
+KFP repository (github.com/kubeflow/pipelines)
+└── sdk/python/kfp/            # Python package root (import name: kfp)
+    ├── client/
+    │   └── client.py          # existing kfp.Client (unchanged)
+    └── kubeflow/
+        └── client.py          # NEW: PipelinesClient (simplified API)
+```
+
+```
+Kubeflow SDK repository (github.com/kubeflow/sdk)
+└── kubeflow/pipelines/
+    └── __init__.py            # re-exports PipelinesClient + dsl/compiler/components/kubernetes
 ```
 
 ```
 User code
     │
     ▼
-PipelinesClient  ──►  kfp.Client  ──►  KFP REST API server
+kubeflow.pipelines.PipelinesClient   (re-export)
     │
-    └── name → ID resolution (experiments, pipelines, versions)
-    └── wait_for_run_status (client-side polling with flexible states)
-    └── constructor alignment (base_url, user_token, ...)
+    ▼
+kfp.kubeflow.client.PipelinesClient  (implementation in KFP repo)
+    │
+    ▼
+kfp.Client / KFP service APIs       (underlying KFP internals)
+    │
+    ▼
+KFP REST API server
 ```
+
+**Why this architecture:**
+
+- **KFP team owns the implementation.** They know the internals, the API
+  server, and the service APIs best. They maintain and release it.
+- **Kubeflow SDK is a thin re-export.** Minimal maintenance — no wrapper code,
+  no mapping layers, no risk of drifting from upstream.
+- **Additive.** `kfp.Client` remains unchanged. The new client exists alongside
+  it at `kfp.kubeflow.client`.
+- **The KFP team has freedom** to implement at whatever level makes sense —
+  wrapping `kfp.Client` or calling service APIs directly — whichever is more
+  reasonable for the phased approach.
 
 ### Dependency
 
 ```toml
 [project.optional-dependencies]
-pipelines = ["kfp[kubernetes]>=2.0.0"]
+pipelines = ["kfp[kubernetes]>=X.Y.Z"]  # first kfp release shipping kfp.kubeflow.client
 ```
 
 **Why `kfp[kubernetes]` only:**
 
 KFP ships three extras (as of kfp 2.x):
 
-```python
-extras_require = {
-    'all': docker + kubernetes + notebooks,
-    'kubernetes': kubernetes,
-    'notebooks': notebooks,
-}
-```
-
-- **`kfp[kubernetes]`** — lightweight (only `kfp` + `protobuf`). Adds K8s
-  helpers (`mount_pvc`, `use_secret_as_env`, `add_node_selector`) that most
-  pipeline users need.
-- **`kfp[notebooks]`** — heavy (nbclient, ipykernel, jupyter_client). Only
-  needed for notebook-as-component use cases.
+- **`kfp[kubernetes]`** — lightweight. Adds K8s helpers (`mount_pvc`,
+  `use_secret_as_env`, `add_node_selector`) that most pipeline users need.
+- **`kfp[notebooks]`** — heavy (nbclient, ipykernel). Only needed for
+  notebook-as-component use cases.
 - **`kfp[all]`** — heaviest (docker + notebooks). Overkill as a default.
-
-Users who need notebook components can `pip install kfp[notebooks]` on top.
-
-After the proposed KFP SDK packaging consolidation (tracked as KEP-12548,
-draft), we bump to e.g. `kfp[kubernetes]>=3.0.0` and re-evaluate.
 
 ### Constructor
 
-Mostly aligned with `ModelRegistryClient` (`base_url`, `port`, `user_token`,
+Aligned with `ModelRegistryClient` (`base_url`, `port`, `user_token`,
 `is_secure`, `custom_ca` are shared). `PipelinesClient` adds `namespace` for
-KFP's multi-user deployment model. `ModelRegistryClient` has an `author`
-parameter that does not apply here.
+KFP's multi-user deployment model.
 
 ```python
 PipelinesClient(
@@ -460,31 +626,42 @@ PipelinesClient(
 | Parameter | Description |
 |---|---|
 | `base_url` | KFP API server URL including scheme |
-| `port` | Inferred from scheme if omitted (443 for https, 8080 for http) |
+| `port` | Inferred from scheme if omitted (443 for https, 8080 for http). The http default is 8080 (not 80) because KFP's API server listens on 8080 by convention |
 | `user_token` | Bearer token for authentication |
 | `is_secure` | Inferred from scheme if omitted |
 | `custom_ca` | Path to PEM-encoded root certificates |
-| `namespace` | K8s namespace for multi-user deployments. Default `None` — lets the server decide |
+| `namespace` | K8s namespace for multi-user deployments. Default `None` — omit sending a client-side default so behavior follows **server** and **deployment** configuration (see below) |
 
 **Namespace default — `None` instead of `"kubeflow"`:** KFP's raw client
-defaults to `"kubeflow"`, which is confusing for single-user deployments. We
+defaults to `"kubeflow"`, which might be confusing for single-user deployments. We
 default to `None` so users who don't care about namespaces simply omit the
-parameter.
+parameter. With `namespace=None`, **what the API server uses** depends on how KFP
+is deployed — e.g. **multi-user** mode may tie runs to the **authenticated user’s
+namespace**; **single-user** profiles may treat a missing namespace like the
+server’s configured default (often `kubeflow` in older docs). Consult the **KFP
+deployment guide** for the target cluster rather than assuming one global rule.
 
-```python
-# Single-user — no namespace needed
-client = PipelinesClient("https://ml-pipeline.example.com")
+### Deviations from Other SDK Clients
 
-# Multi-user — explicit namespace
-client = PipelinesClient("https://ml-pipeline.example.com", namespace="team-ml")
+| Capability | TrainerClient | ModelRegistryClient | PipelinesClient | Gap? |
+|---|---|---|---|---|
+| Name-centric identity | `name` everywhere | `name` everywhere | `name` for create; `run_id` after | Yes — runs |
+| Logs | `get_job_logs(name)` | N/A | Phase 3 | Yes |
+| Events | `get_job_events(name)` | N/A | Phase 3 | Yes |
+| Wait with status set | `wait_for_job_status(name, status={...})` | N/A | `wait(run, status={...})` | Parity (except name vs ID) |
+| Wait raise on failure | Raises on failure | N/A | `raise_on_failure=True` (default) | Parity with Trainer |
+| Return types | Hand-crafted Pydantic | Passthrough (`model_registry.types`) | Passthrough (`kfp_server_api.V2beta1*`) | Same as registry |
+| Auth model | K8s API | REST API | REST API | Aligned with registry |
+| Constructor | `backend_config=` | `base_url, port, user_token, ...` | `base_url, port, user_token, ...` + `namespace` | Aligned with registry |
 
-# Self-signed certs
-client = PipelinesClient(
-    "https://ml-pipeline.internal",
-    user_token="eyJ...",
-    custom_ca="/etc/ssl/certs/internal-ca.pem",
-)
-```
+### Escape hatch (`kfp.Client`)
+
+`PipelinesClient` does not try to wrap every `kfp.Client` knob (IAP, cookies,
+proxy, raw generated APIs, etc.). **Power users** either construct a dedicated
+`kfp.Client(...)` alongside `PipelinesClient`, or use a **`.kfp_client`**
+property on `PipelinesClient` to access the underlying `kfp.Client` instance
+without duplicating connection configuration. The exact accessor name is
+subject to change during KFP-side implementation.
 
 ### DSL Re-exports
 
@@ -493,487 +670,757 @@ re-exported at module level with zero wrapping:
 
 ```python
 from kubeflow.pipelines import PipelinesClient, dsl, compiler, components, kubernetes
-
-@dsl.component
-def my_step(): ...
-
-@dsl.pipeline
-def my_pipeline(): ...
-
-compiler.Compiler().compile(my_pipeline, "pipeline.yaml")
 ```
 
 The DSL is KFP's domain-specific language — it cannot be meaningfully wrapped.
-Re-exporting (including `kfp.kubernetes`) gives users a single namespace for
-the entire author → configure → upload → run flow without any direct `kfp`
-imports.
+Re-exporting gives users a single namespace for the entire
+author → configure → upload → run flow without any direct `kfp` imports.
 
-If `kfp` is not installed, the re-exports are not defined — the `try/except
-ImportError` block in `__init__.py` silently skips the imports. Attempting
-`from kubeflow.pipelines import dsl` then raises an `ImportError` because the
-name `dsl` does not exist in the module. The error message from Python is
-generic (`cannot import name 'dsl'`), so Phase 3 includes improving it to
-suggest `pip install 'kubeflow[pipelines]'`.
+If `kfp` is not installed, avoid binding `PipelinesClient = None` (which would
+make `from kubeflow.pipelines import PipelinesClient` silently give `None`).
+Instead: attempt the import; on failure, leave the names undefined and use a
+module-level `__getattr__` so the first access to any export raises an
+actionable `ImportError`. See the concrete pattern in
+[SDK-side package structure](#sdk-side-package-structure).
 
-### Exposed API
+### Phased API
 
-#### Health and Context
+The API is delivered in phases. Phase 1 covers the core workflow with a minimal
+set of methods. Each subsequent phase is additive and non-breaking.
+
+#### Phase 1: Core workflow
+
+**Goal:** Earn user buy-in with a simple yet powerful API. Eight methods +
+constructor cover: connect → upload → run → monitor → list → inspect → clean up.
+
+##### `upload`
+
+Unified upload that handles functions, files, new pipelines, and new versions.
 
 ```python
-client.get_health()                 # server reachable? multi-user mode?
-client.set_user_namespace("team-b") # switch namespace mid-session
-client.get_user_namespace()         # current namespace
+# From a @dsl.pipeline function — auto-compiles
+client.upload(my_pipeline, name="training-pipeline")
+
+# From a compiled YAML file
+client.upload("training-pipeline.yaml", name="training-pipeline")
+
+# New version — same method, auto-detects existing pipeline
+client.upload(my_pipeline_v2, name="training-pipeline", version="v2-with-caching")
 ```
 
-`get_health` is renamed from KFP's `get_kfp_healthz` for readability.
-`set_user_namespace` / `get_user_namespace` keep KFP's names unchanged — they
-allow switching namespace mid-session without recreating the client.
+The user's intent is always "put this pipeline on the server". The client
+handles the implementation details:
 
-#### Experiments (name-first)
-
-```python
-exp = client.create_experiment("my-experiment")
-exp = client.get_experiment("my-experiment")
-# or by ID:
-exp = client.get_experiment(experiment_id="abc-123")
-
-exps = client.list_experiments(page_size=20)
-client.archive_experiment("my-experiment")
-client.unarchive_experiment("my-experiment")
-client.delete_experiment("my-experiment")
-```
-
-All experiment methods accept `name` as the primary parameter with `experiment_id`
-as a keyword fallback. The wrapper resolves names to IDs before delegating.
-
-#### Pipelines (name-first)
+- First arg is callable → compile it
+- First arg is a string path → use the file
+- Pipeline with that name exists → create new version
+- Pipeline doesn't exist → create it
+- Version label omitted → auto-generate (following KFP UI conventions).
+  Calling `upload` again with the same `name` and no explicit `version`
+  creates a **new version** each time (not idempotent)
 
 ```python
-pipelines = client.list_pipelines(page_size=20)
-p = client.get_pipeline("training-pipeline")
-client.delete_pipeline("training-pipeline")
-
-versions = client.list_pipeline_versions("training-pipeline")
-v = client.get_pipeline_version("version-id", name="training-pipeline")
-client.delete_pipeline_version("version-id", name="training-pipeline")
-```
-
-#### Upload
-
-Four methods covering the compile-and-upload matrix:
-
-```python
-# From compiled YAML/JSON file
-client.upload_pipeline("pipeline.yaml", pipeline_name="my-pipeline")
-client.upload_pipeline_version("pipeline.yaml", "v2", pipeline_name="my-pipeline")
-
-# From @dsl.pipeline function — compile + upload in one step
-client.upload_pipeline_from_pipeline_func(my_pipeline, pipeline_name="my-pipeline")
-client.upload_pipeline_version_from_pipeline_func(my_pipeline, "v2", pipeline_name="my-pipeline")
-```
-
-#### Runs (name-first creation, ID-based tracking)
-
-**Creating a run** is name-first:
-
-```python
-run = client.run_pipeline(
-    job_name="run-1",
-    experiment_name="default",
-    pipeline_name="training-pipeline",
-    params={"epochs": 10},
-)
-```
-
-- `experiment_name` and `pipeline_name` are resolved to IDs internally.
-- Latest pipeline version is used automatically. Pass `version_id=` to pin.
-- Returns a `V2beta1Run` object with `run.run_id`.
-
-**After creation**, runs are tracked by `run_id`:
-
-```python
-run = client.get_run(run.run_id)
-client.wait_for_run_status(run.run_id)
-client.archive_run(run.run_id)
-client.unarchive_run(run.run_id)
-client.delete_run(run.run_id)
-client.terminate_run(run.run_id)
-runs = client.list_runs(experiment_id=exp.experiment_id)
-```
-
-**Why ID-based after creation:** KFP run display names are not unique. Multiple
-runs can share the same `job_name`. There is no reliable name → run mapping, unlike
-`TrainerClient` where TrainJob names are unique K8s resource names. See
-[Open Question 3](#3-runs-tracked-by-id-after-creation) for alternatives
-considered.
-
-**Convenience one-shot methods:**
-
-```python
-# Compile + run in one step (no separate upload)
-result = client.run_pipeline_from_func(my_pipeline, arguments={"epochs": 5})
-result = client.run_pipeline_from_package("pipeline.yaml", arguments={"epochs": 5})
-```
-
-> **Note:** These return KFP's `RunPipelineResult` (not `V2beta1Run`), since
-> they delegate to `kfp.Client.create_run_from_pipeline_func` /
-> `create_run_from_pipeline_package` which handle compilation internally.
-
-#### Recurring Runs
-
-Same name-first creation pattern:
-
-```python
-recurring = client.create_recurring_run(
-    job_name="nightly-retrain",
-    experiment_name="production",
-    pipeline_name="training-pipeline",
-    cron_expression="0 0 * * *",
-    params={"data_path": "/data/latest"},
-)
-
-# Managed by recurring_run_id after creation
-client.get_recurring_run(recurring.recurring_run_id)
-client.disable_recurring_run(recurring.recurring_run_id)
-client.enable_recurring_run(recurring.recurring_run_id)
-client.delete_recurring_run(recurring.recurring_run_id)
-client.list_recurring_runs()
-```
-
-#### `wait_for_run_status`
-
-```python
-def wait_for_run_status(
+def upload(
     self,
-    run_id: str,
-    timeout: int = 600,
-    polling_interval: int = 5,
-    status: set[str] | None = None,
+    pipeline: Callable | str,
+    *,
+    name: str,
+    version: str | None = None,
+    description: str | None = None,
+) -> V2beta1Pipeline | V2beta1PipelineVersion:  # see Open Question 8
+```
+
+**Why unified:** `kfp.Client` currently has four upload methods based on two
+axes (func vs file, new vs version). Users shouldn't need to understand these
+implementation distinctions:
+
+| User intent | Current `kfp.Client` (choose one) | New client |
+|---|---|---|
+| Upload from function | `upload_pipeline_from_pipeline_func` | `upload(fn, name=...)` |
+| Upload from file | `upload_pipeline` | `upload("file.yaml", name=...)` |
+| New version from function | `upload_pipeline_version_from_pipeline_func` | `upload(fn, name=..., version=...)` |
+| New version from file | `upload_pipeline_version` | `upload("file.yaml", name=..., version=...)` |
+
+##### `run`
+
+Run a pipeline by name, or directly from a function.
+
+```python
+# Run an uploaded pipeline
+run = client.run(
+    "training-pipeline",
+    params={"epochs": 10, "lr": 0.001},
+)
+
+# Quick run from function — compile, upload (pipeline on server), then run
+run = client.run(
+    my_pipeline,
+    params={"epochs": 5},
+)
+
+# Run and wait inline (timeout makes it synchronous)
+run = client.run(
+    "training-pipeline",
+    params={"epochs": 10},
+    timeout=3600,
+)
+```
+
+```python
+def run(
+    self,
+    pipeline: str | Callable,
+    *,
+    params: dict[str, Any] | None = None,
+    name: str | None = None,
+    experiment: str | None = None,
+    version: str | None = None,
+    timeout: int | None = None,
 ) -> V2beta1Run:
 ```
 
-Default: waits for any terminal state (`succeeded`, `failed`, `skipped`, `error`).
-Pass a custom `status` set to wait for specific states:
-
-```python
-# Wait for run to start executing
-client.wait_for_run_status(run.run_id, status={"running"}, timeout=120)
-
-# Wait only for success (raise TimeoutError if it fails)
-client.wait_for_run_status(run.run_id, status={"succeeded"}, timeout=3600)
-```
-
-This matches `TrainerClient.wait_for_job_status(name, status={...})` and
-`OptimizerClient.wait_for_job_status(name, status={...})`.
-
-### Deferred APIs
-
-| What | Why |
+| Parameter | Description |
 |---|---|
-| Generated server APIs (`client.pipelines.*`, `client.runs.*`, etc.) | Our high-level methods call them under the hood; exposing raw layer would duplicate functionality |
-| `pipeline_spec` | Internal protobuf IR. Not needed for the normal DSL → compile → upload → run flow |
-| Legacy aliases (`delete_job`, `enable_job`, `disable_job`) | Old names for `*_recurring_run` methods. We unify naming |
-| Advanced auth (`cookies`, `client_id`, `proxy`, `kube_context`, etc.) | Niche. We cover `user_token`, `is_secure`, `custom_ca`. Rest available via `kfp.Client` |
-| UI / notebook helpers (URL printing, IPython display links) | Environment-specific. Can be added later if demanded |
+| `pipeline` | Pipeline name (`str`) or `@dsl.pipeline` function — if a function, **compile → upload → run** (pipeline registered on the server; see [Open Question 6](#6-run-with-callable--implicit-upload-side-effect)) |
+| `params` | Pipeline parameters |
+| `name` | Run display name (auto-generated if omitted) |
+| `experiment` | Experiment name. If `None`, the server's default experiment is used (typically `"Default"`). Auto-created if it doesn't exist, matching `kfp.Client` behavior. |
+| `version` | Pipeline version (latest if omitted) |
+| `timeout` | If set, `run` blocks until the run is terminal or the inner wait times out. If omitted, returns right after the run is **created** (usually still pending) |
 
-### Name Resolution Internals
+**`run` + `timeout` design note:** The convenience of `timeout` on `run()` merges
+“create run” and “wait for completion” into one call. Callers who inspect
+`run.state` must know whether `timeout` was set — without `timeout`, the state
+is typically **not** terminal. Prefer **`run()` then `wait()`** for clearer
+control flow (see [Story 1](#story-1-quick-one-off-run) for `timeout` on `run` vs explicit `wait`).
 
-The wrapper has three internal helpers that make the name-first API work:
+**When `pipeline` is a callable:** The client compiles the function, **uploads**
+it to the API server (creating the pipeline or a **new version** if it already
+exists, using the `@dsl.pipeline(name=...)` name), then creates a run. That
+matches the “pipeline on the server + run” story without a separate `upload`
+call.
+
+> **Note:** That **implicit upload** surprises some users who expected a one-off
+> run with **no** catalog entry. **`kfp.Client.create_run_from_pipeline_func`**
+> can submit **inline spec** only. See [Open Question 6](#6-run-with-callable--implicit-upload-side-effect).
+
+**Two workflow patterns:**
+
+- **Upload once, run many** (Story 2): Call `upload` separately, then `run`
+  by pipeline name. Best when you want to control versioning and trigger
+  multiple runs from the same pipeline.
+- **Quick one-shot**: Story 1 uses explicit `upload` then `run` **by pipeline
+  name**. Stories **5 and 6** pass a **callable** to `run` (compile + upload + run
+  in one call — pipeline ends up on the server) — fewest lines for notebooks and
+  iterative development.
+
+**Recurring runs are separate** (Phase 2). Preference is to keep
+recurring runs distinct because they are a one-time configuration operation
+(set up a schedule), not a common interactive workflow. They also have a
+different return type (`V2beta1RecurringRun` vs `V2beta1Run`) and different
+lifecycle.
+
+##### `wait`
+
+Wait for a run to reach a target state. Accepts a run ID string or the
+`V2beta1Run` object returned from `run`.
 
 ```python
-def _resolve_pipeline_id(self, name, pipeline_id):
-    """Resolve pipeline name → ID using kfp.Client.get_pipeline_id()."""
+completed = client.wait(run, timeout=3600)
 
-def _resolve_experiment_id(self, name, experiment_id, namespace=None):
-    """Resolve experiment name → ID using kfp.Client.get_experiment(experiment_name=...)."""
+# Wait for a specific non-terminal state
+running = client.wait(run, status={"running"}, timeout=120)
 
-def _resolve_latest_version_id(self, pipeline_id):
-    """Fetch the most recent pipeline version using list_pipeline_versions(sort_by='created_at desc')."""
+# Don't raise on failure — inspect the result instead
+result = client.wait(run, raise_on_failure=False)
+if result.state == "failed":
+    print(f"Run failed: {result.error}")
+
+# Also accepts a raw run ID
+completed = client.wait("abc-123", timeout=3600)
 ```
 
-These are not part of the public API. If KFP upstream adds name-first
-parameters to its public methods, these helpers become unnecessary and we can
-remove them.
+```python
+def wait(
+    self,
+    run: str | V2beta1Run,
+    *,
+    status: set[str] | None = None,
+    timeout: int | None = None,
+    poll_interval: int = 5,
+    raise_on_failure: bool = True,
+) -> V2beta1Run:
+```
+
+**Time limit:** If `timeout` is `None`, polling runs until a stop condition below
+is met. If `timeout` is a number of seconds, **`TimeoutError`** is raised when the
+wait does not finish in time (see end of this section).
+
+**At a glance**
+
+| Knob | Role |
+|------|------|
+| `status` | Omit → stop on **any default terminal** state. Set → stop when run state **`status`** (e.g. `{"running"}`, `{"succeeded"}`). |
+| `raise_on_failure` | Only affects **`failed`** and **`error`**: raise `RuntimeError` vs return the run for inspection. |
+| `timeout` | Optional wall-clock limit; can raise **`TimeoutError`**. |
+
+**1. When does polling stop?**
+
+- **`status` omitted:** Stop when the run reaches **any** of the default terminal
+  states: `succeeded`, `failed`, `skipped`, `error`, `cancelled`.
+- **`status` set** (e.g. `{"running"}`): Stop when the run’s state is **in
+  `status`**, **or** when the waiter must end anyway — e.g. **`cancelled`** (so
+  a user cancel does not leave you polling forever), **`failed` / `error`**
+  (see `raise_on_failure`), or **`timeout`**.
+
+Including **`cancelled`** in the default terminal set avoids polling forever
+after a user cancels a run in the UI. See
+[Open Question 9](#9-wait-default-terminal-states--cancelled-and-raise_on_failure)
+for **`skipped`** and deployment-specific expectations.
+
+**2. After stop: raise or return? (`raise_on_failure`)**
+
+`raise_on_failure` does **not** turn `cancelled` or `skipped` into exceptions;
+those always return a `V2beta1Run` so you can branch on `.state`. It only
+governs **`failed`** and **`error`**.
+
+| Situation | `raise_on_failure=True` (default) | `raise_on_failure=False` |
+|-----------|-----------------------------------|---------------------------|
+| Run reaches **`failed`** or **`error`** while the requested `status` is **not** yet satisfied (e.g. you asked for `{"running"}` but the run failed first) | Raises **`RuntimeError`** | Returns the run |
+| Run reaches **`cancelled`** or **`skipped`** | Returns the run (never treated as `raise_on_failure`) | Returns the run |
+
+**3. `TimeoutError`**
+
+Raised when `timeout` is set and the waiter does not finish within the window
+— typically because the run never reached the requested `status` and did not
+otherwise stop in a way that ended the wait. If `raise_on_failure=True`, a
+**`failed`** / **`error`** run usually ends the wait earlier via `RuntimeError`
+instead of waiting for the full timeout.
+
+Set **`raise_on_failure=False`** to always get a `V2beta1Run` back for
+**`failed`** / **`error`** (and inspect `.state` yourself), including when you
+omit `timeout` or use a long window.
+
+##### `get_run`
+
+Inspect a run by ID or by the `V2beta1Run` object returned from `run`.
+
+```python
+run_info = client.get_run(run)  # accepts the run object directly
+run_info = client.get_run("abc-123")  # or a raw run ID
+```
+
+```python
+def get_run(self, run: str | V2beta1Run) -> V2beta1Run:
+```
+
+##### `get_pipeline`
+
+Inspect a pipeline by name.
+
+```python
+pipeline = client.get_pipeline("training-pipeline")
+```
+
+```python
+def get_pipeline(self, name: str) -> V2beta1Pipeline:
+```
+
+##### `list_pipelines`
+
+List pipelines available on the server.
+
+```python
+pipelines = client.list_pipelines()
+```
+
+```python
+def list_pipelines(
+    self,
+    *,
+    limit: int = 100,
+) -> list[V2beta1Pipeline]:
+```
+
+##### `list_runs`
+
+List runs, optionally filtered by pipeline name.
+
+```python
+# All recent runs
+runs = client.list_runs()
+
+# Runs for a specific pipeline
+runs = client.list_runs(pipeline="training-pipeline")
+```
+
+```python
+def list_runs(
+    self,
+    *,
+    pipeline: str | None = None,
+    limit: int = 100,
+) -> list[V2beta1Run]:
+```
+
+Listing is essential for rediscovering runs after a session restart (e.g. a
+Jupyter notebook crash). Without it, users would need the KFP UI or a raw
+`kfp.Client` call to find run IDs.
+
+**Pagination:** Phase 1 list methods return a simple list with a default
+`limit=100` to prevent accidentally fetching thousands of records on busy
+clusters. Full pagination support (`page_size`, `page_token`) will be added in
+Phase 2 alongside the other list methods (`list_experiments`,
+`list_versions`).
+
+##### `delete`
+
+Delete a pipeline by name. This cascades to all pipeline versions (versions are
+children of the pipeline in KFP's data model). Existing runs are **not**
+affected — they retain a snapshot of the pipeline spec they were created with.
+
+```python
+client.delete("training-pipeline")
+```
+
+```python
+def delete(self, name: str) -> None:
+```
+
+> **Safety consideration:** Cascading to all versions could be destructive if a
+> pipeline has many versions. Consider adding a `force: bool = False` parameter
+> that raises if the pipeline has more than one version unless `force=True`. See
+> [Open Question 7](#7-delete-cascading-behavior).
+
+##### Phase 1 summary
+
+| Method | What it replaces in `kfp.Client` |
+|---|---|
+| `upload` | `upload_pipeline`, `upload_pipeline_from_pipeline_func`, `upload_pipeline_version`, `upload_pipeline_version_from_pipeline_func` |
+| `run` | `run_pipeline`, `create_run_from_pipeline_func`, `create_run_from_pipeline_package` |
+| `wait` | `wait_for_run_completion` (with flexible status set) |
+| `get_run` | `get_run` |
+| `get_pipeline` | `get_pipeline` |
+| `list_pipelines` | `list_pipelines` |
+| `list_runs` | `list_runs` (with name-first pipeline filter) |
+| `delete` | `delete_pipeline` |
+
+Eight methods replace ~14 methods from `kfp.Client` for the core workflow.
+
+---
+
+#### Phase 2: Experiments, scheduling, and run lifecycle
+
+For users who need experiment organization, recurring runs, and run lifecycle
+management beyond the core workflow.
+
+```python
+# Experiments
+client.create_experiment("hyperparameter-sweep")
+experiments = client.list_experiments()
+
+# Filter runs by experiment
+runs = client.list_runs(experiment="hyperparameter-sweep")
+
+# Run lifecycle
+client.terminate(run_id)
+client.archive(run_id)
+
+# Pipeline versions
+versions = client.list_versions("training-pipeline")
+
+# Recurring runs (separate from one-off runs per KFP team preference)
+client.create_recurring_run(
+    pipeline="training-pipeline",
+    name="nightly-retrain",
+    experiment="production",
+    cron_expression="0 0 * * *",
+    params={"data_path": "/data/latest"},
+)
+client.list_recurring_runs()
+client.disable_recurring_run(recurring_run_id)
+client.enable_recurring_run(recurring_run_id)
+client.delete_recurring_run(recurring_run_id)
+```
+
+**Why Phase 2:** Experiment management, recurring runs, and run lifecycle
+(terminate, archive) are organizational operations. Phase 1 covers the full
+create → run → list → inspect → delete workflow. Phase 2 adds the tooling to
+manage runs and pipelines at scale.
+
+---
+
+#### Phase 3: Health, observability, and upstream enhancements
+
+Health checks, namespace management, and features that may require KFP API
+server changes or deeper integration.
+
+```python
+# Server health
+health = client.health()
+
+# Namespace management (multi-user)
+client.set_namespace("team-ml")
+ns = client.get_namespace()
+
+# Upstream enhancements (require KFP API server changes)
+logs = client.logs(run_id, task="train")
+events = client.events(run_id)
+completed = client.wait(run_id, callbacks=[my_callback])
+```
+
+**Upstream enhancements:**
+
+1. **Task logs** — `client.logs(run_id, task="train")`
+2. **Run events** — `client.events(run_id)`
+3. **Callbacks on wait** — `client.wait(run_id, callbacks=[my_callback])`
+4. **Server-side name resolution** — eliminates extra API calls 
+    from client-side name → ID resolution
+
+**Why Phase 3:** Health checks and namespace management are infrastructure
+concerns most users never need. The upstream enhancements depend on KFP API
+server changes that are outside the client's control.
+
+---
+
+### Name Resolution
+
+The new client uses name-first parameters (`pipeline="training-pipeline"`,
+`experiment="hyperparameter-sweep"`) while the underlying KFP APIs are
+ID-centric.
+
+Name → ID resolution will be handled internally. The exact approach — whether
+client-side (extra API calls) or server-side (new API parameters) — is an
+[open question](#1-name-first-resolution--client-side-or-server-side) to be
+resolved during the KFP-side KEP.
+
+**Client-side approach** (current implementation):
+
+```python
+# Internal helper — not public API
+def _resolve_pipeline_id(self, name):
+    resolved = self._client.get_pipeline_id(name)
+    if resolved is None:
+        raise ValueError(f"Pipeline {name!r} not found.")
+    return resolved
+```
+
+Each name-first call triggers 1-3 additional API calls for resolution (pipeline
+name → ID, experiment name → ID, latest version lookup). This works but adds
+round-trips.
+
+**Server-side approach** (ideal, requires API server changes):
+
+REST API endpoints accept `display_name` parameters directly, resolving names
+atomically in a single request. Eliminates extra round-trips and race
+conditions.
+
+### Current kfp.Client API Reference
+
+For context, the full `kfp.Client` API that the new client simplifies:
+
+| Category | `kfp.Client` methods |
+|---|---|
+| **Health/Context** | `get_kfp_healthz`, `set_user_namespace`, `get_user_namespace` |
+| **Experiments** | `create_experiment`, `get_experiment`, `list_experiments`, `get_pipeline_id`, `archive_experiment`, `unarchive_experiment`, `delete_experiment` |
+| **Pipelines** | `get_pipeline`, `list_pipelines`, `delete_pipeline`, `list_pipeline_versions`, `get_pipeline_version`, `delete_pipeline_version` |
+| **Upload** | `upload_pipeline`, `upload_pipeline_from_pipeline_func`, `upload_pipeline_version`, `upload_pipeline_version_from_pipeline_func` |
+| **Runs** | `run_pipeline`, `create_run_from_pipeline_func`, `create_run_from_pipeline_package`, `get_run`, `list_runs`, `wait_for_run_completion`, `archive_run`, `unarchive_run`, `delete_run`, `terminate_run` |
+| **Recurring Runs** | `create_recurring_run`, `get_recurring_run`, `list_recurring_runs`, `delete_recurring_run`, `enable_recurring_run`, `disable_recurring_run` |
+
+~30 methods total. The new client's Phase 1 covers the core workflow with 8
+methods, growing incrementally through later phases.
 
 ---
 
 ## Open Questions
 
-Each question includes the current proposal and alternatives considered.
+### 1. Name-first resolution — client-side or server-side
 
-### 1. Task logs
+**Context:** The Kubeflow SDK pattern is name-first (Trainer, Model Registry,
+Optimizer all use names). KFP APIs are ID-centric. Name-first resolution is
+important and agreed upon.
 
-**Gap:** `TrainerClient` exposes `get_job_logs(name, follow=False)`.
-`PipelinesClient` has no logs method. KFP's Python SDK has no `get_task_logs`
-either — logs live in Kubernetes pods, and the KFP UI fetches them via the K8s
-API behind the scenes.
+**Client-side:** Extra API calls per request. Works today without API server changes.
 
-**Current proposal:** Out of scope for v1. Propose upstream to KFP as a native
-`get_task_logs(run_id, task_name)` on `kfp.Client`. This is the cleanest
-long-term path — KFP already knows about pods and can manage K8s auth
-internally.
+**Server-side:** Atomic resolution. No extra round-trips. Requires API server
+changes.
 
-**Interim workaround:** Users can get the pod name from `get_run()` task
-details and use `kubectl logs` or the KFP UI.
+**Decision needed:** To be resolved during the KFP-side KEP.
 
-**If KFP ships it:** Our wrapper delegates to it — one-line addition:
+### 2. Task logs
 
-```python
-def get_task_logs(self, run_id: str, task_name: str) -> str:
-    return self._client.get_task_logs(run_id=run_id, task_name=task_name)
-```
+**Gap:** `TrainerClient` exposes `get_job_logs(name)`. KFP's Python SDK has no
+`get_task_logs` — logs live in Kubernetes pods, and the KFP UI fetches them via
+the K8s API behind the scenes.
 
-**If we need it before KFP ships it:** The alternative is implementing it at
-the SDK wrapper level using the Kubernetes Python client. This would change the
-auth model — today `PipelinesClient` only needs KFP API credentials
-(`base_url` + `user_token`). Fetching pod logs requires K8s API access
-(kubeconfig or in-cluster service account), which is a different auth path.
-The constructor would need additional config (e.g. `k8s_client=` parameter or
-auto-detection via `load_incluster_config()`). This creates a hybrid auth model
-that no other SDK client requires.
+**Proposal:** Out of scope for Phase 1-2. Propose to KFP as a native
+`logs(run_id, task_name)` method in Phase 3. Implementing at the client level
+would require K8s API access (kubeconfig or in-cluster service account),
+creating a hybrid auth model.
 
-```python
-# Hypothetical SDK-side implementation (if upstream doesn't ship it)
-def get_task_logs(self, run_id: str, task_name: str) -> str:
-    run = self.get_run(run_id)
-    pod_name = run.task_details[task_name].pod_name
-    # Requires K8s client — needs kubeconfig or in-cluster SA
-    return self._k8s_client.read_namespaced_pod_log(pod_name, namespace=...)
-```
-
-**Decision needed:** Go with proposal, wait for upstream, or implement with hybrid auth?
-
-### 2. Run events
+### 3. Run events
 
 **Gap:** `TrainerClient.get_job_events(name)` and
-`OptimizerClient.get_job_events(name)` expose K8s events. KFP's API server
-does not surface them. Same auth model concern as logs — implementing this
-requires K8s API access.
+`OptimizerClient.get_job_events(name)` expose K8s events. KFP's API server does
+not surface them. Same hybrid auth concern as logs.
 
-**Current proposal:** Out of scope for v1. Same approach as logs — propose
-upstream to KFP. If we solve the auth question for logs, events come
-essentially for free.
+**Proposal:** Out of scope for Phase 1-2. Same approach as logs — propose
+upstream in Phase 3.
 
-**If KFP ships it:** Same one-line delegation as logs.
+### 4. Runs tracked by ID
 
-**Decision needed:** Same as logs — proposal, wait for upstream, or implement?
+**Gap:** Other SDK clients are fully name-centric. `PipelinesClient` tracks
+runs by `run_id` after creation because KFP run display names are not unique.
 
-### 3. Runs tracked by ID after creation
+**Decision:** Runs remain ID-based. There is no clean unique key for runs —
+display names are not unique, and runs are not always tied to a specific
+pipeline version. This is a fundamental difference from Kubernetes resources
+(where `metadata.name` is unique within a namespace) because KFP runs are
+database records with auto-generated UUIDs.
 
-**Gap:** `TrainerClient` and `ModelRegistryClient` are fully name-centric.
-`PipelinesClient` tracks runs by `run_id` after creation.
+The same applies to **recurring runs** (Phase 2). Methods like
+`disable_recurring_run(recurring_run_id)` and
+`delete_recurring_run(recurring_run_id)` use IDs for the same reason —
+recurring run display names are not unique in KFP. Users discover recurring
+run IDs via `list_recurring_runs()`, which returns objects carrying the ID.
 
-**Why:** KFP run display names are not unique. Multiple runs can share the same
-`job_name`. `TrainerClient` doesn't have this problem because TrainJob names
-are unique K8s resource names.
+Phase 1 mitigates the ID requirement through:
+- **`list_runs`** — rediscover runs after a session restart (e.g. Jupyter
+  notebook crash) without needing to remember UUIDs.
+- **Accepting the `V2beta1Run` object** in `wait` and `get_run` — so in the
+  common same-session workflow, users never need to extract `.run_id` manually.
 
-**Current proposal:** Keep ID-only for v1.
+### 5. Version auto-generation strategy
 
-**Alternatives considered:**
+**Context:** When `upload` is called without an explicit `version` parameter
+and the pipeline already exists, a version label needs to be auto-generated.
 
-| Alternative | Pros | Cons |
-|---|---|---|
-| Name + "most recent" | Simpler API | Silently returns wrong run if duplicates exist |
-| Name + experiment scoping | More precise | Still not guaranteed unique |
-| Fluent run handle (`run.wait()`, `run.archive()`) | User never sees IDs | Only works for current session; can't find yesterday's run |
-| Keep ID-only (current) | Explicit, unambiguous | Deviates from other clients |
+**Proposal:** Follow the approach used by the KFP UI for auto-generated
+names, with the option for users to manually set the version label.
 
-**What would help upstream:** If KFP adds `display_name` filter support for
-runs and recurring runs, we could offer name-based lookup as an option. We
-propose this upstream.
+**Decision needed:** Adopt the KFP UI–style auto-versioning described above, 
+or replace it with an explicit alternative.
 
-**Decision needed:** Is ID-centric acceptable, or should we explore the fluent
-handle pattern?
+### 6. `run()` with callable — implicit upload side-effect
 
-### 4. `wait_for_run_status` callbacks
+**Problem:** For **`run(callable)`**, we can either (1) **only** start a run
+with an **inline** pipeline spec, or (2) **also** create/update a **pipeline on
+the server** and then run. (2) matches this KEP’s Phase 1 flow (pipelines show up
+in the UI; reuse by name is easy) but can feel like a hidden **upload**. (1)
+matches **`kfp.Client.create_run_from_pipeline_func`** — no new pipeline
+resource unless the user **uploads** separately.
 
-**Gap:** `TrainerClient.wait_for_job_status` and
-`OptimizerClient.wait_for_job_status` accept a `callbacks` parameter — a list
-of functions invoked after each poll:
+**Proposal (this KEP):** Same as Phase 1 **`run`** above: **compile → upload →
+run** — register the pipeline (or a new version), then create the run.
 
-```python
-# TrainerClient pattern
-def log_progress(trainjob):
-    print(f"Status: {trainjob.status}")
+**Decision needed:** **Adopt** that proposal **or** default **`run(callable)`**
+to **inline-spec-only** runs (and require **`upload` + `run(name)`** when users
+want a server-side pipeline).
 
-client.wait_for_job_status("my-job", callbacks=[log_progress])
-```
+### 7. `delete` cascading behavior
 
-`PipelinesClient.wait_for_run_status` does not support callbacks.
+**Context:** `delete("training-pipeline")` cascades to all pipeline versions.
+A user could accidentally delete a pipeline with many versions and no way to
+recover them.
 
-**Current proposal:** Not included in v1. The flexible `status` parameter
-covers the main use case. Callbacks can be added later as a non-breaking change:
+**Options:**
+- Add `force: bool = False` — raises if the pipeline has more than one version
+  unless `force=True`.
+- Always cascade (current proposal) but log a warning showing the number of
+  versions being deleted.
 
-```python
-# Future addition — non-breaking
-def wait_for_run_status(
-    self,
-    run_id: str,
-    ...,
-    callbacks: list[Callable[[V2beta1Run], None]] | None = None,
-) -> V2beta1Run:
-```
+**Decision needed:** Determine whether a `force` guard or a confirmation
+mechanism is warranted.
 
-**Decision needed:** Include callbacks in v1 for parity with Trainer/Optimizer,
-or defer?
+### 8. `upload` return type union
 
-### 5. Return types — passthrough vs hand-crafted
+**Context:** `upload` returns `V2beta1Pipeline | V2beta1PipelineVersion`.
+Union return types are harder for callers to use without type-narrowing.
 
-**Gap:** `PipelinesClient` returns `kfp_server_api.V2beta1*` types
-(auto-generated from the KFP OpenAPI spec). `TrainerClient` returns
-hand-crafted Pydantic models from `kubeflow.trainer.types`.
+**Options:**
+- Always return `V2beta1PipelineVersion` — a new pipeline implicitly creates
+  its first version, so a version object is always available.
+- Return a simpler result type (e.g. a dataclass with `pipeline_id`,
+  `version_id`, `name`).
 
-**Current proposal:** Passthrough for v1. `ModelRegistryClient` follows the
-same pattern — it returns `model_registry.types.*` from the underlying library,
-not hand-crafted Kubeflow SDK types. This is zero-maintenance and familiar to
-existing KFP users.
+**Decision needed:** Align with the KFP team on whether a consistent return
+type is feasible.
 
-**Trade-off:** Hand-crafted wrapper types (e.g. `pipelines.types.Run`) would
-give a cleaner API surface but add significant work, a mapping layer, and
-potential upstream divergence.
+### 9. `wait` default terminal states — `cancelled` and `raise_on_failure`
 
-**Decision needed:** Is passthrough acceptable, or do we want wrapper types?
+**Context:** KFP runs can be cancelled (`CANCELED` state). If `cancelled` is
+not in the default terminal set, `wait()` would poll indefinitely when a run
+is cancelled mid-flight.
 
-### 6. Upstream KFP improvements
+**Proposed resolution:** Include `cancelled` in the default terminal state set
+(`succeeded`, `failed`, `skipped`, `error`, `cancelled`) so polling stops.
+Also confirm the exact state string used by the target KFP version (`CANCELED` vs
+`cancelled`).
 
-Several of our design decisions are bridges that become unnecessary if KFP
-upstream adopts improvements. We propose the following to the KFP project:
+**`raise_on_failure` vs `cancelled`:** User- or operator-initiated **cancel** is
+not necessarily a “failure” for exception semantics. The KEP proposes that
+**`cancelled`** (and likely **`skipped`**) **return** the terminal run rather
+than raising `RuntimeError`, while **`failed` / `error`** raise when
+`raise_on_failure=True`.
 
-| Improvement | What it solves for us | Status |
-|---|---|---|
-| `get_task_logs(run_id, task_name)` | Task logs without hybrid auth | To be proposed |
-| `get_run_events(run_id)` | Run events without hybrid auth | To be proposed |
-| `display_name` filter for runs/recurring runs | Name-based run lookup | To be proposed |
-| Name-first public methods for pipelines/experiments | Our `_resolve_*` helpers become unnecessary | To be proposed |
-| `wait_for_run_status(run_id, status={...})` | Our custom polling loop becomes unnecessary | To be proposed |
-
-**If KFP adopts all of these**, our wrapper becomes very thin:
-
-- Constructor alignment (`base_url` → `host` mapping)
-- DSL re-exports (`kubeflow.pipelines.dsl`, etc.)
-- "One SDK" packaging (`pip install 'kubeflow[pipelines]'`)
-
-**Until then**, the wrapper implements name-first resolution, auto-version, and
-flexible wait as a bridge.
-
-### 7. Ownership and long-term maintenance
-
-**Context:** For components that fully migrate into the Kubeflow SDK (e.g.
-Trainer, Optimizer), ownership naturally sits with the component maintainers —
-they own both the underlying CRD/controller and the SDK client. `PipelinesClient`
-is different: it wraps an external SDK (`kfp.Client`) maintained by the KFP
-project.
-
-**What ownership means here:** The implementation can be contributed by anyone,
-but ownership is primarily about **ongoing maintenance**:
-
-- **Code maintenance** — keeping the wrapper functional as `kfp.Client` evolves
-  (method signatures, deprecations, breaking changes across major versions).
-- **API alignment** — ensuring the methods exposed by the wrapper stay up to
-  date with what KFP offers and what other SDK clients (`TrainerClient`,
-  `ModelRegistryClient`) expect in terms of naming and patterns.
-- **Upstream coordination** — collaborating with KFP maintainers on the
-  proposals in [Phase 4](#phase-4-upstream-kfp-proposals) (task logs, run
-  events, name-first API) and adapting the wrapper as KFP ships them.
-- **Testing** — maintaining unit and E2E tests, especially during KFP major
-  version transitions (2.x → 3.x).
-
-**The question:** This wrapper needs KFP maintainer buy-in to be sustainable
-long-term. Bug fixes in KFP behavior need to go through the KFP project. The
-upstream proposals require KFP collaboration. Without that buy-in, the wrapper
-carries more bridge logic indefinitely and risks drifting from upstream.
-
-**Decision needed:** Who owns this wrapper long-term — Kubeflow SDK maintainers,
-KFP maintainers, or shared? And is the KFP team willing to collaborate on the
-upstream improvements that would make the wrapper thinner over time?
-
-**Current proposal:** Add KFP maintainers as sub-owners of the
-`kubeflow/pipelines/` wrapper, with KFP maintainers as the **primary owners**
-in collaboration with the Kubeflow SDK maintainers.
-
-Rationale:
-
-1. **Precedent in the Kubeflow SDK proposal.** The initial Kubeflow SDK design
-   envisioned component teams owning their respective SDK clients. KFP
-   maintainers are the component team for Pipelines — this follows the same
-   model.
-2. **Review and objection rights.** Making KFP maintainers primary owners gives
-   them visibility into every change to the wrapper. They can review PRs, raise
-   objections if the wrapper diverges from upstream conventions, and ensure the
-   wrapper stays aligned with the direction of `kfp.Client`.
-3. **Shared responsibility.** Kubeflow SDK maintainers contribute to the wrapper
-   and keep it consistent with the broader SDK patterns (constructor alignment,
-   naming conventions), while KFP maintainers ensure it stays correct and
-   current with the underlying KFP SDK.
+**Decision needed:** Confirm with the KFP team whether **`skipped`** should ever
+raise under `raise_on_failure=True` (deployment-specific expectations).
 
 ---
 
 ## Design Details
 
-### Package Structure
+### KFP-side package structure
+
+The new client lives in the KFP repository alongside the existing `kfp.Client`:
 
 ```
-kubeflow/
-├── pipelines/
-│   ├── __init__.py                    # PipelinesClient + dsl/compiler/components/kubernetes
-│   └── api/
-│       ├── __init__.py
-│       ├── pipelines_client.py        # PipelinesClient implementation
-│       └── pipelines_client_test.py   # Tests
-├── trainer/    # existing
-├── optimizer/  # existing
-└── hub/        # existing (ModelRegistryClient)
+KFP repository (github.com/kubeflow/pipelines)
+└── sdk/python/kfp/            # Python package root (import name: kfp)
+    ├── client/
+    │   └── client.py              # existing kfp.Client (unchanged)
+    ├── kubeflow/
+    │   ├── __init__.py
+    │   └── client.py              # NEW: PipelinesClient
+    ├── compiler/
+    ├── components/
+    ├── dsl/
+    └── kubernetes/
 ```
 
-### pyproject.toml
+Same [Architecture](#architecture): one physical prefix **`sdk/python/`**, then
+the **`kfp`** package as installed / imported.
 
-```toml
-[project.optional-dependencies]
-pipelines = ["kfp[kubernetes]>=2.0.0"]
+### SDK-side package structure
+
+The Kubeflow SDK re-exports from `kfp.kubeflow`:
+
+```
+Kubeflow SDK repository (github.com/kubeflow/sdk)
+└── kubeflow/
+    ├── pipelines/
+    │   └── __init__.py            # re-exports PipelinesClient + dsl/compiler/components/kubernetes
+    ├── trainer/                   # existing
+    ├── optimizer/                 # existing
+    └── hub/                       # existing (ModelRegistryClient)
 ```
 
-### Deviations from Other SDK Clients
+```python
+# kubeflow/pipelines/__init__.py
+_KFP_EXPORTS = frozenset(
+    {"PipelinesClient", "dsl", "compiler", "components", "kubernetes"}
+)
 
-| Capability | TrainerClient | ModelRegistryClient | PipelinesClient | Gap? |
-|---|---|---|---|---|
-| Name-centric identity | `name` everywhere | `name` everywhere | `name` for create; `run_id` after | Yes — runs |
-| Logs | `get_job_logs(name)` | N/A | Not implemented | Yes |
-| Events | `get_job_events(name)` | N/A | Not implemented | Yes |
-| Wait with status set | `wait_for_job_status(name, status={...})` | N/A | `wait_for_run_status(run_id, status={...})` | Parity (except name vs ID) |
-| Wait with callbacks | `callbacks=[...]` | N/A | Not supported (v1) | Minor gap |
-| Return types | Hand-crafted Pydantic | Passthrough (`model_registry.types`) | Passthrough (`kfp_server_api.V2beta1*`) | Same pattern as registry |
-| Auth model | K8s API | REST API | REST API (K8s needed if logs/events added) | Hybrid only if logs added |
-| Constructor | `backend_config=` | `base_url, port, user_token, ...` | `base_url, port, user_token, ...` + `namespace` | Mostly aligned with registry |
+try:
+    from kfp.kubeflow.client import PipelinesClient
+    from kfp import compiler, components, dsl, kubernetes
+except ImportError:
+    _KFP_IMPORT_FAILED = True
+else:
+    _KFP_IMPORT_FAILED = False
+
+__all__ = list(_KFP_EXPORTS)
+
+def __getattr__(name):
+    # Only fires for names not already bound at module level.
+    # On import failure the names are never defined, so access triggers this.
+    if name in _KFP_EXPORTS and _KFP_IMPORT_FAILED:
+        raise ImportError(
+            f"'{name}' requires kfp. Install it with: "
+            f"pip install 'kubeflow[pipelines]'"
+        ) from None
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+```
+
+Comparison with Trainer / Model Registry clients: see
+[Deviations from Other SDK Clients](#deviations-from-other-sdk-clients) under Proposal.
 
 ### Error Handling
-
-The client raises the following exceptions:
 
 | Exception | When |
 |---|---|
 | `ImportError` | `kfp` not installed. Message directs user to `pip install 'kubeflow[pipelines]'` |
-| `ValueError` | Name resolution fails (pipeline/experiment not found, no versions available) |
-| `TimeoutError` | `wait_for_run_status` exceeds timeout without reaching target state |
-
-All other exceptions (network errors, auth failures, server errors) propagate
-from `kfp.Client` unchanged.
-
-### Logging and Polling
-
-The client will log at `DEBUG` level during name resolution and status polling
-(e.g. `logger.debug(f"Run {run_id}: {current_state}")`), providing visibility
-without cluttering default output. This logging will be added in Phase 1.
-Thread safety follows `kfp.Client`'s guarantees — consult KFP documentation
-for concurrent usage patterns.
+| `ValueError` | Name resolution fails (pipeline/experiment not found, no versions) |
+| `ValueError` | `upload` — callable fails to compile (invalid `@dsl.pipeline` function) |
+| `RuntimeError` | `wait` — run reaches **`failed`** or **`error`** while `raise_on_failure=True` (default). **`cancelled`** / **`skipped`** return the run; they do not raise |
+| `TimeoutError` | `wait` exceeds timeout without reaching target state |
 
 ### Test Plan
 
-- **Unit tests:** All `PipelinesClient` methods tested against a mocked
-  `kfp.Client`. Tests cover name-first resolution, auto-version resolution,
-  experiment resolution, `wait_for_run_status` with custom status sets, and
-  error cases (pipeline not found, no versions, timeout).
-- **E2E tests:** Against a live KFP server. Cover the full upload → run →
-  wait → get_run flow with real pipeline compilation.
+- **Unit tests (KFP repo):** All `PipelinesClient` methods tested against
+  mocked KFP internals. Covers name resolution, auto-version resolution,
+  unified upload logic, and error cases.
+- **E2E tests (KFP repo):** Against a live KFP server if possible. Cover 
+  the full upload → run → wait → get flow.
+- **Integration tests (Kubeflow SDK repository):** Verify re-export works correctly.
+  `from kubeflow.pipelines import PipelinesClient` resolves to the KFP
+  implementation.
+
+---
+
+## Implementation Plan
+
+### SDK-side implementation
+
+The Kubeflow SDK work is minimal — it's a re-export.
+
+1. Add `pipelines = ["kfp[kubernetes]>=X.Y.Z"]` to `pyproject.toml` (pinned to
+   the `kfp` version that includes `kfp.kubeflow.client`)
+2. Create `kubeflow/pipelines/__init__.py` with re-export of `PipelinesClient`
+   and DSL re-exports (`dsl`, `compiler`, `components`, `kubernetes`)
+3. Integration tests verifying re-export
+4. Documentation on sdk.kubeflow.org
+
+### KFP-side implementation (proposed)
+
+The KFP team owns this implementation but of course, we can contribute. This section outlines what we propose
+for a separate KEP against the KFP repo.
+
+**Phase 1: Core workflow**
+
+1. Create `sdk/python/kfp/kubeflow/client.py` with `PipelinesClient` class
+2. Implement constructor with `base_url`→`host` mapping, `user_token`→`existing_token`,
+   `namespace` defaulting to `None`
+3. Implement unified `upload` — detect callable vs path, detect new vs existing
+   pipeline, auto-generate version label following KFP UI conventions
+4. Implement `run` — name-first pipeline and experiment resolution, optional
+   `timeout` for inline wait, support for passing `@dsl.pipeline` function
+   directly (**compile → upload → run**; see [Open Question 6](#6-run-with-callable--implicit-upload-side-effect))
+5. Implement `wait` — flexible status set, client-side polling
+6. Implement `get_run` (by run ID or `V2beta1Run` object) and `get_pipeline` (by name)
+7. Implement `list_pipelines` and `list_runs` (with optional pipeline name filter)
+8. Implement `delete` — by pipeline name
+9. Unit tests for all Phase 1 methods
+
+**Phase 2: Experiments, scheduling, and run lifecycle**
+
+1. Implement experiment management (`create_experiment`, `list_experiments`)
+2. Add experiment filter to `list_runs`
+3. Implement run lifecycle (`terminate`, `archive`)
+4. Implement `list_versions` for pipeline version listing
+5. Implement recurring run methods (`create_recurring_run`, `list_recurring_runs`,
+   `disable_recurring_run`, `enable_recurring_run`, `delete_recurring_run`)
+6. Unit tests
+
+**Phase 3: Health, observability, and upstream enhancements**
+
+1. Implement `health`
+2. Implement `set_namespace`, `get_namespace`
+3. Task logs — `logs(run_id, task_name)` (requires KFP API server changes)
+4. Run events — `events(run_id)` (requires KFP API server changes)
+5. Callbacks on `wait`
+6. Server-side name resolution (if pursued)
+7. E2E tests
+8. Documentation
+
+---
+
+## Implementation History
+
+- 2025-02-18: Initial KEP creation (wrapper-in-SDK approach)
+- 2026-03-24: Refactored to reflect KFP team collaboration — client in KFP
+  repo, phased API, unified upload
 
 ---
 
@@ -986,248 +1433,103 @@ Adoption is optional and incremental. `kfp.Client` remains fully supported.
 | `kfp.Client` | `PipelinesClient` |
 |---|---|
 | `Client(host="...", existing_token="...")` | `PipelinesClient(base_url="...", user_token="...")` |
-| `client.get_pipeline_id("name")` then `client.run_pipeline(pipeline_id=...)` | `client.run_pipeline(pipeline_name="name", ...)` |
-| `client.wait_for_run_completion(run_id)` | `client.wait_for_run_status(run_id)` |
-| `client.create_run_from_pipeline_func(fn)` | `client.run_pipeline_from_func(fn)` |
+| `upload_pipeline_from_pipeline_func(fn, pipeline_name="X")` | `upload(fn, name="X")` |
+| `get_pipeline_id("X")` then `run_pipeline(pipeline_id=...)` | `run("X", params={...})` |
+| `get_run(run_id)` | `get_run(run_id)` or `get_run(run)` |
+| `get_pipeline(pipeline_id)` | `get_pipeline("name")` |
+| `list_pipelines()` | `list_pipelines()` |
+| `list_runs(experiment_id=...)` | `list_runs(pipeline="name")` |
+| `wait_for_run_completion(run_id)` | `wait(run)` or `wait(run_id)` |
+| `delete_pipeline(pipeline_id)` | `delete("name")` |
+| `create_recurring_run(...)` | `create_recurring_run(...)` (Phase 2) |
 
-### When KFP SDK packaging consolidation lands (unified `kfp` 3.x)
+**`kfp.Client` features with no `PipelinesClient` equivalent (use `kfp.Client` directly):**
 
-We bump to `kfp[kubernetes]>=3.0.0`. No wrapper code changes needed — our
-wrapper only calls high-level Client methods and doesn't depend on
-`kfp_server_api` or `kfp_pipeline_spec` import paths.
+| `kfp.Client` method | Why not included |
+|---|---|
+| `archive_experiment` / `unarchive_experiment` | Rare organizational operation |
+| `delete_experiment` | Rare — experiments are lightweight metadata |
+| `archive_run` / `unarchive_run` | Phase 2 covers `archive`; `unarchive` deferred |
+| `delete_run` | Runs are historical records; deletion is uncommon |
+| `get_pipeline_version` / `delete_pipeline_version` | Version-level operations deferred to Phase 2+ |
+
+### When KFP SDK packaging consolidation lands (kfp 3.x)
+
+We bump to `kfp[kubernetes]>=3.0.0`. No wrapper code changes needed — the
+re-export points to the same `kfp.kubeflow.client` module.
 
 ---
 
-## Implementation Plan
-
-### Phase 1: Core wrapper and constructor
-
-1. Add `pipelines = ["kfp[kubernetes]>=2.0.0"]` to `pyproject.toml`
-2. Create `kubeflow/pipelines/__init__.py` with `PipelinesClient` export and `dsl`/`compiler`/`components`/`kubernetes` re-exports
-3. Implement `PipelinesClient` constructor with `base_url`→`host` mapping, `user_token`→`existing_token`, `namespace` defaulting to `None`
-4. Add `_resolve_pipeline_id`, `_resolve_experiment_id`, `_resolve_latest_version_id` internal helpers
-5. Implement `wait_for_run_status` with flexible status set and client-side polling
-6. Unit tests for constructor edge cases, name resolution, and wait logic
-
-### Phase 2: Exposed API methods
-
-1. Implement health/context methods (`get_health`, `set_user_namespace`, `get_user_namespace`)
-2. Implement experiment methods (create, get, list, archive, unarchive, delete) with name-first resolution
-3. Implement pipeline methods (get, list, delete, version CRUD) with name-first resolution
-4. Implement upload methods (from file, from function, version variants)
-5. Implement run methods (`run_pipeline`, `run_pipeline_from_func`, `run_pipeline_from_package`, list, get, archive, unarchive, delete, terminate) with auto-version resolution
-6. Implement recurring run methods (create, get, list, delete, enable, disable) with auto-version resolution
-7. Unit tests for all methods against a mocked `kfp.Client`
-
-### Phase 3: Testing, documentation, and parity
-
-1. E2E tests against a live KFP server covering upload → run → wait → get_run
-2. Update SDK documentation on sdk.kubeflow.org with usage guide and examples
-3. Improve `ImportError` messaging for DSL re-exports (suggest `pip install 'kubeflow[pipelines]'`)
-4. Add migration guide examples
-
-### Phase 4: Upstream KFP proposals
-
-1. Propose `get_task_logs(run_id, task_name)` to KFP — native task log fetching without hybrid auth
-2. Propose `get_run_events(run_id)` to KFP — native event fetching
-3. Propose `display_name` filter for runs and recurring runs — enable name-based lookup
-4. Propose `wait_for_run_status` with flexible status set and `callbacks` support to KFP — matching `TrainerClient`/`OptimizerClient`'s `wait_for_job_status` pattern
-5. Propose namespace default of `None` instead of `"kubeflow"`
-6. As KFP ships these, delegate from wrapper and remove bridge code (`_resolve_*` helpers, custom polling loop)
-
 ## Alternatives
 
-### Alternative 1: Full re-implementation instead of wrapper
+### Alternative 1: Wrapper client in the Kubeflow SDK repo (original approach)
 
-Build a `PipelinesClient` that talks to the KFP REST API directly (using
-`kfp_server_api` or raw HTTP) instead of wrapping `kfp.Client`.
+The original version of this KEP proposed implementing `PipelinesClient` as a
+thin wrapper around `kfp.Client` directly in the Kubeflow SDK repository.
 
-**Rejected:** Significant duplication of logic already in `kfp.Client`
-(pipeline compilation, parameter serialization, auth handling). High
-maintenance burden to keep in sync with KFP API changes.
+**How it worked:**
+
+- `PipelinesClient` lived at `kubeflow/pipelines/api/pipelines_client.py`
+- Every method delegated to `kfp.Client` after resolving names to IDs
+- ~30 methods covering the full `kfp.Client` surface
+- Kubeflow SDK team owned the wrapper code
+
+**Why it was superseded:** The KFP team proposed hosting the client in the KFP
+repo instead. This is a higher-value approach because:
+
+- **KFP team ownership** eliminates the maintenance burden on the SDK team and
+  ensures the client stays aligned with KFP internals.
+- **Freedom to implement at any level** — the KFP team can call service APIs
+  directly or wrap `kfp.Client`, whichever is more reasonable. The SDK wrapper
+  was constrained to wrapping `kfp.Client`'s public methods.
+- **Simplified API surface** — with access to KFP internals, methods like
+  `upload` can unify four separate operations that the wrapper had to delegate
+  to four different `kfp.Client` methods.
+- **No upstream coordination bottleneck** for client-level features. The KFP
+  team implements and releases on their own cadence.
+
+The original wrapper approach remains a viable fallback if the KFP-side
+implementation is significantly delayed.
 
 ### Alternative 2: Re-export `kfp.Client` as-is
 
 Simply re-export `kfp.Client` under `kubeflow.pipelines.Client` without any
-wrapping.
+wrapping or simplification.
 
 **Rejected:** Misses the core value — constructor alignment, name-first API,
-and consistent wait semantics. Users would still deal with `host=`,
-`existing_token=`, and ID-centric methods.
+unified upload, and consistent wait semantics. Users would still deal with
+`host=`, `existing_token=`, and ID-centric methods.
 
-### Alternative 3: Minimal API surface
+### Alternative 3: Migrate KFP SDK codebase into the Kubeflow SDK
 
-Ship only the methods needed for the simplest end-to-end flow and grow from
-there. The minimal set:
-
-```python
-# The entire minimal API
-client = PipelinesClient("https://ml-pipeline.example.com")
-
-pipeline = client.upload_pipeline_from_pipeline_func(my_pipeline, pipeline_name="my-pipeline")
-run = client.run_pipeline(job_name="run-1", pipeline_name="my-pipeline", experiment_name="default")
-run = client.wait_for_run_status(run.run_id)
-run = client.get_run(run.run_id)
-client.delete_pipeline("my-pipeline")
-```
-
-Five methods + constructor. A user can upload, run, monitor, inspect, and clean
-up without learning any other API surface.
-
-**Comparison:**
-
-| Category | Minimal (5 methods) | Full proposal (~30 methods) |
-|---|---|---|
-| **Upload** | `upload_pipeline_from_pipeline_func` | + `upload_pipeline`, `upload_pipeline_version`, `upload_pipeline_version_from_pipeline_func` |
-| **Run** | `run_pipeline` | + `run_pipeline_from_func`, `run_pipeline_from_package` |
-| **Monitor** | `wait_for_run_status`, `get_run` | + `list_runs`, `archive_run`, `unarchive_run`, `delete_run`, `terminate_run` |
-| **Experiments** | *(auto-create default)* | `create_experiment`, `get_experiment`, `list_experiments`, `archive_experiment`, `unarchive_experiment`, `delete_experiment` |
-| **Pipelines** | `delete_pipeline` | + `get_pipeline`, `list_pipelines`, `list_pipeline_versions`, `get_pipeline_version`, `delete_pipeline_version` |
-| **Recurring runs** | *(not included)* | `create_recurring_run`, `get_recurring_run`, `list_recurring_runs`, `delete_recurring_run`, `enable_recurring_run`, `disable_recurring_run` |
-| **Context** | *(not included)* | `get_health`, `set_user_namespace`, `get_user_namespace` |
-
-**Arguments for minimal:**
-
-- Smaller review surface, faster to ship.
-- Forces the "simplest path" as the primary user experience.
-- Additional methods can be added incrementally without breaking changes.
-
-**Arguments for full (current proposal):**
-
-- Every method beyond the minimal five is a one-line delegation to
-  `kfp.Client` with no added logic — the implementation cost is trivial.
-- Shipping without experiment management, pipeline listing, or recurring runs
-  means users must drop down to `kfp.Client` for common operations, defeating
-  the "one SDK" goal.
-
-**Current stance:** Ship the full set. The marginal cost of each additional
-method is near-zero (one-line delegations), while the marginal value is
-significant — users stay within a single client for the entire pipeline
-lifecycle. The minimal set is useful as a "getting started" guide rather than
-an API boundary.
-
-### Alternative 4: Migrate the KFP SDK codebase into the Kubeflow SDK
-
-Instead of wrapping `kfp.Client`, absorb the KFP SDK code (client, DSL,
-compiler, components) directly into the Kubeflow SDK repository — the same
-model used by Trainer, where the training SDK lives entirely in the `kubeflow`
-repo.
-
-**How it would work:**
-
-- The `kfp` Python package (`kfp.Client`, `kfp.dsl`, `kfp.compiler`,
-  `kfp.components`, `kfp.kubernetes`) would be developed and released from the
-  Kubeflow SDK repository.
-- `PipelinesClient` would call into code that lives in the same repo, not an
-  external dependency.
-- DSL, compiler, and components would no longer need re-exports — they would
-  already be under the `kubeflow` namespace.
+Absorb the KFP SDK code (client, DSL, compiler, components) directly into the
+Kubeflow SDK repository.
 
 **Pros:**
 
-- **Single Kubeflow SDK for all components.** Pipelines would join Trainer,
-  Optimizer, Spark, and Model Registry as a first-class citizen of the SDK —
-  one package, one set of conventions, one place to contribute. Users
-  `pip install kubeflow` and get everything.
-- **Full alignment with Trainer/Optimizer model.** One repo, one release cycle,
-  clearly defined maintainers of each part of the SDK.
-- **No upstream coordination bottleneck.** Features like task logs, run events,
-  name-first API, and flexible `wait_for_run_status` could be implemented
-  directly without waiting for KFP to adopt upstream proposals.
-- **Simpler dependency graph.** `pip install 'kubeflow[pipelines]'` would not
-  pull in a separate `kfp` package — fewer version conflicts, no need to track
-  `kfp` releases.
-- **Consistent patterns.** Constructor signatures, error handling, return types,
-  and `wait_for_*` semantics would be native rather than adapted from a
-  different SDK's conventions.
+- Single Kubeflow SDK for all components.
+- Full alignment with the Trainer/Optimizer model.
+- No upstream coordination bottleneck.
+- Simpler dependency graph.
 
 **Cons:**
 
-- **Requires KFP community buy-in.** The KFP SDK is actively maintained by
-  the KFP team with its own release cadence, contributor base, and roadmap.
-  Migrating it would need agreement from KFP maintainers to either move
-  development into the Kubeflow SDK repo or maintain it as a shared effort.
-  Without that agreement, this is not feasible.
-- **Significant migration effort.** The KFP SDK is a large codebase — the
-  client, DSL, compiler, and components are tightly coupled and have their own
-  test suites, CI pipelines, and documentation. Absorbing all of that is a
-  huge effort.
-- **Breaking change for existing `kfp` users.** Users who `import kfp` today
-  would need a migration path. Either the `kfp` package becomes a thin
-  compatibility shim pointing to `kubeflow.pipelines`, or users must update
-  all imports — both are disruptive.
-- **Dual maintenance risk during transition.** Until the migration is complete,
-  bug fixes and features would need to land in both repos, creating a painful
-  transition period.
-- **KFP SDK serves non-Kubeflow use cases.** Some users run KFP standalone
-  without the broader Kubeflow platform. Tying the SDK to the Kubeflow repo
-  could create friction for those users.
-- **Decouples the KFP operator from its SDK.** Today the KFP backend
-  (API server, controllers, compiler) and the KFP SDK live in the same project
-  and evolve together. Migrating the SDK into the Kubeflow repo separates these
-  two — the operator stays in the KFP repo while the SDK moves out. This makes
-  it harder to coordinate API contract changes, test SDK against backend in CI,
-  and release them in lockstep. Other Kubeflow components (Trainer, Spark)
-  already have this operator/SDK split (operators live in their own repos), but
-  the KFP SDK is significantly larger and more tightly coupled to its backend
-  (DSL, compiler, components) than the thin client layers in Trainer or Spark.
+- Requires KFP community buy-in to move development.
+- Significant multi-quarter migration effort.
+- Breaking change for existing `kfp` users.
+- KFP SDK serves non-Kubeflow use cases (e.g. Vertex AI Pipelines).
+- Decouples the KFP operator from its SDK. Other Kubeflow components
+  (Trainer, Spark) already have this split, but the KFP SDK is significantly
+  larger and more tightly coupled to its backend.
 
-**Current stance:** The wrapper approach is the pragmatic path forward — it
-delivers the "one SDK" user experience today without requiring the migration.
-If the Kubeflow and KFP communities converge on a shared SDK vision in the
-future, this alternative becomes the natural next step, and the thin wrapper
-makes migration easier because the public API (`PipelinesClient`) would not
-change.
+**Current stance:** The re-export approach delivers the "one SDK" experience
+without the migration. If communities converge on a shared SDK vision in the
+future, this becomes the natural next step.
 
-### Alternative 5: Git submodule — pin the KFP SDK inside the Kubeflow SDK repo
+### Alternative 4: Git submodule
 
-Instead of depending on `kfp` as a PyPI package or fully migrating the code,
-include the KFP SDK repository as a git submodule within the Kubeflow SDK repo.
-The wrapper would import from the submodule-pinned copy of `kfp` rather than
-an externally installed package.
+Include the KFP SDK as a git submodule in the Kubeflow SDK repo.
 
-**Pros:**
-
-- **Pinned to an exact commit.** The Kubeflow SDK controls precisely which
-  version of the KFP SDK it builds and tests against — no surprises from
-  upstream releases. CI runs against the pinned commit, not whatever `>=2.0.0`
-  resolves to.
-- **No code duplication.** The KFP source stays in its own repo with its own
-  history and contributors. The submodule is a pointer, not a fork.
-- **Easier to patch locally.** If the wrapper needs a temporary fix in KFP
-  code (e.g. a bug blocking a release), it can pin to a fork branch or a
-  specific commit without waiting for an upstream release.
-- **Incremental path toward full migration.** If the community later decides
-  to absorb KFP into the Kubeflow SDK (Alternative 4), the submodule makes the
-  transition smoother — the code is already checked out in the repo.
-
-**Cons:**
-
-- **Submodule complexity.** Git submodules are notoriously painful for
-  contributors — `git clone` doesn't fetch them by default (`--recurse-submodules`
-  is needed), `git status` behaves differently, and updating the pin requires
-  explicit `git submodule update` commands. This raises the contribution barrier.
-- **Build and packaging friction.** The `kfp` package normally installs via
-  pip with its own `pyproject.toml` and dependencies. Building it from a
-  submodule requires custom packaging logic to include the submodule source in
-  the Kubeflow SDK wheel — or users still `pip install kfp` separately,
-  defeating the purpose.
-- **Two sources of truth.** The submodule pin can drift from the latest KFP
-  release. Someone has to actively bump the submodule — if forgotten, the
-  wrapper tests against stale code while users install the latest `kfp` from
-  PyPI.
-- **Doesn't solve the wrapper problem.** The wrapper still delegates to
-  `kfp.Client` — the submodule only controls which version is used at build
-  and test time. The runtime behavior is identical to the current proposal
-  unless the packaging also bundles the submodule source, which adds
-  significant complexity.
-- **CI complexity.** Testing requires checking out the submodule, installing
-  it in the test environment, and keeping the pin in sync with the KFP version
-  declared in `pyproject.toml`. This is more moving parts than a simple pip
-  dependency.
-
-**Current stance:** The added complexity is not justified. The wrapper's
-dependency on `kfp>=2.0.0` via pip is simpler for contributors, simpler for
-packaging, and achieves the same result. Version pinning concerns are better
-addressed with standard dependency management (lock files, CI version matrices)
-than with submodules.
+**Rejected:** Submodule complexity for contributors, build/packaging friction,
+two sources of truth, and it doesn't solve the API simplification problem.
+Standard pip dependency management is simpler.
