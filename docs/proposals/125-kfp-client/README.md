@@ -329,8 +329,8 @@ instead and a separate download component omitted.
 As an ML engineer, I want **`PipelinesClient`** to orchestrate **one pipeline**
 that chains **Spark → Trainer → Model Registry**.
 
-Component bodies are **stubbed** on purpose, to simplify the example. **Story 6** 
-fills in **BuiltinTrainer**, **TorchTune**, and **Initializers** for LLM-style 
+Component bodies are **stubbed** on purpose, to simplify the example. **Story 6**
+fills in **BuiltinTrainer**, **TorchTune**, and **Initializers** for LLM-style
 fine-tuning.
 
 ```python
@@ -1074,7 +1074,7 @@ completed = client.wait(run_id, callbacks=[my_callback])
 1. **Task logs** — `client.logs(run_id, task="train")`
 2. **Run events** — `client.events(run_id)`
 3. **Callbacks on wait** — `client.wait(run_id, callbacks=[my_callback])`
-4. **Server-side name resolution** — eliminates extra API calls 
+4. **Server-side name resolution** — eliminates extra API calls
     from client-side name → ID resolution
 
 **Why Phase 3:** Health checks and namespace management are infrastructure
@@ -1199,7 +1199,7 @@ and the pipeline already exists, a version label needs to be auto-generated.
 **Proposal:** Follow the approach used by the KFP UI for auto-generated
 names, with the option for users to manually set the version label.
 
-**Decision needed:** Adopt the KFP UI–style auto-versioning described above, 
+**Decision needed:** Adopt the KFP UI–style auto-versioning described above,
 or replace it with an explicit alternative.
 
 ### 6. `run()` with callable — implicit upload side-effect
@@ -1351,7 +1351,7 @@ Comparison with Trainer / Model Registry clients: see
 - **Unit tests (KFP repo):** All `PipelinesClient` methods tested against
   mocked KFP internals. Covers name resolution, auto-version resolution,
   unified upload logic, and error cases.
-- **E2E tests (KFP repo):** Against a live KFP server if possible. Cover 
+- **E2E tests (KFP repo):** Against a live KFP server if possible. Cover
   the full upload → run → wait → get flow.
 - **Integration tests (Kubeflow SDK repository):** Verify re-export works correctly.
   `from kubeflow.pipelines import PipelinesClient` resolves to the KFP
