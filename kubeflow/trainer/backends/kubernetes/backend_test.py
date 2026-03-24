@@ -686,8 +686,15 @@ def get_container() -> models.IoK8sApiCoreV1Container:
 
 def create_runtime_type(
     name: str,
+    scope: types.RuntimeScope = types.RuntimeScope.NAMESPACE,
 ) -> types.Runtime:
-    """Create a mock Runtime object for testing."""
+    """Create a mock Runtime object for testing.
+
+    Args:
+        name: Name of the runtime.
+        scope: The scope of the runtime (namespace-scoped or cluster-scoped).
+               Defaults to NAMESPACE for backward compatibility.
+    """
     trainer = types.RuntimeTrainer(
         trainer_type=types.TrainerType.CUSTOM_TRAINER,
         framework=name,
@@ -697,9 +704,7 @@ def create_runtime_type(
         image="example.com/test-runtime",
     )
     trainer.set_command(constants.TORCH_COMMAND)
-    # Namespaced TrainingRuntime objects and default torch runtime use namespace scope;
-    # other runtimes created as cluster-scoped use cluster scope.
-    return types.Runtime(name=name, trainer=trainer)
+    return types.Runtime(name=name, trainer=trainer, scope=scope)
 
 
 def get_train_job_data_type(
@@ -883,7 +888,10 @@ def test_verify_backend(test_case):
             name="get cluster-only runtime (not in namespace, exists in cluster)",
             expected_status=SUCCESS,
             config={"name": "cluster-only-runtime"},
-            expected_output=create_runtime_type(name="cluster-only-runtime"),
+            expected_output=create_runtime_type(
+                name="cluster-only-runtime",
+                scope=types.RuntimeScope.CLUSTER,
+            ),
         ),
     ],
 )
@@ -913,10 +921,10 @@ def test_get_runtime(kubernetes_backend, test_case):
             expected_status=SUCCESS,
             config={"name": LIST_RUNTIMES},
             expected_output=[
-                create_runtime_type(name="runtime-1"),
-                create_runtime_type(name="ns-runtime-2"),
-                create_runtime_type(name="runtime-2"),
-                create_runtime_type(name="runtime-3"),
+                create_runtime_type(name="runtime-1", scope=types.RuntimeScope.NAMESPACE),
+                create_runtime_type(name="ns-runtime-2", scope=types.RuntimeScope.NAMESPACE),
+                create_runtime_type(name="runtime-2", scope=types.RuntimeScope.CLUSTER),
+                create_runtime_type(name="runtime-3", scope=types.RuntimeScope.CLUSTER),
             ],
         ),
         # namespace retrieval fails (timeout) -> expect TimeoutError (raised immediately)
@@ -934,9 +942,9 @@ def test_get_runtime(kubernetes_backend, test_case):
                 "name": LIST_RUNTIMES,
             },
             expected_output=[
-                create_runtime_type(name="runtime-1"),
-                create_runtime_type(name="runtime-2"),
-                create_runtime_type(name="runtime-3"),
+                create_runtime_type(name="runtime-1", scope=types.RuntimeScope.CLUSTER),
+                create_runtime_type(name="runtime-2", scope=types.RuntimeScope.CLUSTER),
+                create_runtime_type(name="runtime-3", scope=types.RuntimeScope.CLUSTER),
             ],
         ),
         # cluster retrieval fails (timeout) -> expect TimeoutError (raised immediately)

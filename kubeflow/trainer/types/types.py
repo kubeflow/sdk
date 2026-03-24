@@ -245,6 +245,17 @@ class TrainerType(Enum):
     BUILTIN_TRAINER = BuiltinTrainer.__name__
 
 
+class RuntimeScope(Enum):
+    """Scope of a training runtime in Kubernetes.
+
+    NAMESPACE: Runtime is scoped to a single namespace (TrainingRuntime).
+    CLUSTER: Runtime is scoped cluster-wide (ClusterTrainingRuntime).
+    """
+
+    NAMESPACE = "namespace"
+    CLUSTER = "cluster"
+
+
 # Representation for the Trainer of the runtime.
 @dataclass
 class RuntimeTrainer:
@@ -267,9 +278,19 @@ class RuntimeTrainer:
 # Representation for the Training Runtime.
 @dataclass
 class Runtime:
+    """Training Runtime configuration that can be used to train models.
+
+    Args:
+        name: Name of the runtime.
+        trainer: The trainer configuration for this runtime.
+        pretrained_model: Optional pretrained model URI.
+        scope: The scope of the runtime (namespace-scoped or cluster-scoped).
+    """
+
     name: str
     trainer: RuntimeTrainer
     pretrained_model: str | None = None
+    scope: RuntimeScope = RuntimeScope.NAMESPACE
 
 
 # Representation for the TrainJob steps.

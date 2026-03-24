@@ -594,6 +594,16 @@ class KubernetesBackend(RuntimeBackend):
                 f"{constants.RUNTIME_FRAMEWORK_LABEL} label"
             )
 
+        # Determine runtime scope based on the resource type
+        scope = (
+            types.RuntimeScope.CLUSTER
+            if isinstance(
+                runtime_cr,
+                models.TrainerV1alpha1ClusterTrainingRuntime,
+            )
+            else types.RuntimeScope.NAMESPACE
+        )
+
         return types.Runtime(
             name=runtime_cr.metadata.name,
             trainer=utils.get_runtime_trainer(
@@ -601,6 +611,7 @@ class KubernetesBackend(RuntimeBackend):
                 runtime_cr.spec.template.spec.replicated_jobs,
                 runtime_cr.spec.ml_policy,
             ),
+            scope=scope,
         )
 
     def _read_pod_logs(self, pod_name: str, container_name: str, follow: bool) -> Iterator[str]:
