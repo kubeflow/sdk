@@ -348,7 +348,14 @@ def get_cluster_custom_object_response(*args, **kwargs):
         raise multiprocessing.TimeoutError()
     if args[3] == RUNTIME:
         raise RuntimeError()
+    if args[3] == NOT_FOUND:
+        # Simulate 404 for non-existent cluster runtime
+        raise client.ApiException(status=404)
+    if args[3] == FORBIDDEN:
+        # Simulate 403 for forbidden cluster runtime
+        raise client.ApiException(status=403)
     if args[2] == constants.CLUSTER_TRAINING_RUNTIME_PLURAL:
+        # Return the requested cluster runtime
         mock_thread.get.return_value = normalize_model(
             create_cluster_training_runtime(name=args[3]),
             models.TrainerV1alpha1ClusterTrainingRuntime,
@@ -861,18 +868,22 @@ def test_verify_backend(test_case):
             expected_error=RuntimeError,
         ),
         TestCase(
-            name="404 error (not found) when getting namespaced runtime -> fallback to cluster",
-            expected_status=SUCCESS,
+            name="404 error when getting namespaced runtime -> raise RuntimeError if not in cluster",
+            expected_status=FAILED,
             config={"name": NOT_FOUND},
-            expected_output=create_runtime_type(
-                name=NOT_FOUND,
-            ),
+            expected_error=RuntimeError,
         ),
         TestCase(
             name="403 error (forbidden) when getting namespaced runtime -> raise RuntimeError",
             expected_status=FAILED,
             config={"name": FORBIDDEN},
             expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="get cluster-only runtime (not in namespace, exists in cluster)",
+            expected_status=SUCCESS,
+            config={"name": "cluster-only-runtime"},
+            expected_output=create_runtime_type(name="cluster-only-runtime"),
         ),
     ],
 )
