@@ -352,7 +352,10 @@ def test_train(local_backend, mock_train_environment, test_case):
         if "rejects kubernetes" in test_case.name:
             assert "not compatible with" in error_msg
         elif "without runtime" in test_case.name:
-            assert "Runtime must be provided" in error_msg
+            assert (
+                "Runtime must be provided for LocalProcessBackend. Available runtimes are:"
+                in error_msg
+            )
         elif "without custom trainer" in test_case.name:
             assert "CustomTrainer must be set" in error_msg
     else:
