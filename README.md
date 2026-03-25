@@ -8,6 +8,8 @@
 
 Latest News 🔥
 
+- [2026/03] The Kubeflow SDK v0.4 is officially released with `SparkClient` and `ModelRegistryClient`
+  support. Check out [the announcement blog post](https://blog.kubeflow.org/kubeflow-sdk-0.4.0-release/).
 - [2026/01] We have our official documentation here at [Kubeflow SDK Documentation](https://sdk.kubeflow.org/en/latest/)
 - [2025/11] Please fill [this survey](https://docs.google.com/forms/d/e/1FAIpQLSet_IAFQzMMDWolzFt5LI9lhzqOOStjIGHxgYqKBnVcRtDfrw/viewform)
   to shape the future of Kubeflow SDK.
