@@ -348,7 +348,14 @@ def get_cluster_custom_object_response(*args, **kwargs):
         raise multiprocessing.TimeoutError()
     if args[3] == RUNTIME:
         raise RuntimeError()
+    if args[3] == NOT_FOUND:
+        # Simulate 404 for non-existent cluster runtime
+        raise client.ApiException(status=404)
+    if args[3] == FORBIDDEN:
+        # Simulate 403 for forbidden cluster runtime
+        raise client.ApiException(status=403)
     if args[2] == constants.CLUSTER_TRAINING_RUNTIME_PLURAL:
+        # Return the requested cluster runtime
         mock_thread.get.return_value = normalize_model(
             create_cluster_training_runtime(name=args[3]),
             models.TrainerV1alpha1ClusterTrainingRuntime,
@@ -679,8 +686,15 @@ def get_container() -> models.IoK8sApiCoreV1Container:
 
 def create_runtime_type(
     name: str,
+    scope: types.RuntimeScope = types.RuntimeScope.NAMESPACE,
 ) -> types.Runtime:
-    """Create a mock Runtime object for testing."""
+    """Create a mock Runtime object for testing.
+
+    Args:
+        name: Name of the runtime.
+        scope: The scope of the runtime (namespace-scoped or cluster-scoped).
+               Defaults to NAMESPACE for backward compatibility.
+    """
     trainer = types.RuntimeTrainer(
         trainer_type=types.TrainerType.CUSTOM_TRAINER,
         framework=name,
@@ -690,9 +704,7 @@ def create_runtime_type(
         image="example.com/test-runtime",
     )
     trainer.set_command(constants.TORCH_COMMAND)
-    # Namespaced TrainingRuntime objects and default torch runtime use namespace scope;
-    # other runtimes created as cluster-scoped use cluster scope.
-    return types.Runtime(name=name, trainer=trainer)
+    return types.Runtime(name=name, trainer=trainer, scope=scope)
 
 
 def get_train_job_data_type(
@@ -861,18 +873,25 @@ def test_verify_backend(test_case):
             expected_error=RuntimeError,
         ),
         TestCase(
-            name="404 error (not found) when getting namespaced runtime -> fallback to cluster",
-            expected_status=SUCCESS,
+            name="404 error when getting namespaced runtime -> raise RuntimeError if not in cluster",
+            expected_status=FAILED,
             config={"name": NOT_FOUND},
-            expected_output=create_runtime_type(
-                name=NOT_FOUND,
-            ),
+            expected_error=RuntimeError,
         ),
         TestCase(
             name="403 error (forbidden) when getting namespaced runtime -> raise RuntimeError",
             expected_status=FAILED,
             config={"name": FORBIDDEN},
             expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="get cluster-only runtime (not in namespace, exists in cluster)",
+            expected_status=SUCCESS,
+            config={"name": "cluster-only-runtime"},
+            expected_output=create_runtime_type(
+                name="cluster-only-runtime",
+                scope=types.RuntimeScope.CLUSTER,
+            ),
         ),
     ],
 )
@@ -902,10 +921,10 @@ def test_get_runtime(kubernetes_backend, test_case):
             expected_status=SUCCESS,
             config={"name": LIST_RUNTIMES},
             expected_output=[
-                create_runtime_type(name="runtime-1"),
-                create_runtime_type(name="ns-runtime-2"),
-                create_runtime_type(name="runtime-2"),
-                create_runtime_type(name="runtime-3"),
+                create_runtime_type(name="runtime-1", scope=types.RuntimeScope.NAMESPACE),
+                create_runtime_type(name="ns-runtime-2", scope=types.RuntimeScope.NAMESPACE),
+                create_runtime_type(name="runtime-2", scope=types.RuntimeScope.CLUSTER),
+                create_runtime_type(name="runtime-3", scope=types.RuntimeScope.CLUSTER),
             ],
         ),
         # namespace retrieval fails (timeout) -> expect TimeoutError (raised immediately)
@@ -923,9 +942,9 @@ def test_get_runtime(kubernetes_backend, test_case):
                 "name": LIST_RUNTIMES,
             },
             expected_output=[
-                create_runtime_type(name="runtime-1"),
-                create_runtime_type(name="runtime-2"),
-                create_runtime_type(name="runtime-3"),
+                create_runtime_type(name="runtime-1", scope=types.RuntimeScope.CLUSTER),
+                create_runtime_type(name="runtime-2", scope=types.RuntimeScope.CLUSTER),
+                create_runtime_type(name="runtime-3", scope=types.RuntimeScope.CLUSTER),
             ],
         ),
         # cluster retrieval fails (timeout) -> expect TimeoutError (raised immediately)

@@ -245,6 +245,17 @@ class TrainerType(Enum):
     BUILTIN_TRAINER = BuiltinTrainer.__name__
 
 
+class RuntimeScope(Enum):
+    """Scope of a training runtime in Kubernetes.
+
+    NAMESPACE: Runtime is scoped to a single namespace (TrainingRuntime).
+    CLUSTER: Runtime is scoped cluster-wide (ClusterTrainingRuntime).
+    """
+
+    NAMESPACE = "namespace"
+    CLUSTER = "cluster"
+
+
 # Representation for the Trainer of the runtime.
 @dataclass
 class RuntimeTrainer:
@@ -267,9 +278,19 @@ class RuntimeTrainer:
 # Representation for the Training Runtime.
 @dataclass
 class Runtime:
+    """Training Runtime configuration that can be used to train models.
+
+    Args:
+        name: Name of the runtime.
+        trainer: The trainer configuration for this runtime.
+        pretrained_model: Optional pretrained model URI.
+        scope: The scope of the runtime (namespace-scoped or cluster-scoped).
+    """
+
     name: str
     trainer: RuntimeTrainer
     pretrained_model: str | None = None
+    scope: RuntimeScope = RuntimeScope.NAMESPACE
 
 
 # Representation for the TrainJob steps.
@@ -291,6 +312,100 @@ class TrainJob:
     num_nodes: int
     creation_timestamp: datetime
     status: str = common_constants.UNKNOWN
+
+
+# Representation for TrainJob progress.
+@dataclass
+class JobProgress:
+    """Progress information for a TrainJob.
+
+    Provides a human-readable summary of job progress including completion
+    percentage, running steps, and pod health status.
+
+    Args:
+        job_name (`str`): The name of the TrainJob.
+        overall_status (`str`): The overall status of the job (e.g., 'Running', 'Complete', 'Failed').
+        total_steps (`int`): Total number of training steps.
+        completed_steps (`int`): Number of completed steps.
+        running_steps (`list[str]`): Names of currently running steps.
+        failed_steps (`list[str]`): Names of failed steps.
+        healthy_pods (`int`): Number of healthy pods running.
+        total_pods (`int`): Total number of pods expected.
+        completion_percentage (`float`): Completion percentage (0-100).
+    """
+
+    job_name: str
+    overall_status: str
+    total_steps: int
+    completed_steps: int
+    running_steps: list[str]
+    failed_steps: list[str]
+    healthy_pods: int
+    total_pods: int
+    completion_percentage: float
+
+    @classmethod
+    def from_job(cls, job: "TrainJob") -> "JobProgress":
+        """Create a JobProgress object from a TrainJob.
+
+        Args:
+            job (`TrainJob`): The TrainJob to extract progress from.
+
+        Returns:
+            JobProgress: An instance with calculated progress metrics.
+        """
+        total_steps = len(job.steps)
+        completed_steps = sum(
+            1
+            for step in job.steps
+            if step.status and step.status.lower() in ("succeeded", "complete")
+        )
+        running_steps = [
+            step.name for step in job.steps if step.status and step.status.lower() in ("running",)
+        ]
+        failed_steps = [
+            step.name
+            for step in job.steps
+            if step.status and step.status.lower() in ("failed", "error")
+        ]
+
+        # Calculate healthy pods and total pods
+        healthy_pods = sum(
+            1
+            for step in job.steps
+            if step.status and step.status.lower() in ("running", "succeeded", "complete")
+        )
+        total_pods = len(job.steps)
+
+        # Calculate completion percentage
+        completion_percentage = (completed_steps / total_steps * 100) if total_steps > 0 else 0.0
+
+        return cls(
+            job_name=job.name,
+            overall_status=job.status,
+            total_steps=total_steps,
+            completed_steps=completed_steps,
+            running_steps=running_steps,
+            failed_steps=failed_steps,
+            healthy_pods=healthy_pods,
+            total_pods=total_pods,
+            completion_percentage=completion_percentage,
+        )
+
+    def __str__(self) -> str:
+        """Return a human-readable progress summary."""
+        summary = f"Job: {self.job_name}\n"
+        summary += f"Status: {self.overall_status}\n"
+        summary += f"Progress: {self.completion_percentage:.1f}% ({self.completed_steps}/{self.total_steps} steps)\n"
+        summary += f"Pods: {self.healthy_pods}/{self.total_pods} healthy\n"
+
+        if self.running_steps:
+            summary += f"Running steps: {', '.join(self.running_steps)}\n"
+
+        if self.failed_steps:
+            summary += f"Failed steps: {', '.join(self.failed_steps)}\n"
+
+        return summary
 
 
 # Representation for TrainJob events.

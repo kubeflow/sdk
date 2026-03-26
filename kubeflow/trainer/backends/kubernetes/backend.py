@@ -460,9 +460,16 @@ class KubernetesBackend(RuntimeBackend):
         if not status.issubset(job_statuses):
             raise ValueError(f"Expected status {status} must be a subset of {job_statuses}")
 
-        if polling_interval > timeout:
+        if polling_interval >= timeout:
             raise ValueError(
-                f"Polling interval {polling_interval} must be less than timeout: {timeout}"
+                f"polling_interval ({polling_interval}) must be strictly less than "
+                f"timeout ({timeout})"
+            )
+
+        if polling_interval <= 0 or timeout <= 0:
+            raise ValueError(
+                f"polling_interval ({polling_interval}) and timeout ({timeout}) "
+                f"must both be positive"
             )
 
         for _ in range(round(timeout / polling_interval)):
@@ -587,6 +594,16 @@ class KubernetesBackend(RuntimeBackend):
                 f"{constants.RUNTIME_FRAMEWORK_LABEL} label"
             )
 
+        # Determine runtime scope based on the resource type
+        scope = (
+            types.RuntimeScope.CLUSTER
+            if isinstance(
+                runtime_cr,
+                models.TrainerV1alpha1ClusterTrainingRuntime,
+            )
+            else types.RuntimeScope.NAMESPACE
+        )
+
         return types.Runtime(
             name=runtime_cr.metadata.name,
             trainer=utils.get_runtime_trainer(
@@ -594,6 +611,7 @@ class KubernetesBackend(RuntimeBackend):
                 runtime_cr.spec.template.spec.replicated_jobs,
                 runtime_cr.spec.ml_policy,
             ),
+            scope=scope,
         )
 
     def _read_pod_logs(self, pod_name: str, container_name: str, follow: bool) -> Iterator[str]:

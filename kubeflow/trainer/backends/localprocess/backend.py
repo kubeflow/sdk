@@ -226,9 +226,16 @@ class LocalProcessBackend(RuntimeBackend):
         if _job is None:
             raise ValueError(f"No TrainJob with name {name}")
 
-        if polling_interval > timeout:
+        if polling_interval >= timeout:
             raise ValueError(
-                f"Polling interval {polling_interval} must be less than timeout: {timeout}"
+                f"polling_interval ({polling_interval}) must be strictly less than "
+                f"timeout ({timeout})"
+            )
+
+        if polling_interval <= 0 or timeout <= 0:
+            raise ValueError(
+                f"polling_interval ({polling_interval}) and timeout ({timeout}) "
+                f"must both be positive"
             )
 
         for _ in range(round(timeout / polling_interval)):

@@ -70,3 +70,119 @@ def test_backend_selection(test_case):
         client = TrainerClient(backend_config=test_case["backend_config"])
         backend_name = client.backend.__class__.__name__
         assert backend_name == test_case["expected_backend"]
+
+
+def test_get_job_progress():
+    """Test TrainerClient.get_job_progress method."""
+    from datetime import datetime
+
+    from kubeflow.trainer.types import types
+
+    # Mock the backend.get_job method
+    mock_backend = Mock()
+
+    # Create a sample TrainJob
+    runtime = types.Runtime(
+        name="test-runtime",
+        trainer=types.RuntimeTrainer(
+            trainer_type=types.TrainerType.CUSTOM_TRAINER,
+            framework="pytorch",
+            image="pytorch:latest",
+        ),
+    )
+
+    job = types.TrainJob(
+        name="test-job",
+        runtime=runtime,
+        steps=[
+            types.Step(
+                name="step-1",
+                status="Succeeded",
+                pod_name="pod-1",
+            ),
+            types.Step(
+                name="step-2",
+                status="Running",
+                pod_name="pod-2",
+            ),
+        ],
+        num_nodes=2,
+        creation_timestamp=datetime.now(),
+        status="Running",
+    )
+
+    mock_backend.get_job.return_value = job
+
+    client = TrainerClient(backend_config=LocalProcessBackendConfig())
+    client.backend = mock_backend
+
+    # Get progress
+    progress = client.get_job_progress("test-job")
+
+    # Verify the progress object
+    assert progress.job_name == "test-job"
+    assert progress.overall_status == "Running"
+    assert progress.total_steps == 2
+    assert progress.completed_steps == 1
+    assert progress.running_steps == ["step-2"]
+    assert progress.failed_steps == []
+    assert progress.healthy_pods == 2
+    assert progress.total_pods == 2
+    assert progress.completion_percentage == 50.0
+
+    # Verify backend.get_job was called with the correct name
+    mock_backend.get_job.assert_called_once_with(name="test-job")
+
+
+def test_get_job_progress_string_output():
+    """Test TrainerClient.get_job_progress returns readable string."""
+    from datetime import datetime
+
+    from kubeflow.trainer.types import types
+
+    # Mock the backend.get_job method
+    mock_backend = Mock()
+
+    # Create a sample TrainJob
+    runtime = types.Runtime(
+        name="test-runtime",
+        trainer=types.RuntimeTrainer(
+            trainer_type=types.TrainerType.CUSTOM_TRAINER,
+            framework="pytorch",
+            image="pytorch:latest",
+        ),
+    )
+
+    job = types.TrainJob(
+        name="my-training-job",
+        runtime=runtime,
+        steps=[
+            types.Step(
+                name="initialization",
+                status="Succeeded",
+                pod_name="pod-1",
+            ),
+            types.Step(
+                name="training",
+                status="Running",
+                pod_name="pod-2",
+            ),
+        ],
+        num_nodes=2,
+        creation_timestamp=datetime.now(),
+        status="Running",
+    )
+
+    mock_backend.get_job.return_value = job
+
+    client = TrainerClient(backend_config=LocalProcessBackendConfig())
+    client.backend = mock_backend
+
+    # Get progress and convert to string
+    progress = client.get_job_progress("my-training-job")
+    progress_str = str(progress)
+
+    # Verify the string representation contains expected information
+    assert "my-training-job" in progress_str
+    assert "Running" in progress_str
+    assert "50.0%" in progress_str
