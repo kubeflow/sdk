@@ -113,3 +113,34 @@ def test_data_cache_initializer(test_case: TestCase):
         assert test_case.expected_status == FAILED
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="CEWithChunkedOutputLoss has correct value",
+            expected_status=SUCCESS,
+            config={"loss": types.Loss.CEWithChunkedOutputLoss},
+            expected_output="torchtune.modules.loss.CEWithChunkedOutputLoss",
+        ),
+        TestCase(
+            name="ForwardKLLoss has correct value",
+            expected_status=SUCCESS,
+            config={"loss": types.Loss.ForwardKLLoss},
+            expected_output="torchtune.modules.loss.ForwardKLLoss",
+        ),
+        TestCase(
+            name="ForwardKLWithChunkedOutputLoss has correct value",
+            expected_status=SUCCESS,
+            config={"loss": types.Loss.ForwardKLWithChunkedOutputLoss},
+            expected_output="torchtune.modules.loss.ForwardKLWithChunkedOutputLoss",
+        ),
+    ],
+)
+def test_loss_enum(test_case: TestCase):
+    """Test Loss enum values match TorchTune module paths."""
+    print("Executing test:", test_case.name)
+    loss = test_case.config["loss"]
+    assert loss.value == test_case.expected_output
+    print("test execution complete")
