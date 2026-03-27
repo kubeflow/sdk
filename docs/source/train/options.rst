@@ -1,26 +1,27 @@
 Options Reference
 =================
 
-Options lets us customize how the TrainJob is created. It passes them as a list to the  "options" parameter of 
-:py:meth:'kubeflow.trainer.TrainerClient.train' method.
-
+Options let to customize how a TrainJob is created and executed. Pass them as a list to the '''options''' parameter of the
+:py:meth:`kubeflow.trainer.TrainerClient.train` method.
 .. code-block:: python
 
-   from kubeflow.trainer import TrainerClient
+   from kubeflow.trainer import TrainerClient, CustomTrainer
    from kubeflow.trainer.options import Name, Labels, Annotations
 
    trainer_client = TrainerClient()
    job_id = trainer_client.train(
-      trainer=CustomTrainer(fuc=train_function),
-      options=[
-         Name("my-train-job"),
-         Labels({"env": "prod", "team": "ml"}),
-         Annotations({"description": "This is a training experiment-42"})
-      ],
+       trainer=CustomTrainer(func=train_function),
+       options=[
+           Name("my-train-job"),
+           Labels({"team": "ml", "env": "prod"}),
+           Annotations({"note": "experiment-42"}),
+       ],
    )
 
-.. note:: 
-   Not all options work with every backend, each option documents which backend it supports. An uusupported option will raise an "ValueError" during the runtime.
+.. note::
+   Not all options work with every backend. Each option documents
+   which backends it supports. An unsupported option will raise a
+   `ValueError` at runtime.
 
 ----
 
@@ -29,54 +30,112 @@ Usage Guide
 
 Name
 ----
-Set a custom name for the TrainJob.
-Will work with "all backends".
+
+Set a custom name for the TrainJob resource. Works with all backends.
 
 .. code-block:: python
-
+   from kubeflow.trainer import TrainerClient, CustomTrainer
    from kubeflow.trainer.options import Name
 
+   trainer_client = TrainerClient()
+
    job_id = trainer_client.train(
-      trainer=CustomTrainer(fuc=train_function),
-      options=[
-         Name("my-custom-job"),
-      ],
+       trainer=CustomTrainer(func=train_function),
+       options=[Name("my-custom-job")],
    )
 
 Labels
 ------
 
-Add labels to the TrainJob resource metadata "metadata.labels". Will support only on the "kubernetes backend".
+Add labels to the TrainJob resource metadata (``metadata.labels``). Only supported on the **Kubernetes backend**.
 
-.. code-block:: python 
+.. code-block:: python
+
+   from kubeflow.trainer import TrainerClient, CustomTrainer
    from kubeflow.trainer.options import Labels
 
+   trainer_client = TrainerClient()
+
    job_id = trainer_client.train(
-      trainer=CustomTrainer(fuc=train_function),
-      options=[Labels({"team": "ml-platform", "version": "v2"})],
+       trainer=CustomTrainer(func=train_function),
+       options=[Labels({"team": "ml-platform", "version": "v2"})],
    )
 
 Annotations
 -----------
 
-Add annotations to the TrainJob resource metadata "metadata.annotations". Will support only on the "kubernetes backend".
-
-.. code-block:: python 
-   from kubeflow.trainer.options import Annotations
-
-   job_id = trainer_client.train(
-      trainer=CustomTrainer(fuc=train_function),
-      options=[Annotations({"owner": "ashley", "ticket": "JIRA-42"})],
-   )
-
-TrainerCommand
-----------------
-
-Override the trainer container command "spec.trainer.command". It can only be used with ''CustomTrainerContainer'' not with ''CustomTrainer'' or ''BuildinTrainer''.
+Add annotations to the TrainJob resource metadata(``metadata.annotations``). Only supported on the Kubernetes backend.
 
 .. code-block:: python
 
-   from kubeflow.trainer.options import (RuntimePatch, TrainingRuntimeSpecPatch, JobSetTemplatePatch, JobSetSpecPatch, ReplicatedJobPatch, JobTemplatePatch, JobSpecPatch, PodTemplatePatch, PodSpecPatch, ContainerPatch)
+   from kubeflow.trainer import TrainerClient, CustomTrainer
+   from kubeflow.trainer.options import Annotations
+
+   trainer_client = TrainerClient()
+
+   job_id = trainer_client.train(
+       trainer=CustomTrainer(func=train_function),
+       options=[Annotations({"owner": "alice", "ticket": "JIRA-42"})],
+   )
+
+TrainerCommand
+--------------
+
+Override the trainer container command (``spec.trainer.command``).
+Can Only be used with ''CustomTrainerContainer'' not with ''CustomTrainer''' or ''BuiltinTrainer''.
+
+.. code-block:: python
+
+   from kubeflow.trainer import TrainerClient, CustomTrainerContainer
+   from kubeflow.trainer.options import TrainerCommand
+
+   trainer_client = TrainerClient()
+
+   job_id = trainer_client.train(
+       trainer=CustomTrainerContainer(image="my-image:latest"),
+       options=[TrainerCommand(["python", "train.py", "--epochs", "10"])],
+   )
+
+TrainerArgs
+-----------
+
+Append extra arguments to the trainer container command.
+
+.. code-block:: python
+
+   from kubeflow.trainer import TrainerClient, CustomTrainer
+   from kubeflow.trainer.options import TrainerArgs
+
+   trainer_client = TrainerClient()
+
+   job_id = trainer_client.train(
+       trainer=CustomTrainer(func=train_function),
+       options=[TrainerArgs(["--lr", "0.001", "--batch-size", "32"])],
+   )
+
+RuntimePatch
+--------------
+
+Apply structured patches to the TrainJob (``spec.runtimePatches``) Use this for advanced Kubernetes-level customisation such as adding init containers, volumes, or tolerations. Only supported on the ''Kubernetes backend''.
+
+.. code-block:: python
+
+   from kubeflow.trainer import TrainerClient, CustomTrainer
+   from kubeflow.trainer.options import (
+       RuntimePatch,
+       TrainingRuntimeSpecPatch,
+       JobSetTemplatePatch,
+       JobSetSpecPatch,
+       ReplicatedJobPatch,
+       JobTemplatePatch,
+       JobSpecPatch,
+       PodTemplatePatch,
+       PodSpecPatch,
+       ContainerPatch,
+   )
+
+   trainer_client = TrainerClient()
+
    patch = RuntimePatch(
        training_runtime_spec=TrainingRuntimeSpecPatch(
            template=JobSetTemplatePatch(
@@ -108,28 +167,35 @@ Override the trainer container command "spec.trainer.command". It can only be us
        )
    )
 
-   job_id=client.train(
-      trainer = CustomTrainer(func=train_function),
-      options=[patch],
-      )
+   job_id = trainer_client.train(
+       trainer=CustomTrainer(func=train_function),
+       options=[patch],
+   )
+
+----
 
 Combining Multiple Options
 --------------------------
 
-To pass multiple options together in a single list:
+You can pass multiple options together in a single list:
 
-..code-block:: python
+.. code-block:: python
 
+   from kubeflow.trainer import TrainerClient, CustomTrainer
    from kubeflow.trainer.options import Name, Labels, Annotations
 
-   job_id = client.train(
-      trainer=CustomTrainer(fuc=train_function),
-      options=[
-         Name("experiment-01"),
-         Labels({"project": "llm-finetune"}),
-         Annotations({"owner": "ashley"})
-      ],
+   trainer_client = TrainerClient()
+
+   job_id = trainer_client.train(
+       trainer=CustomTrainer(func=train_function),
+       options=[
+           Name("experiment-001"),
+           Labels({"project": "llm-finetune"}),
+           Annotations({"author": "alice"}),
+       ],
    )
+
+----
 
 API Reference
 -------------
