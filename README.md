@@ -104,7 +104,16 @@ TrainerClient().wait_for_job_status(job_id)
 # Print TrainJob logs
 print("\n".join(TrainerClient().get_job_logs(name=job_id)))
 ```
+### Understanding the Training Workflow
 
+The training workflow in Kubeflow SDK typically follows these steps:
+
+1. Define a training function  
+2. Create a `TrainJobTemplate`  
+3. Submit the job using `TrainerClient`  
+4. Monitor execution and retrieve logs  
+
+This structured workflow helps users clearly understand how training jobs are created and executed in Kubeflow.
 ### Optimize hyperparameters for your training
 
 ```python
