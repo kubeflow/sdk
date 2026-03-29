@@ -507,7 +507,7 @@ class ContainerBackend(RuntimeBackend):
         containers = self._adapter.list_containers(filters=filters)
 
         if not containers:
-            raise ValueError(f"No TrainJob with name {name}")
+            raise RuntimeError(f"No TrainJob with name {name}")
 
         return containers
 
@@ -672,17 +672,16 @@ class ContainerBackend(RuntimeBackend):
             ValueError: If network metadata is missing or runtime not found
         """
         if not containers:
-            raise ValueError(f"No containers found for TrainJob {job_name}")
+            raise RuntimeError(f"No containers found for TrainJob {job_name}")
 
         # Get metadata from network
         network_id = containers[0]["labels"].get(f"{self.label_prefix}/network-id")
         if not network_id:
-            raise ValueError(f"TrainJob {job_name} is missing network metadata")
+            raise RuntimeError(f"TrainJob {job_name} is missing network metadata")
 
         network_info = self._adapter.get_network(network_id)
         if not network_info:
-            raise ValueError(f"TrainJob {job_name} network not found")
-
+            raise RuntimeError(f"TrainJob {job_name} network not found")
         network_labels = network_info.get("labels", {})
         runtime_name = network_labels.get(f"{self.label_prefix}/runtime-name")
 
@@ -690,10 +689,10 @@ class ContainerBackend(RuntimeBackend):
         try:
             job_runtime = self.get_runtime(runtime_name) if runtime_name else None
         except Exception as e:
-            raise ValueError(f"Runtime {runtime_name} not found for job {job_name}") from e
+            raise RuntimeError(f"Runtime {runtime_name} not found for job {job_name}") from e
 
         if not job_runtime:
-            raise ValueError(f"Runtime {runtime_name} not found for job {job_name}")
+            raise RuntimeError(f"Runtime {runtime_name} not found for job {job_name}")
 
         # Parse creation timestamp from first container
         created_str = containers[0].get("created", "")
