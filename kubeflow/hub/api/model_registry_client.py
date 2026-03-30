@@ -107,6 +107,9 @@ class ModelRegistryClient:
         owner: str | None = None,
         version_description: str | None = None,
         metadata: Mapping[str, SupportedTypes] | None = None,
+        storage_key: str | None = None,
+        storage_path: str | None = None,
+        service_account_name: str | None = None,
     ) -> RegisteredModel:
         """Register a model.
 
@@ -132,6 +135,11 @@ class ModelRegistryClient:
             owner: Owner of the model. Defaults to the client author.
             version_description: Description of the model version.
             metadata: Additional version metadata.
+            storage_key: Name of a Kubernetes Secret containing storage credentials
+                        (e.g., S3 access key/secret for MinIO or AWS).
+            storage_path: Subpath within the storage bucket where the model resides.
+            service_account_name: Kubernetes ServiceAccount name with IRSA/Workload
+                                 Identity for cloud-native auth.
 
         Returns:
             Registered model.
@@ -146,6 +154,9 @@ class ModelRegistryClient:
             owner=owner,
             description=version_description,
             metadata=metadata,
+            storage_key=storage_key,
+            storage_path=storage_path,
+            service_account_name=service_account_name,
         )
 
     def update_model(self, model: RegisteredModel) -> RegisteredModel:
