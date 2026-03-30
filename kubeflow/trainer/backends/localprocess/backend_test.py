@@ -16,13 +16,17 @@
 Unit tests for the LocalProcessBackend class in the Kubeflow Trainer SDK.
 """
 
+from datetime import datetime
 from unittest.mock import Mock, patch
 
 import pytest
 
 from kubeflow.trainer.backends.localprocess.backend import LocalProcessBackend
 from kubeflow.trainer.backends.localprocess.constants import LOCAL_RUNTIME_IMAGE
+from kubeflow.trainer.backends.localprocess.job import LocalJob
 from kubeflow.trainer.backends.localprocess.types import (
+    LocalBackendJobs,
+    LocalBackendStep,
     LocalProcessBackendConfig,
     LocalRuntimeTrainer,
 )
@@ -552,3 +556,87 @@ def test_get_job_status(local_backend, test_case):
 
     status = local_backend._LocalProcessBackend__get_job_status(job)
     assert status == test_case.expected_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="follow=False yields individual lines from stdout snapshot",
+            expected_status=SUCCESS,
+            config={"stdout": "line one\nline two\nline three\n"},
+            expected_output=["line one", "line two", "line three"],
+        ),
+        TestCase(
+            name="follow=False with empty stdout yields nothing",
+            expected_status=SUCCESS,
+            config={"stdout": ""},
+            expected_output=[],
+        ),
+    ],
+)
+def test_get_job_logs_follow_false(local_backend, test_case):
+    """Test that get_job_logs(follow=False) yields individual log lines without side effects."""
+    job = LocalJob(name="test-logs-follow-false-train", command=["echo", "hi"])
+    job._stdout = test_case.config["stdout"]
+    job._status = constants.TRAINJOB_COMPLETE
+    step = LocalBackendStep(step_name="train", job=job)
+    backend_job = LocalBackendJobs(
+        name="test-logs-follow-false", runtime=None, created=datetime.now()
+    )
+    backend_job.steps.append(step)
+    local_backend._LocalProcessBackend__local_jobs.append(backend_job)
+    lines = list(local_backend.get_job_logs("test-logs-follow-false", step="train"))
+    assert lines == test_case.expected_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="follow=True streams lines to caller without printing to stdout",
+            expected_status=SUCCESS,
+            config={"chunks": ["stream one\nstream two\n", "stream three\n"]},
+            expected_output=["stream one", "stream two", "stream three"],
+        ),
+        TestCase(
+            name="follow=True with empty stream yields nothing",
+            expected_status=SUCCESS,
+            config={"chunks": []},
+            expected_output=[],
+        ),
+    ],
+)
+def test_get_job_logs_follow_false_is_eager_snapshot(local_backend):
+    """Test that get_job_logs(follow=False) captures stdout at call time, not at iteration time."""
+    job = LocalJob(name="test-logs-eager-snapshot-train", command=["echo", "hi"])
+    job._stdout = "line one\nline two\n"
+    job._status = constants.TRAINJOB_COMPLETE
+    step = LocalBackendStep(step_name="train", job=job)
+    backend_job = LocalBackendJobs(
+        name="test-logs-eager-snapshot", runtime=None, created=datetime.now()
+    )
+    backend_job.steps.append(step)
+    local_backend._LocalProcessBackend__local_jobs.append(backend_job)
+
+    # Obtain the iterator before mutating stdout.
+    iterator = local_backend.get_job_logs("test-logs-eager-snapshot", step="train")
+    # Mutate stdout after the call — snapshot must NOT include this new line.
+    job._stdout += "line three\n"
+    assert list(iterator) == ["line one", "line two"]
+    """Test that get_job_logs(follow=True) streams lines to caller without printing to stdout."""
+    job = LocalJob(name="test-logs-follow-true-train", command=["echo", "hi"])
+    chunks = test_case.config["chunks"]
+    with patch.object(job, "stream_logs", return_value=iter(chunks)):
+        step = LocalBackendStep(step_name="train", job=job)
+        backend_job = LocalBackendJobs(
+            name="test-logs-follow-true", runtime=None, created=datetime.now()
+        )
+        backend_job.steps.append(step)
+        local_backend._LocalProcessBackend__local_jobs.append(backend_job)
+        lines = list(
+            local_backend.get_job_logs("test-logs-follow-true", follow=True, step="train")
+        )
+    captured = capsys.readouterr()
+    assert captured.out == "", "logs(follow=True) must not print to stdout"
+    assert lines == test_case.expected_output
