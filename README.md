@@ -236,7 +236,25 @@ client = TrainerClient(backend_config=ContainerBackendConfig())
 # Your training runs locally in isolated containers
 job_id = client.train(trainer=CustomTrainer(func=train_fn))
 ```
+## Observability and Tracing
 
+For users interested in monitoring and debugging distributed AI/ML workloads, the Kubeflow SDK can be integrated with tools such as OpenTelemetry for tracing SDK operations and training job lifecycle events.
+
+Example usage:
+
+```python
+from opentelemetry import trace
+from kubeflow.trainer import TrainerClient
+
+tracer = trace.get_tracer(__name__)
+
+with tracer.start_as_current_span("training_job"):
+    client = TrainerClient()
+    # Example training call
+    # client.train(...)
+```
+
+This example demonstrates how tracing can be added around SDK calls for better debugging and observability.
 ## Supported Kubeflow Projects
 
 | Project                     | Status           | Version Support | Description                                                           |
