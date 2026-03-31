@@ -37,9 +37,16 @@ import kubeflow.trainer.backends.kubernetes.utils as utils
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.options import (
     Annotations,
+    JobSetSpecPatch,
+    JobSetTemplatePatch,
+    JobSpecPatch,
+    JobTemplatePatch,
     Labels,
-    SpecAnnotations,
-    SpecLabels,
+    PodSpecPatch,
+    PodTemplatePatch,
+    ReplicatedJobPatch,
+    RuntimePatch,
+    TrainingRuntimeSpecPatch,
 )
 from kubeflow.trainer.test.common import (
     DEFAULT_NAMESPACE,
@@ -311,8 +318,7 @@ def get_train_job(
     train_job_trainer: models.TrainerV1alpha1Trainer | None = None,
     labels: dict[str, str] | None = None,
     annotations: dict[str, str] | None = None,
-    spec_labels: dict[str, str] | None = None,
-    spec_annotations: dict[str, str] | None = None,
+    runtime_patches: list[models.TrainerV1alpha1RuntimePatch] | None = None,
 ) -> models.TrainerV1alpha1TrainJob:
     """
     Create a mock TrainJob object with optional trainer configurations.
@@ -328,8 +334,7 @@ def get_train_job(
         spec=models.TrainerV1alpha1TrainJobSpec(
             runtimeRef=models.TrainerV1alpha1RuntimeRef(name=runtime_name),
             trainer=train_job_trainer,
-            labels=spec_labels,
-            annotations=spec_annotations,
+            runtimePatches=runtime_patches,
         ),
     )
 
@@ -603,7 +608,7 @@ def create_cluster_training_runtime(
         ),
         spec=models.TrainerV1alpha1TrainingRuntimeSpec(
             mlPolicy=models.TrainerV1alpha1MLPolicy(
-                torch=models.TrainerV1alpha1TorchMLPolicySource(),
+                torch={},
                 numNodes=2,
             ),
             template=models.TrainerV1alpha1JobSetTemplateSpec(
@@ -632,7 +637,7 @@ def create_training_runtime(
         ),
         spec=models.TrainerV1alpha1TrainingRuntimeSpec(
             mlPolicy=models.TrainerV1alpha1MLPolicy(
-                torch=models.TrainerV1alpha1TorchMLPolicySource(),
+                torch={},
                 numNodes=2,
             ),
             template=models.TrainerV1alpha1JobSetTemplateSpec(
@@ -1242,30 +1247,82 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             ),
         ),
         TestCase(
-            name="train with spec labels and annotations",
+            name="train with runtime patches",
             expected_status=SUCCESS,
             config={
                 "options": [
-                    SpecLabels({"app": "training", "version": "v1.0"}),
-                    SpecAnnotations({"prometheus.io/scrape": "true"}),
+                    RuntimePatch(
+                        training_runtime_spec=TrainingRuntimeSpecPatch(
+                            template=JobSetTemplatePatch(
+                                spec=JobSetSpecPatch(
+                                    replicated_jobs=[
+                                        ReplicatedJobPatch(
+                                            name="node",
+                                            template=JobTemplatePatch(
+                                                spec=JobSpecPatch(
+                                                    template=PodTemplatePatch(
+                                                        spec=PodSpecPatch(
+                                                            node_selector={"node-type": "gpu-a100"},
+                                                        ),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
+                    ),
                 ],
             },
             expected_output=get_train_job(
                 runtime_name=TORCH_RUNTIME,
                 train_job_name=BASIC_TRAIN_JOB_NAME,
-                spec_labels={"app": "training", "version": "v1.0"},
-                spec_annotations={"prometheus.io/scrape": "true"},
+                runtime_patches=[
+                    models.TrainerV1alpha1RuntimePatch(
+                        manager="trainer.kubeflow.org/kubeflow-sdk",
+                        training_runtime_spec=models.TrainerV1alpha1TrainingRuntimeSpecPatch(
+                            template=models.TrainerV1alpha1JobSetTemplatePatch(
+                                spec=models.TrainerV1alpha1JobSetSpecPatch(
+                                    replicated_jobs=[
+                                        models.TrainerV1alpha1ReplicatedJobPatch(
+                                            name="node",
+                                            template=models.TrainerV1alpha1JobTemplatePatch(
+                                                spec=models.TrainerV1alpha1JobSpecPatch(
+                                                    template=models.TrainerV1alpha1PodTemplatePatch(
+                                                        spec=models.TrainerV1alpha1PodSpecPatch(
+                                                            node_selector={"node-type": "gpu-a100"},
+                                                        ),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
+                    ),
+                ],
             ),
         ),
         TestCase(
-            name="train with both metadata and spec labels/annotations",
+            name="train with metadata labels and runtime patches",
             expected_status=SUCCESS,
             config={
                 "options": [
                     Labels({"owner": "ml-team"}),
                     Annotations({"description": "Fine-tuning job"}),
-                    SpecLabels({"app": "training", "version": "v1.0"}),
-                    SpecAnnotations({"prometheus.io/scrape": "true"}),
+                    RuntimePatch(
+                        training_runtime_spec=TrainingRuntimeSpecPatch(
+                            template=JobSetTemplatePatch(
+                                metadata={
+                                    "labels": {
+                                        "app": "training",
+                                    },
+                                },
+                            ),
+                        ),
+                    ),
                 ],
             },
             expected_output=get_train_job(
@@ -1273,8 +1330,20 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                 train_job_name=BASIC_TRAIN_JOB_NAME,
                 labels={"owner": "ml-team"},
                 annotations={"description": "Fine-tuning job"},
-                spec_labels={"app": "training", "version": "v1.0"},
-                spec_annotations={"prometheus.io/scrape": "true"},
+                runtime_patches=[
+                    models.TrainerV1alpha1RuntimePatch(
+                        manager="trainer.kubeflow.org/kubeflow-sdk",
+                        training_runtime_spec=models.TrainerV1alpha1TrainingRuntimeSpecPatch(
+                            template=models.TrainerV1alpha1JobSetTemplatePatch(
+                                metadata={
+                                    "labels": {
+                                        "app": "training",
+                                    },
+                                },
+                            ),
+                        ),
+                    ),
+                ],
             ),
         ),
     ],

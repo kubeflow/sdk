@@ -451,7 +451,7 @@ class S3ModelInitializer(BaseInitializer):
     Args:
         storage_uri (`str`): The S3 URI for the model in the format 's3://bucket-name/path/to/model'.
         ignore_patterns (`Optional[list[str]]`): List of file patterns to ignore during download.
-            Defaults to `['*.msgpack', '*.h5', '*.bin', '.pt', '.pth']`.
+            Defaults to `['*.msgpack', '*.h5', '*.bin', '*.pt', '*.pth']`.
         endpoint (`Optional[str]`): Custom S3 endpoint URL.
         access_key_id (`Optional[str]`): Access key for authentication.
         secret_access_key (`Optional[str]`): Secret key for authentication.

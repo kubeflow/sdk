@@ -36,8 +36,7 @@ from kubeflow.trainer.options import (
     Annotations,
     Labels,
     Name,
-    PodTemplateOverride,
-    PodTemplateOverrides,
+    RuntimePatch,
 )
 from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.types import types
@@ -295,13 +294,7 @@ def test_get_runtime_packages(local_backend, test_case):
                 "trainer": types.CustomTrainer(
                     func=dummy_training_function,
                 ),
-                "options": [
-                    PodTemplateOverrides(
-                        PodTemplateOverride(
-                            target_jobs=["node"],
-                        )
-                    )
-                ],
+                "options": [RuntimePatch()],
             },
             expected_error=ValueError,
         ),

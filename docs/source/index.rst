@@ -84,12 +84,13 @@ Supported Projects
    * - :doc:`Model Registry <hub/index>`
      - ✅ Available
      - Manage model artifacts and versions
+   * - :doc:`Spark <spark/index>`
+     - ✅ Available
+     - Data processing and feature engineering
+
    * - Pipelines
      - 🚧 Planned
      - Build, run, and track AI workflows
-   * - Spark Operator
-     - 🚧 Planned
-     - Data processing and feature engineering
    * - Feast
      - 🚧 Planned
      - Feature store for machine learning
@@ -146,7 +147,9 @@ Getting Involved
    train/custom-training
    train/distributed
    train/runtimes
+   train/options
    train/api
+
 
 .. toctree::
    :maxdepth: 2
@@ -157,6 +160,14 @@ Getting Involved
    optimize/search-space
    optimize/algorithms
    optimize/api
+
+.. toctree::
+   :maxdepth: 2
+   :hidden:
+   :caption: Spark
+
+   spark/index
+   spark/api
 
 .. toctree::
    :maxdepth: 2
