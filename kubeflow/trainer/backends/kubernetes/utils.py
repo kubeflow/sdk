@@ -661,6 +661,10 @@ def get_model_initializer(
 # Annotation key prefix for W3C trace context propagation.
 _TRACE_ANNOTATION_PREFIX = "opentelemetry.io/"
 
+# Only propagate W3C Trace Context headers — not baggage or other
+# propagator-injected keys that could carry PII or unbounded values.
+_W3C_TRACE_HEADERS = frozenset({"traceparent", "tracestate"})
+
 
 def inject_trace_context(
     annotations: dict[str, str] | None,
@@ -668,8 +672,10 @@ def inject_trace_context(
     """Inject W3C trace context into annotations when OpenTelemetry is available.
 
     Uses the global OTel propagator to inject ``traceparent`` / ``tracestate``
-    headers into a carrier dict, then merges them into *annotations* under the
-    ``opentelemetry.io/`` key prefix.
+    headers into a carrier dict, then merges only those two keys into
+    *annotations* under the ``opentelemetry.io/`` key prefix.
+
+    Existing ``opentelemetry.io/*`` annotations are not overwritten.
 
     Returns *annotations* unchanged when the ``opentelemetry`` package is not
     installed or when no active span context exists.
@@ -689,6 +695,10 @@ def inject_trace_context(
         annotations = {}
 
     for key, value in carrier.items():
-        annotations[f"{_TRACE_ANNOTATION_PREFIX}{key}"] = value
+        if key not in _W3C_TRACE_HEADERS:
+            continue
+        annotation_key = f"{_TRACE_ANNOTATION_PREFIX}{key}"
+        if annotation_key not in annotations:
+            annotations[annotation_key] = value
 
     return annotations

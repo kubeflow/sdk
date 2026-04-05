@@ -869,12 +869,14 @@ class TestInjectTraceContext:
     def test_passthrough_without_otel(self):
         """Annotations returned unchanged when opentelemetry is not installed."""
         existing = {"user-key": "user-value"}
-        result = utils.inject_trace_context(existing)
+        with patch.dict("sys.modules", {"opentelemetry.propagate": None}):
+            result = utils.inject_trace_context(existing)
         assert result is existing
 
     def test_none_passthrough_without_otel(self):
         """None returned when annotations is None and opentelemetry is absent."""
-        assert utils.inject_trace_context(None) is None
+        with patch.dict("sys.modules", {"opentelemetry.propagate": None}):
+            assert utils.inject_trace_context(None) is None
 
     def test_no_active_context(self):
         """No annotations added when OTel is present but no span is active."""
@@ -926,3 +928,30 @@ class TestInjectTraceContext:
         assert result["team"] == "ml-platform"
         assert result["created-by"] == "sdk"
         assert result["opentelemetry.io/traceparent"] == SAMPLE_TRACEPARENT
+
+    def test_does_not_overwrite_existing_trace_annotations(self):
+        """Pre-set opentelemetry.io/* annotations are preserved."""
+        custom_tp = "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01"
+        mock_mod = _mock_otel_propagate({"traceparent": SAMPLE_TRACEPARENT})
+        original = {"opentelemetry.io/traceparent": custom_tp}
+        with patch.dict(
+            "sys.modules",
+            {"opentelemetry": MagicMock(), "opentelemetry.propagate": mock_mod},
+        ):
+            result = utils.inject_trace_context(original)
+        assert result["opentelemetry.io/traceparent"] == custom_tp
+
+    def test_filters_non_w3c_headers(self):
+        """Only traceparent/tracestate are injected — baggage is dropped."""
+        mock_mod = _mock_otel_propagate(
+            {"traceparent": SAMPLE_TRACEPARENT, "baggage": "userId=12345"}
+        )
+        with patch.dict(
+            "sys.modules",
+            {"opentelemetry": MagicMock(), "opentelemetry.propagate": mock_mod},
+        ):
+            result = utils.inject_trace_context(None)
+        assert result == {
+            "opentelemetry.io/traceparent": SAMPLE_TRACEPARENT,
+        }
+        assert "opentelemetry.io/baggage" not in result
