@@ -75,10 +75,10 @@ LocalProcess) and `PipelinesClient`. A shared telemetry module in
 `kubeflow/common/telemetry/` provides helpers for tracer/meter access, attribute constants,
 context propagation, and a `configure_telemetry()` quickstart function.
 
-Every traced operation produces two spans — one at the client level (`INTERNAL`) and one at
-the backend level (`CLIENT`) — keeping traces readable while preserving debugging detail.
+Every traced operation produces two spans: one at the client level (`INTERNAL`) and one at
+the backend level (`CLIENT`). This keeps traces readable while preserving debugging detail.
 When telemetry is configured, the overhead per operation is one span allocation and a few
-attribute writes — negligible for training workflows that run for seconds to hours.
+attribute writes, negligible for training workflows that run for seconds to hours.
 `OptimizerClient`, `ModelRegistryClient`, and `SparkClient` are stretch deliverables that
 reuse the same module.
 
@@ -87,7 +87,7 @@ reuse the same module.
 **Installation:**
 
 ```bash
-# SDK works as before tracing is no-op
+# SDK works as before; tracing is no-op
 pip install kubeflow
 
 # User adds OTel SDK + exporter when they want observability
@@ -166,13 +166,26 @@ TrainerClient.wait_for_job_status                      [45.0s] INTERNAL
     +-- status: OK
 ```
 
+**What an error trace looks like:**
+
+```
+TrainerClient.train                                    [0.3s]  INTERNAL  ERROR
+| kubeflow.trainer.type:  CustomTrainer
+| error.type:             kubernetes.client.ApiException
+|
++-- KubernetesBackend.train                            [0.2s]  CLIENT   ERROR
+    | kubeflow.backend.type:   kubernetes
+    | Exception: ApiException(403): Forbidden
+    +-- status: ERROR
+```
+
 ### User Stories
 
 #### Story 1: Debugging a Slow Training Job Submission
 
 As an ML engineer, I call `client.train()` and it takes 10 seconds to return. With OTel
 traces, I can see that `KubernetesBackend.train` spent 9.5 seconds on
-`create_namespaced_custom_object` — the Kubernetes API server was slow, not the SDK.
+`create_namespaced_custom_object`. The Kubernetes API server was slow, not the SDK.
 
 #### Story 2: Monitoring Job Error Rates
 
@@ -191,7 +204,7 @@ the way through to `training.epoch` inside the pod.
 #### Story 4: Zero Impact Without Configuration
 
 As an ML engineer, I install `kubeflow` without any OTel packages. My existing workflows
-are unaffected — no errors, no performance overhead, no configuration needed. The SDK
+are unaffected: no errors, no performance overhead, no configuration needed. The SDK
 uses no-op implementations by default.
 
 ## Design Details
@@ -202,7 +215,7 @@ uses no-op implementations by default.
 kubeflow/
 +-- common/
 |   +-- telemetry/                    # NEW shared OTel infrastructure
-|   |   +-- __init__.py               # get_tracer(), get_meter(), configure_telemetry()
+|   |   +-- __init__.py               # configure_telemetry() and module-level tracer/meter setup
 |   |   +-- attributes.py             # Kubeflow-specific attribute constants
 |   |   +-- configure.py              # Exporter/sampler setup helper
 |   |   +-- propagation.py            # TRACEPARENT injection for pods/containers
@@ -248,13 +261,13 @@ dev = [
 ]
 ```
 
-Why `opentelemetry-api` as a core dependency: The
+**`opentelemetry-api` as a core dependency.** The
 [OTel native instrumentation guidelines](https://opentelemetry.io/docs/concepts/instrumentation/libraries/)
-recommend libraries depend on `opentelemetry-api` only. The package is lightweight (~100KB,
-only `typing-extensions` as a transitive dependency) and no-op by default, so there is no
-runtime cost when users don't configure telemetry.
+recommend libraries depend on `opentelemetry-api` only. The package is under 100KB
+compressed, with `typing-extensions` and `importlib-metadata` as transitive dependencies,
+and is no-op by default. There is no runtime cost when users don't configure telemetry.
 
-Why `opentelemetry-semantic-conventions`: Provides Python constants for standard attribute
+**`opentelemetry-semantic-conventions`.** Provides Python constants for standard attribute
 names (e.g., `K8S_NAMESPACE_NAME` instead of the raw string `"k8s.namespace.name"`).
 Prevents silent typos and provides IDE autocomplete.
 
@@ -373,6 +386,8 @@ attributes are defined in the
 The SDK injects W3C Trace Context into training pods, containers, and subprocesses using
 the `TRACEPARENT` environment variable. This follows the
 [OTel Environment Carriers spec](https://opentelemetry.io/docs/specs/otel/context/env-carriers/).
+The propagator injects both `TRACEPARENT` and `TRACESTATE` (if present). `TRACESTATE`
+carries vendor-specific trace data and is part of the W3C Trace Context standard.
 
 ```python
 # kubeflow/common/telemetry/propagation.py
@@ -398,7 +413,7 @@ Injection points:
 User-side extraction (optional, written by the user in their training code):
 
 ```python
-# Inside the training pod — user writes this if they want end-to-end tracing
+# Inside the training pod; user writes this if they want end-to-end tracing
 import os
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from opentelemetry import trace
@@ -542,8 +557,6 @@ mechanical: wrap public methods with spans, set the right attributes, add unit t
 - The OTel Environment Carriers spec (used for `TRACEPARENT` injection) is currently at
   Alpha status in the OTel specification. The injection mechanism may need to be updated
   as the spec matures.
-- PipelinesClient instrumentation depends on [PR #343](https://github.com/kubeflow/sdk/pull/343)
-  being merged. If not merged in time, Phase 4 and Phase 5 swap order.
 - The GenAI semantic conventions are still evolving. Training-specific attributes may be
   added upstream, which we can adopt incrementally.
 - `configure_telemetry()` requires `opentelemetry-sdk` (not a core dependency). Users who
@@ -561,14 +574,14 @@ mechanical: wrap public methods with spans, set the right attributes, add unit t
   - **Mitigation**: Document sampling configuration in getting-started guide.
     `configure_telemetry()` accepts a `sampling_rate` parameter.
 - **Risk**: `TRACEPARENT` env var injection relies on an Alpha-status OTel spec.
-  - **Mitigation**: The injection is a simple env var — even if the spec changes, the
+  - **Mitigation**: The injection is a simple env var. Even if the spec changes, the
     mechanism is trivial to update. The env var is harmlessly ignored if not consumed.
 
 ### Test Plan
 
 `opentelemetry-sdk` is added to the `dev` dependency group for `InMemorySpanExporter`.
 
-A shared helper goes in `kubeflow/trainer/test/common.py`:
+A shared test helper goes in `kubeflow/common/telemetry/test_utils.py`:
 
 ```python
 from opentelemetry import trace
@@ -608,7 +621,8 @@ extends `TestCase` with `expected_spans`, `expected_attributes`, and
 - **Beta:** Metrics implemented. PipelinesClient instrumented. Log correlation documented
   and tested. GenAI conventions applied where applicable.
 - **Stable:** Stretch clients (OptimizerClient, ModelRegistryClient, SparkClient)
-  instrumented. E2E tests with OTel Collector. Community feedback addressed.
+  instrumented. E2E tests with OTel Collector. At least one release cycle with no
+  breaking changes to span names or attribute keys.
 
 ## Implementation Plan
 
@@ -657,8 +671,8 @@ Make OTel an optional extra (`pip install kubeflow[telemetry]`) with `try/except
 guards.
 
 Rejected because every instrumentation call would need an `if _tracer:` guard, duplicating
-control flow throughout the codebase. The OTel API is under 100KB with only
-`typing-extensions` as a transitive dependency, and no-op by default. The SDK already
+control flow throughout the codebase. The OTel API is under 100KB compressed, with only `typing-extensions` and
+`importlib-metadata` as transitive dependencies, and is no-op by default. The SDK already
 depends on `kubernetes` which is much heavier. The OTel spec explicitly says libraries
 should depend on the API.
 
