@@ -806,6 +806,39 @@ class ContainerBackend(RuntimeBackend):
     def get_job_events(self, name: str) -> list[types.Event]:
         raise NotImplementedError()
 
+    def _build_failure_message(self, name: str) -> str:
+        """Build a detailed failure message with per-container exit codes and log tails.
+
+        Args:
+            name: Name of the training job.
+
+        Returns:
+            Formatted error message string.
+        """
+        from collections import deque
+
+        lines = [f"TrainJob {name} is Failed"]
+        try:
+            containers = self._get_job_containers(name)
+            for container in sorted(containers, key=lambda c: c["name"]):
+                step = container["labels"].get(f"{self.label_prefix}/step", "unknown")
+                status, exit_code = self._adapter.container_status(container["id"])
+                lines.append(f"  {step}: status={status}, exit_code={exit_code}")
+                if status == "exited" and exit_code != 0:
+                    try:
+                        tail: deque[str] = deque(maxlen=10)
+                        for chunk in self._adapter.container_logs(container["id"], follow=False):
+                            tail.extend(chunk.strip().splitlines())
+                        if tail:
+                            lines.append("  Last logs:")
+                            for log_line in tail:
+                                lines.append(f"    {log_line}")
+                    except Exception:
+                        lines.append("  (unable to retrieve logs)")
+        except Exception as e:
+            logger.debug(f"Failed to build failure details for TrainJob {name}: {e}")
+        return "\n".join(lines)
+
     def wait_for_job_status(
         self,
         name: str,
@@ -829,7 +862,7 @@ class ContainerBackend(RuntimeBackend):
             if tj.status in status:
                 return tj
             if constants.TRAINJOB_FAILED not in status and tj.status == constants.TRAINJOB_FAILED:
-                raise RuntimeError(f"TrainJob {name} is Failed")
+                raise RuntimeError(self._build_failure_message(name))
             time.sleep(polling_interval)
         raise TimeoutError(f"Timeout waiting for TrainJob {name} to reach status: {status}")
 

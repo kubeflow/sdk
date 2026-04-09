@@ -938,6 +938,11 @@ def test_wait_for_job_status(container_backend, test_case):
 
     except Exception as e:
         assert type(e) is test_case.expected_error
+        if test_case.name == "job fails":
+            msg = str(e)
+            assert f"TrainJob {job_name} is Failed" in msg
+            assert "exit_code=1" in msg
+            assert "Last logs:" in msg
     print("test execution complete")
 
 
@@ -1122,3 +1127,61 @@ def test_create_adapter_error_message_format():
         error_msg = str(exc_info.value)
         assert "Could not connect" in error_msg
         assert "tried:" in error_msg
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="no packages returns empty string",
+            expected_status=SUCCESS,
+            config={"packages": None},
+            expected_output="",
+        ),
+        TestCase(
+            name="single package with defaults",
+            expected_status=SUCCESS,
+            config={"packages": ["torchvision"]},
+        ),
+        TestCase(
+            name="multiple packages with custom index",
+            expected_status=SUCCESS,
+            config={
+                "packages": ["torchvision", "transformers[torch]"],
+                "pip_index_urls": [
+                    "https://pypi.org/simple",
+                    "https://download.pytorch.org/whl/cpu",
+                ],
+            },
+        ),
+    ],
+)
+def test_build_pip_install_cmd(test_case):
+    """Test pip install command generation."""
+    from kubeflow.trainer.backends.container import utils as container_utils
+
+    print("Executing test:", test_case.name)
+    trainer = types.CustomTrainer(
+        func=simple_train_func,
+        packages_to_install=test_case.config.get("packages"),
+        pip_index_urls=test_case.config.get("pip_index_urls"),
+    )
+    result = container_utils.build_pip_install_cmd(trainer)
+
+    if test_case.config.get("packages") is None:
+        assert result == ""
+    else:
+        # Verify retry/fallback structure
+        assert "if " in result
+        assert "--user" in result
+        assert "elif " in result
+        assert "exit 1" in result
+        assert result.endswith("&& ")
+        # Verify packages are present
+        for pkg in test_case.config["packages"]:
+            assert pkg in result
+        # Verify extra index URLs are present
+        for url in test_case.config.get("pip_index_urls", [])[1:]:
+            assert url in result
+
+    print("test execution complete")
