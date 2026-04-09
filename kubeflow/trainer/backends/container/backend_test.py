@@ -895,30 +895,36 @@ def test_get_job_logs(container_backend, test_case):
             config={"wait_status": constants.TRAINJOB_COMPLETE, "container_exit_code": 1},
             expected_error=RuntimeError,
         ),
+        TestCase(
+            name="polling interval >= timeout error",
+            expected_status=FAILED,
+            config={"polling_interval": 5, "timeout": 5},
+            expected_error=ValueError,
+        ),
     ],
 )
 def test_wait_for_job_status(container_backend, test_case):
     """Test waiting for job status."""
     print("Executing test:", test_case.name)
-    try:
-        trainer = types.CustomTrainer(func=simple_train_func, num_nodes=1)
-        runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
-        job_name = container_backend.train(runtime=runtime, trainer=trainer)
+    trainer = types.CustomTrainer(func=simple_train_func, num_nodes=1)
+    runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
+    job_name = container_backend.train(runtime=runtime, trainer=trainer)
 
-        if test_case.name == "wait for complete":
-            container_id = container_backend._adapter.containers_created[0]["id"]
-            container_backend._adapter.set_container_status(
-                container_id, "exited", test_case.config["container_exit_code"]
-            )
+    if test_case.name == "wait for complete":
+        container_id = container_backend._adapter.containers_created[0]["id"]
+        container_backend._adapter.set_container_status(
+            container_id, "exited", test_case.config["container_exit_code"]
+        )
 
-            completed_job = container_backend.wait_for_job_status(
-                job_name, status={test_case.config["wait_status"]}, timeout=5, polling_interval=1
-            )
+        completed_job = container_backend.wait_for_job_status(
+            job_name, status={test_case.config["wait_status"]}, timeout=5, polling_interval=1
+        )
 
-            assert test_case.expected_status == SUCCESS
-            assert completed_job.status == constants.TRAINJOB_COMPLETE
+        assert test_case.expected_status == SUCCESS
+        assert completed_job.status == constants.TRAINJOB_COMPLETE
 
-        elif test_case.name == "wait timeout":
+    elif test_case.name == "wait timeout":
+        with pytest.raises(test_case.expected_error):
             container_backend.wait_for_job_status(
                 job_name,
                 status={test_case.config["wait_status"]},
@@ -926,18 +932,24 @@ def test_wait_for_job_status(container_backend, test_case):
                 polling_interval=1,
             )
 
-        elif test_case.name == "job fails":
-            container_id = container_backend._adapter.containers_created[0]["id"]
-            container_backend._adapter.set_container_status(
-                container_id, "exited", test_case.config["container_exit_code"]
-            )
+    elif test_case.name == "job fails":
+        container_id = container_backend._adapter.containers_created[0]["id"]
+        container_backend._adapter.set_container_status(
+            container_id, "exited", test_case.config["container_exit_code"]
+        )
 
+        container_backend.wait_for_job_status(
+            job_name, status={test_case.config["wait_status"]}, timeout=5, polling_interval=1
+        )
+
+    elif test_case.name == "polling interval >= timeout error":
+        with pytest.raises(test_case.expected_error):
             container_backend.wait_for_job_status(
-                job_name, status={test_case.config["wait_status"]}, timeout=5, polling_interval=1
+                job_name,
+                timeout=test_case.config["timeout"],
+                polling_interval=test_case.config["polling_interval"],
             )
 
-    except Exception as e:
-        assert type(e) is test_case.expected_error
     print("test execution complete")
 
 
