@@ -353,7 +353,7 @@ class S3DatasetInitializer(BaseInitializer):
     """Configuration for downloading datasets from S3-compatible storage.
 
     Args:
-        storage_uri (`str`): The S3 URI for the dataset in the format 's3://bucket-name/path/to/model'.
+        storage_uri (`str`): The S3 URI for the dataset in the format 's3://bucket-name/path/to/dataset'.
         ignore_patterns (`Optional[list[str]]`): List of file patterns to ignore during download.
         endpoint (`Optional[str]`): Custom S3 endpoint URL.
         access_key_id (`Optional[str]`): Access key for authentication.
