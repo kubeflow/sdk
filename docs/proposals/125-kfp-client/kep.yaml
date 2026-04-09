@@ -1,0 +1,26 @@
+title: PipelinesClient for Kubeflow SDK
+kep-number: 125
+authors:
+  - "@MStokluska"
+owning-sig: kubeflow/sdk
+participating-sigs: []
+status: provisional
+creation-date: "2026-03-02"
+reviewers:
+  - "@andreyvelich"
+  - "@astefanutti"
+  - "@droctothorpe"
+  - "@Electronic-Waste"
+  - "@Fiona-Waters"
+  - "@HumairAK"
+  - "@kramaranya"
+  - "@mprahl"
+  - "@zazulam"
+approvers:
+  - "@andreyvelich"
+  - "@astefanutti"
+  - "@kramaranya"
+  - "@mprahl"
+see-also:
+  - https://github.com/kubeflow/sdk/issues/125
+replaces: []
