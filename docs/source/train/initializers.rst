@@ -182,8 +182,8 @@ Override default images or increase the timeout via ``ContainerBackendConfig``:
    from kubeflow.trainer.backends.container.types import ContainerBackendConfig
 
    client = TrainerClient(backend_config=ContainerBackendConfig(
-       dataset_initializer_image="ghcr.io/kubeflow/trainer/dataset-initializer:v0.4.0",
-       model_initializer_image="ghcr.io/kubeflow/trainer/model-initializer:v0.4.0",
+       dataset_initializer_image="ghcr.io/kubeflow/trainer/dataset-initializer:latest",
+       model_initializer_image="ghcr.io/kubeflow/trainer/model-initializer:latest",
        initializer_timeout=1800,  # seconds, default 600
    ))
 
