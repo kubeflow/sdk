@@ -113,11 +113,11 @@ def build_pip_install_cmd(trainer: types.CustomTrainer) -> str:
     log_file = "/tmp/pip_install.log"
     return (
         f"if {pip_env} {pip_base} --user {quoted} >{log_file} 2>&1; then "
-        f'echo "Successfully installed packages"; '
+        f'echo "Successfully installed Python packages (user): {quoted}"; '
         f"elif {pip_env} {pip_base} {quoted} >>{log_file} 2>&1; then "
-        f'echo "Successfully installed packages (system-wide)"; '
+        f'echo "Successfully installed Python packages (system-wide): {quoted}"; '
         f"else "
-        f'echo "ERROR: Failed to install packages: {quoted}" >&2; '
+        f'echo "ERROR: Failed to install Python packages: {quoted}" >&2; '
         f"cat {log_file} >&2; exit 1; "
         f"fi && "
     )
