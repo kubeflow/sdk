@@ -200,7 +200,7 @@ class TorchTuneConfig:
         batch_size (`Optional[int]`):
             The number of samples processed before updating model weights.
         epochs (`Optional[int]`):
-            The number of samples processed before updating model weights.
+            The number of complete passes over the training dataset.
         loss (`Optional[Loss]`): The loss algorithm we use to fine-tune the LLM,
             e.g. `torchtune.modules.loss.CEWithChunkedOutputLoss`.
         num_nodes (`Optional[int]`): The number of nodes to use for training.
@@ -327,7 +327,7 @@ class HuggingFaceDatasetInitializer(BaseInitializer):
     """Configuration for downloading datasets from HuggingFace Hub.
 
     Args:
-        storage_uri (`str`): The HuggingFace Hub model identifier in the format 'hf://username/repo_name'.
+        storage_uri (`str`): The HuggingFace Hub dataset identifier in the format 'hf://username/repo_name'.
         ignore_patterns (`Optional[list[str]]`): List of file patterns to ignore during download.
         access_token (`Optional[str]`): HuggingFace Hub access token for private datasets.
     """
@@ -353,7 +353,7 @@ class S3DatasetInitializer(BaseInitializer):
     """Configuration for downloading datasets from S3-compatible storage.
 
     Args:
-        storage_uri (`str`): The S3 URI for the model in the format 's3://bucket-name/path/to/model'.
+        storage_uri (`str`): The S3 URI for the dataset in the format 's3://bucket-name/path/to/dataset'.
         ignore_patterns (`Optional[list[str]]`): List of file patterns to ignore during download.
         endpoint (`Optional[str]`): Custom S3 endpoint URL.
         access_key_id (`Optional[str]`): Access key for authentication.
