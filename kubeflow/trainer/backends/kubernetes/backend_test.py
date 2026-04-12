@@ -1570,7 +1570,19 @@ def test_get_job_logs(kubernetes_backend, test_case):
         TestCase(
             name="polling_interval equal to timeout raises ValueError",
             expected_status=FAILED,
-            config={"name": "basic-job", "timeout": 10, "polling_interval": 10},
+            config={"name": BASIC_TRAIN_JOB_NAME, "timeout": 10, "polling_interval": 10},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="zero polling_interval raises ValueError",
+            expected_status=FAILED,
+            config={"name": BASIC_TRAIN_JOB_NAME, "timeout": 10, "polling_interval": 0},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="negative polling_interval raises ValueError",
+            expected_status=FAILED,
+            config={"name": BASIC_TRAIN_JOB_NAME, "timeout": 10, "polling_interval": -1},
             expected_error=ValueError,
         ),
     ],
