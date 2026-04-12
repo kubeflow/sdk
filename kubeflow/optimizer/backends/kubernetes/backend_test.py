@@ -25,7 +25,7 @@ import pytest
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.optimizer.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.optimizer.types.search_types import Search
-from kubeflow.trainer.test.common import SUCCESS, TestCase
+from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.types.types import CustomTrainer, TrainJobTemplate
 
 
@@ -116,3 +116,39 @@ def test_optimize(optimizer_backend, test_case):
         assert isinstance(e, test_case.expected_error)
 
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="polling_interval greater than timeout raises ValueError",
+            expected_status=FAILED,
+            config={"name": "test-job", "timeout": 1, "polling_interval": 2},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="polling_interval equal to timeout raises ValueError",
+            expected_status=FAILED,
+            config={"name": "test-job", "timeout": 10, "polling_interval": 10},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="zero polling_interval raises ValueError",
+            expected_status=FAILED,
+            config={"name": "test-job", "timeout": 10, "polling_interval": 0},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="negative polling_interval raises ValueError",
+            expected_status=FAILED,
+            config={"name": "test-job", "timeout": 10, "polling_interval": -1},
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_wait_for_job_status(optimizer_backend, test_case):
+    """Test KubernetesBackend.wait_for_job_status with various scenarios."""
+    print("Executing test:", test_case.name)
+    with pytest.raises(test_case.expected_error):
+        optimizer_backend.wait_for_job_status(**test_case.config)
