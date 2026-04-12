@@ -20,7 +20,7 @@ No network calls, no OTel backend required.
 """
 
 import os
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -210,4 +210,82 @@ def test_span_attributes_convention(test_case: TestCase) -> None:
             )
     elif test_case.name == "no duplicate values in SpanAttributes":
         assert len(values) == len(set(values)), "SpanAttributes has duplicate values"
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="train() emits TRAINER_TRAIN span with correct name and attributes",
+            expected_status=SUCCESS,
+            config={"runtime": "torch-distributed"},
+        ),
+    ],
+)
+def test_train_emits_telemetry_span(test_case) -> None:
+    """Integration test: train() must emit a real OTel span captured by InMemorySpanExporter.
+
+    Sets up a real TracerProvider backed by InMemorySpanExporter, injects it into
+    KubernetesBackend following the same mock pattern as backend_test.py, calls
+    train(), and asserts that the correct span name and attributes were recorded.
+
+    Skipped automatically when opentelemetry-sdk is not installed.
+    """
+    print(f"Executing test: {test_case.name}")
+
+    pytest.importorskip("opentelemetry", reason="opentelemetry-sdk not installed; skipping")
+
+    from kubeflow_trainer_api import models as api_models
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from kubeflow.common.types import KubernetesBackendConfig
+    from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
+
+    # Wire up an in-memory exporter so we can inspect emitted spans.
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    real_tracer = provider.get_tracer("kubeflow.trainer")
+
+    # Minimal real TrainJobSpec so TrainerV1alpha1TrainJob.to_dict() succeeds.
+    mock_spec = api_models.TrainerV1alpha1TrainJobSpec(
+        runtimeRef=api_models.TrainerV1alpha1RuntimeRef(name=test_case.config["runtime"])
+    )
+
+    # Mirror the kubernetes_backend fixture from backend_test.py.
+    with (
+        patch("kubernetes.config.load_kube_config", return_value=None),
+        patch(
+            "kubernetes.client.CustomObjectsApi",
+            return_value=Mock(
+                create_namespaced_custom_object=Mock(return_value=None),
+            ),
+        ),
+        patch("kubernetes.client.CoreV1Api", return_value=Mock()),
+        patch(
+            "kubeflow.trainer.backends.kubernetes.backend.KubernetesBackend.verify_backend",
+            return_value=None,
+        ),
+    ):
+        backend = KubernetesBackend(KubernetesBackendConfig())
+        # Inject the real tracer so train() records real spans.
+        backend._tracer = real_tracer
+        # Short-circuit spec building — we are testing spans, not spec construction.
+        backend._get_trainjob_spec = Mock(return_value=mock_spec)
+        backend.train(runtime=test_case.config["runtime"])
+
+    spans = exporter.get_finished_spans()
+    assert len(spans) >= 1, f"Expected at least one span, got {len(spans)}"
+
+    train_span = next((s for s in spans if s.name == SpanNames.TRAINER_TRAIN), None)
+    assert train_span is not None, (
+        f"Expected span named {SpanNames.TRAINER_TRAIN!r}, got names: {[s.name for s in spans]}"
+    )
+    assert train_span.attributes.get(SpanAttributes.BACKEND) == "kubernetes"
+    assert train_span.attributes.get(SpanAttributes.TRAINJOB_RUNTIME) == test_case.config["runtime"]
+    assert SpanAttributes.TRAINJOB_NAME in train_span.attributes
+
     print("test execution complete")

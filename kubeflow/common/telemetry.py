@@ -30,7 +30,7 @@ Usage inside SDK internals:
 
 User opt-in to enable tracing:
     import kubeflow.common.telemetry as telemetry
-    telemetry.configure(exporter="jaeger", endpoint="http://localhost:4317")
+    telemetry.configure(exporter="otlp", endpoint="http://localhost:4317")
 """
 
 from __future__ import annotations
@@ -91,7 +91,7 @@ def get_tracer(instrumentation_name: str = "kubeflow.sdk") -> Any:
         enabled, otherwise _NoOpTracer.
     """
     if _tracing_disabled() or not _is_otel_available():
-        return _NoOpTracer()
+        return _NOOP_TRACER
     from opentelemetry import trace
 
     return trace.get_tracer(instrumentation_name)
@@ -108,7 +108,8 @@ def configure(
     SDK users who manage their own TracerProvider can skip this call entirely.
 
     Args:
-        exporter: One of otlp, jaeger, console.
+        exporter: One of otlp, console.
+            Note: Jaeger accepts OTLP natively on port 4317 — use exporter='otlp'.
         endpoint: Exporter endpoint URL.
         service_name: Service name reported in traces.
 
@@ -149,18 +150,21 @@ def _build_exporter(exporter: str, endpoint: str) -> Any:
         ImportError: If the required exporter package is missing.
         ValueError: If exporter name is unknown.
     """
-    if exporter in ("otlp", "jaeger"):
+    if exporter == "otlp":
         try:
             from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
             return OTLPSpanExporter(endpoint=endpoint)
         except ImportError as e:
-            raise ImportError("Install opentelemetry-exporter-otlp for OTLP/Jaeger export.") from e
+            raise ImportError("Install opentelemetry-exporter-otlp for OTLP export.") from e
     if exporter == "console":
         from opentelemetry.sdk.trace.export import ConsoleSpanExporter
 
         return ConsoleSpanExporter()
-    raise ValueError(f"Unknown exporter '{exporter}'. Choose from: otlp, jaeger, console.")
+    raise ValueError(
+        f"Unknown exporter '{exporter}'. Choose from: otlp, console. "
+        "Note: Jaeger accepts OTLP natively on port 4317 — use exporter='otlp'."
+    )
 
 
 class SpanNames:
@@ -228,6 +232,12 @@ class _NoOpSpan:
     def set_status(self, *args: Any, **kwargs: Any) -> _NoOpSpan:
         return self
 
+    def is_recording(self) -> bool:
+        return False
+
+    def get_span_context(self):
+        return None
+
     def end(self) -> None:
         pass
 
@@ -237,7 +247,12 @@ class _NoOpTracer:
 
     @contextlib.contextmanager  # type: ignore[misc]
     def start_as_current_span(self, name: str, **kwargs: Any):  # type: ignore[return]
-        yield _NoOpSpan()
+        yield _NOOP_SPAN
 
     def start_span(self, name: str, **kwargs: Any) -> _NoOpSpan:
-        return _NoOpSpan()
+        return _NOOP_SPAN
+
+
+# Module-level singletons — avoids per-call allocation on the hot NoOp path.
+_NOOP_SPAN = _NoOpSpan()
+_NOOP_TRACER = _NoOpTracer()

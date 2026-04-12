@@ -506,11 +506,11 @@ class KubernetesBackend(RuntimeBackend):
                 f"Received polling_interval={polling_interval}, timeout={timeout}"
             )
 
-        for _ in range(round(timeout / polling_interval)):
-            with self._tracer.start_as_current_span(SpanNames.TRAINER_POLL_STATUS) as poll_span:
-                poll_span.set_attribute(SpanAttributes.TRAINJOB_NAME, name)
-                poll_span.set_attribute(SpanAttributes.POLL_TIMEOUT, timeout)
-                poll_span.set_attribute(SpanAttributes.POLL_INTERVAL, polling_interval)
+        with self._tracer.start_as_current_span(SpanNames.TRAINER_POLL_STATUS) as poll_span:
+            poll_span.set_attribute(SpanAttributes.TRAINJOB_NAME, name)
+            poll_span.set_attribute(SpanAttributes.POLL_TIMEOUT, timeout)
+            poll_span.set_attribute(SpanAttributes.POLL_INTERVAL, polling_interval)
+            for _ in range(round(timeout / polling_interval)):
                 # Check the status after event is generated for the TrainJob's Pods.
                 trainjob = self.get_job(name)
                 logger.debug(f"TrainJob {name}, status {trainjob.status}")
@@ -527,14 +527,14 @@ class KubernetesBackend(RuntimeBackend):
                 ):
                     raise RuntimeError(f"TrainJob {name} is Failed")
 
-                # Return the TrainJob if it reaches the expected status.
-                poll_span.set_attribute(SpanAttributes.TRAINJOB_STATUS, trainjob.status or "")
+                # Emit one event per iteration instead of one child span.
                 poll_span.add_event(
                     "status_check",
                     {SpanAttributes.TRAINJOB_STATUS: trainjob.status or ""},
                 )
+
+                # Return the TrainJob if it reaches the expected status.
                 if trainjob.status in status:
-                    poll_span.add_event("job_reached_expected_status")
                     return trainjob
 
                 time.sleep(polling_interval)
