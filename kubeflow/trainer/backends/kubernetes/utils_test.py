@@ -211,10 +211,10 @@ def test_get_resources_per_node(test_case: TestCase):
                 "\n"
                 "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                 '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
-                '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
+                '    echo "Successfully installed Python packages (user): ${PACKAGES[*]}"\n'
                 "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                 '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
-                '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
+                '    echo "Successfully installed Python packages (system-wide): ${PACKAGES[*]}"\n'
                 "else\n"
                 '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
                 '    cat "$LOG_FILE" >&2\n'
@@ -241,10 +241,10 @@ def test_get_resources_per_node(test_case: TestCase):
                 "\n"
                 "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                 '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
-                '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
+                '    echo "Successfully installed Python packages (user): ${PACKAGES[*]}"\n'
                 "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                 '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
-                '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
+                '    echo "Successfully installed Python packages (system-wide): ${PACKAGES[*]}"\n'
                 "else\n"
                 '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
                 '    cat "$LOG_FILE" >&2\n'
@@ -275,10 +275,10 @@ def test_get_resources_per_node(test_case: TestCase):
                 "\n"
                 "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                 '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
-                '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
+                '    echo "Successfully installed Python packages (user): ${PACKAGES[*]}"\n'
                 "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                 '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
-                '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
+                '    echo "Successfully installed Python packages (system-wide): ${PACKAGES[*]}"\n'
                 "else\n"
                 '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
                 '    cat "$LOG_FILE" >&2\n'
@@ -305,10 +305,10 @@ def test_get_resources_per_node(test_case: TestCase):
                 "\n"
                 "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                 '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
-                '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
+                '    echo "Successfully installed Python packages (user): ${PACKAGES[*]}"\n'
                 "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                 '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
-                '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
+                '    echo "Successfully installed Python packages (system-wide): ${PACKAGES[*]}"\n'
                 "else\n"
                 '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
                 '    cat "$LOG_FILE" >&2\n'
@@ -335,10 +335,10 @@ def test_get_resources_per_node(test_case: TestCase):
                 "\n"
                 "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                 '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
-                '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
+                '    echo "Successfully installed Python packages (user): ${PACKAGES[*]}"\n'
                 "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                 '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
-                '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
+                '    echo "Successfully installed Python packages (system-wide): ${PACKAGES[*]}"\n'
                 "else\n"
                 '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
                 '    cat "$LOG_FILE" >&2\n'
@@ -489,10 +489,10 @@ def test_get_script_for_python_packages(test_case):
                     "\n"
                     "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                     '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
-                    '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
+                    '    echo "Successfully installed Python packages (user): ${PACKAGES[*]}"\n'
                     "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
                     '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
-                    '    echo "Successfully installed Python packages: ${PACKAGES[*]}"\n'
+                    '    echo "Successfully installed Python packages (system-wide): ${PACKAGES[*]}"\n'
                     "else\n"
                     '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
                     '    cat "$LOG_FILE" >&2\n'
