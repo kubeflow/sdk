@@ -13,5 +13,6 @@
 # limitations under the License.
 
 from kubeflow.hub.api.model_registry_client import ModelRegistryClient
+from kubeflow.hub.types.types import StorageConfig
 
-__all__ = ["ModelRegistryClient"]
+__all__ = ["ModelRegistryClient", "StorageConfig"]
