@@ -426,104 +426,128 @@ class KubernetesBackend(RuntimeBackend):
             TimeoutError: If connection times out.
             RuntimeError: If port-forward fails.
         """
-        # Get connect URL (handles port-forwarding for local development)
-        connect_url, pf_proc = self.get_connect_url(info)
-        # Track local port for reconnection attempts
-        local_port = int(connect_url.split(":")[-1]) if pf_proc else None
-
-        # Check port-forward process status
-        if pf_proc is not None and pf_proc.poll() is not None:
-            stderr_b = pf_proc.stderr.read() if pf_proc.stderr else b""
-            stderr_str = stderr_b.decode("utf-8", errors="replace").strip() if stderr_b else ""
-            raise RuntimeError(
-                f"Port-forward process exited with code {pf_proc.returncode} "
-                f"before connect. stderr: {stderr_str}"
-            )
-
-        # Log connection info
+        pf_proc = None
+        
         try:
-            import pyspark as _pyspark
+            # Get connect URL (handles port-forwarding for local development)
+            connect_url, pf_proc = self.get_connect_url(info)
+            # Track local port for reconnection attempts
+            local_port = int(connect_url.split(":")[-1]) if pf_proc else None
 
-            logger.info(
-                "Connect URL: %s | PySpark client version: %s | connect_timeout=%ss",
-                connect_url,
-                getattr(_pyspark, "__version__", "unknown"),
-                connect_timeout,
-            )
-        except Exception:
-            logger.info("Connect URL: %s | connect_timeout=%ss", connect_url, connect_timeout)
+            # Check port-forward process status
+            if pf_proc is not None and pf_proc.poll() is not None:
+                stderr_b = pf_proc.stderr.read() if pf_proc.stderr else b""
+                stderr_str = stderr_b.decode("utf-8", errors="replace").strip() if stderr_b else ""
+                raise RuntimeError(
+                    f"Port-forward process exited with code {pf_proc.returncode} "
+                    f"before connect. stderr: {stderr_str}"
+                )
 
-        # Determine gRPC readiness delay
-        delay_sec = grpc_ready_delay
-        if delay_sec is None:
-            delay_env = os.environ.get("SPARK_CONNECT_READY_DELAY_SEC")
-            if delay_env is not None:
-                with contextlib.suppress(ValueError):
-                    delay_sec = int(delay_env)
-            if delay_sec is None:
-                delay_sec = 5 if os.environ.get("SPARK_E2E_DEBUG") else 3
-
-        if delay_sec > 0:
-            logger.info("Waiting %ss for Spark Connect server gRPC readiness", delay_sec)
-            # Use active probing instead of blind sleep to detect port-forward death early
-            probe_start = time.monotonic()
-            while time.monotonic() - probe_start < delay_sec:
-                # Check if port-forward process died
-                if pf_proc is not None and pf_proc.poll() is not None:
-                    logger.warning("Port-forward died during gRPC ready wait, restarting...")
-                    connect_url, pf_proc = self.get_connect_url(info, local_port=local_port)
-                    local_port = int(connect_url.split(":")[-1]) if pf_proc else None
-                # Verify port is still reachable
-                if local_port and not self._wait_for_connect_port(
-                    "127.0.0.1", local_port, timeout_sec=1, interval_sec=0.5
-                ):
-                    logger.warning("Port %s not reachable during gRPC ready wait", local_port)
-                time.sleep(1)
-
-        # Final port-forward health check before connection attempt
-        if pf_proc is not None and pf_proc.poll() is not None:
-            logger.warning("Port-forward died before connect, restarting...")
-            connect_url, pf_proc = self.get_connect_url(info, local_port=local_port)
-
-        # Create SparkSession with timeout
-        result: list = []
-        exc_holder: list = []
-
-        def _get_or_create() -> None:
+            # Log connection info
             try:
-                session = SparkSession.builder.remote(connect_url).getOrCreate()
-                result.append(session)
-            except Exception as e:
-                exc_holder.append(e)
+                import pyspark as _pyspark
 
-        thread = threading.Thread(target=_get_or_create, daemon=True)
-        thread.start()
-        thread.join(timeout=connect_timeout)
+                logger.info(
+                    "Connect URL: %s | PySpark client version: %s | connect_timeout=%ss",
+                    connect_url,
+                    getattr(_pyspark, "__version__", "unknown"),
+                    connect_timeout,
+                )
+            except Exception:
+                logger.info("Connect URL: %s | connect_timeout=%ss", connect_url, connect_timeout)
 
-        if not thread.is_alive():
-            if exc_holder:
-                raise exc_holder[0]
-            if result:
-                return result[0]
+            # Determine gRPC readiness delay
+            delay_sec = grpc_ready_delay
+            if delay_sec is None:
+                delay_env = os.environ.get("SPARK_CONNECT_READY_DELAY_SEC")
+                if delay_env is not None:
+                    with contextlib.suppress(ValueError):
+                        delay_sec = int(delay_env)
+                if delay_sec is None:
+                    delay_sec = 5 if os.environ.get("SPARK_E2E_DEBUG") else 3
 
-        # Connection timed out
-        base_msg = (
-            f"Spark Connect connection to {connect_url} did not complete "
-            f"within {connect_timeout}s. "
-            "Verify: (1) port-forward target is the Spark Connect server pod, "
-            "(2) PySpark and server Spark major.minor match, "
-            "(3) driver pod logs for gRPC/auth errors; "
-            "see Spark sql/connect for server config."
-        )
-        if pf_proc is not None and pf_proc.poll() is not None:
-            stderr_b = pf_proc.stderr.read() if pf_proc.stderr else b""
-            stderr_str = stderr_b.decode("utf-8", errors="replace").strip() if stderr_b else ""
-            base_msg += (
-                f" Port-forward process exited during connect "
-                f"(code={pf_proc.returncode}). stderr: {stderr_str}"
+            if delay_sec > 0:
+                logger.info("Waiting %ss for Spark Connect server gRPC readiness", delay_sec)
+                # Use active probing instead of blind sleep to detect port-forward death early
+                probe_start = time.monotonic()
+                while time.monotonic() - probe_start < delay_sec:
+                    # Check if port-forward process died
+                    if pf_proc is not None and pf_proc.poll() is not None:
+                        logger.warning("Port-forward died during gRPC ready wait, restarting...")
+                        if pf_proc is not None:
+                            if pf_proc.poll() is None:
+                                pf_proc.terminate()
+                            pf_proc.wait(timeout=5)
+                        pf_proc = None
+                        connect_url, pf_proc = self.get_connect_url(info, local_port=local_port)
+                        local_port = int(connect_url.split(":")[-1]) if pf_proc else None
+                    # Verify port is still reachable
+                    if local_port and not self._wait_for_connect_port(
+                        "127.0.0.1", local_port, timeout_sec=1, interval_sec=0.5
+                    ):
+                        logger.warning("Port %s not reachable during gRPC ready wait", local_port)
+                    time.sleep(1)
+
+            # Final port-forward health check before connection attempt
+            if pf_proc is not None and pf_proc.poll() is not None:
+                logger.warning("Port-forward died before connect, restarting...")
+                if pf_proc is not None:
+                    if pf_proc.poll() is None:
+                        pf_proc.terminate()
+                    pf_proc.wait(timeout=5)
+                pf_proc = None
+                connect_url, pf_proc = self.get_connect_url(info, local_port=local_port)
+
+            # Create SparkSession with timeout
+            result: list = []
+            exc_holder: list = []
+
+            def _get_or_create() -> None:
+                try:
+                    session = SparkSession.builder.remote(connect_url).getOrCreate()
+                    result.append(session)
+                except Exception as e:
+                    exc_holder.append(e)
+
+            thread = threading.Thread(target=_get_or_create, daemon=True)
+            thread.start()
+            thread.join(timeout=connect_timeout)
+
+            if not thread.is_alive():
+                if exc_holder:
+                    raise exc_holder[0]
+                if result:
+                    pf_proc = None
+                    return result[0]
+
+            # Connection timed out
+            base_msg = (
+                f"Spark Connect connection to {connect_url} did not complete "
+                f"within {connect_timeout}s. "
+                "Verify: (1) port-forward target is the Spark Connect server pod, "
+                "(2) PySpark and server Spark major.minor match, "
+                "(3) driver pod logs for gRPC/auth errors; "
+                "see Spark sql/connect for server config."
             )
-        raise TimeoutError(base_msg)
-
+            if pf_proc is not None and pf_proc.poll() is not None:
+                stderr_b = pf_proc.stderr.read() if pf_proc.stderr else b""
+                stderr_str = stderr_b.decode("utf-8", errors="replace").strip() if stderr_b else ""
+                base_msg += (
+                    f" Port-forward process exited during connect "
+                    f"(code={pf_proc.returncode}). stderr: {stderr_str}"
+                )
+            raise TimeoutError(base_msg)
+        
+        finally:
+            if pf_proc is not None:
+                if pf_proc.poll() is None:
+                    logger.info("Terminating port-forward process (pid=%s)", pf_proc.pid)
+                    pf_proc.terminate()
+                try:
+                    pf_proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    pf_proc.kill()
+    
     def create_and_connect(
         self,
         num_executors: int | None = None,
