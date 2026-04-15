@@ -547,6 +547,13 @@ class KubernetesBackend(RuntimeBackend):
                     pf_proc.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     pf_proc.kill()
+                    try:
+                        pf_proc.wait()
+                    except Exception:
+                        logger.exception(
+                            "Failed to reap port-forward process after kill (pid=%s)",
+                            pf_proc.pid,
+                        )
     
     def create_and_connect(
         self,
