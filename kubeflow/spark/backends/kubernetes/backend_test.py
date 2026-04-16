@@ -737,3 +737,20 @@ def test_extract_name_option(kubernetes_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+def test_connect_cleanup_on_failure(kubernetes_backend):
+    """Test connect() cleans up port-forward process on failure."""
+    mock_proc = Mock()
+    mock_proc.poll.return_value = 1
+
+    with patch.object(
+        kubernetes_backend,
+        "get_connect_url",
+        return_value=("sc://127.0.0.1:15002", mock_proc),
+    ), patch(
+        "kubeflow.spark.backends.kubernetes.backend.SparkSession.builder.remote",
+        side_effect=Exception("connect failed"),
+    ):
+        with pytest.raises(Exception):
+            kubernetes_backend.connect(info=Mock())
+
+    assert mock_proc.wait.called

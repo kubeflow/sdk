@@ -399,7 +399,24 @@ class KubernetesBackend(RuntimeBackend):
             proc.wait(timeout=5)
             logger.warning("Port %s did not become reachable in time for %s", port, key)
         raise RuntimeError(f"Port-forward failed for all candidates in {info.namespace}")
-
+    
+    def _cleanup_proc(self, proc):
+        if proc is None:
+            return
+        if proc.poll() is None:
+            proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            try:
+                proc.wait()
+            except Exception:
+                logger.exception(
+                    "Failed to reap port-forward process after kill (pid=%s)",
+                    proc.pid,
+                )
+    
     def connect(
         self,
         info: SparkConnectInfo,
@@ -474,10 +491,7 @@ class KubernetesBackend(RuntimeBackend):
                     # Check if port-forward process died
                     if pf_proc is not None and pf_proc.poll() is not None:
                         logger.warning("Port-forward died during gRPC ready wait, restarting...")
-                        if pf_proc is not None:
-                            if pf_proc.poll() is None:
-                                pf_proc.terminate()
-                            pf_proc.wait(timeout=5)
+                        self._cleanup_proc(pf_proc)
                         pf_proc = None
                         connect_url, pf_proc = self.get_connect_url(info, local_port=local_port)
                         local_port = int(connect_url.split(":")[-1]) if pf_proc else None
@@ -491,10 +505,7 @@ class KubernetesBackend(RuntimeBackend):
             # Final port-forward health check before connection attempt
             if pf_proc is not None and pf_proc.poll() is not None:
                 logger.warning("Port-forward died before connect, restarting...")
-                if pf_proc is not None:
-                    if pf_proc.poll() is None:
-                        pf_proc.terminate()
-                    pf_proc.wait(timeout=5)
+                self._cleanup_proc(pf_proc)
                 pf_proc = None
                 connect_url, pf_proc = self.get_connect_url(info, local_port=local_port)
 
@@ -539,21 +550,7 @@ class KubernetesBackend(RuntimeBackend):
             raise TimeoutError(base_msg)
         
         finally:
-            if pf_proc is not None:
-                if pf_proc.poll() is None:
-                    logger.info("Terminating port-forward process (pid=%s)", pf_proc.pid)
-                    pf_proc.terminate()
-                try:
-                    pf_proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    pf_proc.kill()
-                    try:
-                        pf_proc.wait()
-                    except Exception:
-                        logger.exception(
-                            "Failed to reap port-forward process after kill (pid=%s)",
-                            pf_proc.pid,
-                        )
+            self._cleanup_proc(pf_proc)
     
     def create_and_connect(
         self,
