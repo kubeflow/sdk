@@ -210,3 +210,26 @@ class TestSparkExamples:
             pytest.skip("Requires in-cluster execution (SPARK_E2E_RUN_IN_CLUSTER=1)")
 
         self._run_example("connect_existing_session.py", namespace)
+
+    def test_batch_job_lifecycle_example(self):
+        """EX04: Validate batch_job_lifecycle.py runs without errors."""
+        namespace = os.environ.get("SPARK_TEST_NAMESPACE", "spark-test")
+
+        if USE_IN_CLUSTER and RUNNER_IMAGE:
+            self._run_example("batch_job_lifecycle.py", namespace)
+            return
+
+        stdout = self._run_example("batch_job_lifecycle.py", namespace)
+
+        assert "BATCH JOB LIFECYCLE COMPLETE!" in stdout
+
+    def test_batch_failed_job_example(self):
+        """EX05: Validate batch_failed_job.py handles failed Spark jobs."""
+        namespace = os.environ.get("SPARK_TEST_NAMESPACE", "spark-test")
+
+        if USE_IN_CLUSTER and RUNNER_IMAGE:
+            self._run_example("batch_failed_job.py", namespace)
+            return
+
+        stdout = self._run_example("batch_failed_job.py", namespace)
+        assert "Job failed as expected." in stdout
