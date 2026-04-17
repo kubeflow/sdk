@@ -19,6 +19,7 @@ import pytest
 
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.utils import (
+    _cpu_kubernetes_to_spark,
     _memory_kubernetes_to_spark,
     build_service_url,
     build_spark_connect_cr,
@@ -46,6 +47,27 @@ class TestMemoryKubernetesToSpark:
     )
     def test_conversion(self, k8s_memory: str, expected_spark: str) -> None:
         assert _memory_kubernetes_to_spark(k8s_memory) == expected_spark
+
+
+class TestCpuKubernetesToSpark:
+    """Tests for _cpu_kubernetes_to_spark."""
+
+    @pytest.mark.parametrize(
+        "k8s_cpu,expected_spark",
+        [
+            ("500m", 1),
+            ("1500m", 2),
+            ("1", 1),
+            ("1.5", 2),
+            ("2", 2),
+            ("0.1", 1),
+            ("", 1),
+            (None, 1),
+            ("invalid", 1),
+        ],
+    )
+    def test_conversion(self, k8s_cpu: str, expected_spark: int) -> None:
+        assert _cpu_kubernetes_to_spark(k8s_cpu) == expected_spark
 
 
 class TestGenerateSessionName:
