@@ -14,6 +14,7 @@
 
 """Utility functions for Kubernetes Spark backend."""
 
+import math
 import re
 from typing import Any
 from urllib.parse import urlparse
@@ -71,6 +72,21 @@ def _memory_kubernetes_to_spark(memory: str) -> str:
     return num + spark_suffix
 
 
+def _cpu_kubernetes_to_spark(cpu: str) -> int:
+    """Convert Kubernetes CPU request to integer Spark cores (rounded up).
+
+    Spark expects integer cores. Kubernetes allows fractional CPUs (e.g., "500m", "1.5").
+    """
+    if not cpu:
+        return 1
+    try:
+        if cpu.endswith("m"):
+            return math.ceil(float(cpu[:-1]) / 1000)
+        return math.ceil(float(cpu))
+    except ValueError:
+        return 1
+
+
 def build_service_url(info: SparkConnectInfo) -> str:
     """Build Spark Connect URL from session info.
 
@@ -102,7 +118,7 @@ def get_server_spec_from_driver(
     if driver:
         if driver.resources:
             if "cpu" in driver.resources:
-                cores = int(driver.resources["cpu"])
+                cores = _cpu_kubernetes_to_spark(driver.resources["cpu"])
             if "memory" in driver.resources:
                 memory = _memory_kubernetes_to_spark(driver.resources["memory"])
 
@@ -162,7 +178,7 @@ def get_executor_spec_from_executor(
 
     if resource_dict:
         if "cpu" in resource_dict:
-            cores = int(resource_dict["cpu"])
+            cores = _cpu_kubernetes_to_spark(resource_dict["cpu"])
         if "memory" in resource_dict:
             memory = _memory_kubernetes_to_spark(resource_dict["memory"])
 
