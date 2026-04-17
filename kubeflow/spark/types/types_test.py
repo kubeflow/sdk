@@ -15,12 +15,19 @@
 """Unit tests for Kubeflow Spark types."""
 
 from datetime import datetime
+from unittest.mock import patch
+
+import pytest
 
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
+    FileJob,
+    FuncJob,
     SparkConnectInfo,
     SparkConnectState,
+    SparkJob,
+    SparkJobStatus,
 )
 
 
@@ -172,3 +179,163 @@ class TestExecutor:
         assert executor.resources_per_executor["cpu"] == "8"
         assert executor.resources_per_executor["memory"] == "32Gi"
         assert executor.resources_per_executor["nvidia.com/gpu"] == "2"
+
+
+class TestSparkJobStatus:
+    """Tests for SparkJobStatus enum."""
+
+    def test_enum_values(self):
+        """Verify SparkJobStatus enum has expected values."""
+        assert SparkJobStatus.CREATED == "Created"
+        assert SparkJobStatus.RUNNING == "Running"
+        assert SparkJobStatus.COMPLETED == "Completed"
+        assert SparkJobStatus.FAILED == "Failed"
+
+    def test_enum_is_string(self):
+        """Verify SparkJobStatus inherits from str."""
+        assert isinstance(SparkJobStatus.RUNNING, str)
+        assert SparkJobStatus.RUNNING == "Running"
+
+    @pytest.mark.parametrize(
+        "operator_state,expected_status",
+        [
+            (None, SparkJobStatus.CREATED),
+            ("", SparkJobStatus.CREATED),
+            ("SUBMITTED", SparkJobStatus.CREATED),
+            ("RUNNING", SparkJobStatus.RUNNING),
+            ("SUCCEEDING", SparkJobStatus.RUNNING),
+            ("SUSPENDING", SparkJobStatus.RUNNING),
+            ("SUSPENDED", SparkJobStatus.RUNNING),
+            ("RESUMING", SparkJobStatus.RUNNING),
+            ("COMPLETED", SparkJobStatus.COMPLETED),
+            ("FAILED", SparkJobStatus.FAILED),
+            ("SUBMISSION_FAILED", SparkJobStatus.FAILED),
+            ("FAILING", SparkJobStatus.FAILED),
+            ("PENDING_RERUN", SparkJobStatus.FAILED),
+            ("INVALIDATING", SparkJobStatus.FAILED),
+            ("UNKNOWN", SparkJobStatus.FAILED),
+        ],
+    )
+    def test_from_operator_state(
+        self,
+        operator_state,
+        expected_status,
+    ):
+        """Verify SparkApplication states map to SparkJobStatus."""
+        assert SparkJobStatus.from_operator_state(operator_state) == expected_status
+
+    def test_unknown_operator_state(self):
+        """Verify unknown SparkApplication states default to FAILED."""
+        with patch("kubeflow.spark.types.types.logger") as mock_logger:
+            status = SparkJobStatus.from_operator_state("SOME_NEW_STATE")
+
+        assert status == SparkJobStatus.FAILED
+        mock_logger.warning.assert_called_once_with(
+            "Unknown SparkApplication state '%s'. Defaulting to FAILED.",
+            "SOME_NEW_STATE",
+        )
+
+
+class TestSparkJob:
+    """Tests for SparkJob dataclass."""
+
+    def test_defaults(self):
+        """SparkJob with only required fields."""
+
+        job = SparkJob(
+            name="test-job",
+            namespace="default",
+        )
+
+        assert job.name == "test-job"
+        assert job.namespace == "default"
+        assert job.status is None
+        assert job.creation_timestamp is None
+        assert job.num_executors is None
+        assert job.driver_pod_name is None
+
+    def test_all_fields(self):
+        """SparkJob with all fields set."""
+
+        created = datetime(2025, 1, 12, 10, 30, 0)
+
+        job = SparkJob(
+            name="full-job",
+            namespace="spark-ns",
+            status=SparkJobStatus.RUNNING,
+            creation_timestamp=created,
+            num_executors=10,
+            driver_pod_name="driver-pod-1",
+        )
+
+        assert job.name == "full-job"
+        assert job.namespace == "spark-ns"
+        assert job.status == SparkJobStatus.RUNNING
+        assert job.creation_timestamp == created
+        assert job.num_executors == 10
+        assert job.driver_pod_name == "driver-pod-1"
+
+
+class TestFileJob:
+    """Tests for FileJob dataclass."""
+
+    def test_defaults(self):
+        """FileJob with required fields."""
+
+        job = FileJob(
+            file_source="s3://bucket/job.py",
+        )
+
+        assert job.file_source == "s3://bucket/job.py"
+        assert job.args is None
+        assert job.main_class is None
+
+    def test_all_fields(self):
+        """FileJob with all fields."""
+
+        job = FileJob(
+            file_source="local:///opt/spark/app.py",
+            args=["--date", "2026-06-30"],
+            main_class="org.apache.spark.Main",
+        )
+
+        assert job.file_source == "local:///opt/spark/app.py"
+        assert job.args == ["--date", "2026-06-30"]
+        assert job.main_class == "org.apache.spark.Main"
+
+
+class TestFuncJob:
+    """Tests for FuncJob dataclass."""
+
+    def test_defaults(self):
+        """FuncJob with only required fields."""
+
+        def sample():
+            return "ok"
+
+        job = FuncJob(
+            func=sample,
+        )
+
+        assert job.func is sample
+        assert job.func_args is None
+
+    def test_all_fields(self):
+        """FuncJob with function arguments."""
+
+        def sample(x, y):
+            return x + y
+
+        job = FuncJob(
+            func=sample,
+            func_args={
+                "x": 1,
+                "y": 2,
+            },
+        )
+
+        assert job.func is sample
+        assert job.func_args == {
+            "x": 1,
+            "y": 2,
+        }

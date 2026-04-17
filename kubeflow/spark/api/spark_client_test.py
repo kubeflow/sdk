@@ -21,6 +21,11 @@ import pytest
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.api.spark_client import SparkClient
 from kubeflow.spark.test.common import FAILED, SUCCESS, TestCase
+from kubeflow.spark.types.types import (
+    FileJob,
+    FuncJob,
+    SparkJob,
+)
 
 
 @pytest.mark.parametrize(
@@ -73,3 +78,98 @@ def test_create_and_connect(test_case: TestCase):
             assert isinstance(e, test_case.expected_error), (
                 f"Expected exception type '{test_case.expected_error.__name__}' but got '{type(e).__name__}: {str(e)}'"
             )
+
+
+@pytest.mark.parametrize(
+    "job,spark_conf,options,backend_error,expected_error",
+    [
+        (
+            FuncJob(func=lambda: None),
+            None,
+            None,
+            NotImplementedError("Function-based jobs are not supported in Phase 1."),
+            NotImplementedError,
+        ),
+        (
+            "not-a-job",
+            None,
+            None,
+            TypeError("job must be an instance of FileJob or FuncJob."),
+            TypeError,
+        ),
+        (
+            FileJob(file_source=""),
+            None,
+            None,
+            ValueError("`job.file_source` must be a non-empty string."),
+            ValueError,
+        ),
+        (
+            FileJob(file_source="s3://bucket/job.py"),
+            {"spark.executor.memory": "4g"},
+            None,
+            None,
+            NotImplementedError,
+        ),
+        (
+            FileJob(file_source="s3://bucket/job.py"),
+            None,
+            [object()],
+            None,
+            NotImplementedError,
+        ),
+    ],
+)
+def test_submit_job_validation(
+    job,
+    spark_conf,
+    options,
+    backend_error,
+    expected_error,
+):
+    """Test SparkClient submit_job validation."""
+
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
+        backend = mock_backend.return_value
+
+        if backend_error is not None:
+            backend.submit_job.side_effect = backend_error
+
+        client = SparkClient()
+
+        with pytest.raises(expected_error):
+            client.submit_job(
+                job=job,
+                spark_conf=spark_conf,
+                options=options,
+            )
+
+
+def test_submit_job_success():
+    """Test successful submit_job."""
+
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
+        backend = mock_backend.return_value
+
+        backend.submit_job.return_value = SparkJob(
+            name="spark-job-123",
+            namespace="default",
+        )
+
+        client = SparkClient()
+
+        name = client.submit_job(
+            job=FileJob(
+                file_source="s3://bucket/job.py",
+            ),
+        )
+
+        assert name == "spark-job-123"
+
+        backend.submit_job.assert_called_once_with(
+            job=FileJob(
+                file_source="s3://bucket/job.py",
+            ),
+            num_executors=None,
+            resources_per_executor=None,
+        )

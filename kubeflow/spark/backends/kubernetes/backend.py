@@ -36,12 +36,25 @@ from kubeflow.spark.backends.base import RuntimeBackend
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.utils import (
     build_service_url,
+    build_spark_application_cr,
     build_spark_connect_cr,
+    generate_job_name,
     generate_session_name,
+    get_spark_application_info_from_cr,
     get_spark_connect_info_from_cr,
+    read_pod_logs,
 )
 from kubeflow.spark.types.options import Name
-from kubeflow.spark.types.types import Driver, Executor, SparkConnectInfo, SparkConnectState
+from kubeflow.spark.types.types import (
+    Driver,
+    Executor,
+    FileJob,
+    FuncJob,
+    SparkConnectInfo,
+    SparkConnectState,
+    SparkJob,
+    SparkJobStatus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +76,7 @@ def _enable_spark_debug_logging() -> None:
 
 
 class KubernetesBackend(RuntimeBackend):
-    """Kubernetes backend for managing SparkConnect sessions."""
+    """Kubernetes backend for managing SparkConnect sessions and Spark batch jobs."""
 
     def __init__(self, backend_config: KubernetesBackendConfig):
         """Initialize Kubernetes Spark backend."""
@@ -81,6 +94,10 @@ class KubernetesBackend(RuntimeBackend):
 
         self.custom_api = client.CustomObjectsApi()
         self.core_api = client.CoreV1Api()
+
+    # ------------------------------------------------------------------
+    # Spark Connect sessions
+    # ------------------------------------------------------------------
 
     def _extract_name_option(self, options: list | None) -> tuple[str, list]:
         """Extract Name option from options list, or generate name if absent.
@@ -252,8 +269,8 @@ class KubernetesBackend(RuntimeBackend):
         polling_interval: int = 2,
     ) -> SparkConnectInfo:
         """Wait for a SparkConnect session to become ready (INTERNAL USE ONLY)."""
-        start_time = time.time()
-        last_log_time = 0.0
+        start_time = time.monotonic()
+        last_log_time = start_time
 
         while True:
             info = self.get_session(name)
@@ -265,7 +282,7 @@ class KubernetesBackend(RuntimeBackend):
                     name,
                     info.state,
                     info.service_name,
-                    time.time() - start_time,
+                    time.monotonic() - start_time,
                 )
                 return info
 
@@ -274,7 +291,7 @@ class KubernetesBackend(RuntimeBackend):
                     f"{constants.SPARK_CONNECT_KIND} failed: {self.namespace}/{name}"
                 )
 
-            now = time.time()
+            now = time.monotonic()
             if now - last_log_time >= 10.0:
                 logger.info(
                     "Waiting for session: %s/%s state=%s serviceName=%s elapsed=%.0fs",
@@ -596,31 +613,419 @@ class KubernetesBackend(RuntimeBackend):
             )
 
         try:
-            if follow:
-                thread = self.core_api.read_namespaced_pod_log(
-                    name=info.driver_pod_name,
-                    namespace=self.namespace,
-                    follow=True,
-                    _preload_content=False,
-                    async_req=True,
-                )
-                resp = thread.get(common_constants.DEFAULT_TIMEOUT)
-                for line in resp.stream():
-                    yield line.decode("utf-8").rstrip("\n")
-            else:
-                thread = self.core_api.read_namespaced_pod_log(
-                    name=info.driver_pod_name,
-                    namespace=self.namespace,
-                    async_req=True,
-                )
-                logs = thread.get(common_constants.DEFAULT_TIMEOUT)
-                for line in logs.split("\n"):
-                    yield line
-        except multiprocessing.TimeoutError as e:
+            yield from read_pod_logs(
+                core_api=self.core_api,
+                namespace=self.namespace,
+                pod_name=info.driver_pod_name,
+                follow=follow,
+            )
+
+        except TimeoutError as e:
             raise TimeoutError(
                 f"Timeout to get logs for {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
             ) from e
-        except Exception as e:
+
+        except RuntimeError as e:
             raise RuntimeError(
                 f"Failed to get logs for {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
+            ) from e
+
+    # ------------------------------------------------------------------
+    # Spark batch jobs
+    # ------------------------------------------------------------------
+
+    def _validate_job(
+        self,
+        job: FileJob | FuncJob,
+    ) -> None:
+        """Validate a Spark job.
+
+        Args:
+            job: Spark job definition to validate.
+
+        Raises:
+            NotImplementedError: If a function-based job is provided, as function-based jobs are
+                not supported in Phase 1.
+            TypeError: If job is not an instance of FileJob or FuncJob.
+        """
+
+        if isinstance(job, FileJob):
+            self._validate_file_job(job)
+            return
+
+        if isinstance(job, FuncJob):
+            raise NotImplementedError("Function-based jobs are not supported in Phase 1.")
+
+        raise TypeError("job must be an instance of FileJob or FuncJob.")
+
+    def _validate_file_job(
+        self,
+        job: FileJob,
+    ) -> None:
+        """Validate a file-based Spark job.
+
+        Args:
+            job: File-based Spark job definition to validate.
+
+        Raises:
+            ValueError: If file_source is empty, args is not a list of strings, or
+                main_class is not a string.
+        """
+
+        if not isinstance(job.file_source, str) or not job.file_source.strip():
+            raise ValueError("`job.file_source` must be a non-empty string.")
+
+        if job.args is not None:
+            if not isinstance(job.args, list):
+                raise ValueError("`job.args` must be a list of strings.")
+
+            if not all(isinstance(arg, str) for arg in job.args):
+                raise ValueError("All `job.args` must be strings.")
+
+        if job.main_class is not None and not isinstance(job.main_class, str):
+            raise ValueError("`job.main_class` must be a string.")
+
+    def submit_job(
+        self,
+        job: FileJob | FuncJob,
+        executor: Executor | None = None,
+        num_executors: int | None = None,
+        resources_per_executor: dict[str, str] | None = None,
+    ) -> SparkJob:
+        """Submit a SparkApplication for batch execution.
+
+        Args:
+            job:
+                File-based Spark workload definition.
+
+            executor:
+                Executor configuration.
+
+            num_executors:
+                Number of executor instances.
+
+            resources_per_executor:
+                Resource requirements per executor.
+
+        Returns:
+            SparkJob information object.
+
+        Raises:
+            ValueError:
+                If job validation fails.
+
+            TimeoutError:
+                If SparkApplication creation times out.
+
+            RuntimeError:
+                If SparkApplication creation fails.
+        """
+        self._validate_job(job)
+
+        job_name = generate_job_name()
+
+        logger.info(
+            "Submitting SparkApplication '%s'",
+            job_name,
+        )
+
+        spark_application = build_spark_application_cr(
+            name=job_name,
+            namespace=self.namespace,
+            main_file=job.file_source,
+            arguments=job.args,
+            executor=executor,
+            num_executors=num_executors,
+            resources_per_executor=resources_per_executor,
+        )
+
+        try:
+            thread = self.custom_api.create_namespaced_custom_object(
+                group=constants.SPARK_APPLICATION_GROUP,
+                version=constants.SPARK_APPLICATION_VERSION,
+                namespace=self.namespace,
+                plural=constants.SPARK_APPLICATION_PLURAL,
+                body=spark_application.to_dict(),
+                async_req=True,
+            )
+            response = thread.get(common_constants.DEFAULT_TIMEOUT)
+
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(f"Timeout creating Spark job: {self.namespace}/{job_name}") from e
+
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to create Spark job: {self.namespace}/{job_name}: {e}"
+            ) from e
+
+        cr = models.SparkV1beta2SparkApplication.from_dict(response)
+
+        return get_spark_application_info_from_cr(cr)
+
+    def get_job(self, name: str) -> SparkJob:
+        """Get information about a Spark job.
+
+        Args:
+            name:
+                Name of the SparkApplication.
+
+        Returns:
+            SparkJob information object.
+
+        Raises:
+            TimeoutError: If retrieving the SparkApplication times out.
+            RuntimeError: If the SparkApplication is not found or cannot be retrieved.
+        """
+
+        try:
+            thread = self.custom_api.get_namespaced_custom_object(
+                group=constants.SPARK_APPLICATION_GROUP,
+                version=constants.SPARK_APPLICATION_VERSION,
+                namespace=self.namespace,
+                plural=constants.SPARK_APPLICATION_PLURAL,
+                name=name,
+                async_req=True,
+            )
+
+            response = thread.get(common_constants.DEFAULT_TIMEOUT)
+
+            spark_application = models.SparkV1beta2SparkApplication.from_dict(response)
+
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(f"Timeout to get Spark job: {self.namespace}/{name}") from e
+
+        except client.ApiException as e:
+            if e.status == 404:
+                raise RuntimeError(f"Spark job not found: {self.namespace}/{name}") from e
+
+            raise RuntimeError(f"Failed to get Spark job: {self.namespace}/{name}: {e}") from e
+
+        except Exception as e:
+            raise RuntimeError(f"Failed to get Spark job: {self.namespace}/{name}") from e
+        return get_spark_application_info_from_cr(spark_application)
+
+    def list_jobs(
+        self,
+        status: set[SparkJobStatus] | None = None,
+    ) -> list[SparkJob]:
+        """List Spark jobs.
+
+        Args:
+            status:
+                Optional set of job statuses to filter the returned jobs.
+
+        Returns:
+            List of SparkJob information objects.
+
+        Raises:
+            TimeoutError: If listing SparkApplications times out.
+            RuntimeError: If the SparkApplications cannot be listed.
+        """
+
+        try:
+            thread = self.custom_api.list_namespaced_custom_object(
+                group=constants.SPARK_APPLICATION_GROUP,
+                version=constants.SPARK_APPLICATION_VERSION,
+                namespace=self.namespace,
+                plural=constants.SPARK_APPLICATION_PLURAL,
+                async_req=True,
+            )
+
+            response = thread.get(
+                common_constants.DEFAULT_TIMEOUT,
+            )
+
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(
+                f"Timeout to list {constants.SPARK_APPLICATION_KIND}s "
+                f"in namespace: {self.namespace}"
+            ) from e
+
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to list {constants.SPARK_APPLICATION_KIND}s in namespace: {self.namespace}"
+            ) from e
+
+        spark_application_list = models.SparkV1beta2SparkApplicationList.from_dict(
+            response,
+        )
+
+        jobs = [get_spark_application_info_from_cr(app) for app in spark_application_list.items]
+
+        if status:
+            jobs = [job for job in jobs if job.status in status]
+
+        return jobs
+
+    def delete_job(self, name: str) -> None:
+        """Delete a Spark job.
+
+        Args:
+            name:
+                Name of the SparkApplication to delete.
+
+        Raises:
+            TimeoutError: If deleting the SparkApplication times out.
+            RuntimeError: If the SparkApplication is not found or cannot be deleted.
+        """
+
+        try:
+            thread = self.custom_api.delete_namespaced_custom_object(
+                group=constants.SPARK_APPLICATION_GROUP,
+                version=constants.SPARK_APPLICATION_VERSION,
+                namespace=self.namespace,
+                plural=constants.SPARK_APPLICATION_PLURAL,
+                name=name,
+                async_req=True,
+            )
+
+            thread.get(common_constants.DEFAULT_TIMEOUT)
+
+            logger.info("Deleted Spark job '%s'", name)
+
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(
+                f"Timeout to delete {constants.SPARK_APPLICATION_KIND}: {self.namespace}/{name}"
+            ) from e
+
+        except client.ApiException as e:
+            if e.status == 404:
+                raise RuntimeError(
+                    f"{constants.SPARK_APPLICATION_KIND} not found: {self.namespace}/{name}"
+                ) from e
+
+            raise RuntimeError(
+                f"Failed to delete {constants.SPARK_APPLICATION_KIND}: {self.namespace}/{name}"
+            ) from e
+
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to delete {constants.SPARK_APPLICATION_KIND}: {self.namespace}/{name}"
+            ) from e
+
+    def wait_for_job_status(
+        self,
+        name: str,
+        status: set[SparkJobStatus] | None = None,
+        timeout: int = 600,
+        polling_interval: int = 2,
+    ) -> SparkJob:
+        """Wait for a Spark job to reach one of the target states.
+
+        Args:
+            name: Name of the SparkApplication.
+            status: Target job statuses to wait for. Defaults to COMPLETED.
+            timeout: Maximum time in seconds to wait.
+            polling_interval: Time in seconds between status checks.
+
+        Returns:
+            SparkJob information object after the target status is reached.
+
+        Raises:
+            ValueError: If polling_interval is negative.
+            RuntimeError: If the SparkApplication reaches the FAILED state before reaching
+                one of the target statuses.
+            TimeoutError: If the target status is not reached within the timeout.
+        """
+
+        if status is None:
+            status = {SparkJobStatus.COMPLETED}
+
+        if timeout <= 0:
+            raise ValueError("timeout must be positive.")
+
+        if polling_interval <= 0:
+            raise ValueError("polling_interval must be positive.")
+
+        start_time = time.monotonic()
+        last_log_time = start_time
+
+        while True:
+            job = self.get_job(name)
+
+            if job.status in status:
+                logger.info(
+                    "Job reached target state: %s/%s status=%s (%.0fs)",
+                    self.namespace,
+                    name,
+                    job.status,
+                    time.monotonic() - start_time,
+                )
+                return job
+            if job.status == SparkJobStatus.FAILED and SparkJobStatus.FAILED not in status:
+                raise RuntimeError(
+                    f"Spark job reached failed state: {self.namespace}/{name}(status={job.status})"
+                )
+
+            now = time.monotonic()
+
+            if now - last_log_time >= 10.0:
+                logger.info(
+                    "Waiting for job: %s/%s status=%s elapsed=%.0fs",
+                    self.namespace,
+                    name,
+                    job.status,
+                    now - start_time,
+                )
+                last_log_time = now
+
+            if now - start_time >= timeout:
+                raise TimeoutError(
+                    f"Timeout waiting for Spark job to reach "
+                    f"{status}: {self.namespace}/{name} "
+                    f"(timeout: {timeout}s)"
+                )
+
+            time.sleep(polling_interval)
+
+    def get_job_logs(
+        self,
+        name: str,
+        follow: bool = False,
+    ) -> Iterator[str]:
+        """Get logs from a Spark job.
+
+        Logs are retrieved from the Kubernetes driver pod associated with the
+        SparkApplication. Log retrieval is only available while the driver pod
+        exists.
+
+        Args:
+            name: Name of the SparkApplication.
+            follow: Whether to stream logs continuously.
+
+        Yields:
+            Log lines from the SparkApplication driver pod.
+
+        Raises:
+            RuntimeError: If the driver pod does not exist or logs cannot be retrieved.
+            TimeoutError: If retrieving the driver pod logs times out.
+        """
+
+        job = self.get_job(name)
+
+        if not job.driver_pod_name:
+            raise RuntimeError(
+                f"No driver pod for {constants.SPARK_APPLICATION_KIND}: {self.namespace}/{name}"
+            )
+
+        try:
+            yield from read_pod_logs(
+                core_api=self.core_api,
+                namespace=self.namespace,
+                pod_name=job.driver_pod_name,
+                follow=follow,
+            )
+
+        except TimeoutError as e:
+            raise TimeoutError(
+                f"Timeout to get logs for "
+                f"{constants.SPARK_APPLICATION_KIND}: "
+                f"{self.namespace}/{name}"
+            ) from e
+
+        except RuntimeError as e:
+            raise RuntimeError(
+                f"Failed to get logs for "
+                f"{constants.SPARK_APPLICATION_KIND}: "
+                f"{self.namespace}/{name}"
             ) from e
