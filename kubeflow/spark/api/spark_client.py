@@ -127,17 +127,52 @@ class SparkClient:
         )
 
     def list_sessions(self) -> list[SparkConnectInfo]:
-        """List all SparkConnect sessions."""
+        """List all SparkConnect sessions.
+
+        Returns:
+            List of SparkConnectInfo objects for all sessions in the namespace.
+        """
         return self.backend.list_sessions()
 
     def get_session(self, name: str) -> SparkConnectInfo:
-        """Get session info by name."""
+        """Get information about a specific SparkConnect session.
+
+        Args:
+            name: The name of the SparkConnect session to retrieve.
+
+        Returns:
+            SparkConnectInfo object containing session details.
+
+        Raises:
+            RuntimeError: If the session cannot be retrieved or found.
+            TimeoutError: If the request to the Kubernetes API times out.
+        """
         return self.backend.get_session(name)
 
     def delete_session(self, name: str) -> None:
-        """Delete a SparkConnect session."""
+        """Delete a SparkConnect session.
+
+        Args:
+            name: The name of the SparkConnect session to delete.
+
+        Raises:
+            RuntimeError: If the session cannot be deleted or found.
+            TimeoutError: If the request to the Kubernetes API times out.
+        """
         self.backend.delete_session(name)
 
     def get_session_logs(self, name: str, follow: bool = False) -> Iterator[str]:
-        """Get logs from a session."""
+        """Get logs from a SparkConnect session's server pod.
+
+        Args:
+            name: The name of the SparkConnect session.
+            follow: Whether to continuously follow the log stream. Defaults to False.
+
+        Returns:
+            An iterator over the log lines from the session's pod.
+
+        Raises:
+            RuntimeError: If the session has no pod or logs cannot be retrieved.
+            TimeoutError: If the request to the Kubernetes API times out.
+        """
         return self.backend.get_session_logs(name, follow=follow)
