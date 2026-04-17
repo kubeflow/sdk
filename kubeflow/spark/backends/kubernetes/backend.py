@@ -614,7 +614,7 @@ class KubernetesBackend(RuntimeBackend):
                     async_req=True,
                 )
                 logs = thread.get(common_constants.DEFAULT_TIMEOUT)
-                for line in logs.split("\n"):
+                for line in logs.splitlines():
                     yield line
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(
