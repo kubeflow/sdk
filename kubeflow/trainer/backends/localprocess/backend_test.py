@@ -123,7 +123,7 @@ def test_list_runtimes(local_backend, test_case):
             name="get_nonexistent_runtime",
             expected_status=FAILED,
             config={"runtime_name": "nonexistent-runtime"},
-            expected_error=ValueError,
+            expected_error=RuntimeError,
         ),
     ],
 )
@@ -172,7 +172,7 @@ def test_get_runtime(local_backend, test_case):
                     ),
                 ),
             },
-            expected_error=ValueError,
+            expected_error=RuntimeError,
         ),
     ],
 )
@@ -373,7 +373,7 @@ def test_train(local_backend, mock_train_environment, test_case):
             name="get_nonexistent_job",
             expected_status=FAILED,
             config={"job_name": "nonexistent-job"},
-            expected_error=ValueError,
+            expected_error=RuntimeError,
         ),
     ],
 )
@@ -410,7 +410,7 @@ def test_list_jobs(local_backend, test_case):
             name="get_logs_nonexistent_job",
             expected_status=FAILED,
             config={"job_name": "nonexistent-job", "step": "train"},
-            expected_error=ValueError,
+            expected_error=RuntimeError,
         ),
     ],
 )
@@ -457,6 +457,12 @@ def test_get_job_logs(local_backend, test_case):
             config={"name": BASIC_TRAIN_JOB_NAME, "timeout": 10, "polling_interval": -1},
             expected_error=ValueError,
         ),
+        TestCase(
+            name="wait_for_nonexistent_job",
+            expected_status=FAILED,
+            config={"name": "nonexistent-job"},
+            expected_error=RuntimeError,
+        ),
     ],
 )
 def test_wait_for_job_status(local_backend, test_case):
@@ -473,7 +479,7 @@ def test_wait_for_job_status(local_backend, test_case):
             name="delete_nonexistent_job",
             expected_status=FAILED,
             config={"job_name": "nonexistent-job"},
-            expected_error=ValueError,
+            expected_error=RuntimeError,
         ),
     ],
 )
