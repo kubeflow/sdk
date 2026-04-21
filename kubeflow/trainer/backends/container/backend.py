@@ -779,12 +779,14 @@ class ContainerBackend(RuntimeBackend):
         name: str,
         follow: bool = False,
         step: str = constants.NODE + "-0",
+        strict: bool = False,
     ) -> Iterator[str]:
         """Get logs for a training job by querying container runtime."""
         containers = self._get_job_containers(name)
 
         # Check if requesting logs from all node containers (default behavior)
         want_all_nodes = step == constants.NODE + "-0"
+        matched = False
 
         for container in sorted(containers, key=lambda c: c["name"]):
             container_step = container["labels"].get(f"{self.label_prefix}/step", "")
@@ -797,11 +799,15 @@ class ContainerBackend(RuntimeBackend):
             elif container_step != step:
                 continue
 
+            matched = True
             try:
                 yield from self._adapter.container_logs(container["id"], follow)
             except Exception as e:
                 logger.warning(f"Failed to get logs for {container['name']}: {e}")
                 yield f"Error getting logs: {e}\n"
+
+        if strict and not matched:
+            raise ValueError(f"No log source found for TrainJob {name} step={step}")
 
     def get_job_events(self, name: str) -> list[types.Event]:
         raise NotImplementedError()

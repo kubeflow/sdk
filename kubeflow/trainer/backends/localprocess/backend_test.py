@@ -412,6 +412,12 @@ def test_list_jobs(local_backend, test_case):
             config={"job_name": "nonexistent-job", "step": "train"},
             expected_error=ValueError,
         ),
+        TestCase(
+            name="get_logs_strict_missing_step",
+            expected_status=FAILED,
+            config={"job_name": BASIC_TRAIN_JOB_NAME, "step": "missing-step", "strict": True},
+            expected_error=ValueError,
+        ),
     ],
 )
 def test_get_job_logs(local_backend, test_case):
@@ -419,9 +425,23 @@ def test_get_job_logs(local_backend, test_case):
     job_name = test_case.config.get("job_name")
     step = test_case.config.get("step", "train")
 
+    if job_name == BASIC_TRAIN_JOB_NAME:
+        mock_job = Mock()
+        mock_job.logs.return_value = ["log line"]
+
+        mock_step = Mock()
+        mock_step.step_name = "train"
+        mock_step.job = mock_job
+
+        mock_local_job = Mock()
+        mock_local_job.name = BASIC_TRAIN_JOB_NAME
+        mock_local_job.steps = [mock_step]
+
+        local_backend._LocalProcessBackend__local_jobs.append(mock_local_job)
+
     if test_case.expected_status == FAILED:
         with pytest.raises(test_case.expected_error):
-            list(local_backend.get_job_logs(job_name, step=step))
+            list(local_backend.get_job_logs(job_name, step=step, strict=test_case.config.get("strict", False)))
 
 
 @pytest.mark.parametrize(
