@@ -23,6 +23,7 @@ Directory: docs/proposals/285-specialized-trainers/README.md
   - [Motivation](#motivation)
     - [User Value](#user-value)
     - [Personas](#personas)
+    - [Why Specialized Trainers?](#why-specialized-trainers)
     - [Goals](#goals)
     - [Non-Goals](#non-goals)
   - [Current State Analysis](#current-state-analysis)
@@ -32,17 +33,19 @@ Directory: docs/proposals/285-specialized-trainers/README.md
     - [Identified Limitations](#identified-limitations)
   - [Proposal](#proposal)
     - [A. BaseTrainer Abstract Interface](#a-basetrainer-abstract-interface)
-    - [B. Tier 1: Framework-Specific Trainers](#b-tier-1-framework-specific-trainers)
+    - [B. FuncTrainer — Function-Driven Base](#b-functrainer--function-driven-base)
       - [TorchTrainer](#torchtrainer)
-      - [MPITrainer](#mpitrainer)
+      - [DeepSpeedTrainer](#deepspeedtrainer)
       - [JAXTrainer](#jaxtrainer)
       - [XGBoostTrainer](#xgboosttrainer)
-    - [C. Tier 2: Application-Level Trainers](#c-tier-2-application-level-trainers)
+    - [C. ConfigTrainer — Config-Driven Base](#c-configtrainer--config-driven-base)
+      - [BuiltinTrainer Migration Path](#builtintrainer-migration-path)
     - [D. RuntimeConfig](#d-runtimeconfig)
     - [E. TrainerClient Changes](#e-trainerclient-changes)
   - [Design Details](#design-details)
     - [Runtime Auto-Discovery](#runtime-auto-discovery)
     - [Runtime Validation](#runtime-validation)
+    - [Trainer Responsibility Boundary](#trainer-responsibility-boundary)
     - [Framework Argument Separation](#framework-argument-separation)
     - [Backend Integration](#backend-integration)
     - [Type Hierarchy Diagram](#type-hierarchy-diagram)
@@ -60,7 +63,8 @@ Directory: docs/proposals/285-specialized-trainers/README.md
     - [2. Use Pydantic `BaseModel` instead of `@dataclass`](#2-use-pydantic-basemodel-instead-of-dataclass)
     - [3. Put RuntimeConfig inside BaseTrainer instead of as a separate parameter](#3-put-runtimeconfig-inside-basetrainer-instead-of-as-a-separate-parameter)
     - [4. Automatic runtime selection with scoring/ranking instead of strict single-match](#4-automatic-runtime-selection-with-scoringranking-instead-of-strict-single-match)
-    - [5. Have specialized trainers inherit from CustomTrainer](#5-have-specialized-trainers-inherit-from-customtrainer)
+    - [5. Flat hierarchy: all trainers inherit directly from BaseTrainer](#5-flat-hierarchy-all-trainers-inherit-directly-from-basetrainer)
+    - [6. Have specialized trainers inherit from CustomTrainer](#6-have-specialized-trainers-inherit-from-customtrainer)
   - [References](#references)
 <!-- /toc -->
 
@@ -71,12 +75,13 @@ Directory: docs/proposals/285-specialized-trainers/README.md
 This proposal introduces two backward-compatible enhancements to the Kubeflow SDK
 (`kubeflow/sdk`) trainer subsystem:
 
-1. **Specialized, framework-aware trainer abstractions** — A new `BaseTrainer` abstract
-   interface and a suite of framework-specific implementations (`TorchTrainer`, `MPITrainer`,
-   `JAXTrainer`, etc.) that automatically discover and validate the correct
-   `ClusterTrainingRuntime` using the `trainer.kubeflow.org/framework` label. This fills the
-   "missing middle" between the overly generic `CustomTrainer` and the overly narrow
-   `BuiltinTrainer`.
+1. **Specialized, framework-aware trainer abstractions** — A three-level type hierarchy:
+   `BaseTrainer` (common interface) → `FuncTrainer` (function-driven) and `ConfigTrainer`
+   (config-driven), with framework-specific implementations (`TorchTrainer`,
+   `DeepSpeedTrainer`, `JAXTrainer`, etc.) that automatically discover and validate the
+   correct `ClusterTrainingRuntime` using the `trainer.kubeflow.org/framework` label.
+   This fills the "missing middle" between the overly generic `CustomTrainer` and the
+   overly narrow `BuiltinTrainer`.
 
 2. **`RuntimeConfig` dataclass** — A dedicated configuration object that cleanly separates
    per-job runtime environment settings (packages, pip config, environment variables) from
@@ -106,7 +111,8 @@ runtime reference. However, the current SDK abstractions create a usability gap:
   not accept user-defined training functions.
 
 For the majority of distributed training workloads — "run this PyTorch DDP function on
-N nodes" or "run this MPI script across a cluster" — neither abstraction fits well.
+N nodes" or "run this DeepSpeed training script across a cluster" — neither abstraction
+fits well.
 Users must either use the low-level `CustomTrainer` with manual runtime wiring, or
 fall back to raw YAML.
 
@@ -120,18 +126,41 @@ This proposal benefits all three personas defined in KEP-2170:
 | **MLOps Engineer** | Must help data scientists find the correct runtime name for their framework | Framework validation catches mismatches at submission time |
 | **Platform Admin / DevOps** | Cannot enforce that users pick the correct runtime for their framework | Trainers validate `trainer.kubeflow.org/framework` labels on runtimes |
 
+### Why Specialized Trainers?
+
+Beyond runtime auto-discovery and framework validation, specialized trainers provide
+a set of capabilities that `CustomTrainer` cannot offer:
+
+| Capability | `CustomTrainer` | Specialized Trainer (e.g., `TorchTrainer`) |
+|---|---|---|
+| **Runtime selection** | User must know and pass the runtime name | Auto-discovered from `trainer.kubeflow.org/framework` label |
+| **Framework validation** | None — mismatches fail at execution time | Validated at submission time, before `TrainJob` is created |
+| **Typed framework arguments** | Untyped `func_args` dict mixes hyperparams with framework args (`max_restarts`, `deepspeed_config`) | Dedicated typed fields with IDE autocomplete and documentation |
+| **Separation of concerns** | Runtime env (`packages_to_install`, `env`), scaling (`num_nodes`), training logic (`func`), and framework args all in one flat dataclass | Training logic in `FuncTrainer`, config in `ConfigTrainer`, runtime env in `RuntimeConfig`, scaling on `BaseTrainer` |
+| **IDE/type-checker support** | `func_args: dict` — no autocomplete or type checking | Typed fields — autocomplete, mypy, and docstrings per framework |
+| **Extensibility** | Adding framework support requires modifying `CustomTrainer` or creating ad-hoc wrappers | New framework = new subclass of `FuncTrainer` or `ConfigTrainer` |
+| **Self-documenting API** | `CustomTrainer(func=..., func_args={"max_restarts": 3})` — unclear what's a hyperparam vs. framework arg | `TorchTrainer(func=..., max_restarts=3)` — intent is clear from the type |
+
+**In summary:** Specialized trainers encode framework knowledge into the type system.
+The trainer class itself tells you what framework it targets, what arguments it accepts,
+and what runtimes it is compatible with. This shifts errors from runtime to definition
+time and makes the SDK self-documenting.
+
 ### Goals
 
 1. Define a `BaseTrainer` abstract interface that all trainer implementations satisfy,
    enabling the SDK and backends to handle any trainer polymorphically.
-2. Implement Tier 1 framework-specific trainers (`TorchTrainer`, `MPITrainer`,
-   `JAXTrainer`, `XGBoostTrainer`) that auto-discover runtimes by the
-   `trainer.kubeflow.org/framework` label and validate runtime compatibility.
-3. Provide a clear extension point (Tier 2) for community-contributed, application-level
-   trainers (e.g., `TransformersTrainer`, `DeepSpeedTrainer`).
-4. Introduce a `RuntimeConfig` dataclass to cleanly separate per-job runtime environment
+2. Define two intermediate abstract classes — `FuncTrainer` for function-driven
+   trainers and `ConfigTrainer` for config-driven trainers — that provide shared
+   fields and default implementations for their respective categories.
+3. Implement framework-specific function-driven trainers (`TorchTrainer`,
+   `DeepSpeedTrainer`, `JAXTrainer`, `XGBoostTrainer`) that auto-discover runtimes
+   by the `trainer.kubeflow.org/framework` label and validate runtime compatibility.
+4. Provide a clear extension point for community-contributed config-driven trainers
+   (e.g., `TorchTuneTrainer`, `UnslothTrainer`, `VeRLTrainer`).
+5. Introduce a `RuntimeConfig` dataclass to cleanly separate per-job runtime environment
    settings from training-loop and scaling configuration.
-5. Maintain 100% backward compatibility with the existing `CustomTrainer`,
+6. Maintain 100% backward compatibility with the existing `CustomTrainer`,
    `CustomTrainerContainer`, `BuiltinTrainer`, and `TrainerClient.train()` APIs.
 
 ### Non-Goals
@@ -141,9 +170,11 @@ This proposal benefits all three personas defined in KEP-2170:
 2. **New runtime labels or conventions.** We rely on the existing
    `trainer.kubeflow.org/framework` label already required on all runtimes.
 3. **Deprecating `CustomTrainer` or `BuiltinTrainer`.** Both remain supported.
-   Specialized trainers are an additional option, not a replacement.
+   Specialized trainers are an additional option, not a replacement. `ConfigTrainer`
+   is designed as the successor to `BuiltinTrainer` for config-driven trainers,
+   but the migration is deferred to a follow-up proposal.
 4. **Tier 2 trainer implementations.** This proposal defines the extension mechanism
-   and interface. Concrete Tier 2 implementations (Transformers, DeepSpeed, Unsloth,
+   and interface. Concrete Tier 2 implementations (TorchTune, Transformers, Unsloth,
    Axolotl) will be proposed in follow-up KEPs.
 5. **Changes to the `TrainJobTemplate` dataclass.** Template support for specialized
    trainers can be added incrementally.
@@ -177,9 +208,9 @@ class CustomTrainer:
 - Mixes runtime-environment settings (`packages_to_install`, `pip_index_urls`, `env`)
   with scaling/resource settings (`num_nodes`, `resources_per_node`) and training logic
   (`func`, `func_args`).
-- No framework awareness. A user can pass a PyTorch training function with an MPI
-  runtime and the SDK will not catch the mismatch until the controller rejects the job
-  or, worse, it fails at execution time.
+- No framework awareness. A user can pass a PyTorch training function with a
+  DeepSpeed runtime and the SDK will not catch the mismatch until the controller
+  rejects the job or, worse, it fails at execution time.
 - `func_args` is an untyped `dict` that conflates user hyperparameters with framework
   arguments (e.g., `rdzv_endpoint`, `nnodes`) that the Trainer controller already
   injects via environment variables.
@@ -234,6 +265,10 @@ Introduce an abstract base class that defines the contract all trainers must sat
 This enables the SDK, backends, and `TrainerClient` to work with any trainer
 polymorphically through a single, stable interface.
 
+`BaseTrainer` holds common fields and methods shared by both function-driven and
+config-driven trainers. The training-mode-specific concerns (`func`/`func_args` vs.
+`config`) are pushed down to the two intermediate classes described in sections B and C.
+
 ```python
 # kubeflow/trainer/types/types.py
 
@@ -245,24 +280,29 @@ from typing import Callable, Optional, ClassVar
 class BaseTrainer(ABC):
     """Abstract base class for all specialized trainer implementations.
 
+    Provides common fields for scaling and resource configuration, runtime
+    auto-discovery via the `supported_frameworks` class variable, and
+    framework validation.
+
+    Subclasses should not inherit from this directly — use `FuncTrainer`
+    for function-driven trainers or `ConfigTrainer` for config-driven trainers.
+
     Class Attributes:
         supported_frameworks: Framework identifiers this trainer supports.
             Must match values of the `trainer.kubeflow.org/framework` label
             on ClusterTrainingRuntime resources.
+
+    Args:
+        num_nodes: Number of nodes for distributed training.
+        resources_per_node: Resource requirements per node (cpu, memory, gpu).
+        image: Optional custom container image.
     """
 
     supported_frameworks: ClassVar[list[str]]
 
-    @abstractmethod
-    def get_train_func(self) -> Optional[Callable]:
-        """Return the user-provided training function, or None for
-        container/config-driven trainers."""
-        ...
-
-    @abstractmethod
-    def get_train_func_args(self) -> Optional[dict]:
-        """Return the arguments to pass to the training function."""
-        ...
+    num_nodes: Optional[int] = None
+    resources_per_node: Optional[dict] = None
+    image: Optional[str] = None
 
     @abstractmethod
     def get_framework_args(self) -> dict:
@@ -270,18 +310,6 @@ class BaseTrainer(ABC):
         with arguments injected by the Kubeflow Trainer controller
         (e.g., rdzv_endpoint, nnodes are excluded)."""
         ...
-
-    def get_num_nodes(self) -> Optional[int]:
-        """Return the number of nodes for distributed training."""
-        return getattr(self, "num_nodes", None)
-
-    def get_resources_per_node(self) -> Optional[dict]:
-        """Return resource requirements per node."""
-        return getattr(self, "resources_per_node", None)
-
-    def get_image(self) -> Optional[str]:
-        """Return a custom container image, if any."""
-        return getattr(self, "image", None)
 
     def validate_runtime(self, runtime: "Runtime") -> None:
         """Validate that the given runtime is compatible with this trainer.
@@ -292,8 +320,6 @@ class BaseTrainer(ABC):
         Raises:
             ValueError: If the runtime's framework is not in supported_frameworks.
         """
-        # Runtime.trainer.framework holds the value of
-        # the trainer.kubeflow.org/framework label.
         if runtime.trainer.framework not in self.supported_frameworks:
             raise ValueError(
                 f"{type(self).__name__} supports frameworks "
@@ -306,35 +332,74 @@ class BaseTrainer(ABC):
 
 - `supported_frameworks` is a `ClassVar`, not an instance field. It is a property of
   the trainer *class*, not of individual instances.
+- Common fields (`num_nodes`, `resources_per_node`, `image`) live on `BaseTrainer` so
+  every trainer inherits them without repetition.
+- `get_framework_args()` is the only abstract method on `BaseTrainer`. Training-mode
+  concerns (`get_train_func()`, `get_config()`) are defined on the intermediate classes.
 - `validate_runtime()` has a default implementation so subclasses get validation for
   free but can extend it.
-- The interface uses simple return types (`Optional[Callable]`, `dict`, `Optional[int]`)
-  rather than framework-specific types, keeping the base class framework-agnostic.
 - Methods use `get_*` naming to clearly indicate they are accessors, not setters.
 
-### B. Tier 1: Framework-Specific Trainers
+### B. FuncTrainer — Function-Driven Base
 
-Each Tier 1 trainer maps 1:1 to a framework identified by the
-`trainer.kubeflow.org/framework` label value.
+`FuncTrainer` is the base class for trainers where the user provides a Python training
+function. It owns the `func` and `func_args` fields and implements the corresponding
+accessors, so concrete framework trainers only need to add framework-specific fields.
+
+```python
+@dataclass
+class FuncTrainer(BaseTrainer):
+    """Base class for function-driven trainers.
+
+    The user provides a training function that is serialized and executed
+    within the distributed environment configured by the runtime.
+
+    Args:
+        func: The training function. Each node executes this function.
+        func_args: Arguments passed to the training function. Should contain
+            only user hyperparameters — framework arguments like rdzv_endpoint
+            and nnodes are injected by the Kubeflow Trainer controller.
+    """
+
+    func: Callable
+    func_args: Optional[dict] = None
+
+    def get_train_func(self) -> Callable:
+        """Return the user-provided training function."""
+        return self.func
+
+    def get_train_func_args(self) -> Optional[dict]:
+        """Return the arguments to pass to the training function."""
+        return self.func_args
+
+    def validate_runtime(self, runtime: "Runtime") -> None:
+        """Validate framework and trainer_type compatibility.
+
+        FuncTrainer requires runtimes with trainer_type == CUSTOM_TRAINER.
+        """
+        super().validate_runtime(runtime)
+        if runtime.trainer.trainer_type != TrainerType.CUSTOM_TRAINER:
+            raise ValueError(
+                f"{type(self).__name__} requires a runtime with "
+                f"trainer_type={TrainerType.CUSTOM_TRAINER.value}, but "
+                f"runtime '{runtime.name}' has "
+                f"trainer_type={runtime.trainer.trainer_type.value}"
+            )
+```
+
+Concrete function-driven trainers extend `FuncTrainer` and only need to define
+`supported_frameworks`, framework-specific fields, and `get_framework_args()`:
 
 #### TorchTrainer
 
 ```python
 @dataclass
-class TorchTrainer(BaseTrainer):
+class TorchTrainer(FuncTrainer):
     """Trainer for PyTorch distributed training workloads.
 
     Supports runtimes labeled with `trainer.kubeflow.org/framework: torch`.
 
     Args:
-        func: The training function. Each node executes this function within
-            the distributed environment configured by the runtime.
-        func_args: Arguments passed to the training function. Should contain
-            only user hyperparameters — framework arguments like rdzv_endpoint
-            and nnodes are injected by the Kubeflow Trainer controller.
-        num_nodes: Number of nodes for distributed training.
-        resources_per_node: Resource requirements per node (cpu, memory, gpu).
-        image: Optional custom container image.
         max_restarts: Maximum number of worker group restarts before failing.
             Maps to torchrun --max-restarts.
         monitor_interval: Interval in seconds for the elastic agent to monitor
@@ -343,21 +408,9 @@ class TorchTrainer(BaseTrainer):
 
     supported_frameworks: ClassVar[list[str]] = ["torch"]
 
-    func: Callable
-    func_args: Optional[dict] = None
-    num_nodes: Optional[int] = None
-    resources_per_node: Optional[dict] = None
-    image: Optional[str] = None
-
     # Torch-specific arguments (non-overlapping with controller-injected args)
     max_restarts: Optional[int] = None
     monitor_interval: Optional[float] = None
-
-    def get_train_func(self) -> Optional[Callable]:
-        return self.func
-
-    def get_train_func_args(self) -> Optional[dict]:
-        return self.func_args
 
     def get_framework_args(self) -> dict:
         args = {}
@@ -368,43 +421,42 @@ class TorchTrainer(BaseTrainer):
         return args
 ```
 
-#### MPITrainer
+#### DeepSpeedTrainer
 
 ```python
 @dataclass
-class MPITrainer(BaseTrainer):
-    """Trainer for MPI-based distributed training workloads.
+class DeepSpeedTrainer(FuncTrainer):
+    """Trainer for DeepSpeed distributed training workloads.
 
-    Supports runtimes labeled with `trainer.kubeflow.org/framework: mpi`.
+    DeepSpeed can be bootstrapped via either `torchrun` or `mpirun`, so this
+    trainer supports both torch-based and MPI-based runtimes. The SDK
+    auto-discovers a compatible runtime by matching the
+    `trainer.kubeflow.org/framework` label against the supported frameworks.
+    When both runtime types are available, the user must specify the runtime
+    explicitly.
 
     Args:
-        func: The training function.
-        func_args: Arguments passed to the training function.
-        num_nodes: Number of nodes for distributed training.
-        resources_per_node: Resource requirements per node.
-        image: Optional custom container image.
-        num_proc_per_node: Number of MPI processes per node.
+        deepspeed_config: Path or dict for the DeepSpeed JSON configuration.
+            When provided, the config is passed to the DeepSpeed launcher
+            via the --deepspeed_config flag.
+        num_proc_per_node: Number of processes per node. Maps to
+            --num_gpus (DeepSpeed launcher) or --nproc_per_node (torchrun).
     """
 
-    supported_frameworks: ClassVar[list[str]] = ["mpi"]
+    supported_frameworks: ClassVar[list[str]] = ["deepspeed", "torch"]
 
-    func: Callable
-    func_args: Optional[dict] = None
-    num_nodes: Optional[int] = None
-    resources_per_node: Optional[dict] = None
-    image: Optional[str] = None
-
-    # MPI-specific arguments
+    # DeepSpeed-specific arguments
+    deepspeed_config: Optional[Union[str, dict]] = None
     num_proc_per_node: Optional[int] = None
-
-    def get_train_func(self) -> Optional[Callable]:
-        return self.func
-
-    def get_train_func_args(self) -> Optional[dict]:
-        return self.func_args
 
     def get_framework_args(self) -> dict:
         args = {}
+        if self.deepspeed_config is not None:
+            if isinstance(self.deepspeed_config, dict):
+                import json
+                args["deepspeed_config"] = json.dumps(self.deepspeed_config)
+            else:
+                args["deepspeed_config"] = self.deepspeed_config
         if self.num_proc_per_node is not None:
             args["num-proc-per-node"] = str(self.num_proc_per_node)
         return args
@@ -414,32 +466,13 @@ class MPITrainer(BaseTrainer):
 
 ```python
 @dataclass
-class JAXTrainer(BaseTrainer):
+class JAXTrainer(FuncTrainer):
     """Trainer for JAX distributed training workloads.
 
     Supports runtimes labeled with `trainer.kubeflow.org/framework: jax`.
-
-    Args:
-        func: The training function.
-        func_args: Arguments passed to the training function.
-        num_nodes: Number of nodes for distributed training.
-        resources_per_node: Resource requirements per node.
-        image: Optional custom container image.
     """
 
     supported_frameworks: ClassVar[list[str]] = ["jax"]
-
-    func: Callable
-    func_args: Optional[dict] = None
-    num_nodes: Optional[int] = None
-    resources_per_node: Optional[dict] = None
-    image: Optional[str] = None
-
-    def get_train_func(self) -> Optional[Callable]:
-        return self.func
-
-    def get_train_func_args(self) -> Optional[dict]:
-        return self.func_args
 
     def get_framework_args(self) -> dict:
         return {}
@@ -449,7 +482,7 @@ class JAXTrainer(BaseTrainer):
 
 ```python
 @dataclass
-class XGBoostTrainer(BaseTrainer):
+class XGBoostTrainer(FuncTrainer):
     """Trainer for XGBoost distributed training workloads.
 
     Supports runtimes labeled with `trainer.kubeflow.org/framework: xgboost`.
@@ -457,60 +490,146 @@ class XGBoostTrainer(BaseTrainer):
 
     supported_frameworks: ClassVar[list[str]] = ["xgboost"]
 
-    func: Callable
-    func_args: Optional[dict] = None
-    num_nodes: Optional[int] = None
-    resources_per_node: Optional[dict] = None
-    image: Optional[str] = None
-
-    def get_train_func(self) -> Optional[Callable]:
-        return self.func
-
-    def get_train_func_args(self) -> Optional[dict]:
-        return self.func_args
-
     def get_framework_args(self) -> dict:
         return {}
 ```
 
-### C. Tier 2: Application-Level Trainers
+### C. ConfigTrainer — Config-Driven Base
 
-Tier 2 trainers compose Tier 1 trainers or extend `BaseTrainer` directly to provide
-higher-level, application-specific APIs. This proposal defines the extension point;
-concrete implementations are deferred to follow-up proposals.
+`ConfigTrainer` is the base class for trainers that are driven by a configuration
+object rather than a user-provided function. The runtime's entrypoint (e.g.,
+`tune run`, `accelerate launch`) handles execution based on the config.
+
+This replaces the current `BuiltinTrainer` pattern with an extensible, `BaseTrainer`-
+compatible design that supports runtime auto-discovery and framework validation.
 
 ```python
-# Example: future TransformersTrainer (NOT part of this proposal's implementation scope)
+@dataclass
+class ConfigTrainer(BaseTrainer):
+    """Base class for config-driven trainers.
+
+    Config-driven trainers do not accept a user training function. Instead,
+    they accept a configuration object that fully describes the training job.
+    The runtime's entrypoint handles execution based on the config.
+
+    Subclasses must implement `get_config()` to return the configuration
+    as a dictionary that can be passed to the runtime entrypoint.
+    """
+
+    @abstractmethod
+    def get_config(self) -> dict:
+        """Return the training configuration as a dictionary.
+
+        The returned dict is passed to the runtime entrypoint as arguments
+        or mounted as a config file, depending on the backend.
+        """
+        ...
+
+    def get_framework_args(self) -> dict:
+        """Default implementation: delegates to get_config().
+
+        Subclasses may override to separate framework args from config args.
+        """
+        return self.get_config()
+
+    def validate_runtime(self, runtime: "Runtime") -> None:
+        """Validate framework and trainer_type compatibility.
+
+        ConfigTrainer requires runtimes with trainer_type == BUILTIN_TRAINER.
+        """
+        super().validate_runtime(runtime)
+        if runtime.trainer.trainer_type != TrainerType.BUILTIN_TRAINER:
+            raise ValueError(
+                f"{type(self).__name__} requires a runtime with "
+                f"trainer_type={TrainerType.BUILTIN_TRAINER.value}, but "
+                f"runtime '{runtime.name}' has "
+                f"trainer_type={runtime.trainer.trainer_type.value}"
+            )
+```
+
+Concrete config-driven trainers extend `ConfigTrainer`. These are **not part of this
+proposal's implementation scope** — they will be proposed in follow-up KEPs. The
+examples below illustrate the extension pattern:
+
+```python
+# Example: future TorchTuneTrainer
 
 @dataclass
-class TransformersTrainer(BaseTrainer):
-    """Trainer for HuggingFace Transformers training.
+class TorchTuneTrainer(ConfigTrainer):
+    """Config-driven trainer for TorchTune recipes.
 
-    Wraps Transformer's Trainer API and maps to a PyTorch runtime.
+    Replaces the current BuiltinTrainer(config=TorchTuneConfig(...)) pattern.
     """
 
     supported_frameworks: ClassVar[list[str]] = ["torch"]
 
-    model_name: str
-    training_args: dict
-    dataset: str
-    num_nodes: Optional[int] = None
-    resources_per_node: Optional[dict] = None
+    config: TorchTuneConfig
 
-    def get_train_func(self) -> Optional[Callable]:
-        # Returns a generated function that uses Transformers Trainer internally
-        ...
-
-    def get_train_func_args(self) -> Optional[dict]:
-        return {"model_name": self.model_name, "dataset": self.dataset, **self.training_args}
-
-    def get_framework_args(self) -> dict:
-        return {}
+    def get_config(self) -> dict:
+        return self.config.to_dict()
 ```
 
-The existing `BuiltinTrainer` with `TorchTuneConfig` is conceptually a Tier 2 trainer.
-In a future proposal, it could be refactored to extend `BaseTrainer`. For now, it
-remains unchanged for backward compatibility.
+```python
+# Example: future UnslothTrainer
+
+@dataclass
+class UnslothTrainer(ConfigTrainer):
+    """Config-driven trainer for Unsloth fine-tuning."""
+
+    supported_frameworks: ClassVar[list[str]] = ["torch"]
+
+    model: str
+    dataset: str
+    max_seq_length: int = 2048
+    load_in_4bit: bool = True
+
+    def get_config(self) -> dict:
+        return {
+            "model": self.model,
+            "dataset": self.dataset,
+            "max_seq_length": self.max_seq_length,
+            "load_in_4bit": self.load_in_4bit,
+        }
+```
+
+```python
+# Example: future VeRLTrainer
+
+@dataclass
+class VeRLTrainer(ConfigTrainer):
+    """Config-driven trainer for VeRL RLHF training."""
+
+    supported_frameworks: ClassVar[list[str]] = ["torch"]
+
+    model: str
+    reward_model: str
+    algorithm: str = "ppo"
+
+    def get_config(self) -> dict:
+        return {
+            "model": self.model,
+            "reward_model": self.reward_model,
+            "algorithm": self.algorithm,
+        }
+```
+
+#### BuiltinTrainer Migration Path
+
+The existing `BuiltinTrainer` with `TorchTuneConfig` is conceptually a `ConfigTrainer`.
+This proposal does **not** deprecate or modify `BuiltinTrainer`, but `ConfigTrainer`
+is designed to be its successor:
+
+| Aspect | `BuiltinTrainer` (current) | `ConfigTrainer` subclass (future) |
+|---|---|---|
+| Runtime discovery | None (hardcoded) | Auto-discovery via `supported_frameworks` |
+| Framework validation | None | `validate_runtime()` |
+| RuntimeConfig support | No | Yes |
+| Extension model | Modify `BuiltinTrainer` class | Create new `ConfigTrainer` subclass |
+| Config type | Hardcoded `TorchTuneConfig` | Any config via `get_config()` |
+
+A follow-up proposal will define the concrete migration from `BuiltinTrainer` to
+`ConfigTrainer` subclasses for TorchTune and other config-driven frameworks. Until then,
+`BuiltinTrainer` remains fully supported and unchanged.
 
 ### D. RuntimeConfig
 
@@ -520,25 +639,6 @@ reused across any trainer type.
 
 ```python
 @dataclass
-class PipConfig:
-    """Configuration for pip package installation.
-
-    Args:
-        index_urls: PyPI index URLs. The first URL is the primary index;
-            remaining URLs are extra indexes.
-        quiet: Suppress pip output during installation.
-        install_as_user: Use --user flag for pip install (useful when the
-            container runs as non-root).
-    """
-
-    index_urls: list[str] = field(
-        default_factory=lambda: list(constants.DEFAULT_PIP_INDEX_URLS)
-    )
-    quiet: bool = True
-    install_as_user: bool = False
-
-
-@dataclass
 class RuntimeConfig:
     """Per-job runtime environment configuration.
 
@@ -546,17 +646,25 @@ class RuntimeConfig:
     environment variables to set) from training-loop and scaling concerns.
 
     This is passed to `TrainerClient.train()` and applies regardless of
-    the trainer type used.
+    the trainer type used. It is a separate parameter on `train()` — not
+    embedded in trainers — because runtime configuration is orthogonal to
+    both trainer type and initializer. The same RuntimeConfig applies to
+    all training pods, and keeping it at the `train()` call site allows
+    users to set custom env for initializers in the future without changing
+    the trainer classes.
 
     Args:
-        packages: Python packages to install before running the training
-            function (e.g., ["transformers>=4.40", "datasets"]).
-        pip_config: Configuration for pip installation behavior.
+        packages_to_install: Python packages to install before running the
+            training function (e.g., ["transformers>=4.40", "datasets"]).
+        pip_index_urls: PyPI index URLs. The first URL is the primary index;
+            remaining URLs are extra indexes.
         env: Environment variables to set in all training nodes.
     """
 
-    packages: Optional[list[str]] = None
-    pip_config: Optional[PipConfig] = None
+    packages_to_install: Optional[list[str]] = None
+    pip_index_urls: list[str] = field(
+        default_factory=lambda: list(constants.DEFAULT_PIP_INDEX_URLS)
+    )
     env: Optional[dict[str, str]] = None
 ```
 
@@ -564,9 +672,15 @@ class RuntimeConfig:
 
 - Uses `@dataclass` (not Pydantic `BaseModel`) to be consistent with the rest of the
   SDK codebase.
-- `PipConfig` is a separate dataclass rather than inline fields, because pip
-  configuration is a distinct concern with its own options.
-- `packages` replaces `packages_to_install` for brevity.
+- Field names (`packages_to_install`, `pip_index_urls`) are consistent with the
+  existing `CustomTrainer` fields and with KFP's `PipelinesClient`.
+- Pip configuration is flattened into `RuntimeConfig` rather than nested in a separate
+  `PipConfig` type, keeping the API surface minimal. Additional pip options (e.g.,
+  `--quiet`, `--user`) can be added as fields later if needed.
+- `RuntimeConfig` is a separate `train()` parameter — not embedded in trainers —
+  because runtime configuration is orthogonal to trainer type. The same `RuntimeConfig`
+  should be usable with `CustomTrainer`, `FuncTrainer`, or `ConfigTrainer` subclasses.
+  It also allows future extension to apply env vars to initializers.
 - `RuntimeConfig` is optional — when not provided, the trainer's own fields
   (`packages_to_install`, `env` on `CustomTrainer`) or the runtime defaults are used.
   This preserves backward compatibility.
@@ -605,8 +719,9 @@ When a `BaseTrainer` subclass is passed:
    available options and instructing the user to specify one explicitly.
 4. If `runtime` is provided (as a name or `Runtime` object), the trainer's
    `validate_runtime()` method is called to verify compatibility.
-5. The backend receives the trainer through the existing `BaseTrainer` interface
-   methods (`get_train_func()`, `get_framework_args()`, etc.).
+5. The backend dispatches based on the trainer type: `FuncTrainer` subclasses are
+   handled via `get_train_func()` / `get_train_func_args()`, while `ConfigTrainer`
+   subclasses are handled via `get_config()`. Both share `get_framework_args()`.
 
 When `runtime_config` is provided, its values take precedence over any
 runtime-environment fields on `CustomTrainer` (for backward compatibility, those
@@ -660,29 +775,104 @@ def _resolve_runtime(
     return matching[0]
 ```
 
+**Multi-runtime selection strategy:**
+
+When multiple runtimes match the trainer's `supported_frameworks`, the SDK raises a
+`ValueError` listing the available options. The user resolves the ambiguity by passing
+the `runtime` parameter to `train()`:
+
+```python
+# Two torch runtimes exist: "torch-distributed" and "torch-elastic"
+# Auto-discovery raises ValueError listing both options.
+
+# User resolves by specifying explicitly:
+client.train(
+    runtime="torch-elastic",
+    trainer=TorchTrainer(func=my_fn, num_nodes=4),
+)
+```
+
+This is a deliberate design choice. The `runtime` parameter on `train()` is the
+single, existing mechanism for runtime selection. Adding a `runtime_name` to
+`RuntimeConfig` or to trainer classes would conflate concerns — `RuntimeConfig` is for
+packages and environment, trainers are for training logic, and runtime selection belongs
+to the `train()` call site. See also
+[Alternative #4](#4-automatic-runtime-selection-with-scoringranking-instead-of-strict-single-match)
+for why priority-based scoring was rejected.
+
 ### Runtime Validation
 
-Validation happens at two levels:
+Validation happens at three levels:
 
 1. **Framework label check** (in `BaseTrainer.validate_runtime()`): Ensures the
    runtime's `trainer.kubeflow.org/framework` label value is in the trainer's
    `supported_frameworks` list.
 
-2. **Framework-specific checks** (in subclass overrides): For example, `MPITrainer`
-   could verify that the runtime's MPI policy source is configured correctly.
+2. **Trainer type check** (in `FuncTrainer.validate_runtime()` and
+   `ConfigTrainer.validate_runtime()`): Ensures the runtime's `trainer_type` matches
+   the trainer category. `FuncTrainer` requires `TrainerType.CUSTOM_TRAINER`;
+   `ConfigTrainer` requires `TrainerType.BUILTIN_TRAINER`. This catches mismatches
+   such as passing a function-driven trainer to a config-only runtime.
 
-Validation errors are raised as `ValueError` at submission time, *before* the
-`TrainJob` CR is created in the cluster.
+3. **Framework-specific checks** (in concrete trainer overrides): For example,
+   `DeepSpeedTrainer` could verify that the runtime's launcher configuration
+   (torchrun vs. mpirun) is compatible with the selected runtime.
+
+**Validation strategy — SDK vs. control plane:**
+
+SDK validation raises `ValueError` at submission time, *before* the `TrainJob` CR is
+created in the cluster. This is intentionally a hard fail, not a warning, because:
+
+1. **Fast feedback.** A `ValueError` with a clear message is immediate. A warning
+   that the user ignores leads to a `TrainJob` that fails minutes later in the
+   controller or at execution time, wasting cluster resources.
+2. **Deterministic checks.** The SDK validates against concrete, known properties
+   (framework label, `trainer_type`) — not heuristics. These checks are
+   authoritative at the SDK level.
+3. **Control plane remains the final arbiter.** The controller's webhook may enforce
+   additional constraints (resource quotas, policy, version compatibility) that the
+   SDK does not know about. SDK validation is a *subset* of control-plane validation,
+   not a replacement.
+4. **Overridable.** Subclasses can override `validate_runtime()` to relax or extend
+   validation for custom use cases.
+
+In summary: the SDK fails fast on checks it *can* perform (framework, trainer_type),
+and defers to the controller for checks it *cannot* perform (quotas, policies).
+
+### Trainer Responsibility Boundary
+
+Trainers are **data objects**, not builders. They expose structured data about the
+training job; they do not construct the `TrainJob` CRD, build container entrypoints,
+or interact with the Kubernetes API. The responsibility boundary is:
+
+| Concern | Owner | Rationale |
+|---|---|---|
+| Training function / config | **Trainer** (`get_train_func()`, `get_config()`) | Trainer knows what to run |
+| Framework-specific CLI args | **Trainer** (`get_framework_args()`) | Trainer knows its framework's options |
+| Scaling & resources | **Trainer** (`num_nodes`, `resources_per_node`) | User sets these on the trainer |
+| Serializing function into `command` | **Backend** (`get_command_using_train_func()`) | Backend knows the serialization format |
+| Building `TrainJob` CRD / container spec | **Backend** | Backend knows the target platform (K8s, container, local) |
+| Injecting distributed args (`rdzv_endpoint`, `nnodes`, etc.) | **Controller** | Controller owns the distributed topology |
+| Enforcing policies, quotas, webhooks | **Controller** | Control plane is the final authority |
+
+This separation ensures that:
+- Adding a new trainer does **not** require changes to the backend — only a new
+  `FuncTrainer` or `ConfigTrainer` subclass.
+- Adding a new backend does **not** require changes to trainers — backends consume
+  the same `BaseTrainer` interface.
+- The controller continues to own distributed coordination args, avoiding conflicts
+  between SDK-provided and controller-injected arguments.
 
 ### Framework Argument Separation
 
 The current `CustomTrainer.func_args` dict mixes user hyperparameters with framework
-arguments. Specialized trainers solve this by separating them into two methods:
+arguments. The three-level hierarchy solves this structurally:
 
-| Method | Contains | Example |
-|---|---|---|
-| `get_train_func_args()` | User hyperparameters | `{"learning_rate": 1e-4, "epochs": 10}` |
-| `get_framework_args()` | Framework-specific CLI args not injected by the controller | `{"max-restarts": "3", "monitor-interval": "5"}` |
+| Layer | Method | Contains | Maps to in `TrainJob` CRD |
+|---|---|---|---|
+| `FuncTrainer` | `get_train_func_args()` | User hyperparameters | Embedded in serialized `trainer.command` |
+| `ConfigTrainer` | `get_config()` | Full training configuration | `trainer.args` (parsed by runtime entrypoint) |
+| `BaseTrainer` | `get_framework_args()` | Framework CLI args not injected by the controller | Appended to `trainer.args` |
 
 Arguments that the Kubeflow Trainer controller already injects (e.g., `rdzv_endpoint`,
 `nnodes`, `nproc_per_node`, `node_rank`) are **excluded** from `get_framework_args()`.
@@ -692,25 +882,42 @@ which the controller manages.
 ### Backend Integration
 
 Each backend (`KubernetesBackend`, `ContainerBackend`, `LocalProcessBackend`) must be
-updated to handle `BaseTrainer` instances. The integration follows this pattern:
+updated to handle `BaseTrainer` instances. The backend reads from the trainer's
+interface methods and maps them to platform-specific constructs:
 
 ```python
-# In each backend's train() method:
+# In KubernetesBackend — building the TrainJob CR:
 
-def train(self, runtime, initializer, trainer, runtime_config, options):
-    if isinstance(trainer, BaseTrainer):
-        # Use the BaseTrainer interface
-        func = trainer.get_train_func()
-        func_args = trainer.get_train_func_args()
+def _build_trainer_cr(self, runtime, trainer):
+    trainer_cr = TrainerV1alpha1Trainer()
+    trainer_cr.num_nodes = trainer.num_nodes
+    trainer_cr.resources_per_node = trainer.resources_per_node
+    trainer_cr.image = trainer.image
+
+    if isinstance(trainer, FuncTrainer):
+        # Serialize function into command (same as CustomTrainer today)
+        trainer_cr.command = get_command_using_train_func(
+            runtime,
+            trainer.get_train_func(),
+            trainer.get_train_func_args(),
+            runtime_config.pip_index_urls if runtime_config else None,
+            runtime_config.packages_to_install if runtime_config else None,
+        )
+        # Framework args go into trainer.args
         framework_args = trainer.get_framework_args()
-        num_nodes = trainer.get_num_nodes()
-        resources = trainer.get_resources_per_node()
-        image = trainer.get_image()
-        # Build TrainJob spec using these values + framework_args
-        ...
-    elif isinstance(trainer, CustomTrainer):
-        # Existing logic, unchanged
-        ...
+        if framework_args:
+            trainer_cr.args = [
+                f"--{k}={v}" for k, v in framework_args.items()
+            ]
+
+    elif isinstance(trainer, ConfigTrainer):
+        # Config-driven: use runtime's command, pass config as args
+        trainer_cr.command = list(runtime.trainer.command)
+        trainer_cr.args = [
+            f"{k}={v}" for k, v in trainer.get_config().items()
+        ]
+
+    return trainer_cr
 ```
 
 The `runtime_config` parameter is applied uniformly: packages are installed in the
@@ -719,27 +926,28 @@ init container, environment variables are set on all training pods.
 ### Type Hierarchy Diagram
 
 ```
-                    BaseTrainer (ABC)
-                    ├── get_train_func()
-                    ├── get_train_func_args()
-                    ├── get_framework_args()
-                    ├── get_num_nodes()
-                    ├── get_resources_per_node()
-                    ├── get_image()
-                    └── validate_runtime()
-                         │
-          ┌──────────────┼──────────────┬───────────────┐
-          │              │              │               │
-    TorchTrainer    MPITrainer    JAXTrainer    XGBoostTrainer
-    (framework:     (framework:   (framework:   (framework:
-     "torch")        "mpi")        "jax")        "xgboost")
-          │
-          │  (future Tier 2, via follow-up proposals)
-          │
-    ┌─────┴──────────┐
-    │                │
-Transformers     DeepSpeed
-  Trainer        Trainer
+                        BaseTrainer (ABC)
+                        ├── supported_frameworks (ClassVar)
+                        ├── num_nodes, resources_per_node, image
+                        ├── get_framework_args()  [abstract]
+                        └── validate_runtime()
+                              │
+              ┌───────────────┴───────────────┐
+              │                               │
+        FuncTrainer (ABC)              ConfigTrainer (ABC)
+        ├── func: Callable             ├── get_config()  [abstract]
+        ├── func_args: dict            └── get_framework_args()
+        ├── get_train_func()                  │
+        └── get_train_func_args()             │  (future, via follow-up proposals)
+              │                               │
+    ┌─────────┼─────────┬──────────┐    ┌─────┼──────────┬──────────┐
+    │         │         │          │    │     │          │          │
+  Torch   DeepSpeed   JAX    XGBoost  Torch  Unsloth   VeRL    Axolotl
+  Trainer  Trainer  Trainer  Trainer  Tune   Trainer  Trainer  Trainer
+              │                      Trainer
+              │
+    (supports both "deepspeed"
+     and "torch" frameworks)
 
 
     Existing (unchanged):
@@ -751,8 +959,8 @@ Transformers     DeepSpeed
 
     New:
 
-    RuntimeConfig ─── PipConfig
-    (per-job env)      (pip settings)
+    RuntimeConfig
+    (per-job env: packages, pip URLs, env vars)
 ```
 
 ---
@@ -803,7 +1011,7 @@ job_id = client.train(
         max_restarts=3,  # Typed, torch-specific argument
     ),
     runtime_config=RuntimeConfig(
-        packages=["transformers", "datasets"],
+        packages_to_install=["transformers", "datasets"],
         env={"NCCL_DEBUG": "INFO"},
     ),
 )
@@ -823,20 +1031,25 @@ job_id = client.train(
 )
 ```
 
-**MPI example:**
+**DeepSpeed example:**
 
 ```python
-from kubeflow.trainer import MPITrainer, RuntimeConfig
+from kubeflow.trainer import DeepSpeedTrainer, RuntimeConfig
 
 job_id = client.train(
-    trainer=MPITrainer(
-        func=train_horovod,
+    trainer=DeepSpeedTrainer(
+        func=train_deepspeed,
         num_nodes=8,
         resources_per_node={"gpu": 4, "memory": "32Gi"},
         num_proc_per_node=4,
+        deepspeed_config={
+            "train_batch_size": 32,
+            "fp16": {"enabled": True},
+            "zero_optimization": {"stage": 2},
+        },
     ),
     runtime_config=RuntimeConfig(
-        packages=["horovod[pytorch]"],
+        packages_to_install=["deepspeed"],
     ),
 )
 ```
@@ -849,12 +1062,12 @@ job_id = client.train(
 |---|---|
 | `CustomTrainer` | **No change.** Remains fully functional. `packages_to_install`, `pip_index_urls`, and `env` fields are retained. |
 | `CustomTrainerContainer` | **No change.** |
-| `BuiltinTrainer` | **No change.** |
+| `BuiltinTrainer` | **No change.** `ConfigTrainer` is designed as its successor (see [BuiltinTrainer Migration Path](#builtintrainer-migration-path)), but migration is deferred to a follow-up proposal. |
 | `TrainerClient.train()` | **Additive only.** New `runtime_config` parameter is optional with default `None`. The `trainer` parameter type union is extended to include `BaseTrainer`. |
 | `TrainJobTemplate` | **No change in this proposal.** Future work can extend it to support `BaseTrainer` subclasses. |
 | `RuntimeConfig` vs `CustomTrainer` fields | When both `RuntimeConfig` and `CustomTrainer` fields are provided, `RuntimeConfig` takes precedence. This is documented but does not break existing code since `RuntimeConfig` defaults to `None`. |
 | Python version | No new Python version requirements. Uses `dataclass`, `ABC`, `ClassVar` — all available in Python 3.9+. |
-| SDK public exports | New classes are exported from `kubeflow.trainer` (`TorchTrainer`, `MPITrainer`, `JAXTrainer`, `XGBoostTrainer`, `RuntimeConfig`, `PipConfig`). No existing exports are removed or renamed. |
+| SDK public exports | New classes are exported from `kubeflow.trainer` (`BaseTrainer`, `FuncTrainer`, `ConfigTrainer`, `TorchTrainer`, `DeepSpeedTrainer`, `JAXTrainer`, `XGBoostTrainer`, `RuntimeConfig`). No existing exports are removed or renamed. |
 
 ---
 
@@ -862,21 +1075,25 @@ job_id = client.train(
 
 ### Unit Tests
 
-1. **BaseTrainer interface compliance**: Verify that each Tier 1 trainer correctly
-   implements all abstract methods.
+1. **Type hierarchy compliance**: Verify that each `FuncTrainer` subclass correctly
+   inherits `func`/`func_args` fields and each `ConfigTrainer` subclass implements
+   `get_config()`.
 2. **`validate_runtime()` — positive**: Each trainer validates a runtime with a
-   matching framework label.
-3. **`validate_runtime()` — negative**: Each trainer raises `ValueError` for a
-   runtime with a non-matching framework label.
-4. **`get_framework_args()`**: Verify that each trainer returns only non-overlapping
+   matching framework label and compatible `trainer_type`.
+3. **`validate_runtime()` — negative framework**: Each trainer raises `ValueError`
+   for a runtime with a non-matching framework label.
+4. **`validate_runtime()` — negative trainer_type**: `FuncTrainer` subclass raises
+   `ValueError` for a `BUILTIN_TRAINER` runtime; `ConfigTrainer` subclass raises
+   `ValueError` for a `CUSTOM_TRAINER` runtime.
+5. **`get_framework_args()`**: Verify that each trainer returns only non-overlapping
    arguments (excludes controller-injected args).
-5. **`RuntimeConfig` defaults**: Verify `None` defaults and precedence over
+6. **`RuntimeConfig` defaults**: Verify `None` defaults and precedence over
    `CustomTrainer` fields.
-6. **Runtime auto-discovery — single match**: Mock `list_runtimes()` to return one
+7. **Runtime auto-discovery — single match**: Mock `list_runtimes()` to return one
    matching runtime; verify it is selected.
-7. **Runtime auto-discovery — no match**: Mock `list_runtimes()` to return no
+8. **Runtime auto-discovery — no match**: Mock `list_runtimes()` to return no
    matching runtimes; verify `ValueError`.
-8. **Runtime auto-discovery — multiple matches**: Mock `list_runtimes()` to return
+9. **Runtime auto-discovery — multiple matches**: Mock `list_runtimes()` to return
    multiple matching runtimes; verify `ValueError` with runtime names in the
    message.
 
@@ -902,22 +1119,23 @@ job_id = client.train(
 
 This proposal can be implemented incrementally across multiple PRs:
 
-**Phase 1: Core Interface and RuntimeConfig**
-- Add `BaseTrainer` abstract class to `kubeflow/trainer/types/types.py`
-- Add `RuntimeConfig` and `PipConfig` dataclasses
+**Phase 1: Core Type Hierarchy and RuntimeConfig**
+- Add `BaseTrainer`, `FuncTrainer`, `ConfigTrainer` to `kubeflow/trainer/types/types.py`
+- Add `RuntimeConfig` dataclass
 - Add `_resolve_runtime()` to `TrainerClient`
 - Extend `TrainerClient.train()` signature
-- Unit tests for the interface and RuntimeConfig
+- Unit tests for the type hierarchy and RuntimeConfig
 
 **Phase 2: TorchTrainer**
-- Implement `TorchTrainer`
+- Implement `TorchTrainer` (extends `FuncTrainer`)
 - Update `KubernetesBackend`, `ContainerBackend`, `LocalProcessBackend` to handle
-  `BaseTrainer`
+  `FuncTrainer` and `ConfigTrainer` dispatch
 - Integration tests
 - Documentation and examples
 
-**Phase 3: MPITrainer, JAXTrainer, XGBoostTrainer**
-- Implement remaining Tier 1 trainers
+**Phase 3: DeepSpeedTrainer, JAXTrainer, XGBoostTrainer**
+- Implement remaining `FuncTrainer` subclasses
+- DeepSpeedTrainer with multi-runtime support (torch and deepspeed/MPI runtimes)
 - Framework-specific validation and argument handling
 - Tests and documentation
 
@@ -961,6 +1179,9 @@ runtime config.
   same `RuntimeConfig` should be usable with `CustomTrainer`,
   `CustomTrainerContainer`, or any `BaseTrainer` subclass.
 - Keeping it as a separate `train()` parameter maintains clean separation of concerns.
+- Users may want custom env for initializers too. A separate `train()` parameter
+  can be extended to apply to both trainers and initializers without changing trainer
+  classes.
 
 ### 4. Automatic runtime selection with scoring/ranking instead of strict single-match
 
@@ -974,7 +1195,22 @@ scoring heuristic (e.g., prefer non-deprecated, prefer more specific labels).
 - A clear error message listing available runtimes is more useful than a possibly
   wrong automatic selection.
 
-### 5. Have specialized trainers inherit from CustomTrainer
+### 5. Flat hierarchy: all trainers inherit directly from BaseTrainer
+
+Have all concrete trainers (both function-driven and config-driven) inherit directly
+from `BaseTrainer` without the `FuncTrainer` / `ConfigTrainer` intermediate layer.
+
+**Rejected because:**
+- Config-driven trainers would carry `get_train_func()` returning `None` — semantically
+  incorrect and error-prone.
+- Function-driven trainers would each redeclare `func` and `func_args` fields —
+  unnecessary repetition.
+- Backend dispatch would rely on runtime checks (`if trainer.get_train_func() is None`)
+  instead of type checks (`isinstance(trainer, ConfigTrainer)`).
+- The intermediate classes encode the fundamental difference between the two trainer
+  modes at the type level, making the API self-documenting.
+
+### 6. Have specialized trainers inherit from CustomTrainer
 
 Make `TorchTrainer` a subclass of `CustomTrainer` instead of a new `BaseTrainer`
 hierarchy.
