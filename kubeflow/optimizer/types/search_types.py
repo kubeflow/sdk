@@ -14,7 +14,6 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Union
 
 from kubeflow_katib_api import models as katib_models
 
@@ -85,8 +84,8 @@ class Distribution(Enum):
 
 @dataclass
 class ContinuousSearchSpace:
-    min: Union[float, int]
-    max: Union[float, int]
+    min: float | int
+    max: float | int
     distribution: Distribution
 
 

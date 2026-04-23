@@ -18,7 +18,6 @@ import random
 import string
 import tempfile
 import time
-from typing import Optional, Union
 import uuid
 
 from kubeflow.trainer.backends.base import RuntimeBackend
@@ -71,12 +70,13 @@ class LocalProcessBackend(RuntimeBackend):
 
     def train(
         self,
-        runtime: Optional[Union[str, types.Runtime]] = None,
-        initializer: Optional[types.Initializer] = None,
-        trainer: Optional[
-            Union[types.CustomTrainer, types.CustomTrainerContainer, types.BuiltinTrainer]
-        ] = None,
-        options: Optional[list] = None,
+        runtime: str | types.Runtime | None = None,
+        initializer: types.Initializer | None = None,
+        trainer: types.CustomTrainer
+        | types.CustomTrainerContainer
+        | types.BuiltinTrainer
+        | None = None,
+        options: list | None = None,
     ) -> str:
         if runtime is None:
             raise ValueError("Runtime must be provided for LocalProcessBackend")
@@ -146,7 +146,7 @@ class LocalProcessBackend(RuntimeBackend):
 
         return trainjob_name
 
-    def list_jobs(self, runtime: Optional[types.Runtime] = None) -> list[types.TrainJob]:
+    def list_jobs(self, runtime: types.Runtime | None = None) -> list[types.TrainJob]:
         result = []
 
         for _job in self.__local_jobs:
@@ -209,24 +209,32 @@ class LocalProcessBackend(RuntimeBackend):
             # (adjust args if stream_logs has different signature)
             yield from _step.job.logs(follow=follow)
 
+    def get_job_events(self, name: str) -> list[types.Event]:
+        raise NotImplementedError()
+
     def wait_for_job_status(
         self,
         name: str,
         status: set[str] = {constants.TRAINJOB_COMPLETE},
         timeout: int = 600,
         polling_interval: int = 2,
-        callbacks: Optional[list[Callable[[types.TrainJob], None]]] = None,
+        callbacks: list[Callable[[types.TrainJob], None]] | None = None,
     ) -> types.TrainJob:
+        if polling_interval <= 0:
+            raise ValueError(
+                f"Polling interval must be a positive number, got polling_interval={polling_interval}"
+            )
+        if polling_interval >= timeout:
+            raise ValueError(
+                f"Polling interval must be strictly less than timeout. "
+                f"Received polling_interval={polling_interval}, timeout={timeout}"
+            )
+
         # find first match or fallback
         _job = next((_job for _job in self.__local_jobs if _job.name == name), None)
 
         if _job is None:
             raise ValueError(f"No TrainJob with name {name}")
-
-        if polling_interval > timeout:
-            raise ValueError(
-                f"Polling interval {polling_interval} must be less than timeout: {timeout}"
-            )
 
         for _ in range(round(timeout / polling_interval)):
             # Get current job status
@@ -258,6 +266,8 @@ class LocalProcessBackend(RuntimeBackend):
         self.__local_jobs.remove(_job)
 
     def __get_job_status(self, job: LocalBackendJobs) -> str:
+        if not job.steps:
+            return constants.TRAINJOB_CREATED
         statuses = [_step.job.status for _step in job.steps]
         # if status is running or failed will take precedence over completed
         if constants.TRAINJOB_FAILED in statuses:
@@ -267,7 +277,7 @@ class LocalProcessBackend(RuntimeBackend):
         elif constants.TRAINJOB_CREATED in statuses:
             status = constants.TRAINJOB_CREATED
         else:
-            status = constants.TRAINJOB_CREATED
+            status = constants.TRAINJOB_COMPLETE
 
         return status
 

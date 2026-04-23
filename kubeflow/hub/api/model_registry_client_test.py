@@ -97,8 +97,12 @@ def test_init_import_error(test_case, monkeypatch):
                 "author": "test",
             },
             expected_output={
+                "server_address": "http://localhost",
                 "port": 8080,
+                "author": "test",
                 "is_secure": False,
+                "user_token": None,
+                "custom_ca": None,
             },
         ),
         TestCase(
@@ -109,8 +113,12 @@ def test_init_import_error(test_case, monkeypatch):
                 "author": "test",
             },
             expected_output={
+                "server_address": "https://registry.example.com",
                 "port": 443,
+                "author": "test",
                 "is_secure": True,
+                "user_token": None,
+                "custom_ca": None,
             },
         ),
         TestCase(
@@ -122,8 +130,44 @@ def test_init_import_error(test_case, monkeypatch):
                 "author": "test-author",
             },
             expected_output={
+                "server_address": "http://localhost",
                 "port": 9080,
+                "author": "test-author",
                 "is_secure": False,
+                "user_token": None,
+                "custom_ca": None,
+            },
+        ),
+        TestCase(
+            name="https URL with explicit port parses port",
+            expected_status=SUCCESS,
+            config={
+                "base_url": "https://example.org:456",
+                "author": "test",
+            },
+            expected_output={
+                "server_address": "https://example.org:456",
+                "port": 443,
+                "author": "test",
+                "is_secure": True,
+                "user_token": None,
+                "custom_ca": None,
+            },
+        ),
+        TestCase(
+            name="http URL with explicit port parses port",
+            expected_status=SUCCESS,
+            config={
+                "base_url": "http://example.org:456",
+                "author": "test",
+            },
+            expected_output={
+                "server_address": "http://example.org:456",
+                "port": 8080,
+                "author": "test",
+                "is_secure": False,
+                "user_token": None,
+                "custom_ca": None,
             },
         ),
     ],
@@ -144,9 +188,7 @@ def test_init(test_case, monkeypatch):
 
         assert test_case.expected_status == SUCCESS
         mock_registry_class.assert_called_once()
-        call_kwargs = mock_registry_class.call_args[1]
-        assert call_kwargs["port"] == test_case.expected_output["port"]
-        assert call_kwargs["is_secure"] is test_case.expected_output["is_secure"]
+        assert mock_registry_class.call_args[1] == test_case.expected_output
         assert client._registry == mock_registry_instance
 
     except Exception as e:
@@ -167,17 +209,83 @@ def test_init(test_case, monkeypatch):
                 "model_format_version": "1.0",
                 "version": "v1",
             },
+            expected_output={
+                "storage_key": None,
+                "storage_path": None,
+                "service_account_name": None,
+            },
+        ),
+        TestCase(
+            name="register_model forwards full StorageConfig fields",
+            expected_status=SUCCESS,
+            config={
+                "name": "test",
+                "uri": "s3://bucket/model",
+                "version": "v1",
+                "storage_config_kwargs": {
+                    "storage_key": "my-s3-secret",
+                    "storage_path": "models/v1",
+                    "service_account_name": "model-sa",
+                },
+            },
+            expected_output={
+                "storage_key": "my-s3-secret",
+                "storage_path": "models/v1",
+                "service_account_name": "model-sa",
+            },
+        ),
+        TestCase(
+            name="register_model forwards partial StorageConfig (storage_key only)",
+            expected_status=SUCCESS,
+            config={
+                "name": "test",
+                "uri": "s3://bucket/model",
+                "version": "v1",
+                "storage_config_kwargs": {"storage_key": "my-s3-secret"},
+            },
+            expected_output={
+                "storage_key": "my-s3-secret",
+                "storage_path": None,
+                "service_account_name": None,
+            },
+        ),
+        TestCase(
+            name="register_model forwards partial StorageConfig (service_account_name only)",
+            expected_status=SUCCESS,
+            config={
+                "name": "test",
+                "uri": "s3://bucket/model",
+                "version": "v1",
+                "storage_config_kwargs": {"service_account_name": "model-sa"},
+            },
+            expected_output={
+                "storage_key": None,
+                "storage_path": None,
+                "service_account_name": "model-sa",
+            },
         ),
     ],
 )
 def test_register_model(test_case, client, mock_registry):
     """Test register_model delegates to ModelRegistry.register_model."""
 
+    from kubeflow.hub.types.types import StorageConfig
+
+    config = dict(test_case.config)
+    storage_kwargs = config.pop("storage_config_kwargs", None)
+    if storage_kwargs is not None:
+        config["storage_config"] = StorageConfig(**storage_kwargs)
+
     try:
-        client.register_model(**test_case.config)
+        client.register_model(**config)
 
         assert test_case.expected_status == SUCCESS
         assert mock_registry.register_model.called
+        forwarded = mock_registry.register_model.call_args[1]
+        for field, expected in test_case.expected_output.items():
+            assert forwarded[field] == expected, (
+                f"expected {field}={expected!r}, got {forwarded[field]!r}"
+            )
 
     except Exception as e:
         assert test_case.expected_status == FAILED

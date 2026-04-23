@@ -8,7 +8,7 @@ Prerequisites
 
 Before you begin, make sure you have:
 
-1. Python 3.9 or higher installed
+1. Python 3.10 or higher installed
 2. The Kubeflow SDK installed (see :doc:`installation`)
 3. Access to a Kubernetes cluster with Kubeflow Trainer installed
 

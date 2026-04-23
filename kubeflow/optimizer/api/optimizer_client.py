@@ -14,7 +14,7 @@
 
 from collections.abc import Callable, Iterator
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.optimizer.backends.kubernetes.backend import KubernetesBackend
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 class OptimizerClient:
     def __init__(
         self,
-        backend_config: Optional[KubernetesBackendConfig] = None,
+        backend_config: KubernetesBackendConfig | None = None,
     ):
         """Initialize a Kubeflow Optimizer client.
 
@@ -59,10 +59,10 @@ class OptimizerClient:
         self,
         trial_template: TrainJobTemplate,
         *,
-        trial_config: Optional[TrialConfig] = None,
+        trial_config: TrialConfig | None = None,
         search_space: dict[str, Any],
-        objectives: Optional[list[Objective]] = None,
-        algorithm: Optional[BaseAlgorithm] = None,
+        objectives: list[Objective] | None = None,
+        algorithm: BaseAlgorithm | None = None,
     ) -> str:
         """Create an OptimizationJob for hyperparameter tuning.
 
@@ -123,7 +123,7 @@ class OptimizerClient:
     def get_job_logs(
         self,
         name: str,
-        trial_name: Optional[str] = None,
+        trial_name: str | None = None,
         follow: bool = False,
     ) -> Iterator[str]:
         """Get logs from a specific trial of an OptimizationJob.
@@ -160,7 +160,7 @@ class OptimizerClient:
         """
         return self.backend.get_job_logs(name=name, trial_name=trial_name, follow=follow)
 
-    def get_best_results(self, name: str) -> Optional[Result]:
+    def get_best_results(self, name: str) -> Result | None:
         """Get the best hyperparameters and metrics from an OptimizationJob.
 
         This method retrieves the optimal hyperparameters and their corresponding metrics
@@ -185,7 +185,7 @@ class OptimizerClient:
         status: set[str] = {constants.OPTIMIZATION_JOB_COMPLETE},
         timeout: int = 3600,
         polling_interval: int = 2,
-        callbacks: Optional[list[Callable[[OptimizationJob], None]]] = None,
+        callbacks: list[Callable[[OptimizationJob], None]] | None = None,
     ) -> OptimizationJob:
         """Wait for an OptimizationJob to reach a desired status.
 

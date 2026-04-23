@@ -203,17 +203,23 @@ def test_get_resources_per_node(test_case: TestCase):
                 '\nif ! [ -x "$(command -v pip)" ]; then\n'
                 "    python -m ensurepip || python -m ensurepip --user || "
                 "apt-get install python-pip\n"
+                "fi\n\n\n"
+                "PACKAGES=(torch numpy custom-package)\n"
+                "PIP_OPTS=(--index-url https://pypi.org/simple --extra-index-url https://private.repo.com/simple --extra-index-url https://internal.company.com/simple)\n"
+                'LOG_FILE="pip_install.log"\n'
+                'rm -f "$LOG_FILE"\n'
+                "\n"
+                "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
+                '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
+                '    echo "Successfully installed Python packages (user): ${PACKAGES[*]}"\n'
+                "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
+                '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
+                '    echo "Successfully installed Python packages (system-wide): ${PACKAGES[*]}"\n'
+                "else\n"
+                '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
+                '    cat "$LOG_FILE" >&2\n'
+                "    exit 1\n"
                 "fi\n\n"
-                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
-                "--no-warn-script-location --index-url https://pypi.org/simple "
-                "--extra-index-url https://private.repo.com/simple "
-                "--extra-index-url https://internal.company.com/simple "
-                "--user torch numpy custom-package ||\n"
-                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
-                "--no-warn-script-location --index-url https://pypi.org/simple "
-                "--extra-index-url https://private.repo.com/simple "
-                "--extra-index-url https://internal.company.com/simple "
-                "torch numpy custom-package\n"
             ),
         ),
         TestCase(
@@ -227,13 +233,23 @@ def test_get_resources_per_node(test_case: TestCase):
                 '\nif ! [ -x "$(command -v pip)" ]; then\n'
                 "    python -m ensurepip || python -m ensurepip --user || "
                 "apt-get install python-pip\n"
+                "fi\n\n\n"
+                "PACKAGES=(torch numpy custom-package)\n"
+                "PIP_OPTS=(--index-url https://pypi.org/simple)\n"
+                'LOG_FILE="pip_install.log"\n'
+                'rm -f "$LOG_FILE"\n'
+                "\n"
+                "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
+                '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
+                '    echo "Successfully installed Python packages (user): ${PACKAGES[*]}"\n'
+                "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
+                '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
+                '    echo "Successfully installed Python packages (system-wide): ${PACKAGES[*]}"\n'
+                "else\n"
+                '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
+                '    cat "$LOG_FILE" >&2\n'
+                "    exit 1\n"
                 "fi\n\n"
-                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
-                "--no-warn-script-location --index-url https://pypi.org/simple "
-                "--user torch numpy custom-package ||\n"
-                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
-                "--no-warn-script-location --index-url https://pypi.org/simple "
-                "torch numpy custom-package\n"
             ),
         ),
         TestCase(
@@ -251,17 +267,23 @@ def test_get_resources_per_node(test_case: TestCase):
                 '\nif ! [ -x "$(command -v pip)" ]; then\n'
                 "    python -m ensurepip || python -m ensurepip --user || "
                 "apt-get install python-pip\n"
+                "fi\n\n\n"
+                "PACKAGES=(torch numpy custom-package)\n"
+                "PIP_OPTS=(--index-url https://pypi.org/simple --extra-index-url https://private.repo.com/simple --extra-index-url https://internal.company.com/simple)\n"
+                'LOG_FILE="pip_install.log"\n'
+                'rm -f "$LOG_FILE"\n'
+                "\n"
+                "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
+                '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
+                '    echo "Successfully installed Python packages (user): ${PACKAGES[*]}"\n'
+                "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
+                '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
+                '    echo "Successfully installed Python packages (system-wide): ${PACKAGES[*]}"\n'
+                "else\n"
+                '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
+                '    cat "$LOG_FILE" >&2\n'
+                "    exit 1\n"
                 "fi\n\n"
-                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
-                "--no-warn-script-location --index-url https://pypi.org/simple "
-                "--extra-index-url https://private.repo.com/simple "
-                "--extra-index-url https://internal.company.com/simple "
-                "--user torch numpy custom-package ||\n"
-                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
-                "--no-warn-script-location --index-url https://pypi.org/simple "
-                "--extra-index-url https://private.repo.com/simple "
-                "--extra-index-url https://internal.company.com/simple "
-                "torch numpy custom-package\n"
             ),
         ),
         TestCase(
@@ -275,13 +297,53 @@ def test_get_resources_per_node(test_case: TestCase):
                 '\nif ! [ -x "$(command -v pip)" ]; then\n'
                 "    python -m ensurepip || python -m ensurepip --user || "
                 "apt-get install python-pip\n"
+                "fi\n\n\n"
+                "PACKAGES=(torch numpy)\n"
+                "PIP_OPTS=(--index-url https://pypi.org/simple)\n"
+                'LOG_FILE="pip_install.log"\n'
+                'rm -f "$LOG_FILE"\n'
+                "\n"
+                "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
+                '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
+                '    echo "Successfully installed Python packages (user): ${PACKAGES[*]}"\n'
+                "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
+                '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
+                '    echo "Successfully installed Python packages (system-wide): ${PACKAGES[*]}"\n'
+                "else\n"
+                '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
+                '    cat "$LOG_FILE" >&2\n'
+                "    exit 1\n"
                 "fi\n\n"
-                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
-                f"--no-warn-script-location --index-url "
-                f"{constants.DEFAULT_PIP_INDEX_URLS[0]} --user torch numpy ||\n"
-                "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
-                f"--no-warn-script-location --index-url "
-                f"{constants.DEFAULT_PIP_INDEX_URLS[0]} torch numpy\n"
+            ),
+        ),
+        TestCase(
+            name="packages with extras notation",
+            config={
+                "packages_to_install": ["datasets", "transformers[torch]", "cloudpathlib[all]"],
+                "pip_index_urls": constants.DEFAULT_PIP_INDEX_URLS,
+                "is_mpi": False,
+            },
+            expected_output=(
+                '\nif ! [ -x "$(command -v pip)" ]; then\n'
+                "    python -m ensurepip || python -m ensurepip --user || "
+                "apt-get install python-pip\n"
+                "fi\n\n\n"
+                "PACKAGES=(datasets 'transformers[torch]' 'cloudpathlib[all]')\n"
+                "PIP_OPTS=(--index-url https://pypi.org/simple)\n"
+                'LOG_FILE="pip_install.log"\n'
+                'rm -f "$LOG_FILE"\n'
+                "\n"
+                "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
+                '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
+                '    echo "Successfully installed Python packages (user): ${PACKAGES[*]}"\n'
+                "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
+                '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
+                '    echo "Successfully installed Python packages (system-wide): ${PACKAGES[*]}"\n'
+                "else\n"
+                '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
+                '    cat "$LOG_FILE" >&2\n'
+                "    exit 1\n"
+                "fi\n\n"
             ),
         ),
     ],
@@ -403,6 +465,48 @@ def test_get_script_for_python_packages(test_case):
                 ),
             ],
         ),
+        TestCase(
+            name="with packages to install",
+            expected_status=SUCCESS,
+            config={
+                "func": (lambda: print("Hello World")),
+                "func_args": None,
+                "runtime": _build_runtime(),
+                "packages_to_install": ["requests"],
+            },
+            expected_output=[
+                "bash",
+                "-c",
+                (
+                    '\nif ! [ -x "$(command -v pip)" ]; then\n'
+                    "    python -m ensurepip || python -m ensurepip --user || "
+                    "apt-get install python-pip\n"
+                    "fi\n\n\n"
+                    "PACKAGES=(requests)\n"
+                    "PIP_OPTS=(--index-url https://pypi.org/simple)\n"
+                    'LOG_FILE="pip_install.log"\n'
+                    'rm -f "$LOG_FILE"\n'
+                    "\n"
+                    "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
+                    '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
+                    '    echo "Successfully installed Python packages (user): ${PACKAGES[*]}"\n'
+                    "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
+                    '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
+                    '    echo "Successfully installed Python packages (system-wide): ${PACKAGES[*]}"\n'
+                    "else\n"
+                    '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
+                    '    cat "$LOG_FILE" >&2\n'
+                    "    exit 1\n"
+                    "fi\n\n"
+                    "\nread -r -d '' SCRIPT << EOM\n\n"
+                    '"func": (lambda: print("Hello World")),\n\n'
+                    "<lambda>()\n\n"
+                    "EOM\n"
+                    'printf "%s" "$SCRIPT" > "utils_test.py"\n'
+                    'python "utils_test.py"'
+                ),
+            ],
+        ),
     ],
 )
 def test_get_command_using_train_func(test_case: TestCase):
@@ -412,7 +516,7 @@ def test_get_command_using_train_func(test_case: TestCase):
             train_func=test_case.config.get("func"),
             train_func_parameters=test_case.config.get("func_args"),
             pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
-            packages_to_install=[],
+            packages_to_install=test_case.config.get("packages_to_install", []),
         )
 
         assert test_case.expected_status == SUCCESS
@@ -630,5 +734,114 @@ def test_get_model_initializer(test_case):
         assert env_dict == expected_env, f"Expected env {expected_env}, got {env_dict}"
 
     except Exception as e:
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="lora_dropout=0.0 is not silently dropped",
+            expected_status=SUCCESS,
+            config={
+                "peft_config": types.LoraConfig(lora_dropout=0.0),
+            },
+            expected_output=[
+                "model.lora_dropout=0.0",
+                "model.lora_attn_modules=[q_proj,v_proj,output_proj]",
+            ],
+        ),
+        TestCase(
+            name="apply_lora_to_mlp=False is not silently dropped",
+            expected_status=SUCCESS,
+            config={
+                "peft_config": types.LoraConfig(apply_lora_to_mlp=False),
+            },
+            expected_output=[
+                "model.apply_lora_to_mlp=False",
+                "model.lora_attn_modules=[q_proj,v_proj,output_proj]",
+            ],
+        ),
+        TestCase(
+            name="standard lora config with positive values",
+            expected_status=SUCCESS,
+            config={
+                "peft_config": types.LoraConfig(lora_rank=8, lora_alpha=16, lora_dropout=0.1),
+            },
+            expected_output=[
+                "model.lora_rank=8",
+                "model.lora_alpha=16",
+                "model.lora_dropout=0.1",
+                "model.lora_attn_modules=[q_proj,v_proj,output_proj]",
+            ],
+        ),
+        TestCase(
+            name="invalid peft config type raises ValueError",
+            expected_status=FAILED,
+            config={
+                "peft_config": "invalid",
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_get_args_from_peft_config(test_case: TestCase):
+    print("Executing test:", test_case.name)
+    try:
+        args = utils.get_args_from_peft_config(test_case.config["peft_config"])
+
+        assert test_case.expected_status == SUCCESS
+        assert args == test_case.expected_output
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="train_on_input=False is not silently dropped",
+            expected_status=SUCCESS,
+            config={
+                "dataset_preprocess_config": types.TorchTuneInstructDataset(
+                    train_on_input=False,
+                ),
+            },
+            expected_output=[
+                f"dataset={constants.TORCH_TUNE_INSTRUCT_DATASET}",
+                "dataset.train_on_input=False",
+            ],
+        ),
+        TestCase(
+            name="train_on_input=True is included",
+            expected_status=SUCCESS,
+            config={
+                "dataset_preprocess_config": types.TorchTuneInstructDataset(
+                    train_on_input=True,
+                ),
+            },
+            expected_output=[
+                f"dataset={constants.TORCH_TUNE_INSTRUCT_DATASET}",
+                "dataset.train_on_input=True",
+            ],
+        ),
+    ],
+)
+def test_get_args_from_dataset_preprocess_config(test_case: TestCase):
+    print("Executing test:", test_case.name)
+    try:
+        args = utils.get_args_from_dataset_preprocess_config(
+            test_case.config["dataset_preprocess_config"]
+        )
+
+        assert test_case.expected_status == SUCCESS
+        assert args == test_case.expected_output
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
         assert type(e) is test_case.expected_error
     print("test execution complete")

@@ -12,11 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 from dataclasses import fields
 import inspect
 import os
+import shlex
 import textwrap
-from typing import Any, Callable, Optional, Union
+from typing import Any
 from urllib.parse import urlparse
 
 from kubeflow_trainer_api import models
@@ -26,8 +28,8 @@ from kubeflow.trainer.types import types
 
 
 def get_container_devices(
-    resources: Optional[models.IoK8sApiCoreV1ResourceRequirements],
-) -> Optional[tuple[str, str]]:
+    resources: models.IoK8sApiCoreV1ResourceRequirements | None,
+) -> tuple[str, str] | None:
     """
     Get the device type and device count for the given container.
     """
@@ -66,7 +68,7 @@ def get_container_devices(
 
 def get_runtime_trainer_container(
     replicated_jobs: list[models.JobsetV1alpha2ReplicatedJob],
-) -> Optional[models.IoK8sApiCoreV1Container]:
+) -> models.IoK8sApiCoreV1Container | None:
     """
     Get the runtime node container from the given replicated jobs.
     """
@@ -117,12 +119,8 @@ def get_runtime_trainer(
     if devices := get_container_devices(trainer_container.resources):
         trainer.device, trainer.device_count = devices
 
-    # Torch and MPI plugins override accelerator count.
-    if ml_policy.torch and ml_policy.torch.num_proc_per_node:
-        num_proc = ml_policy.torch.num_proc_per_node.actual_instance
-        if isinstance(num_proc, int):
-            trainer.device_count = str(num_proc)
-    elif ml_policy.mpi and ml_policy.mpi.num_proc_per_node:
+    # MPI plugin overrides accelerator count.
+    if ml_policy.mpi and ml_policy.mpi.num_proc_per_node:
         trainer.device_count = str(ml_policy.mpi.num_proc_per_node)
 
     # Multiply accelerator_count by the number of nodes.
@@ -136,7 +134,7 @@ def get_runtime_trainer(
     # Set the Trainer entrypoint.
     if framework == types.TORCH_TUNE:
         trainer.set_command(constants.TORCH_TUNE_COMMAND)
-    elif ml_policy.torch:
+    elif ml_policy.torch is not None:
         trainer.set_command(constants.TORCH_COMMAND)
     elif ml_policy.mpi:
         trainer.set_command(constants.MPI_COMMAND)
@@ -149,7 +147,7 @@ def get_runtime_trainer(
 def get_trainjob_initializer_step(
     pod_name: str,
     pod_spec: models.IoK8sApiCoreV1PodSpec,
-    pod_status: Optional[models.IoK8sApiCoreV1PodStatus],
+    pod_status: models.IoK8sApiCoreV1PodStatus | None,
 ) -> types.Step:
     """
     Get the TrainJob initializer step from the given Pod name, spec, and status.
@@ -176,7 +174,7 @@ def get_trainjob_initializer_step(
 def get_trainjob_node_step(
     pod_name: str,
     pod_spec: models.IoK8sApiCoreV1PodSpec,
-    pod_status: Optional[models.IoK8sApiCoreV1PodStatus],
+    pod_status: models.IoK8sApiCoreV1PodStatus | None,
     trainjob_runtime: types.Runtime,
     replicated_job_name: str,
     job_index: int,
@@ -260,15 +258,25 @@ def get_resources_per_node(
 def get_script_for_python_packages(
     packages_to_install: list[str],
     pip_index_urls: list[str],
+    install_log_file: str = "pip_install.log",
 ) -> str:
     """
     Get init script to install Python packages from the given pip index URLs.
     """
-    packages_str = " ".join(packages_to_install)
+    # Quote package names and URLs with shlex.quote() to prevent shell injection.
+    # Use a bash array so that quotes are interpreted during array initialization;
+    # storing shlex-quoted values in a plain string variable breaks because bash
+    # does not re-interpret quotes during variable expansion (e.g. packages with
+    # extras like 'transformers[torch]' would be passed to pip with literal quotes).
+    packages_str = " ".join(shlex.quote(pkg) for pkg in packages_to_install)
 
     # first url will be the index-url.
-    options = [f"--index-url {pip_index_urls[0]}"]
-    options.extend(f"--extra-index-url {extra_index_url}" for extra_index_url in pip_index_urls[1:])
+    options = [f"--index-url {shlex.quote(pip_index_urls[0])}"]
+    options.extend(
+        f"--extra-index-url {shlex.quote(extra_index_url)}"
+        for extra_index_url in pip_index_urls[1:]
+    )
+    options_str = " ".join(options)
 
     header_script = textwrap.dedent(
         """
@@ -279,18 +287,29 @@ def get_script_for_python_packages(
         """
     )
 
-    script_for_python_packages = (
-        header_script
-        + "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
-        + "--no-warn-script-location {} --user {}".format(
-            " ".join(options),
-            packages_str,
-        )
-        + " ||\nPIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
-        + "--no-warn-script-location {} {}\n".format(
-            " ".join(options),
-            packages_str,
-        )
+    # First try per-user installation, then fall back to system-wide installation.
+    # Pip output is captured to a log file and only printed when both attempts fail;
+    # on success we emit a single concise confirmation line.
+    script_for_python_packages = header_script + textwrap.dedent(
+        f"""
+        PACKAGES=({packages_str})
+        PIP_OPTS=({options_str})
+        LOG_FILE="{install_log_file}"
+        rm -f "$LOG_FILE"
+
+        if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\
+            --no-warn-script-location "${{PIP_OPTS[@]}}" --user "${{PACKAGES[@]}}" >"$LOG_FILE" 2>&1; then
+            echo "Successfully installed Python packages (user): ${{PACKAGES[*]}}"
+        elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\
+            --no-warn-script-location "${{PIP_OPTS[@]}}" "${{PACKAGES[@]}}" >>"$LOG_FILE" 2>&1; then
+            echo "Successfully installed Python packages (system-wide): ${{PACKAGES[*]}}"
+        else
+            echo "ERROR: Failed to install Python packages: ${{PACKAGES[*]}}" >&2
+            cat "$LOG_FILE" >&2
+            exit 1
+        fi
+
+        """
     )
 
     return script_for_python_packages
@@ -299,9 +318,9 @@ def get_script_for_python_packages(
 def get_command_using_train_func(
     runtime: types.Runtime,
     train_func: Callable,
-    train_func_parameters: Optional[dict[str, Any]],
+    train_func_parameters: dict[str, Any] | None,
     pip_index_urls: list[str],
-    packages_to_install: Optional[list[str]],
+    packages_to_install: list[str] | None,
 ) -> list[str]:
     """
     Get the Trainer container command from the given training function and parameters.
@@ -344,6 +363,9 @@ def get_command_using_train_func(
     # The default file location for OpenMPI is: /home/mpiuser/<FILE_NAME>.py
     if is_mpi:
         func_file = os.path.join(constants.DEFAULT_MPI_USER_HOME, func_file)
+        install_log_file = os.path.join(constants.DEFAULT_MPI_USER_HOME, "pip_install.log")
+    else:
+        install_log_file = "pip_install.log"
 
     # Install Python packages if that is required.
     install_packages = ""
@@ -351,6 +373,7 @@ def get_command_using_train_func(
         install_packages = get_script_for_python_packages(
             packages_to_install,
             pip_index_urls,
+            install_log_file=install_log_file,
         )
 
     # Add function code to the Trainer command.
@@ -369,7 +392,7 @@ def get_command_using_train_func(
 
 def get_trainer_cr_from_custom_trainer(
     runtime: types.Runtime,
-    trainer: Union[types.CustomTrainer, types.CustomTrainerContainer],
+    trainer: types.CustomTrainer | types.CustomTrainerContainer,
 ) -> models.TrainerV1alpha1Trainer:
     """
     Get the Trainer CR from the custom trainer.
@@ -414,7 +437,7 @@ def get_trainer_cr_from_custom_trainer(
 def get_trainer_cr_from_builtin_trainer(
     runtime: types.Runtime,
     trainer: types.BuiltinTrainer,
-    initializer: Optional[types.Initializer] = None,
+    initializer: types.Initializer | None = None,
 ) -> models.TrainerV1alpha1Trainer:
     """
     Get the Trainer CR from the builtin trainer.
@@ -443,7 +466,7 @@ def get_trainer_cr_from_builtin_trainer(
 
 def get_args_using_torchtune_config(
     fine_tuning_config: types.TorchTuneConfig,
-    initializer: Optional[types.Initializer] = None,
+    initializer: types.Initializer | None = None,
 ) -> list[str]:
     """
     Get the Trainer args from the TorchTuneConfig.
@@ -520,7 +543,7 @@ def get_args_from_peft_config(peft_config: types.LoraConfig) -> list[str]:
     # Override the PEFT fields if they are provided.
     for field, arg_name in field_map.items():
         value = getattr(peft_config, field, None)
-        if value:
+        if value is not None:
             args.append(f"{arg_name}={value}")
 
     # Override the LoRA attention modules if they are provided.
@@ -558,7 +581,7 @@ def get_args_from_dataset_preprocess_config(
         args.append(f"dataset.split={dataset_preprocess_config.split}")
 
     # Override the train_on_input field if it is provided.
-    if dataset_preprocess_config.train_on_input:
+    if dataset_preprocess_config.train_on_input is not None:
         args.append(f"dataset.train_on_input={dataset_preprocess_config.train_on_input}")
 
     # Override the new_system_prompt field if it is provided.
@@ -589,11 +612,9 @@ def get_optional_initializer_envs(
 
 
 def get_dataset_initializer(
-    dataset: Union[
-        types.HuggingFaceDatasetInitializer,
-        types.S3DatasetInitializer,
-        types.DataCacheInitializer,
-    ],
+    dataset: types.HuggingFaceDatasetInitializer
+    | types.S3DatasetInitializer
+    | types.DataCacheInitializer,
 ) -> models.TrainerV1alpha1DatasetInitializer:
     """
     Get the TrainJob dataset initializer from the given config.
@@ -623,7 +644,7 @@ def get_dataset_initializer(
 
 
 def get_model_initializer(
-    model: Union[types.HuggingFaceModelInitializer, types.S3ModelInitializer],
+    model: types.HuggingFaceModelInitializer | types.S3ModelInitializer,
 ) -> models.TrainerV1alpha1ModelInitializer:
     """
     Get the TrainJob model initializer from the given config.

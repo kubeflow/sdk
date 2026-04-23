@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
-from typing import Optional
 
 from kubernetes import config
 
@@ -23,7 +22,7 @@ def is_running_in_k8s() -> bool:
     return os.path.isdir("/var/run/secrets/kubernetes.io/")
 
 
-def get_default_target_namespace(context: Optional[str] = None) -> str:
+def get_default_target_namespace(context: str | None = None) -> str:
     if not is_running_in_k8s():
         try:
             all_contexts, current_context = config.list_kube_config_contexts()

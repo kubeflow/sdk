@@ -15,7 +15,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
       - uses: pre-commit/action@v3.0.1
+        with:
+          extra_args: --all-files
 
   test:
     runs-on: ubuntu-latest
@@ -23,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.11"]
+        python-version: ["3.10", "3.11"]
 
     name: Test (Python ${{ matrix.python-version }})
 
@@ -37,6 +41,9 @@ jobs:
 
       - name: Verify
         run: make verify
+
+      - name: Test GitHub Actions Scripts
+        run: make test-scripts
 
       - name: Run Tests
         run: |
