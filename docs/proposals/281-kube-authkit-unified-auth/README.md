@@ -402,14 +402,9 @@ new `get_k8s_client` entry point instead.
   compatibility with `user_token`
 - Coverage target: >=90% for `kubeflow/common/auth/`
 
-Packages and current coverage:
-
-- `kubeflow.common.auth`: N/A (new package)
-- `kubeflow.trainer.backends.kubernetes`: 2026-04-23 — existing coverage
-- `kubeflow.optimizer.backends.kubernetes`: 2026-04-23 — existing coverage
-- `kubeflow.spark.backends.kubernetes`: 2026-04-23 — existing coverage
-- `kubeflow.hub.api`: 2026-04-23 — existing coverage
-
+Baseline coverage metrics for the existing packages are not yet included in this
+proposal; add coverage percentages or links to published coverage reports once
+they are available.
 #### E2E Tests
 
 - Full `TrainerClient` workflow with `AuthConfig` — submit and monitor a training
