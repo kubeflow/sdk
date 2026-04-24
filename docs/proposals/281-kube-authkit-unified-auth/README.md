@@ -11,10 +11,11 @@ Ref: https://github.com/kubeflow/sdk/issues/281
 This KEP proposes donating the [kube-authkit](https://github.com/szaher/kube-authkit)
 library to the Kubeflow project, embedding it in the SDK repository under
 `kubeflow/common/auth/`, and publishing it as a standalone PyPI package
-(`kubeflow-authkit`). kube-authkit replaces the fragmented authentication code
-currently duplicated across Trainer, Optimizer, Spark, and Hub backends with a
-single, strategy-based authentication layer supporting KubeConfig, in-cluster
-service account, OIDC, and OpenShift OAuth.
+(`kubeflow-authkit`). kube-authkit replaces fragmented authentication across
+SDK backends: duplicated Kubernetes auth logic in Trainer, Optimizer, and Spark,
+plus Hub's separate `user_token`-based path, with a single, strategy-based
+authentication layer supporting KubeConfig, in-cluster service account, OIDC,
+and OpenShift OAuth.
 
 ## Motivation
 
