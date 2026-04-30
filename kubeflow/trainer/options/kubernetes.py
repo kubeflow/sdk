@@ -478,7 +478,6 @@ class TrainerArgs:
         trainer_spec["args"] = self.args
 
 
-@dataclass
 class TrainerEnvFrom:
     """Used to add environment variables using kubernetes resources (secrets, configmaps, etc...)
     to the trainer container (.spec.trainer.env), these values will be merged with the TrainingRuntime's
