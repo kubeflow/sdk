@@ -61,7 +61,9 @@ def _enable_spark_debug_logging() -> None:
         h.setLevel(logging.INFO)
         root.addHandler(h)
 
+
 def _cleanup_proc(proc):
+    """Terminate and clean up a subprocess if it is still running, and close stderr."""
     if proc is None:
         return
     if proc.poll() is None:
@@ -79,11 +81,13 @@ def _cleanup_proc(proc):
                 )
     if proc.stderr:
         proc.stderr.close()
-            
+
+
 def _read_proc_stderr(proc):
     """Read and decode stderr from a subprocess."""
     stderr_b = proc.stderr.read() if proc.stderr else b""
     return stderr_b.decode("utf-8", errors="replace").strip() if stderr_b else ""
+
 
 class KubernetesBackend(RuntimeBackend):
     """Kubernetes backend for managing SparkConnect sessions."""
@@ -396,6 +400,7 @@ class KubernetesBackend(RuntimeBackend):
                     proc.returncode,
                     err_msg,
                 )
+                _cleanup_proc(proc)
                 continue
             if self._wait_for_connect_port("127.0.0.1", port, timeout_sec=90):
                 # Final verification: ensure process is still alive after port check
@@ -407,6 +412,7 @@ class KubernetesBackend(RuntimeBackend):
                         proc.returncode,
                         err_msg,
                     )
+                    _cleanup_proc(proc)
                     continue
                 logger.info(
                     "Connect URL: %s | port-forward: %s -> localhost:%s | namespace=%s",
@@ -416,11 +422,10 @@ class KubernetesBackend(RuntimeBackend):
                     info.namespace,
                 )
                 return (url, proc)
-            proc.terminate()
-            proc.wait(timeout=5)
+            _cleanup_proc(proc)
             logger.warning("Port %s did not become reachable in time for %s", port, key)
         raise RuntimeError(f"Port-forward failed for all candidates in {info.namespace}")
-    
+
     def connect(
         self,
         info: SparkConnectInfo,
@@ -448,7 +453,7 @@ class KubernetesBackend(RuntimeBackend):
             RuntimeError: If port-forward fails.
         """
         pf_proc = None
-        
+
         try:
             # Get connect URL (handles port-forwarding for local development)
             connect_url, pf_proc = self.get_connect_url(info)
@@ -513,8 +518,8 @@ class KubernetesBackend(RuntimeBackend):
                 connect_url, pf_proc = self.get_connect_url(info, local_port=local_port)
 
             # Create SparkSession with timeout
-            result: list = []
-            exc_holder: list = []
+            result = []
+            exc_holder = []
 
             def _get_or_create() -> None:
                 try:
@@ -550,10 +555,10 @@ class KubernetesBackend(RuntimeBackend):
                     f"(code={pf_proc.returncode}). stderr: {stderr_str}"
                 )
             raise TimeoutError(base_msg)
-        
+
         finally:
             _cleanup_proc(pf_proc)
-    
+
     def create_and_connect(
         self,
         num_executors: int | None = None,
