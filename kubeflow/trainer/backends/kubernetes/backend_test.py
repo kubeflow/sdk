@@ -46,6 +46,7 @@ from kubeflow.trainer.options import (
     PodTemplatePatch,
     ReplicatedJobPatch,
     RuntimePatch,
+    TrainerEnvFrom,
     TrainingRuntimeSpecPatch,
 )
 from kubeflow.trainer.test.common import (
@@ -1344,6 +1345,71 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                         ),
                     ),
                 ],
+            ),
+        ),
+        TestCase(
+            name="train with envFrom",
+            expected_status=SUCCESS,
+            config={
+                "options": [
+                    TrainerEnvFrom.secret("MY_SECRET", secret_name="mysecret", key="mysecretkey")
+                ],
+            },
+            expected_output=get_train_job(
+                runtime_name=TORCH_RUNTIME,
+                train_job_name=BASIC_TRAIN_JOB_NAME,
+                train_job_trainer=models.TrainerV1alpha1Trainer(
+                    env=[
+                        models.IoK8sApiCoreV1EnvVar(
+                            name="MY_SECRET",
+                            valueFrom=models.IoK8sApiCoreV1EnvVarSource(
+                                secretKeyRef=models.IoK8sApiCoreV1SecretKeySelector(
+                                    name="mysecret", key="mysecretkey"
+                                )
+                            ),
+                        )
+                    ]
+                ),
+            ),
+        ),
+        TestCase(
+            name="train with envFrom and trainer env",
+            expected_status=SUCCESS,
+            config={
+                "options": [
+                    TrainerEnvFrom.secret("MY_SECRET", secret_name="mysecret", key="mysecretkey")
+                ],
+                "trainer": types.CustomTrainer(
+                    func=lambda: print("Hello World"),
+                    func_args={"learning_rate": 0.001, "batch_size": 32},
+                    packages_to_install=["torch", "numpy"],
+                    pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
+                    num_nodes=2,
+                    env={
+                        "TEST_ENV": "test_value",
+                        "ANOTHER_ENV": "another_value",
+                    },
+                ),
+            },
+            expected_output=get_train_job(
+                runtime_name=TORCH_RUNTIME,
+                train_job_name=BASIC_TRAIN_JOB_NAME,
+                train_job_trainer=get_custom_trainer(
+                    pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
+                    packages_to_install=["torch", "numpy"],
+                    env=[
+                        models.IoK8sApiCoreV1EnvVar(name="TEST_ENV", value="test_value"),
+                        models.IoK8sApiCoreV1EnvVar(name="ANOTHER_ENV", value="another_value"),
+                        models.IoK8sApiCoreV1EnvVar(
+                            name="MY_SECRET",
+                            valueFrom=models.IoK8sApiCoreV1EnvVarSource(
+                                secretKeyRef=models.IoK8sApiCoreV1SecretKeySelector(
+                                    name="mysecret", key="mysecretkey"
+                                )
+                            ),
+                        ),
+                    ],
+                ),
             ),
         ),
     ],

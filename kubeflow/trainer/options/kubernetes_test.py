@@ -14,6 +14,7 @@
 
 """Unit tests for Kubernetes options."""
 
+from kubeflow_trainer_api import models
 import pytest
 
 from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
@@ -33,6 +34,7 @@ from kubeflow.trainer.options import (
     RuntimePatch,
     TrainerArgs,
     TrainerCommand,
+    TrainerEnvFrom,
     TrainingRuntimeSpecPatch,
 )
 
@@ -69,6 +71,17 @@ class TestKubernetesOptionBackendValidation:
             (Annotations, {"description": "test job"}),
             (TrainerCommand, ["python", "train.py"]),
             (TrainerArgs, ["--epochs", "10"]),
+            (
+                TrainerEnvFrom,
+                {
+                    "name": "MY_SECRET",
+                    "valueFrom": models.IoK8sApiCoreV1EnvVarSource(
+                        secretKeyRef=models.IoK8sApiCoreV1SecretKeySelector(
+                            name="mysecret", key="mysecretkey"
+                        )
+                    ),
+                },
+            ),
         ],
     )
     def test_kubernetes_options_reject_wrong_backend(
@@ -79,6 +92,8 @@ class TestKubernetesOptionBackendValidation:
             option = option_class(command=option_args)
         elif option_class == TrainerArgs:
             option = option_class(args=option_args)
+        elif option_class == TrainerEnvFrom:
+            option = option_class(env_name=option_args["name"], value_from=option_args["valueFrom"])
         else:
             option = option_class(option_args)
 
@@ -129,6 +144,33 @@ class TestKubernetesOptionApplication:
                 ["--epochs", "10"],
                 {"spec": {"trainer": {"args": ["--epochs", "10"]}}},
             ),
+            (
+                TrainerEnvFrom,
+                {
+                    "name": "MY_SECRET",
+                    "valueFrom": models.IoK8sApiCoreV1EnvVarSource(
+                        secretKeyRef=models.IoK8sApiCoreV1SecretKeySelector(
+                            name="mysecret", key="mysecretkey"
+                        )
+                    ),
+                },
+                {
+                    "spec": {
+                        "trainer": {
+                            "env": [
+                                models.IoK8sApiCoreV1EnvVar(
+                                    name="MY_SECRET",
+                                    valueFrom=models.IoK8sApiCoreV1EnvVarSource(
+                                        secretKeyRef=models.IoK8sApiCoreV1SecretKeySelector(
+                                            name="mysecret", key="mysecretkey"
+                                        )
+                                    ),
+                                )
+                            ]
+                        }
+                    }
+                },
+            ),
         ],
     )
     def test_option_application(
@@ -139,6 +181,8 @@ class TestKubernetesOptionApplication:
             option = option_class(command=option_args)
         elif option_class == TrainerArgs:
             option = option_class(args=option_args)
+        elif option_class == TrainerEnvFrom:
+            option = option_class(env_name=option_args["name"], value_from=option_args["valueFrom"])
         else:
             option = option_class(option_args)
 
@@ -159,9 +203,48 @@ class TestTrainerOptionValidation:
             (TrainerArgs, ["--epochs", "10"], "CustomTrainer", True),
             (TrainerCommand, ["python", "train.py"], "BuiltinTrainer", True),
             (TrainerArgs, ["--epochs", "10"], "BuiltinTrainer", True),
+            (
+                TrainerEnvFrom,
+                {
+                    "name": "MY_SECRET",
+                    "valueFrom": models.IoK8sApiCoreV1EnvVarSource(
+                        secretKeyRef=models.IoK8sApiCoreV1SecretKeySelector(
+                            name="mysecret", key="mysecretkey"
+                        )
+                    ),
+                },
+                "BuiltinTrainer",
+                True,
+            ),
             # Successful applications
             (TrainerCommand, ["python", "train.py"], "CustomTrainerContainer", False),
             (TrainerArgs, ["--epochs", "10"], "CustomTrainerContainer", False),
+            (
+                TrainerEnvFrom,
+                {
+                    "name": "MY_SECRET",
+                    "valueFrom": models.IoK8sApiCoreV1EnvVarSource(
+                        secretKeyRef=models.IoK8sApiCoreV1SecretKeySelector(
+                            name="mysecret", key="mysecretkey"
+                        )
+                    ),
+                },
+                "CustomTrainerContainer",
+                False,
+            ),
+            (
+                TrainerEnvFrom,
+                {
+                    "name": "MY_SECRET",
+                    "valueFrom": models.IoK8sApiCoreV1EnvVarSource(
+                        secretKeyRef=models.IoK8sApiCoreV1SecretKeySelector(
+                            name="mysecret", key="mysecretkey"
+                        )
+                    ),
+                },
+                "CustomTrainer",
+                False,
+            ),
         ],
     )
     def test_trainer_option_validation(
@@ -190,23 +273,35 @@ class TestTrainerOptionValidation:
         # Create option
         if option_class == TrainerCommand:
             option = option_class(command=option_args)
-        else:  # TrainerArgs
+        elif option_class == TrainerArgs:
             option = option_class(args=option_args)
+        else:  # TrainerEnvFrom
+            option = option_class(env_name=option_args["name"], value_from=option_args["valueFrom"])
 
         job_spec = {}
 
         if should_fail:
             with pytest.raises(ValueError) as exc_info:
                 option(job_spec, trainer, mock_kubernetes_backend)
-            assert "TrainerCommand can only be used with CustomTrainerContainer" in str(
-                exc_info.value
-            ) or "TrainerArgs can only be used with CustomTrainerContainer" in str(exc_info.value)
+            assert (
+                "TrainerCommand can only be used with CustomTrainerContainer" in str(exc_info.value)
+                or "TrainerArgs can only be used with CustomTrainerContainer" in str(exc_info.value)
+                or f"TrainerEnvFrom option is not compatible with {type(trainer).__name__}"
+                in str(exc_info.value)
+            )
         else:
             option(job_spec, trainer, mock_kubernetes_backend)
             if option_class == TrainerCommand:
                 assert job_spec["spec"]["trainer"]["command"] == option_args
-            else:
+            elif option_class == TrainerArgs:
                 assert job_spec["spec"]["trainer"]["args"] == option_args
+            else:
+                assert job_spec["spec"]["trainer"]["env"] == [
+                    models.IoK8sApiCoreV1EnvVar(
+                        name=option_args["name"],
+                        valueFrom=option_args["valueFrom"],
+                    )
+                ]
 
 
 class TestContainerPatch:

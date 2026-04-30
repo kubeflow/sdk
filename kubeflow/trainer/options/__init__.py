@@ -36,6 +36,7 @@ from kubeflow.trainer.options.kubernetes import (
     RuntimePatch,
     TrainerArgs,
     TrainerCommand,
+    TrainerEnvFrom,
     TrainingRuntimeSpecPatch,
 )
 
@@ -56,5 +57,6 @@ __all__ = [
     "RuntimePatch",
     "TrainerArgs",
     "TrainerCommand",
+    "TrainerEnvFrom",
     "TrainingRuntimeSpecPatch",
 ]
