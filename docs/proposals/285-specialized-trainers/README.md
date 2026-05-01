@@ -58,6 +58,11 @@ Directory: docs/proposals/285-specialized-trainers/README.md
     - [Integration Tests](#integration-tests)
     - [Backward Compatibility Tests](#backward-compatibility-tests)
   - [Implementation Plan](#implementation-plan)
+  - [Graduation Criteria](#graduation-criteria)
+    - [Alpha (target: current cycle)](#alpha-target-current-cycle)
+    - [Beta](#beta)
+    - [GA](#ga)
+  - [Open Questions](#open-questions)
   - [Alternatives Considered](#alternatives-considered)
     - [1. Extend CustomTrainer with a `framework` field instead of new classes](#1-extend-customtrainer-with-a-framework-field-instead-of-new-classes)
     - [2. Use Pydantic `BaseModel` instead of `@dataclass`](#2-use-pydantic-basemodel-instead-of-dataclass)
@@ -290,7 +295,9 @@ class BaseTrainer(ABC):
     Class Attributes:
         supported_frameworks: Framework identifiers this trainer supports.
             Must match values of the `trainer.kubeflow.org/framework` label
-            on ClusterTrainingRuntime resources.
+            on ClusterTrainingRuntime resources. Declared as a tuple (immutable)
+            and ordered by preference — the first entry is the preferred framework
+            for auto-discovery.
 
     Args:
         num_nodes: Number of nodes for distributed training.
@@ -298,11 +305,20 @@ class BaseTrainer(ABC):
         image: Optional custom container image.
     """
 
-    supported_frameworks: ClassVar[list[str]]
+    supported_frameworks: ClassVar[tuple[str, ...]]
 
     num_nodes: Optional[int] = None
     resources_per_node: Optional[dict] = None
     image: Optional[str] = None
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        if not getattr(cls, "__abstractmethods__", None):
+            if not hasattr(cls, "supported_frameworks") or not cls.supported_frameworks:
+                raise TypeError(
+                    f"{cls.__name__} must define a non-empty "
+                    f"'supported_frameworks' class variable"
+                )
 
     @abstractmethod
     def get_framework_args(self) -> dict:
@@ -330,8 +346,12 @@ class BaseTrainer(ABC):
 
 **Design decisions:**
 
-- `supported_frameworks` is a `ClassVar`, not an instance field. It is a property of
-  the trainer *class*, not of individual instances.
+- `supported_frameworks` is a `ClassVar[tuple[str, ...]]` — immutable and class-level.
+  It is a property of the trainer *class*, not of individual instances. The tuple is
+  ordered by preference: the first entry is the preferred framework for auto-discovery.
+  `__init_subclass__` enforces that every concrete subclass defines a non-empty
+  `supported_frameworks`, catching missing declarations at class definition time
+  rather than at runtime.
 - Common fields (`num_nodes`, `resources_per_node`, `image`) live on `BaseTrainer` so
   every trainer inherits them without repetition.
 - `get_framework_args()` is the only abstract method on `BaseTrainer`. Training-mode
@@ -406,7 +426,7 @@ class TorchTrainer(FuncTrainer):
             workers. Maps to torchrun --monitor-interval.
     """
 
-    supported_frameworks: ClassVar[list[str]] = ["torch"]
+    supported_frameworks: ClassVar[tuple[str, ...]] = ("torch",)
 
     # Torch-specific arguments (non-overlapping with controller-injected args)
     max_restarts: Optional[int] = None
@@ -443,11 +463,21 @@ class DeepSpeedTrainer(FuncTrainer):
             --num_gpus (DeepSpeed launcher) or --nproc_per_node (torchrun).
     """
 
-    supported_frameworks: ClassVar[list[str]] = ["deepspeed", "torch"]
+    supported_frameworks: ClassVar[tuple[str, ...]] = ("deepspeed", "torch")
 
     # DeepSpeed-specific arguments
     deepspeed_config: Optional[Union[str, dict]] = None
     num_proc_per_node: Optional[int] = None
+
+    def validate_runtime(self, runtime: "Runtime") -> None:
+        """Validate framework compatibility and launcher support.
+
+        In addition to the standard framework label check, DeepSpeedTrainer
+        verifies that the runtime's launcher is compatible (torchrun or mpirun).
+        """
+        super().validate_runtime(runtime)
+        # TODO: Check runtime.trainer.command for launcher compatibility
+        # once the Runtime type exposes launcher metadata.
 
     def get_framework_args(self) -> dict:
         args = {}
@@ -472,7 +502,7 @@ class JAXTrainer(FuncTrainer):
     Supports runtimes labeled with `trainer.kubeflow.org/framework: jax`.
     """
 
-    supported_frameworks: ClassVar[list[str]] = ["jax"]
+    supported_frameworks: ClassVar[tuple[str, ...]] = ("jax",)
 
     def get_framework_args(self) -> dict:
         return {}
@@ -488,7 +518,7 @@ class XGBoostTrainer(FuncTrainer):
     Supports runtimes labeled with `trainer.kubeflow.org/framework: xgboost`.
     """
 
-    supported_frameworks: ClassVar[list[str]] = ["xgboost"]
+    supported_frameworks: ClassVar[tuple[str, ...]] = ("xgboost",)
 
     def get_framework_args(self) -> dict:
         return {}
@@ -561,7 +591,7 @@ class TorchTuneTrainer(ConfigTrainer):
     Replaces the current BuiltinTrainer(config=TorchTuneConfig(...)) pattern.
     """
 
-    supported_frameworks: ClassVar[list[str]] = ["torch"]
+    supported_frameworks: ClassVar[tuple[str, ...]] = ("torch",)
 
     config: TorchTuneConfig
 
@@ -576,7 +606,7 @@ class TorchTuneTrainer(ConfigTrainer):
 class UnslothTrainer(ConfigTrainer):
     """Config-driven trainer for Unsloth fine-tuning."""
 
-    supported_frameworks: ClassVar[list[str]] = ["torch"]
+    supported_frameworks: ClassVar[tuple[str, ...]] = ("torch",)
 
     model: str
     dataset: str
@@ -599,7 +629,7 @@ class UnslothTrainer(ConfigTrainer):
 class VeRLTrainer(ConfigTrainer):
     """Config-driven trainer for VeRL RLHF training."""
 
-    supported_frameworks: ClassVar[list[str]] = ["torch"]
+    supported_frameworks: ClassVar[tuple[str, ...]] = ("torch",)
 
     model: str
     reward_model: str
@@ -684,6 +714,13 @@ class RuntimeConfig:
 - `RuntimeConfig` is optional — when not provided, the trainer's own fields
   (`packages_to_install`, `env` on `CustomTrainer`) or the runtime defaults are used.
   This preserves backward compatibility.
+- **Merge semantics:** When both `RuntimeConfig` and `CustomTrainer` fields are
+  provided, `RuntimeConfig` fields override `CustomTrainer` fields **only when the
+  `RuntimeConfig` field is not `None`**. For example, if
+  `RuntimeConfig(env={"DEBUG": "1"})` is passed alongside
+  `CustomTrainer(packages_to_install=["torch"])`, the trainer's `packages_to_install`
+  is preserved because `RuntimeConfig.packages_to_install` is `None`. This is a
+  field-level merge, not a wholesale replacement.
 
 ### E. TrainerClient Changes
 
@@ -727,6 +764,17 @@ When `runtime_config` is provided, its values take precedence over any
 runtime-environment fields on `CustomTrainer` (for backward compatibility, those
 fields remain on `CustomTrainer` but `RuntimeConfig` is the preferred mechanism).
 
+**`runtime=None` behavior by trainer type:**
+
+| Trainer type | `runtime=None` behavior |
+|---|---|
+| `CustomTrainer` / `BuiltinTrainer` | Defaults to `constants.DEFAULT_TRAINING_RUNTIME` ("torch-distributed"), preserving existing behavior. |
+| `BaseTrainer` subclasses (`TorchTrainer`, etc.) | Auto-discovery via `_resolve_runtime()` — finds runtimes matching `supported_frameworks`. |
+
+This distinction is intentional: existing code must not change behavior, while new
+trainer types benefit from auto-discovery. The `train()` docstring documents this
+difference explicitly.
+
 ---
 
 ## Design Details
@@ -753,12 +801,19 @@ def _resolve_runtime(
         trainer.validate_runtime(runtime)
         return runtime
 
-    # Auto-discover: find runtimes matching the trainer's frameworks
+    # Auto-discover: find runtimes matching the trainer's frameworks.
+    # Iterate supported_frameworks in declaration order (most preferred first)
+    # to provide deterministic selection when exactly one runtime matches
+    # the most-preferred framework.
     all_runtimes = self.list_runtimes()
-    matching = [
-        r for r in all_runtimes
-        if r.trainer.framework in trainer.supported_frameworks
-    ]
+    matching = []
+    for framework in trainer.supported_frameworks:
+        matching = [
+            r for r in all_runtimes
+            if r.trainer.framework == framework
+        ]
+        if matching:
+            break
 
     if len(matching) == 0:
         raise ValueError(
@@ -767,8 +822,9 @@ def _resolve_runtime(
         )
     if len(matching) > 1:
         raise ValueError(
-            f"Multiple runtimes found for frameworks "
-            f"{trainer.supported_frameworks}: {[r.name for r in matching]}. "
+            f"Multiple runtimes found for framework "
+            f"'{matching[0].trainer.framework}': "
+            f"{[r.name for r in matching]}. "
             f"Please specify the runtime explicitly."
         )
 
@@ -777,9 +833,21 @@ def _resolve_runtime(
 
 **Multi-runtime selection strategy:**
 
-When multiple runtimes match the trainer's `supported_frameworks`, the SDK raises a
-`ValueError` listing the available options. The user resolves the ambiguity by passing
-the `runtime` parameter to `train()`:
+Auto-discovery iterates `supported_frameworks` in declaration order (most preferred
+first). For each framework, it collects matching runtimes. If exactly one runtime
+matches the most-preferred framework, it is selected automatically. If multiple
+runtimes match the same framework, the SDK raises a `ValueError` listing the
+available options. If no runtimes match the most-preferred framework, discovery
+falls through to the next framework in the tuple.
+
+For example, `DeepSpeedTrainer` declares `supported_frameworks = ("deepspeed", "torch")`.
+On a cluster with only a `torch-distributed` runtime, auto-discovery falls through
+`"deepspeed"` (no match) and selects the `torch-distributed` runtime. On a cluster
+with both a `deepspeed-mpi` and a `torch-distributed` runtime, auto-discovery finds
+`deepspeed-mpi` first (matching `"deepspeed"`) and selects it without ambiguity.
+
+When multiple runtimes match the same framework, the user resolves the ambiguity by
+passing the `runtime` parameter to `train()`:
 
 ```python
 # Two torch runtimes exist: "torch-distributed" and "torch-elastic"
@@ -1062,7 +1130,7 @@ job_id = client.train(
 |---|---|
 | `CustomTrainer` | **No change.** Remains fully functional. `packages_to_install`, `pip_index_urls`, and `env` fields are retained. |
 | `CustomTrainerContainer` | **No change.** |
-| `BuiltinTrainer` | **No change.** `ConfigTrainer` is designed as its successor (see [BuiltinTrainer Migration Path](#builtintrainer-migration-path)), but migration is deferred to a follow-up proposal. |
+| `BuiltinTrainer` | **No change in Alpha.** `ConfigTrainer` is designed as its successor (see [BuiltinTrainer Migration Path](#builtintrainer-migration-path)). In Beta, `BuiltinTrainer` will emit a `FutureWarning` directing users to `TorchTuneTrainer`. Formal deprecation occurs at GA. |
 | `TrainerClient.train()` | **Additive only.** New `runtime_config` parameter is optional with default `None`. The `trainer` parameter type union is extended to include `BaseTrainer`. |
 | `TrainJobTemplate` | **No change in this proposal.** Future work can extend it to support `BaseTrainer` subclasses. |
 | `RuntimeConfig` vs `CustomTrainer` fields | When both `RuntimeConfig` and `CustomTrainer` fields are provided, `RuntimeConfig` takes precedence. This is documented but does not break existing code since `RuntimeConfig` defaults to `None`. |
@@ -1143,6 +1211,75 @@ This proposal can be implemented incrementally across multiple PRs:
 - Export new classes from `kubeflow.trainer.__init__`
 - Update SDK documentation on sdk.kubeflow.org
 - Add migration guide examples
+
+> **Note:** Phase 1 and Phase 2 should ship together in the same SDK release.
+> Releasing the type hierarchy without backend support would make `TorchTrainer`
+> importable but unusable, producing a confusing `ValueError` at `train()` time.
+
+---
+
+## Graduation Criteria
+
+### Alpha (target: current cycle)
+
+- `BaseTrainer`, `FuncTrainer`, `ConfigTrainer`, and `RuntimeConfig` types are
+  implemented and exported.
+- `TorchTrainer` is implemented with full backend support (Kubernetes, Container,
+  LocalProcess).
+- Runtime auto-discovery and `validate_runtime()` are functional.
+- Unit tests cover the type hierarchy, validation (positive and negative), and
+  auto-discovery (single-match, no-match, multi-match).
+- At least one integration test exercises `TorchTrainer` end-to-end against the
+  Kubernetes backend.
+- All existing `CustomTrainer` and `BuiltinTrainer` tests continue to pass.
+- `RuntimeConfig` merge semantics are implemented and tested.
+
+### Beta
+
+- `DeepSpeedTrainer`, `JAXTrainer`, and `XGBoostTrainer` are implemented.
+- At least one `ConfigTrainer` subclass (`TorchTuneTrainer`) is implemented,
+  proving the config-driven extension model and beginning `BuiltinTrainer` migration.
+- `BuiltinTrainer` emits a `FutureWarning` directing users to `TorchTuneTrainer`.
+- SDK documentation on sdk.kubeflow.org covers all new trainer types with examples.
+- Migration guide is published.
+
+### GA
+
+- All Tier 1 trainers are stable with no breaking changes for at least one release.
+- `BuiltinTrainer` is formally deprecated (removal deferred to a future major version).
+- `CustomTrainer` runtime-environment fields (`packages_to_install`, `pip_index_urls`,
+  `env`) are formally deprecated in favor of `RuntimeConfig`.
+- Community has contributed at least one Tier 2 `ConfigTrainer` subclass.
+
+---
+
+## Open Questions
+
+The following design questions should be resolved before or during implementation:
+
+1. **DeepSpeed launcher detection.** `DeepSpeedTrainer` supports both `torchrun` and
+   `mpirun` launchers. How should `validate_runtime()` detect which launcher a runtime
+   uses? The `Runtime` type currently does not expose launcher metadata. Options:
+   (a) inspect `runtime.trainer.command`, (b) add a launcher label to runtimes,
+   (c) defer validation to the controller.
+
+2. **`ConfigTrainer.get_config()` return type.** The current return type `dict` is
+   untyped. Should `ConfigTrainer` subclasses return a typed configuration object
+   instead (e.g., a Pydantic model or typed dataclass) to get the same static-analysis
+   benefits that `FuncTrainer` provides via typed fields?
+
+3. **Observability.** When runtime auto-discovery selects a runtime, should the SDK
+   log the selected runtime name and framework at `INFO` level? This would aid
+   debugging but adds a logging dependency.
+
+4. **`resources_per_node` typing.** The current `Optional[dict]` is untyped. Should
+   this be a structured type (e.g., `ResourceRequirements` dataclass with `cpu`,
+   `memory`, `gpu` fields) to enable IDE autocomplete and validation?
+
+5. **Backend validation safety net.** Currently, `validate_runtime()` is only called
+   via `TrainerClient._resolve_runtime()`. Should backends also call
+   `validate_runtime()` as a defensive check, in case trainers are passed to backends
+   directly?
 
 ---
 

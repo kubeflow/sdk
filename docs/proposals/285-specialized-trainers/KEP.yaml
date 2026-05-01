@@ -2,7 +2,7 @@ title: Specialized Trainer Abstractions and RuntimeConfig for the Kubeflow SDK
 kep-number: 285
 authors:
   - "@szaher"
-status: implementable
+status: draft
 creation-date: 2026-02-11
 reviewers:
   - "@andreyvelich"
