@@ -15,8 +15,6 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-import typing
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -42,11 +40,11 @@ class LocalBackendStep(BaseModel):
 
 
 class LocalBackendJobs(BaseModel):
-    steps: Optional[list[LocalBackendStep]] = []
-    runtime: Optional[types.Runtime] = None
+    steps: list[LocalBackendStep] | None = []
+    runtime: types.Runtime | None = None
     name: str
-    created: typing.Optional[datetime] = None
-    completed: typing.Optional[datetime] = None
+    created: datetime | None = None
+    completed: datetime | None = None
 
     class Config:
         arbitrary_types_allowed = True

@@ -22,3 +22,6 @@ htmlcov/
 
 # Documentation build
 docs/_build/
+
+# Local E2E: cloned for building Spark Operator image (SPARK_OPERATOR_IMAGE_TAG=local)
+spark-operator/

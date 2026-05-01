@@ -16,9 +16,11 @@
 Utility functions for the Container backend.
 """
 
+from dataclasses import dataclass
 import logging
 import os
 from pathlib import Path
+import shlex
 
 from kubeflow.common.constants import UNKNOWN
 from kubeflow.trainer.constants import constants
@@ -88,6 +90,10 @@ def build_pip_install_cmd(trainer: types.CustomTrainer) -> str:
     """
     Build pip install command for packages.
 
+    Generates a shell snippet that installs packages with retry logic and
+    fallback from per-user to system-wide installation, matching the resilience
+    of the Kubernetes backend's install script.
+
     Args:
         trainer: CustomTrainer configuration.
 
@@ -99,12 +105,21 @@ def build_pip_install_cmd(trainer: types.CustomTrainer) -> str:
         return ""
 
     index_urls = trainer.pip_index_urls or list(constants.DEFAULT_PIP_INDEX_URLS)
-    main_idx = index_urls[0]
-    extras = " ".join(f"--extra-index-url {u}" for u in index_urls[1:])
-    quoted = " ".join(f'"{p}"' for p in pkgs)
+    main_idx = shlex.quote(index_urls[0])
+    extras = " ".join(f"--extra-index-url {shlex.quote(u)}" for u in index_urls[1:])
+    quoted = " ".join(shlex.quote(p) for p in pkgs)
+    pip_env = "PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1"
+    pip_base = f"python -m pip install --no-warn-script-location --index-url {main_idx} {extras}"
+    log_file = "/tmp/pip_install.log"
     return (
-        "PIP_DISABLE_PIP_VERSION_CHECK=1 pip install --no-warn-script-location "
-        f"--index-url {main_idx} {extras} {quoted} && "
+        f"if {pip_env} {pip_base} --user {quoted} >{log_file} 2>&1; then "
+        f'echo "Successfully installed Python packages (user): {quoted}"; '
+        f"elif {pip_env} {pip_base} {quoted} >>{log_file} 2>&1; then "
+        f'echo "Successfully installed Python packages (system-wide): {quoted}"; '
+        f"else "
+        f'echo "ERROR: Failed to install Python packages: {quoted}" >&2; '
+        f"cat {log_file} >&2; exit 1; "
+        f"fi && "
     )
 
 
@@ -211,3 +226,111 @@ def aggregate_container_statuses(adapter, containers: list[dict]) -> str:
     """
     statuses = [get_container_status(adapter, c["id"]) for c in containers]
     return aggregate_status_from_containers(statuses)
+
+
+@dataclass
+class ContainerInitializer:
+    """Internal type for container initializer configuration."""
+
+    name: str
+    image: str
+    command: list[str]
+    env: dict[str, str]
+
+
+def get_optional_initializer_envs(
+    initializer: types.BaseInitializer, required_fields: set[str]
+) -> dict[str, str]:
+    """
+    Get optional environment variables from the initializer config.
+
+    Iterates over dataclass fields and converts non-required, non-None values
+    to environment variables with uppercase names.
+
+    Args:
+        initializer: Dataset or model initializer configuration.
+        required_fields: Set of field names to skip (already handled).
+
+    Returns:
+        Dictionary of environment variables.
+    """
+    from dataclasses import fields
+
+    env = {}
+    for f in fields(initializer):
+        if f.name not in required_fields:
+            value = getattr(initializer, f.name)
+            if value is not None:
+                # Convert list values (like ignore_patterns) to comma-separated strings
+                if isinstance(value, list):
+                    value = ",".join(str(item) for item in value)
+                env[f.name.upper()] = str(value)
+    return env
+
+
+def get_dataset_initializer(dataset: types.BaseInitializer, config) -> ContainerInitializer:
+    """
+    Get container initializer configuration for dataset initialization.
+
+    Args:
+        dataset: Dataset initializer configuration (HuggingFace or S3).
+        config: ContainerBackendConfig with initializer image settings.
+
+    Returns:
+        ContainerInitializer with image, command, and environment variables.
+
+    Raises:
+        ValueError: If the dataset initializer type is not supported.
+    """
+    if not isinstance(dataset, (types.HuggingFaceDatasetInitializer, types.S3DatasetInitializer)):
+        raise ValueError(
+            f"Unsupported dataset initializer type: {type(dataset).__name__}. "
+            "Supported types: HuggingFaceDatasetInitializer, S3DatasetInitializer"
+        )
+
+    env = {
+        "STORAGE_URI": dataset.storage_uri,
+        "OUTPUT_PATH": constants.DATASET_PATH,
+    }
+    env.update(get_optional_initializer_envs(dataset, required_fields={"storage_uri"}))
+
+    return ContainerInitializer(
+        name="dataset-initializer",
+        image=config.dataset_initializer_image,
+        command=["bash", "-c", "python -m pkg.initializers.dataset"],
+        env=env,
+    )
+
+
+def get_model_initializer(model: types.BaseInitializer, config) -> ContainerInitializer:
+    """
+    Get container initializer configuration for model initialization.
+
+    Args:
+        model: Model initializer configuration (HuggingFace or S3).
+        config: ContainerBackendConfig with initializer image settings.
+
+    Returns:
+        ContainerInitializer with image, command, and environment variables.
+
+    Raises:
+        ValueError: If the model initializer type is not supported.
+    """
+    if not isinstance(model, (types.HuggingFaceModelInitializer, types.S3ModelInitializer)):
+        raise ValueError(
+            f"Unsupported model initializer type: {type(model).__name__}. "
+            "Supported types: HuggingFaceModelInitializer, S3ModelInitializer"
+        )
+
+    env = {
+        "STORAGE_URI": model.storage_uri,
+        "OUTPUT_PATH": constants.MODEL_PATH,
+    }
+    env.update(get_optional_initializer_envs(model, required_fields={"storage_uri"}))
+
+    return ContainerInitializer(
+        name="model-initializer",
+        image=config.model_initializer_image,
+        command=["bash", "-c", "python -m pkg.initializers.model"],
+        env=env,
+    )

@@ -15,7 +15,7 @@
 """Common options and helper classes used across multiple backends."""
 
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any
 
 from kubeflow.trainer.backends.base import RuntimeBackend
 from kubeflow.trainer.types.types import BuiltinTrainer, CustomTrainer, CustomTrainerContainer
@@ -36,7 +36,7 @@ class Name:
     def __call__(
         self,
         job_spec: dict[str, Any],
-        trainer: Optional[Union[BuiltinTrainer, CustomTrainer, CustomTrainerContainer]],
+        trainer: BuiltinTrainer | CustomTrainer | CustomTrainerContainer | None,
         backend: RuntimeBackend,
     ) -> None:
         """Apply custom name to the job specification.

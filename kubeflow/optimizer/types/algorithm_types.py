@@ -14,7 +14,7 @@
 
 import abc
 from dataclasses import dataclass, fields
-from typing import Any, Optional
+from typing import Any
 
 from kubeflow_katib_api import models
 
@@ -70,7 +70,7 @@ class RandomSearch(BaseAlgorithm):
         random_state (`Optional[int]`): Random seed for reproducibility.
     """
 
-    random_state: Optional[int] = None
+    random_state: int | None = None
 
     @property
     def algorithm_name(self) -> str:

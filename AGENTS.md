@@ -197,7 +197,7 @@ def filter_completed_jobs(jobs: list[str], completed: set[str]) -> list[str]:
 
 **Style Requirements:**
 
-- Line length 100, Python 3.9 target, double quotes, spaces indent
+- Line length 100, Python 3.10 target, double quotes, spaces indent
 - Imports: isort via ruff; first-party is `kubeflow`; prefer absolute imports
 - Naming: pep8-naming; functions/vars `snake_case`, classes `PascalCase`, constants `UPPER_SNAKE_CASE`; prefix private with `_`
 - Use descriptive, self-explanatory variable names. Avoid overly short or cryptic identifiers

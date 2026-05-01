@@ -17,6 +17,8 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping
 from typing import TYPE_CHECKING
 
+from kubeflow.hub.types.types import StorageConfig
+
 if TYPE_CHECKING:
     from model_registry.types import (
         ModelArtifact,
@@ -67,6 +69,10 @@ class ModelRegistryClient:
 
         Raises:
             ImportError: If model-registry is not installed.
+        Examples:
+            ModelRegistryClient("https://example.org", port=456)  # port kwarg
+            ModelRegistryClient("https://example.org:456")        # base_url (including port)
+            ModelRegistryClient("https://example.org")            # default port (`443` for https, `8080` for http)
         """
         try:
             from model_registry import ModelRegistry
@@ -103,17 +109,18 @@ class ModelRegistryClient:
         owner: str | None = None,
         version_description: str | None = None,
         metadata: Mapping[str, SupportedTypes] | None = None,
+        storage_config: StorageConfig | None = None,
     ) -> RegisteredModel:
         """Register a model.
 
         This registers a model in the model registry. The model is not downloaded,
         and has to be stored prior to registration.
 
-        Most models can be registered using their URI, along with optional
-        connection-specific parameters, `storage_key` and `storage_path` or,
-        simply a `service_account_name`. URI builder utilities are recommended
-        when referring to specialized storage; for example `utils.s3_uri_from`
-        helper when using S3 object storage data connections.
+        Most models can be registered using their URI, along with an optional
+        `storage_config` describing how KServe should fetch the model at
+        inference time. URI builder utilities are recommended when referring to
+        specialized storage; for example `utils.s3_uri_from` when using S3
+        object storage data connections.
 
         Args:
             name: Name of the model.
@@ -128,10 +135,15 @@ class ModelRegistryClient:
             owner: Owner of the model. Defaults to the client author.
             version_description: Description of the model version.
             metadata: Additional version metadata.
+            storage_config: Storage credentials for the model artifact. Groups
+                           `storage_key`, `storage_path`, and
+                           `service_account_name` used by KServe's
+                           StorageInitializer. See `StorageConfig` for details.
 
         Returns:
             Registered model.
         """
+        storage = storage_config or StorageConfig()
         return self._registry.register_model(
             name=name,
             uri=uri,
@@ -142,6 +154,9 @@ class ModelRegistryClient:
             owner=owner,
             description=version_description,
             metadata=metadata,
+            storage_key=storage.storage_key,
+            storage_path=storage.storage_path,
+            service_account_name=storage.service_account_name,
         )
 
     def update_model(self, model: RegisteredModel) -> RegisteredModel:

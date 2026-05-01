@@ -30,7 +30,7 @@ from datetime import datetime, timedelta
 import json
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 import urllib.error
 import urllib.request
 
@@ -127,7 +127,7 @@ def _fetch_runtime_from_github(
     repo: str = "trainer",
     branch: str = "master",
     path: str = "manifests/base/runtimes",
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Fetch a runtime YAML from GitHub.
 
@@ -153,7 +153,7 @@ def _fetch_runtime_from_github(
         return None
 
 
-def _get_cached_runtime_list() -> Optional[list[str]]:
+def _get_cached_runtime_list() -> list[str] | None:
     """
     Get cached runtime file list if it exists and is not expired.
 
@@ -224,7 +224,7 @@ def _get_github_runtime_files() -> list[str]:
     return []
 
 
-def _get_cached_runtime(runtime_file: str) -> Optional[dict[str, Any]]:
+def _get_cached_runtime(runtime_file: str) -> dict[str, Any] | None:
     """
     Get cached runtime if it exists and is not expired.
 
@@ -285,7 +285,7 @@ def _cache_runtime(runtime_file: str, data: dict[str, Any]) -> None:
         logger.debug(f"Failed to cache {runtime_file}: {e}")
 
 
-def _load_runtime_from_github_with_cache(runtime_file: str) -> Optional[dict[str, Any]]:
+def _load_runtime_from_github_with_cache(runtime_file: str) -> dict[str, Any] | None:
     """
     Load runtime from GitHub with caching.
 
