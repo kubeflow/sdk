@@ -739,26 +739,148 @@ def test_extract_name_option(kubernetes_backend, test_case):
     print("test execution complete")
 
 
-def test_connect_cleanup_on_failure(kubernetes_backend):
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="cleanup on connect failure",
+            expected_status=FAILED,
+        ),
+    ],
+)
+def test_connect_cleanup_on_failure(kubernetes_backend, test_case):
     """Test connect() cleans up port-forward process on failure."""
+    print("Executing test:", test_case.name)
+
     mock_proc = Mock()
     mock_proc.poll.return_value = None
 
     mock_builder = Mock()
     mock_builder.remote.return_value.getOrCreate.side_effect = RuntimeError("connect failed")
 
-    with (
-        patch.object(
-            kubernetes_backend,
-            "get_connect_url",
-            return_value=("sc://127.0.0.1:15002", mock_proc),
-        ),
-        patch(
-            "kubeflow.spark.backends.kubernetes.backend.SparkSession.builder",
-            mock_builder,
-        ),
-        pytest.raises(RuntimeError),
-    ):
-        kubernetes_backend.connect(info=Mock())
+    try:
+        with (
+            patch.object(
+                kubernetes_backend,
+                "get_connect_url",
+                return_value=("sc://127.0.0.1:15002", mock_proc),
+            ),
+            patch(
+                "kubeflow.spark.backends.kubernetes.backend.SparkSession.builder",
+                mock_builder,
+            ),
+        ):
+            kubernetes_backend.connect(info=Mock())
 
-    assert mock_proc.wait.called
+        # should not reach here
+        raise AssertionError("Expected RuntimeError but connect() succeeded")
+
+    except Exception as e:
+        assert type(e) is RuntimeError
+        assert mock_proc.wait.called
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="port-forward fails triggers cleanup",
+            expected_status=FAILED,
+            expected_error=RuntimeError,
+        ),
+    ],
+)
+def test_get_connect_url_cleanup_on_failure(kubernetes_backend, test_case):
+    """Test get_connect_url cleans up subprocess on failure paths."""
+    print("Executing test:", test_case.name)
+
+    info = SparkConnectInfo(
+        name="test-session",
+        namespace="default",
+        state=SparkConnectState.READY,
+        service_name="test-session-svc",
+    )
+
+    mock_proc = Mock()
+    mock_proc.poll.return_value = None
+
+    try:
+        with (
+            patch.dict(
+                "os.environ",
+                {"KUBERNETES_SERVICE_HOST": "", "SPARK_CONNECT_LOCAL_PORT": "15002"},
+                clear=False,
+            ),
+            patch(
+                "kubeflow.spark.backends.kubernetes.backend.subprocess.Popen",
+                return_value=mock_proc,
+            ),
+            patch("kubeflow.spark.backends.kubernetes.backend.time.sleep"),
+            patch.object(
+                kubernetes_backend,
+                "_wait_for_connect_port",
+                return_value=False,  # simulate failure
+            ),
+        ):
+            kubernetes_backend.get_connect_url(info)
+
+        raise AssertionError("Expected RuntimeError but succeeded")
+
+    except Exception as e:
+        assert type(e) is RuntimeError
+        assert mock_proc.wait.called
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="proc already exited triggers cleanup",
+            expected_status=FAILED,
+            expected_error=RuntimeError,
+        ),
+    ],
+)
+def test_get_connect_url_proc_exit_cleanup(kubernetes_backend, test_case):
+    """Test cleanup when subprocess exits early."""
+    print("Executing test:", test_case.name)
+
+    info = SparkConnectInfo(
+        name="test-session",
+        namespace="default",
+        state=SparkConnectState.READY,
+        service_name="test-session-svc",
+    )
+
+    mock_proc = Mock()
+    mock_proc.poll.return_value = 1  # already exited
+
+    try:
+        with (
+            patch.dict(
+                "os.environ",
+                {"KUBERNETES_SERVICE_HOST": "", "SPARK_CONNECT_LOCAL_PORT": "15002"},
+                clear=False,
+            ),
+            patch(
+                "kubeflow.spark.backends.kubernetes.backend.subprocess.Popen",
+                return_value=mock_proc,
+            ),
+            patch("kubeflow.spark.backends.kubernetes.backend.time.sleep"),
+            patch.object(
+                kubernetes_backend,
+                "_wait_for_connect_port",
+                return_value=True,
+            ),
+        ):
+            kubernetes_backend.get_connect_url(info)
+
+        raise AssertionError("Expected RuntimeError but succeeded")
+
+    except Exception as e:
+        assert type(e) is RuntimeError
+    print("test execution complete")
