@@ -22,6 +22,7 @@
   - [Architecture](#architecture)
   - [Dependency](#dependency)
   - [Constructor](#constructor)
+    - [`PipelinesBackendConfig`](#pipelinesbackendconfig)
   - [Escape hatch (`kfp.Client`)](#escape-hatch-kfpclient)
   - [DSL Re-exports](#dsl-re-exports)
   - [Phased API](#phased-api)
@@ -74,7 +75,8 @@ Today, Kubeflow users who want to orchestrate ML pipelines must install and use
 - **Two SDKs, two import styles** — users mix `from kfp import ...` with
   `from kubeflow.trainer import ...`.
 - **Inconsistent constructor** — `kfp.Client(host=..., existing_token=...,
-  namespace="kubeflow")` vs `ModelRegistryClient(base_url=..., user_token=...)`.
+  namespace="kubeflow")` vs the `backend_config` pattern used by `TrainerClient`,
+  `SparkClient`, and `OptimizerClient`.
 - **ID-centric API** — `kfp.Client` requires pipeline IDs and experiment IDs
   before triggering a run. Other SDK clients are name-first.
 - **Too many methods for simple tasks** — uploading a pipeline requires choosing
@@ -93,9 +95,9 @@ Today, Kubeflow users who want to orchestrate ML pipelines must install and use
    at the `kubeflow.pipelines` module level.
 4. Add `wait_for_run_status` with a flexible status set and callbacks (matching
    `TrainerClient.wait_for_job_status`).
-5. Align the constructor with `ModelRegistryClient` (`base_url`, `port`,
-   `user_token`, `is_secure`, `custom_ca`) and add `namespace` for KFP's
-   multi-user deployments.
+5. Adopt the `backend_config` pattern (matching `TrainerClient`, `SparkClient`,
+   `OptimizerClient`) via `PipelinesBackendConfig` for KFP connection
+   parameters, enabling future local/container backends without breaking changes.
 6. Deliver the API in phases — Phase 1 covers the core workflow with
    minimal methods; later phases add management, observability, and advanced
    features.
@@ -137,10 +139,10 @@ def train(epochs: int) -> str:
 def my_pipeline(epochs: int = 10):
     train(epochs=epochs)
 
-client = PipelinesClient("https://ml-pipeline.example.com")
+client = PipelinesClient()
 
 # Upload (compiles automatically from function)
-client.upload_pipeline(my_pipeline, pipeline_name="training-pipeline")
+client.upload_pipeline(my_pipeline, name="training-pipeline")
 
 # Run the uploaded pipeline
 run = client.run("training-pipeline", params={"epochs": 5})
@@ -173,10 +175,10 @@ def training_pipeline(data_path: str = "/data", lr: float = 0.001, epochs: int =
     data = preprocess(data_path=data_path)
     train(data_path=data.output, lr=lr, epochs=epochs)
 
-client = PipelinesClient("https://ml-pipeline.example.com")
+client = PipelinesClient()
 
 # Upload once
-client.upload_pipeline(training_pipeline, pipeline_name="training-pipeline")
+client.upload_pipeline(training_pipeline, name="training-pipeline")
 
 # Create experiment
 client.create_experiment("hyperparameter-sweep")
@@ -216,7 +218,7 @@ As a data scientist, I want to wait until my run starts executing (not just
 completes) so I can start tailing external logs.
 
 ```python
-client = PipelinesClient("https://ml-pipeline.example.com")
+client = PipelinesClient()
 
 run = client.run("training-pipeline", params={"epochs": 10})
 
@@ -279,8 +281,8 @@ def training_pipeline(subset_size: int = 1000, num_epochs: int = 3):
     )
     train_task.after(download_task)
 
-client = PipelinesClient("https://ml-pipeline.example.com")
-client.upload_pipeline(training_pipeline, pipeline_name="distributed-training")
+client = PipelinesClient()
+client.upload_pipeline(training_pipeline, name="distributed-training")
 
 run = client.run(
     "distributed-training",
@@ -395,7 +397,7 @@ def full_pipeline(
         trained_model_uri=train.outputs["trained_model_uri"],
     )
 
-client = PipelinesClient("https://ml-pipeline.example.com")
+client = PipelinesClient()
 
 # Compile and submit inline — no upload, no catalog entry
 run = client.run(
@@ -462,33 +464,54 @@ KFP ships three extras (as of kfp 2.x):
 
 ### Constructor
 
-Shares parameter names with `ModelRegistryClient` (`base_url`, `port`, `user_token`,
-`is_secure`, `custom_ca`). `PipelinesClient` adds `namespace` for KFP's multi-user
-deployment model and supports zero-arg construction (like `TrainerClient` and
-`OptimizerClient`) via auto-discovery when `base_url` is omitted.
+Follows the `backend_config` pattern used by `TrainerClient`, `SparkClient`, and
+`OptimizerClient`. Phase 1 supports a single backend via `PipelinesBackendConfig`;
+future phases can add `PipelinesLocalBackendConfig` and `PipelinesContainerBackendConfig`
+without breaking the constructor API.
 
 ```python
 PipelinesClient(
-    base_url: str | None = None,
-    port: int | None = None,
-    *,
-    user_token: str | None = None,
-    is_secure: bool | None = None,
-    custom_ca: str | None = None,
-    namespace: str | None = None,
+    backend_config: PipelinesBackendConfig | None = None,
 )
+```
+
+When `backend_config` is `None`, defaults to `PipelinesBackendConfig()` (zero-arg
+construction with auto-discovery).
+
+#### `PipelinesBackendConfig`
+
+```python
+@dataclass
+class PipelinesBackendConfig:
+    base_url: str | None = None
+    user_token: str | None = None
+    is_secure: bool | None = None
+    custom_ca: str | None = None
+    namespace: str | None = None
 ```
 
 | Parameter | Description |
 |---|---|
-| `base_url` | KFP API server URL including scheme. If omitted, auto-discovered following kfp client |
-| `port` | Inferred from scheme if omitted (443 for https, 8080 for http). The http default is 8080 (not 80) because KFP's API server listens on 8080 by convention |
+| `base_url` | KFP API server URL including scheme and port (e.g. `https://ml-pipeline.example.com:8080`). If omitted, auto-discovered following `kfp.Client` conventions (in-cluster DNS or kubeconfig proxy) |
 | `user_token` | Bearer token for authentication |
 | `is_secure` | Inferred from scheme if omitted |
 | `custom_ca` | Path to PEM-encoded root certificates |
-| `namespace` | K8s namespace. If omitted, auto-detected |
+| `namespace` | K8s namespace. If omitted, auto-detected following `kfp.Client` conventions |
 
-**`namespace` auto-detection:** following what kfp.client does currently.
+**Usage:**
+
+```python
+# Zero-arg (auto-discovery)
+client = PipelinesClient()
+
+# Explicit config
+client = PipelinesClient(
+    backend_config=PipelinesBackendConfig(
+        base_url="https://ml-pipeline.example.com",
+        user_token="...",
+    )
+)
+```
 
 ### Escape hatch (`kfp.Client`)
 
@@ -525,13 +548,13 @@ Unified upload that handles functions, files, new pipelines, and new versions.
 
 ```python
 # From a @dsl.pipeline function — auto-compiles
-client.upload_pipeline(my_pipeline, pipeline_name="training-pipeline")
+client.upload_pipeline(my_pipeline, name="training-pipeline")
 
 # From a compiled YAML file
-client.upload_pipeline("training-pipeline.yaml", pipeline_name="training-pipeline")
+client.upload_pipeline("training-pipeline.yaml", name="training-pipeline")
 
 # New version — same method, auto-detects existing pipeline
-client.upload_pipeline(my_pipeline_v2, pipeline_name="training-pipeline", version="v2-with-caching")
+client.upload_pipeline(my_pipeline_v2, name="training-pipeline", version="v2-with-caching")
 ```
 
 The user's intent is always "put this pipeline on the server". The client
@@ -541,8 +564,8 @@ handles the implementation details:
 - First arg is a string path → use the file
 - Pipeline with that name exists → create new version
 - Pipeline doesn't exist → create it
-- `pipeline_name` omitted → auto-generate from callable's `@dsl.pipeline(name=...)` value, or the function name; for file paths, use the filename without extension.
-  Calling `upload_pipeline` again with the same `pipeline_name` and no explicit `version`
+- `name` omitted → auto-generate from callable's `@dsl.pipeline(name=...)` value, or the function name; for file paths, use the filename without extension.
+  Calling `upload_pipeline` again with the same `name` and no explicit `version`
   creates a **new version** each time (not idempotent)
 - `version` omitted → auto-generate version label following the same conventions as the KFP UI (exact format deferred to implementation)
 
@@ -551,7 +574,7 @@ def upload_pipeline(
     self,
     pipeline: Callable | str,
     *,
-    pipeline_name: str | None = None,
+    name: str | None = None,
     version: str | None = None,
     description: str | None = None,
 ) -> PipelineVersion:
@@ -563,10 +586,10 @@ implementation distinctions:
 
 | User intent | Current `kfp.Client` (choose one) | New client |
 |---|---|---|
-| Upload from function | `upload_pipeline_from_pipeline_func` | `upload_pipeline(fn, pipeline_name=...)` |
-| Upload from file | `upload_pipeline` | `upload_pipeline("file.yaml", pipeline_name=...)` |
-| New version from function | `upload_pipeline_version_from_pipeline_func` | `upload_pipeline(fn, pipeline_name=..., version=...)` |
-| New version from file | `upload_pipeline_version` | `upload_pipeline("file.yaml", pipeline_name=..., version=...)` |
+| Upload from function | `upload_pipeline_from_pipeline_func` | `upload_pipeline(fn, name=...)` |
+| Upload from file | `upload_pipeline` | `upload_pipeline("file.yaml", name=...)` |
+| New version from function | `upload_pipeline_version_from_pipeline_func` | `upload_pipeline(fn, name=..., version=...)` |
+| New version from file | `upload_pipeline_version` | `upload_pipeline("file.yaml", name=..., version=...)` |
 
 ##### `run`
 
@@ -681,37 +704,23 @@ run_info = client.get_run("abc-123")
 ```
 
 ```python
-def get_run(self, run: str) -> Run:
+def get_run(self, run_id: str) -> Run:
 ```
 
 ##### `get_pipeline`
 
-Inspect a pipeline by name, or a specific pipeline version by name.
+Inspect a pipeline by name.
 
 ```python
-# Get the pipeline
 pipeline = client.get_pipeline("training-pipeline")
-
-# Get a specific version
-version = client.get_pipeline("training-pipeline", version="v2-with-caching")
 ```
 
 ```python
-def get_pipeline(
-    self,
-    name: str,
-    *,
-    version: str | None = None,
-) -> Pipeline | PipelineVersion:
+def get_pipeline(self, name: str) -> Pipeline:
 ```
-
-**Semantics:**
-- `version=None` (default): returns the `Pipeline` object
-- `version="..."`: returns the matching `PipelineVersion` object. Raises `ValueError`
-  if that version name does not exist
 
 **Name resolution:**
-- Exactly one pipeline match → proceed
+- Exactly one pipeline match → return the `Pipeline` object
 - Zero matches → raise `ValueError` ("pipeline not found")
 - Multiple matches (possible when mixing clients) → raise `ValueError` with the
   list of ambiguous IDs so the user can fall back to `kfp.Client`
@@ -721,6 +730,34 @@ Within `PipelinesClient`'s own workflow there are never duplicate pipeline names
 
 > **Note**: exception types may be refined in [#458](https://github.com/kubeflow/sdk/issues/458)
 (e.g. `NameResolutionError`).
+
+##### `get_pipeline_version`
+
+Retrieve a specific pipeline version by name.
+If `version` is omitted, the latest version is returned.
+
+```python
+# Get the latest version
+latest = client.get_pipeline_version("training-pipeline")
+
+# Get a specific version
+v2 = client.get_pipeline_version("training-pipeline", version="v2-with-caching")
+```
+
+```python
+def get_pipeline_version(
+    self,
+    name: str,
+    *,
+    version: str | None = None,
+) -> PipelineVersion:
+```
+
+**Semantics:**
+- `version=None` (default): returns the latest `PipelineVersion`
+- `version="..."`: returns the matching `PipelineVersion`. Raises `ValueError`
+  if that version name does not exist
+- Raises `ValueError` if the pipeline has no versions
 
 ##### `list_pipelines`
 
@@ -735,16 +772,12 @@ for pipeline in response.pipelines:
 
 # Next page
 response = client.list_pipelines(page_token=response.next_page_token)
-
-# Filter by namespace
-response = client.list_pipelines(namespace="my-namespace")
 ```
 
 ```python
 def list_pipelines(
     self,
     *,
-    namespace: str | None = None,
     page_token: str = '',
     page_size: int = 10,
 ) -> ListPipelinesResponse:
@@ -761,7 +794,7 @@ def list_pipelines(
 ##### `list_pipeline_versions`
 
 List versions of a pipeline by name. Follows `kfp.Client.list_pipeline_versions`
-pagination — `pipeline_id` is replaced with a name-first `name` parameter resolved
+pagination — `pipeline_id` is replaced with a name-first parameter resolved
 internally.
 
 ```python
@@ -868,7 +901,8 @@ Full name-first CRUD for experiments is included in Phase 1.
 client.create_experiment("hyperparameter-sweep")
 
 # List
-for exp in client.list_experiments():
+response = client.list_experiments()
+for exp in response.experiments:
     print(exp.display_name)
 
 # Get
@@ -883,7 +917,6 @@ def create_experiment(self, name: str, *, description: str | None = None) -> Exp
 def list_experiments(
     self,
     *,
-    namespace: str | None = None,
     page_token: str = '',
     page_size: int = 10,
 ) -> ListExperimentsResponse: ...
@@ -910,6 +943,7 @@ integration ([kubeflow/community#892](https://github.com/kubeflow/community/issu
 | `wait_for_run_status` | `wait_for_run_completion` |
 | `get_run` | `get_run` |
 | `get_pipeline` | `get_pipeline` |
+| `get_pipeline_version` | `get_pipeline_version` (name-first; latest if version omitted) |
 | `list_pipelines` | `list_pipelines` (to be reconsidered during implementation) |
 | `list_pipeline_versions` | `list_pipeline_versions` (name-first; same pagination) |
 | `list_runs` | `list_runs` (to be reconsidered during implementation) |
@@ -919,7 +953,7 @@ integration ([kubeflow/community#892](https://github.com/kubeflow/community/issu
 | `get_experiment` | `get_experiment` |
 | `delete_experiment` | `delete_experiment` |
 
-Thirteen methods replace 19 methods from `kfp.Client` for the core workflow.
+Fourteen methods replace 19 methods from `kfp.Client` for the core workflow.
 
 ---
 
@@ -1026,12 +1060,13 @@ Adoption is optional and incremental. `kfp.Client` remains fully supported.
 
 | `kfp.Client` | `PipelinesClient` |
 |---|---|
-| `Client(host="...", existing_token="...")` | `PipelinesClient(base_url="...", user_token="...")` or `PipelinesClient()` (auto-discovery) |
-| `upload_pipeline_from_pipeline_func(fn, pipeline_name="X")` | `upload_pipeline(fn, pipeline_name="X")` |
+| `Client(host="...", existing_token="...")` | `PipelinesClient(backend_config=PipelinesBackendConfig(base_url="...", user_token="..."))` or `PipelinesClient()` (auto-discovery) |
+| `upload_pipeline_from_pipeline_func(fn, pipeline_name="X")` | `upload_pipeline(fn, name="X")` |
 | `get_pipeline_id("X")` then `run_pipeline(pipeline_id=...)` | `run("X", params={...})` |
 | `create_run_from_pipeline_func(fn, ...)` | `run(fn, params={...})` (compile and submit inline) |
 | `get_run(run_id)` | `get_run(run_id)` |
-| `get_pipeline(pipeline_id)` | `get_pipeline("name")` or `get_pipeline("name", version="v1")` |
+| `get_pipeline(pipeline_id)` | `get_pipeline("name")` |
+| `get_pipeline_version(pipeline_id, version_id)` | `get_pipeline_version("name")` (latest) or `get_pipeline_version("name", version="v1")` |
 | `list_pipeline_versions(pipeline_id=...)` | `list_pipeline_versions("name")` |
 | `list_pipelines()` | `list_pipelines()` |
 | `list_runs(experiment_id=...)` | `list_runs(experiment="name")` (name-first; same pagination) |
