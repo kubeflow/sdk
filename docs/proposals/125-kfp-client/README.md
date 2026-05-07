@@ -733,31 +733,23 @@ Within `PipelinesClient`'s own workflow there are never duplicate pipeline names
 
 ##### `get_pipeline_version`
 
-Retrieve a specific pipeline version by name.
-If `version` is omitted, the latest version is returned.
+Retrieve a specific pipeline version by pipeline name and version name.
 
 ```python
-# Get the latest version
-latest = client.get_pipeline_version("training-pipeline")
-
-# Get a specific version
-v2 = client.get_pipeline_version("training-pipeline", version="v2-with-caching")
+v2 = client.get_pipeline_version(name="training-pipeline", version="v2-with-caching")
 ```
 
 ```python
 def get_pipeline_version(
     self,
     name: str,
-    *,
-    version: str | None = None,
+    version: str,
 ) -> PipelineVersion:
 ```
 
 **Semantics:**
-- `version=None` (default): returns the latest `PipelineVersion`
-- `version="..."`: returns the matching `PipelineVersion`. Raises `ValueError`
-  if that version name does not exist
-- Raises `ValueError` if the pipeline has no versions
+- Resolves the pipeline by `name`, then looks up the version by `version` within
+  that pipeline. Raises `ValueError` if the pipeline or version is not found
 
 ##### `list_pipelines`
 
