@@ -1,0 +1,257 @@
+name: Validate Lockfile Security
+
+on:
+  pull_request:
+    paths:
+      - 'uv.lock'
+      - 'pyproject.toml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check-security-regressions:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          path: pr-code
+
+      - name: Checkout base branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.base_ref }}
+          path: base-code
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Verify lockfile is in sync with pyproject.toml
+        run: |
+          cd pr-code
+          echo "Checking if uv.lock is in sync with pyproject.toml..."
+          if ! uv lock --check; then
+            echo "::error title=Lockfile Out of Sync::uv.lock is out of sync with pyproject.toml. Please run 'uv lock' and commit the changes."
+            echo ""
+            echo "ERROR: uv.lock is out of sync with pyproject.toml"
+            echo "This means pyproject.toml was modified but 'uv lock' was not run."
+            echo ""
+            echo "To fix this:"
+            echo "  1. Run: uv lock"
+            echo "  2. Commit the updated uv.lock file"
+            echo "  3. Push your changes"
+            echo ""
+            exit 1
+          fi
+          echo "Lockfile is in sync"
+
+      - name: Audit PR branch lockfile
+        run: |
+          cd pr-code
+          # NOTE: uv audit is experimental (preview feature) and its text output format may
+          # change without notice. If the parsing in the compare step breaks after a uv upgrade,
+          # check the output format or consider switching to osv-scanner JSON output.
+          # Both tools query the same OSV.dev database, but filtering and version-range logic
+          # differ between uv audit (preview) and OSV-Scanner — results may not be identical.
+          rc=0
+          uv audit --preview-features > ../audit-pr.txt 2>&1 || rc=$?
+          cat ../audit-pr.txt
+          # Exit code 1 = vulns found (expected). Non-zero, non-1 = tool failure.
+          if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
+            echo "::error::uv audit failed on PR branch with exit code $rc"
+            exit 1
+          fi
+
+      - name: Audit base branch lockfile
+        run: |
+          cd base-code
+          rc=0
+          uv audit --preview-features > ../audit-base.txt 2>&1 || rc=$?
+          cat ../audit-base.txt
+          if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
+            echo "::error::uv audit failed on base branch with exit code $rc"
+            exit 1
+          fi
+
+      - name: Compare scans and detect regressions
+        id: compare
+        run: |
+          echo "=== Comparing vulnerability scans ==="
+
+          # Extract advisory ID, package name, and version from uv audit text output
+          extract_vuln_details() {
+            local file="$1"
+            local current_pkg=""
+            local current_ver=""
+            while IFS= read -r line; do
+              # Match package header: "aiohttp 3.13.3 has N known vulnerabilities:"
+              if echo "$line" | grep -qP '^[a-zA-Z].*has \d+ known vulnerabilit'; then
+                current_pkg=$(echo "$line" | awk '{print $1}')
+                current_ver=$(echo "$line" | awk '{print $2}')
+              fi
+              # Match advisory line: "- GHSA-xxxx-xxxx-xxxx: ..." or "- PYSEC-xxxx-xxxx: ..." etc.
+              if echo "$line" | grep -qP '^\- [A-Z]+-'; then
+                local advisory_id=$(echo "$line" | grep -oP '(?<=^- )[A-Z]+-[a-zA-Z0-9-]+')
+                echo "${advisory_id}|${current_pkg}|${current_ver}"
+              fi
+            done < "$file"
+          }
+
+          BASE_VULNS=$(extract_vuln_details audit-base.txt | sort -u)
+          PR_VULNS=$(extract_vuln_details audit-pr.txt | sort -u)
+
+          # Count
+          if [ -z "$BASE_VULNS" ]; then BASE_COUNT=0; else BASE_COUNT=$(echo "$BASE_VULNS" | wc -l); fi
+          if [ -z "$PR_VULNS" ]; then PR_COUNT=0; else PR_COUNT=$(echo "$PR_VULNS" | wc -l); fi
+
+          echo "Base branch vulnerabilities: $BASE_COUNT"
+          echo "PR branch vulnerabilities: $PR_COUNT"
+
+          # Find NEW vulns (in PR but not in base) — compare by advisory_id|package
+          if [ -n "$PR_VULNS" ]; then
+            BASE_KEYS=$(echo "$BASE_VULNS" | cut -d'|' -f1,2 | sort -u)
+            NEW_VULNS=""
+            while IFS='|' read -r advisory_id pkg ver; do
+              KEY="${advisory_id}|${pkg}"
+              if ! echo "$BASE_KEYS" | grep -qxF "$KEY"; then
+                NEW_VULNS="${NEW_VULNS}${advisory_id}|${pkg}|${ver}\n"
+              fi
+            done <<< "$PR_VULNS"
+            NEW_VULNS=$(echo -e "$NEW_VULNS" | sed '/^$/d')
+          else
+            NEW_VULNS=""
+          fi
+
+          if [ -n "$NEW_VULNS" ]; then
+            echo ""
+            echo "NEW vulnerabilities detected:"
+            echo "$NEW_VULNS"
+            echo ""
+            echo "::warning title=Security Alert::This PR introduces new vulnerabilities. Review the bot comment below."
+            echo "new_cves_found=true" >> $GITHUB_OUTPUT
+
+            # Build markdown table
+            echo "new_cves<<EOF" >> $GITHUB_OUTPUT
+            echo "| Advisory ID | Package | Version |" >> $GITHUB_OUTPUT
+            echo "| :--- | :--- | :--- |" >> $GITHUB_OUTPUT
+
+            while IFS='|' read -r advisory_id pkg ver; do
+              [ -z "$advisory_id" ] && continue
+              # Look up advisory URL from the PR audit output, anchored to the advisory line
+              ADVISORY=$(grep -P "^- ${advisory_id}:" audit-pr.txt | grep -oP 'https://\S+' | head -1 || true)
+              if [ -n "$ADVISORY" ]; then
+                echo "| [$advisory_id]($ADVISORY) | $pkg | $ver |" >> $GITHUB_OUTPUT
+              else
+                echo "| $advisory_id | $pkg | $ver |" >> $GITHUB_OUTPUT
+              fi
+            done <<< "$NEW_VULNS"
+
+            echo "EOF" >> $GITHUB_OUTPUT
+            exit 0
+          else
+            echo "No new vulnerabilities introduced by this PR"
+            echo "new_cves_found=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment on PR with regression details
+        id: comment
+        continue-on-error: true
+        if: always() && steps.compare.outputs.new_cves_found == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const newCves = `${{ steps.compare.outputs.new_cves }}`;
+            const commentMarker = '<!-- lockfile-security-check -->';
+            const body = [
+              commentMarker,
+              '## Security Regression Detected',
+              '',
+              'This PR introduces new vulnerabilities that are not present in the base branch:',
+              '',
+              newCves,
+              '',
+              '### Why This Warning Appears',
+              `The lockfile changes in this PR would introduce vulnerabilities. The base branch (\`${{ github.base_ref }}\`) does not have these advisories.`,
+              '',
+              '> **Note:** This check is informational and does not block merging.',
+              '',
+              '### How to Fix',
+              '1. Run `uv lock --upgrade-package <package>` for each affected package',
+              '2. If the package is a transitive dependency, try upgrading its parent packages',
+              '3. If upgrades don\'t resolve it, consider:',
+              '   - Finding an alternative dependency without vulnerabilities',
+              '   - Consulting with the security team for risk assessment',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+
+            const existingComment = comments.find(comment =>
+              comment.body.includes(commentMarker)
+            );
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                comment_id: existingComment.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            }
+
+      - name: Fallback alert if PR comment failed
+        if: always() && steps.compare.outputs.new_cves_found == 'true' && steps.comment.outcome == 'failure'
+        run: |
+          echo "::warning::Failed to post security regression comment on PR. See details in step summary."
+          {
+            echo "## Security Regression Detected"
+            echo ""
+            echo "> The PR comment could not be posted (API failure). Review the regression details below."
+            echo ""
+            echo '${{ steps.compare.outputs.new_cves }}'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Delete security comment when resolved
+        continue-on-error: true
+        if: success() && steps.compare.outputs.new_cves_found == 'false'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const commentMarker = '<!-- lockfile-security-check -->';
+
+            const { data: comments } = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+
+            const existingComment = comments.find(comment =>
+              comment.body.includes(commentMarker)
+            );
+
+            if (existingComment) {
+              await github.rest.issues.deleteComment({
+                comment_id: existingComment.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+              console.log('Security comment deleted - vulnerabilities resolved!');
+            }
