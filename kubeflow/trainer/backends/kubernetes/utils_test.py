@@ -61,6 +61,18 @@ def _build_runtime() -> types.Runtime:
             },
             expected_error=ValueError,
         ),
+        TestCase(
+            name="single NPU limit returns device and count",
+            expected_status=SUCCESS,
+            config={
+                "resources": models.IoK8sApiCoreV1ResourceRequirements(
+                    limits={
+                        constants.NPU_LABEL: models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                    }
+                )
+            },
+            expected_output=("npu", "2.0"),
+        ),
     ],
 )
 def test_get_container_devices(test_case: TestCase):
