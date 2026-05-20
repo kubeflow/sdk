@@ -14,19 +14,15 @@
 
 """Utility functions for Kubernetes Spark backend."""
 
-import contextlib
-from datetime import datetime
 import re
 from typing import Any
 from urllib.parse import urlparse
 import uuid
 
+from kubeflow_spark_api import models
+
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.types.types import Driver, Executor, SparkConnectInfo, SparkConnectState
-
-# Type alias for backend to avoid circular imports
-if False:  # TYPE_CHECKING equivalent without import
-    pass
 
 
 def generate_session_name() -> str:
@@ -88,7 +84,96 @@ def build_service_url(info: SparkConnectInfo) -> str:
     return f"sc://{service}.{info.namespace}.svc.cluster.local:{constants.SPARK_CONNECT_PORT}"
 
 
-def build_spark_connect_crd(
+def get_server_spec_from_driver(
+    driver: Driver | None = None,
+) -> models.SparkV1alpha1ServerSpec:
+    """Convert SDK Driver to API ServerSpec.
+
+    Args:
+        driver: SDK Driver configuration.
+
+    Returns:
+        API ServerSpec model.
+    """
+    cores = constants.DEFAULT_DRIVER_CPU
+    memory = _memory_kubernetes_to_spark(constants.DEFAULT_DRIVER_MEMORY)
+    template = None
+
+    if driver:
+        if driver.resources:
+            if "cpu" in driver.resources:
+                cores = int(driver.resources["cpu"])
+            if "memory" in driver.resources:
+                memory = _memory_kubernetes_to_spark(driver.resources["memory"])
+
+        if driver.service_account:
+            # PodSpec requires containers field (can be empty list)
+            template = models.IoK8sApiCoreV1PodTemplateSpec(
+                spec=models.IoK8sApiCoreV1PodSpec(
+                    containers=[],
+                    service_account_name=driver.service_account,
+                )
+            )
+
+    return models.SparkV1alpha1ServerSpec(
+        cores=cores,
+        memory=memory,
+        template=template,
+    )
+
+
+def get_executor_spec_from_executor(
+    executor: Executor | None = None,
+    num_executors: int | None = None,
+    resources_per_executor: dict[str, str] | None = None,
+) -> models.SparkV1alpha1ExecutorSpec:
+    """Convert SDK Executor to API ExecutorSpec.
+
+    Precedence rules:
+    - Instances: executor.num_instances > num_executors > default
+    - Resources: executor.resources_per_executor > resources_per_executor
+
+    Args:
+        executor: SDK Executor configuration.
+        num_executors: Simple mode number of executors.
+        resources_per_executor: Simple mode resource requirements.
+
+    Returns:
+        API ExecutorSpec model.
+    """
+    # Determine number of instances
+    if executor and executor.num_instances:
+        instances = executor.num_instances
+    elif num_executors:
+        instances = num_executors
+    else:
+        instances = constants.DEFAULT_NUM_EXECUTORS
+
+    # Determine resource dict
+    resource_dict = None
+    if executor and executor.resources_per_executor:
+        resource_dict = executor.resources_per_executor
+    elif resources_per_executor:
+        resource_dict = resources_per_executor
+
+    # Extract cores and memory
+    cores = constants.DEFAULT_EXECUTOR_CPU
+    memory = _memory_kubernetes_to_spark(constants.DEFAULT_EXECUTOR_MEMORY)
+
+    if resource_dict:
+        if "cpu" in resource_dict:
+            cores = int(resource_dict["cpu"])
+        if "memory" in resource_dict:
+            memory = _memory_kubernetes_to_spark(resource_dict["memory"])
+
+    return models.SparkV1alpha1ExecutorSpec(
+        instances=instances,
+        cores=cores,
+        memory=memory,
+    )
+
+
+def build_spark_connect_cr(
     name: str,
     namespace: str,
     spark_version: str | None = None,
@@ -99,8 +184,8 @@ def build_spark_connect_crd(
     executor: Executor | None = None,
     options: list | None = None,
     backend: Any | None = None,
-) -> dict[str, Any]:
-    """Build SparkConnect CRD manifest (KEP-107 compliant).
+) -> models.SparkV1alpha1SparkConnect:
+    """Build SparkConnect CR using typed API models (KEP-107 compliant).
 
     Precedence rules:
     - Executor instances: executor.num_instances > num_executors > default
@@ -121,72 +206,18 @@ def build_spark_connect_crd(
         backend: Backend instance for option validation.
 
     Returns:
-        SparkConnect CRD as dictionary.
+        SparkConnect CR as typed Pydantic model.
     """
     spark_version = spark_version or constants.DEFAULT_SPARK_VERSION
 
-    # Precedence: executor.num_instances > num_executors > default
-    executor_spec: dict[str, Any] = {}
-    if executor and executor.num_instances is not None:
-        executor_spec["instances"] = executor.num_instances
-    elif num_executors is not None:
-        executor_spec["instances"] = num_executors
-    else:
-        executor_spec["instances"] = constants.DEFAULT_NUM_EXECUTORS
+    # Build server spec using conversion function
+    server_spec = get_server_spec_from_driver(driver)
 
-    # Precedence: executor.resources_per_executor > resources_per_executor
-    resource_dict = None
-    if executor and executor.resources_per_executor:
-        resource_dict = executor.resources_per_executor
-    elif resources_per_executor:
-        resource_dict = resources_per_executor
+    # Build executor spec using conversion function
+    executor_spec = get_executor_spec_from_executor(executor, num_executors, resources_per_executor)
 
-    if resource_dict:
-        if "cpu" in resource_dict:
-            executor_spec["cores"] = int(resource_dict["cpu"])
-        if "memory" in resource_dict:
-            executor_spec["memory"] = _memory_kubernetes_to_spark(resource_dict["memory"])
-    if "cores" not in executor_spec:
-        executor_spec["cores"] = constants.DEFAULT_EXECUTOR_CPU
-    if "memory" not in executor_spec:
-        executor_spec["memory"] = _memory_kubernetes_to_spark(constants.DEFAULT_EXECUTOR_MEMORY)
-
-    server_spec: dict[str, Any] = {}
-    if driver:
-        if driver.resources:
-            if "cpu" in driver.resources:
-                server_spec["cores"] = int(driver.resources["cpu"])
-            if "memory" in driver.resources:
-                server_spec["memory"] = _memory_kubernetes_to_spark(driver.resources["memory"])
-
-        if driver.service_account:
-            if "template" not in server_spec:
-                server_spec["template"] = {"spec": {}}
-            server_spec["template"]["spec"]["serviceAccountName"] = driver.service_account
-    if "cores" not in server_spec:
-        server_spec["cores"] = constants.DEFAULT_DRIVER_CPU
-    if "memory" not in server_spec:
-        server_spec["memory"] = _memory_kubernetes_to_spark(constants.DEFAULT_DRIVER_MEMORY)
-
-    crd: dict[str, Any] = {
-        "apiVersion": f"{constants.SPARK_CONNECT_GROUP}/{constants.SPARK_CONNECT_VERSION}",
-        "kind": constants.SPARK_CONNECT_KIND,
-        "metadata": {
-            "name": name,
-            "namespace": namespace,
-        },
-        "spec": {
-            "sparkVersion": spark_version,
-            "server": server_spec,
-            "executor": executor_spec,
-        },
-    }
-
-    # Precedence: driver.image > default
-    if driver and driver.image:
-        crd["spec"]["image"] = driver.image
-    else:
-        crd["spec"]["image"] = constants.DEFAULT_SPARK_IMAGE
+    # Determine image (driver.image > default)
+    image = driver.image if driver and driver.image else constants.DEFAULT_SPARK_IMAGE
 
     # Use direct JAR URL to avoid Ivy cache (container may not have writable ~/.ivy2)
     connect_jar_url = (
@@ -206,49 +237,69 @@ def build_spark_connect_crd(
         for k, v in spark_conf.items():
             if k != "spark.jars":
                 base_conf[k] = v
-    crd["spec"]["sparkConf"] = base_conf
+
+    # Build the typed SparkConnect model
+    spark_connect = models.SparkV1alpha1SparkConnect(
+        api_version=f"{constants.SPARK_CONNECT_GROUP}/{constants.SPARK_CONNECT_VERSION}",
+        kind=constants.SPARK_CONNECT_KIND,
+        metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+            name=name,
+            namespace=namespace,
+        ),
+        spec=models.SparkV1alpha1SparkConnectSpec(
+            spark_version=spark_version,
+            image=image,
+            server=server_spec,
+            executor=executor_spec,
+            spark_conf=base_conf,
+        ),
+    )
 
     # Apply options - extensibility without API changes (callable pattern)
     if options and backend is not None:
         for option in options:
             if callable(option):
-                option(crd, backend)
+                option(spark_connect, backend)
 
-    return crd
+    return spark_connect
 
 
-def parse_spark_connect_status(crd_response: dict[str, Any]) -> SparkConnectInfo:
-    """Parse SparkConnect CRD response into SparkConnectInfo.
+def get_spark_connect_info_from_cr(
+    spark_connect_cr: models.SparkV1alpha1SparkConnect,
+) -> SparkConnectInfo:
+    """Convert API SparkConnect model to SDK SparkConnectInfo.
 
     Args:
-        crd_response: Raw CRD response from Kubernetes API.
+        spark_connect_cr: API SparkConnect model.
 
     Returns:
-        SparkConnectInfo with parsed status.
+        SDK SparkConnectInfo dataclass.
+
+    Raises:
+        ValueError: If the CR is invalid.
     """
-    metadata = crd_response.get("metadata", {})
-    status = crd_response.get("status", {})
-    server_status = status.get("server", {})
+    if not (spark_connect_cr.metadata and spark_connect_cr.metadata.name):
+        raise ValueError(f"SparkConnect CR is invalid: {spark_connect_cr}")
 
-    state_str = status.get("state", "")
-    try:
-        state = SparkConnectState(state_str) if state_str else SparkConnectState.PROVISIONING
-    except ValueError:
-        state = SparkConnectState.PROVISIONING
+    # Parse state
+    state = SparkConnectState.PROVISIONING
+    if spark_connect_cr.status and spark_connect_cr.status.state:
+        try:
+            state = SparkConnectState(spark_connect_cr.status.state)
+        except ValueError:
+            state = SparkConnectState.PROVISIONING
 
-    # Parse creation timestamp
-    creation_timestamp = None
-    creation_ts = metadata.get("creationTimestamp")
-    if creation_ts:
-        with contextlib.suppress(ValueError, AttributeError):
-            creation_timestamp = datetime.fromisoformat(creation_ts.replace("Z", "+00:00"))
+    # Extract server status
+    server_status = None
+    if spark_connect_cr.status and spark_connect_cr.status.server:
+        server_status = spark_connect_cr.status.server
 
     return SparkConnectInfo(
-        name=metadata.get("name", ""),
-        namespace=metadata.get("namespace", ""),
+        name=spark_connect_cr.metadata.name,
+        namespace=spark_connect_cr.metadata.namespace,
         state=state,
-        pod_name=server_status.get("podName"),
-        pod_ip=server_status.get("podIp"),
-        service_name=server_status.get("serviceName"),
-        creation_timestamp=creation_timestamp,
+        pod_name=server_status.pod_name if server_status else None,
+        pod_ip=server_status.pod_ip if server_status else None,
+        service_name=server_status.service_name if server_status else None,
+        creation_timestamp=spark_connect_cr.metadata.creation_timestamp,
     )

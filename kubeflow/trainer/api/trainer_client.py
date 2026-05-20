@@ -79,6 +79,7 @@ class TrainerClient:
 
     def get_runtime(self, name: str) -> types.Runtime:
         """Get the runtime object
+
         Args:
             name: Name of the runtime.
 
@@ -156,7 +157,7 @@ class TrainerClient:
             runtime: Reference to one of the existing runtimes.
 
         Returns:
-            List of created TrainJobs. If no TrainJob exist, an empty list is returned.
+            List of created TrainJobs. If no TrainJobs exist, an empty list is returned.
 
         Raises:
             TimeoutError: Timeout to list TrainJobs.
@@ -165,7 +166,7 @@ class TrainerClient:
         return self.backend.list_jobs(runtime=runtime)
 
     def get_job(self, name: str) -> types.TrainJob:
-        """Get the TrainJob object
+        """Get the TrainJob object.
 
         Args:
             name: Name of the TrainJob.

@@ -28,25 +28,22 @@ classifiers = [
 dependencies = [
   "kubernetes>=27.2.0",
   "pydantic>=2.10.0",
-  "kubeflow-trainer-api>=2.0.0",
+  "kubeflow-trainer-api>=2.2.0",
   "kubeflow-katib-api>=0.19.0",
 ]
 
 [project.optional-dependencies]
-docker = [
-  "docker>=6.1.3",
-]
-podman = [
-  "podman>=5.6.0"
-]
+docker = ["docker>=6.1.3"]
+podman = ["podman>=5.6.0"]
 spark = [
-    # Match major.minor to SparkConnect server image (see kubeflow.spark.backends.kubernetes.constants)
-    # Use [connect] extra to get compatible grpcio, pandas, pyarrow versions automatically
-    "pyspark[connect]==3.4.1",
+  # pyspark-connect is Apache Spark Python API with Spark Connect by default
+  # Match major.minor of pyspark-connect to Spark constants declared in kubeflow.spark.backends.kubernetes.constants
+  # Ensure pyspark-connect and the spark image align with the Spark version used in the Spark operator image
+  # https://github.com/kubeflow/spark-operator/blob/master/Dockerfile#L17
+  "pyspark-connect==4.0.1",
+  "kubeflow-spark-api>=2.4.0",
 ]
-hub = [
-  "model-registry>=0.3.6",
-]
+hub = ["model-registry>=0.3.6"]
 
 [dependency-groups]
 docs = [
@@ -64,6 +61,7 @@ dev = [
   "coverage>=7.0",
   "kubeflow_trainer_api@git+https://github.com/kubeflow/trainer.git@master#subdirectory=api/python_api",
   "kubeflow_katib_api@git+https://github.com/kubeflow/katib.git@master#subdirectory=api/python_api",
+  "kubeflow_spark_api@git+https://github.com/kubeflow/spark-operator.git@master#subdirectory=api/python_api",
   "ruff>=0.12.2",
   "pre-commit>=4.2.0",
   "PyGithub>=2.7.0",
@@ -129,8 +127,8 @@ select = [
 ]
 
 ignore = [
-  "B006",  # mutable-argument-default
-  "E501",  # Embedded HTML/SVG has long lines
+  "B006", # mutable-argument-default
+  "E501", # Embedded HTML/SVG has long lines
 ]
 
 
@@ -148,9 +146,7 @@ markers = [
   "timeout: marks tests with timeout limit",
   "options: marks tests for Spark options pattern",
 ]
-filterwarnings = [
-  "ignore::pydantic.warnings.PydanticDeprecatedSince20",
-]
+filterwarnings = ["ignore::pydantic.warnings.PydanticDeprecatedSince20"]
 
 [tool.ty.environment]
 python-version = "3.10"

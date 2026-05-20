@@ -28,6 +28,7 @@ from unittest.mock import Mock, patch
 import uuid
 
 from kubeflow_trainer_api import models
+from kubernetes import client
 import pytest
 
 from kubeflow.common.types import KubernetesBackendConfig
@@ -36,9 +37,16 @@ import kubeflow.trainer.backends.kubernetes.utils as utils
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.options import (
     Annotations,
+    JobSetSpecPatch,
+    JobSetTemplatePatch,
+    JobSpecPatch,
+    JobTemplatePatch,
     Labels,
-    SpecAnnotations,
-    SpecLabels,
+    PodSpecPatch,
+    PodTemplatePatch,
+    ReplicatedJobPatch,
+    RuntimePatch,
+    TrainingRuntimeSpecPatch,
 )
 from kubeflow.trainer.test.common import (
     DEFAULT_NAMESPACE,
@@ -50,12 +58,15 @@ from kubeflow.trainer.test.common import (
 )
 from kubeflow.trainer.types import types
 
+NOT_FOUND = "not_found"
+FORBIDDEN = "forbidden"
+
 # In all tests runtime name is equal to the framework name.
 TORCH_RUNTIME = "torch"
 TORCH_TUNE_RUNTIME = "torchtune"
 
-# 2 nodes * 2 nproc
-RUNTIME_DEVICES = "4"
+# Device count = GPU resources per node (1) × num_nodes (2) = 2
+RUNTIME_DEVICES = "2"
 
 FAIL_LOGS = "fail_logs"
 LIST_RUNTIMES = "list_runtimes"
@@ -222,26 +233,31 @@ def get_custom_trainer(
     """
     Get the custom trainer for the TrainJob.
     """
-    pip_command = [f"--index-url {pip_index_urls[0]}"]
-    pip_command.extend([f"--extra-index-url {repo}" for repo in pip_index_urls[1:]])
-    pip_command = " ".join(pip_command)
+    # Use the same helper as production code to build the pip install script so
+    # tests stay in sync with the runtime behavior.
+    install_script = utils.get_script_for_python_packages(
+        packages_to_install=packages_to_install,
+        pip_index_urls=pip_index_urls,
+        install_log_file="pip_install.log",
+    )
 
-    packages_command = " ".join(packages_to_install)
+    # Append the embedded training function script that matches EXEC_FUNC_SCRIPT
+    # with torchrun as the entrypoint and a fixed lambda for deterministic tests.
+    func_script = (
+        "\nread -r -d '' SCRIPT << EOM\n\n"
+        'func=lambda: print("Hello World"),\n\n'
+        "<lambda>(**{'learning_rate': 0.001, 'batch_size': 32})\n\n"
+        'EOM\nprintf "%s" "$SCRIPT" > "backend_test.py"\n'
+        'torchrun "backend_test.py"'
+    )
+
+    full_command = install_script + func_script
+
     return models.TrainerV1alpha1Trainer(
         command=[
             "bash",
             "-c",
-            '\nif ! [ -x "$(command -v pip)" ]; then\n    python -m ensurepip '
-            "|| python -m ensurepip --user || apt-get install python-pip"
-            "\nfi\n\n"
-            "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet"
-            f" --no-warn-script-location {pip_command} --user {packages_command}"
-            " ||\nPIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet"
-            f" --no-warn-script-location {pip_command} {packages_command}"
-            "\n\nread -r -d '' SCRIPT << EOM\n\nfunc=lambda: "
-            'print("Hello World"),\n\n<lambda>(**'
-            "{'learning_rate': 0.001, 'batch_size': 32})\n\nEOM\nprintf \"%s\" "
-            '"$SCRIPT" > "backend_test.py"\ntorchrun "backend_test.py"',
+            full_command,
         ],
         numNodes=2,
         env=env,
@@ -302,8 +318,7 @@ def get_train_job(
     train_job_trainer: models.TrainerV1alpha1Trainer | None = None,
     labels: dict[str, str] | None = None,
     annotations: dict[str, str] | None = None,
-    spec_labels: dict[str, str] | None = None,
-    spec_annotations: dict[str, str] | None = None,
+    runtime_patches: list[models.TrainerV1alpha1RuntimePatch] | None = None,
 ) -> models.TrainerV1alpha1TrainJob:
     """
     Create a mock TrainJob object with optional trainer configurations.
@@ -319,8 +334,7 @@ def get_train_job(
         spec=models.TrainerV1alpha1TrainJobSpec(
             runtimeRef=models.TrainerV1alpha1RuntimeRef(name=runtime_name),
             trainer=train_job_trainer,
-            labels=spec_labels,
-            annotations=spec_annotations,
+            runtimePatches=runtime_patches,
         ),
     )
 
@@ -350,6 +364,10 @@ def get_namespaced_custom_object_response(*args, **kwargs):
         raise multiprocessing.TimeoutError()
     if args[2] == RUNTIME or args[4] == RUNTIME:
         raise RuntimeError()
+    if args[4] == NOT_FOUND:
+        raise client.ApiException(status=404)
+    if args[4] == FORBIDDEN:
+        raise client.ApiException(status=403)
     if args[3] == TRAIN_JOBS:  # TODO: review this.
         mock_thread.get.return_value = add_status(create_train_job(train_job_name=args[4]))
     elif args[3] == constants.TRAINING_RUNTIME_PLURAL:
@@ -590,9 +608,7 @@ def create_cluster_training_runtime(
         ),
         spec=models.TrainerV1alpha1TrainingRuntimeSpec(
             mlPolicy=models.TrainerV1alpha1MLPolicy(
-                torch=models.TrainerV1alpha1TorchMLPolicySource(
-                    numProcPerNode=models.IoK8sApimachineryPkgUtilIntstrIntOrString(2)
-                ),
+                torch={},
                 numNodes=2,
             ),
             template=models.TrainerV1alpha1JobSetTemplateSpec(
@@ -621,9 +637,7 @@ def create_training_runtime(
         ),
         spec=models.TrainerV1alpha1TrainingRuntimeSpec(
             mlPolicy=models.TrainerV1alpha1MLPolicy(
-                torch=models.TrainerV1alpha1TorchMLPolicySource(
-                    numProcPerNode=models.IoK8sApimachineryPkgUtilIntstrIntOrString(2)
-                ),
+                torch={},
                 numNodes=2,
             ),
             template=models.TrainerV1alpha1JobSetTemplateSpec(
@@ -846,6 +860,20 @@ def test_verify_backend(test_case):
             config={"name": RUNTIME},
             expected_error=RuntimeError,
         ),
+        TestCase(
+            name="404 error (not found) when getting namespaced runtime -> fallback to cluster",
+            expected_status=SUCCESS,
+            config={"name": NOT_FOUND},
+            expected_output=create_runtime_type(
+                name=NOT_FOUND,
+            ),
+        ),
+        TestCase(
+            name="403 error (forbidden) when getting namespaced runtime -> raise RuntimeError",
+            expected_status=FAILED,
+            config={"name": FORBIDDEN},
+            expected_error=RuntimeError,
+        ),
     ],
 )
 def test_get_runtime(kubernetes_backend, test_case):
@@ -880,14 +908,27 @@ def test_get_runtime(kubernetes_backend, test_case):
                 create_runtime_type(name="runtime-3"),
             ],
         ),
-        # namespace retrieval fails (timeout) but cluster succeeds -> expect TimeoutError
+        # namespace retrieval fails (timeout) -> expect TimeoutError (raised immediately)
         TestCase(
             name="namespace fails but cluster succeeds",
             expected_status=FAILED,
             config={"namespace": TIMEOUT, "name": LIST_RUNTIMES},
             expected_error=TimeoutError,
         ),
-        # cluster retrieval fails but namespace succeeds -> expect TimeoutError
+        TestCase(
+            name="namespace 404 but cluster succeeds",
+            expected_status=SUCCESS,
+            config={
+                "namespace_error": client.ApiException(status=404),
+                "name": LIST_RUNTIMES,
+            },
+            expected_output=[
+                create_runtime_type(name="runtime-1"),
+                create_runtime_type(name="runtime-2"),
+                create_runtime_type(name="runtime-3"),
+            ],
+        ),
+        # cluster retrieval fails (timeout) -> expect TimeoutError (raised immediately)
         TestCase(
             name="cluster fails but namespace succeeds",
             expected_status=FAILED,
@@ -898,14 +939,14 @@ def test_get_runtime(kubernetes_backend, test_case):
             },
             expected_error=TimeoutError,
         ),
-        # both fail with timeout -> expect TimeoutError
+        # both fail with timeout -> expect TimeoutError (namespace raises first)
         TestCase(
             name="both fail with timeout",
             expected_status=FAILED,
             config={"namespace_error": TIMEOUT, "name": LIST_RUNTIMES, "cluster_error": TIMEOUT},
             expected_error=TimeoutError,
         ),
-        # both fail with other errors -> expect RuntimeError
+        # both fail with other errors -> expect RuntimeError (namespace raises first)
         TestCase(
             name="both fail with runtime error",
             expected_status=FAILED,
@@ -926,7 +967,7 @@ def test_list_runtimes(kubernetes_backend, test_case):
     # If tests passed a sentinel (TIMEOUT or RUNTIME) in `namespace`, don't set the backend
     # namespace to that sentinel (that causes the fixture helper to raise at call time).
     # Instead, keep a real namespace and inject a thread whose .get() raises as desired.
-    if ns_cfg in {TIMEOUT, RUNTIME}:
+    if ns_cfg in {TIMEOUT, RUNTIME} or isinstance(ns_cfg, Exception):
         # keep a safe namespace for API call signatures
         kubernetes_backend.namespace = DEFAULT_NAMESPACE
         # inject mock thread that will raise on .get()
@@ -1206,30 +1247,82 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             ),
         ),
         TestCase(
-            name="train with spec labels and annotations",
+            name="train with runtime patches",
             expected_status=SUCCESS,
             config={
                 "options": [
-                    SpecLabels({"app": "training", "version": "v1.0"}),
-                    SpecAnnotations({"prometheus.io/scrape": "true"}),
+                    RuntimePatch(
+                        training_runtime_spec=TrainingRuntimeSpecPatch(
+                            template=JobSetTemplatePatch(
+                                spec=JobSetSpecPatch(
+                                    replicated_jobs=[
+                                        ReplicatedJobPatch(
+                                            name="node",
+                                            template=JobTemplatePatch(
+                                                spec=JobSpecPatch(
+                                                    template=PodTemplatePatch(
+                                                        spec=PodSpecPatch(
+                                                            node_selector={"node-type": "gpu-a100"},
+                                                        ),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
+                    ),
                 ],
             },
             expected_output=get_train_job(
                 runtime_name=TORCH_RUNTIME,
                 train_job_name=BASIC_TRAIN_JOB_NAME,
-                spec_labels={"app": "training", "version": "v1.0"},
-                spec_annotations={"prometheus.io/scrape": "true"},
+                runtime_patches=[
+                    models.TrainerV1alpha1RuntimePatch(
+                        manager="trainer.kubeflow.org/kubeflow-sdk",
+                        training_runtime_spec=models.TrainerV1alpha1TrainingRuntimeSpecPatch(
+                            template=models.TrainerV1alpha1JobSetTemplatePatch(
+                                spec=models.TrainerV1alpha1JobSetSpecPatch(
+                                    replicated_jobs=[
+                                        models.TrainerV1alpha1ReplicatedJobPatch(
+                                            name="node",
+                                            template=models.TrainerV1alpha1JobTemplatePatch(
+                                                spec=models.TrainerV1alpha1JobSpecPatch(
+                                                    template=models.TrainerV1alpha1PodTemplatePatch(
+                                                        spec=models.TrainerV1alpha1PodSpecPatch(
+                                                            node_selector={"node-type": "gpu-a100"},
+                                                        ),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
+                    ),
+                ],
             ),
         ),
         TestCase(
-            name="train with both metadata and spec labels/annotations",
+            name="train with metadata labels and runtime patches",
             expected_status=SUCCESS,
             config={
                 "options": [
                     Labels({"owner": "ml-team"}),
                     Annotations({"description": "Fine-tuning job"}),
-                    SpecLabels({"app": "training", "version": "v1.0"}),
-                    SpecAnnotations({"prometheus.io/scrape": "true"}),
+                    RuntimePatch(
+                        training_runtime_spec=TrainingRuntimeSpecPatch(
+                            template=JobSetTemplatePatch(
+                                metadata={
+                                    "labels": {
+                                        "app": "training",
+                                    },
+                                },
+                            ),
+                        ),
+                    ),
                 ],
             },
             expected_output=get_train_job(
@@ -1237,8 +1330,20 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                 train_job_name=BASIC_TRAIN_JOB_NAME,
                 labels={"owner": "ml-team"},
                 annotations={"description": "Fine-tuning job"},
-                spec_labels={"app": "training", "version": "v1.0"},
-                spec_annotations={"prometheus.io/scrape": "true"},
+                runtime_patches=[
+                    models.TrainerV1alpha1RuntimePatch(
+                        manager="trainer.kubeflow.org/kubeflow-sdk",
+                        training_runtime_spec=models.TrainerV1alpha1TrainingRuntimeSpecPatch(
+                            template=models.TrainerV1alpha1JobSetTemplatePatch(
+                                metadata={
+                                    "labels": {
+                                        "app": "training",
+                                    },
+                                },
+                            ),
+                        ),
+                    ),
+                ],
             ),
         ),
     ],
@@ -1461,6 +1566,24 @@ def test_get_job_logs(kubernetes_backend, test_case):
                 "timeout": 2,
             },
             expected_error=TimeoutError,
+        ),
+        TestCase(
+            name="polling_interval equal to timeout raises ValueError",
+            expected_status=FAILED,
+            config={"name": BASIC_TRAIN_JOB_NAME, "timeout": 10, "polling_interval": 10},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="zero polling_interval raises ValueError",
+            expected_status=FAILED,
+            config={"name": BASIC_TRAIN_JOB_NAME, "timeout": 10, "polling_interval": 0},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="negative polling_interval raises ValueError",
+            expected_status=FAILED,
+            config={"name": BASIC_TRAIN_JOB_NAME, "timeout": 10, "polling_interval": -1},
+            expected_error=ValueError,
         ),
     ],
 )

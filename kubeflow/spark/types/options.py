@@ -23,6 +23,8 @@ This follows the same callable pattern as kubeflow.trainer.options for SDK consi
 from dataclasses import dataclass
 from typing import Any
 
+from kubeflow_spark_api import models
+
 from kubeflow.spark.backends.base import RuntimeBackend
 
 
@@ -46,11 +48,13 @@ class Labels:
 
     labels: dict[str, str]
 
-    def __call__(self, crd: dict[str, Any], backend: RuntimeBackend) -> None:
-        """Apply labels to the CRD specification.
+    def __call__(
+        self, spark_connect: models.SparkV1alpha1SparkConnect, backend: RuntimeBackend
+    ) -> None:
+        """Apply labels to the SparkConnect model.
 
         Args:
-            crd: CRD specification dictionary to modify.
+            spark_connect: SparkConnect model to modify.
             backend: Backend instance for validation.
 
         Raises:
@@ -64,9 +68,9 @@ class Labels:
                 f"Supported backends: KubernetesBackend"
             )
 
-        metadata = crd.setdefault("metadata", {})
-        labels = metadata.setdefault("labels", {})
-        labels.update(self.labels)
+        if spark_connect.metadata.labels is None:
+            spark_connect.metadata.labels = {}
+        spark_connect.metadata.labels.update(self.labels)
 
 
 @dataclass
@@ -94,11 +98,13 @@ class Annotations:
 
     annotations: dict[str, str]
 
-    def __call__(self, crd: dict[str, Any], backend: RuntimeBackend) -> None:
-        """Apply annotations to the CRD specification.
+    def __call__(
+        self, spark_connect: models.SparkV1alpha1SparkConnect, backend: RuntimeBackend
+    ) -> None:
+        """Apply annotations to the SparkConnect model.
 
         Args:
-            crd: CRD specification dictionary to modify.
+            spark_connect: SparkConnect model to modify.
             backend: Backend instance for validation.
 
         Raises:
@@ -112,9 +118,9 @@ class Annotations:
                 f"Supported backends: KubernetesBackend"
             )
 
-        metadata = crd.setdefault("metadata", {})
-        annotations = metadata.setdefault("annotations", {})
-        annotations.update(self.annotations)
+        if spark_connect.metadata.annotations is None:
+            spark_connect.metadata.annotations = {}
+        spark_connect.metadata.annotations.update(self.annotations)
 
 
 @dataclass
@@ -155,11 +161,13 @@ class PodTemplateOverride:
     role: str  # "driver" or "executor"
     template: dict[str, Any]
 
-    def __call__(self, crd: dict[str, Any], backend: RuntimeBackend) -> None:
-        """Apply pod template override to the CRD specification.
+    def __call__(
+        self, spark_connect: models.SparkV1alpha1SparkConnect, backend: RuntimeBackend
+    ) -> None:
+        """Apply pod template override to the SparkConnect model.
 
         Args:
-            crd: CRD specification dictionary to modify.
+            spark_connect: SparkConnect model to modify.
             backend: Backend instance for validation.
 
         Raises:
@@ -174,18 +182,32 @@ class PodTemplateOverride:
             )
 
         if self.role == "driver":
-            spec_key = "server"
+            role_spec = spark_connect.spec.server
         elif self.role == "executor":
-            spec_key = "executor"
+            role_spec = spark_connect.spec.executor
         else:
             raise ValueError(f"Invalid role '{self.role}'. Must be 'driver' or 'executor'.")
 
-        spec = crd.setdefault("spec", {})
-        role_spec = spec.setdefault(spec_key, {})
-        template = role_spec.setdefault("template", {})
+        # Get or create template
+        if role_spec.template is None:
+            role_spec.template = models.IoK8sApiCoreV1PodTemplateSpec()
 
-        # Deep merge template
-        self._deep_merge(template, self.template)
+        # Convert existing template to dict, merge, and convert back
+        existing_dict = role_spec.template.to_dict() if role_spec.template else {}
+        self._deep_merge(existing_dict, self.template)
+
+        # Ensure spec.containers exists (required by PodSpec validation)
+        if (
+            "spec" in existing_dict
+            and existing_dict["spec"] is not None
+            and (
+                "containers" not in existing_dict["spec"]
+                or existing_dict["spec"]["containers"] is None
+            )
+        ):
+            existing_dict["spec"]["containers"] = []
+
+        role_spec.template = models.IoK8sApiCoreV1PodTemplateSpec.from_dict(existing_dict)
 
     @staticmethod
     def _deep_merge(target: dict[str, Any], source: dict[str, Any]) -> None:
@@ -219,11 +241,13 @@ class NodeSelector:
 
     selectors: dict[str, str]
 
-    def __call__(self, crd: dict[str, Any], backend: RuntimeBackend) -> None:
-        """Apply node selector constraints to the CRD specification.
+    def __call__(
+        self, spark_connect: models.SparkV1alpha1SparkConnect, backend: RuntimeBackend
+    ) -> None:
+        """Apply node selector constraints to the SparkConnect model.
 
         Args:
-            crd: CRD specification dictionary to modify.
+            spark_connect: SparkConnect model to modify.
             backend: Backend instance for validation.
 
         Raises:
@@ -237,14 +261,16 @@ class NodeSelector:
                 f"Supported backends: KubernetesBackend"
             )
 
-        spec = crd.setdefault("spec", {})
-
-        for role in ["server", "executor"]:
-            role_spec = spec.setdefault(role, {})
-            template = role_spec.setdefault("template", {})
-            pod_spec = template.setdefault("spec", {})
-            node_selector = pod_spec.setdefault("nodeSelector", {})
-            node_selector.update(self.selectors)
+        # Apply to both server and executor
+        for role_spec in [spark_connect.spec.server, spark_connect.spec.executor]:
+            if role_spec.template is None:
+                role_spec.template = models.IoK8sApiCoreV1PodTemplateSpec()
+            if role_spec.template.spec is None:
+                # PodSpec requires containers field (can be empty list)
+                role_spec.template.spec = models.IoK8sApiCoreV1PodSpec(containers=[])
+            if role_spec.template.spec.node_selector is None:
+                role_spec.template.spec.node_selector = {}
+            role_spec.template.spec.node_selector.update(self.selectors)
 
 
 @dataclass
@@ -280,11 +306,13 @@ class Toleration:
     value: str = ""
     effect: str = "NoSchedule"
 
-    def __call__(self, crd: dict[str, Any], backend: RuntimeBackend) -> None:
-        """Apply toleration to the CRD specification.
+    def __call__(
+        self, spark_connect: models.SparkV1alpha1SparkConnect, backend: RuntimeBackend
+    ) -> None:
+        """Apply toleration to the SparkConnect model.
 
         Args:
-            crd: CRD specification dictionary to modify.
+            spark_connect: SparkConnect model to modify.
             backend: Backend instance for validation.
 
         Raises:
@@ -298,22 +326,24 @@ class Toleration:
                 f"Supported backends: KubernetesBackend"
             )
 
-        toleration = {
-            "key": self.key,
-            "operator": self.operator,
-            "effect": self.effect,
-        }
-        if self.value:
-            toleration["value"] = self.value
+        # Create toleration model
+        toleration = models.IoK8sApiCoreV1Toleration(
+            key=self.key,
+            operator=self.operator,
+            effect=self.effect,
+            value=self.value if self.value else None,
+        )
 
-        spec = crd.setdefault("spec", {})
-
-        for role in ["server", "executor"]:
-            role_spec = spec.setdefault(role, {})
-            template = role_spec.setdefault("template", {})
-            pod_spec = template.setdefault("spec", {})
-            tolerations = pod_spec.setdefault("tolerations", [])
-            tolerations.append(toleration)
+        # Apply to both server and executor
+        for role_spec in [spark_connect.spec.server, spark_connect.spec.executor]:
+            if role_spec.template is None:
+                role_spec.template = models.IoK8sApiCoreV1PodTemplateSpec()
+            if role_spec.template.spec is None:
+                # PodSpec requires containers field (can be empty list)
+                role_spec.template.spec = models.IoK8sApiCoreV1PodSpec(containers=[])
+            if role_spec.template.spec.tolerations is None:
+                role_spec.template.spec.tolerations = []
+            role_spec.template.spec.tolerations.append(toleration)
 
 
 @dataclass
@@ -355,14 +385,16 @@ class Name:
 
     name: str
 
-    def __call__(self, crd: dict[str, Any], backend: RuntimeBackend) -> None:
-        """Apply custom name to CRD metadata.
+    def __call__(
+        self, spark_connect: models.SparkV1alpha1SparkConnect, backend: RuntimeBackend
+    ) -> None:
+        """Apply custom name to SparkConnect metadata.
 
         Note: This method exists for interface consistency but is not typically
         called, as the name is extracted earlier in the backend flow.
 
         Args:
-            crd: CRD specification dictionary to modify.
+            spark_connect: SparkConnect model to modify.
             backend: Backend instance for validation.
 
         Raises:
@@ -376,5 +408,4 @@ class Name:
                 f"Supported backends: KubernetesBackend"
             )
 
-        metadata = crd.setdefault("metadata", {})
-        metadata["name"] = self.name
+        spark_connect.metadata.name = self.name

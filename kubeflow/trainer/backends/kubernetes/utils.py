@@ -16,6 +16,7 @@ from collections.abc import Callable
 from dataclasses import fields
 import inspect
 import os
+import shlex
 import textwrap
 from typing import Any
 from urllib.parse import urlparse
@@ -40,7 +41,6 @@ def get_container_devices(
     # TODO (andreyvelich): We should discuss how to get container device type.
     # Potentially, we can use the trainer.kubeflow.org/device label from the runtime or
     # node types.
-    # TODO (andreyvelich): Support other resource labels (e.g. NPUs).
     if constants.GPU_LABEL in resources.limits:
         device = constants.GPU_LABEL.split("/")[1]
         device_count = resources.limits[constants.GPU_LABEL].actual_instance
@@ -54,6 +54,13 @@ def get_container_devices(
         mig_key = mig_keys[0]
         device = mig_key.split("/")[1]
         device_count = resources.limits[mig_key].actual_instance
+    elif constants.NPU_LABEL in resources.limits:
+        # huawei.com/Ascend910 is the K8s extended resource key for Huawei's Ascend 910 NPU.
+        # Unlike GPU/TPU, the suffix ("Ascend910") doesn't generically describe the device
+        # type, so we explicitly return "npu" as the device string instead of deriving it
+        # from the key.
+        device = "npu"
+        device_count = resources.limits[constants.NPU_LABEL].actual_instance
     elif constants.CPU_LABEL in resources.limits:
         device = constants.CPU_LABEL
         device_count = resources.limits[constants.CPU_LABEL].actual_instance
@@ -118,12 +125,8 @@ def get_runtime_trainer(
     if devices := get_container_devices(trainer_container.resources):
         trainer.device, trainer.device_count = devices
 
-    # Torch and MPI plugins override accelerator count.
-    if ml_policy.torch and ml_policy.torch.num_proc_per_node:
-        num_proc = ml_policy.torch.num_proc_per_node.actual_instance
-        if isinstance(num_proc, int):
-            trainer.device_count = str(num_proc)
-    elif ml_policy.mpi and ml_policy.mpi.num_proc_per_node:
+    # MPI plugin overrides accelerator count.
+    if ml_policy.mpi and ml_policy.mpi.num_proc_per_node:
         trainer.device_count = str(ml_policy.mpi.num_proc_per_node)
 
     # Multiply accelerator_count by the number of nodes.
@@ -137,7 +140,7 @@ def get_runtime_trainer(
     # Set the Trainer entrypoint.
     if framework == types.TORCH_TUNE:
         trainer.set_command(constants.TORCH_TUNE_COMMAND)
-    elif ml_policy.torch:
+    elif ml_policy.torch is not None:
         trainer.set_command(constants.TORCH_COMMAND)
     elif ml_policy.mpi:
         trainer.set_command(constants.MPI_COMMAND)
@@ -261,15 +264,25 @@ def get_resources_per_node(
 def get_script_for_python_packages(
     packages_to_install: list[str],
     pip_index_urls: list[str],
+    install_log_file: str = "pip_install.log",
 ) -> str:
     """
     Get init script to install Python packages from the given pip index URLs.
     """
-    packages_str = " ".join(packages_to_install)
+    # Quote package names and URLs with shlex.quote() to prevent shell injection.
+    # Use a bash array so that quotes are interpreted during array initialization;
+    # storing shlex-quoted values in a plain string variable breaks because bash
+    # does not re-interpret quotes during variable expansion (e.g. packages with
+    # extras like 'transformers[torch]' would be passed to pip with literal quotes).
+    packages_str = " ".join(shlex.quote(pkg) for pkg in packages_to_install)
 
     # first url will be the index-url.
-    options = [f"--index-url {pip_index_urls[0]}"]
-    options.extend(f"--extra-index-url {extra_index_url}" for extra_index_url in pip_index_urls[1:])
+    options = [f"--index-url {shlex.quote(pip_index_urls[0])}"]
+    options.extend(
+        f"--extra-index-url {shlex.quote(extra_index_url)}"
+        for extra_index_url in pip_index_urls[1:]
+    )
+    options_str = " ".join(options)
 
     header_script = textwrap.dedent(
         """
@@ -280,18 +293,29 @@ def get_script_for_python_packages(
         """
     )
 
-    script_for_python_packages = (
-        header_script
-        + "PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
-        + "--no-warn-script-location {} --user {}".format(
-            " ".join(options),
-            packages_str,
-        )
-        + " ||\nPIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install --quiet "
-        + "--no-warn-script-location {} {}\n".format(
-            " ".join(options),
-            packages_str,
-        )
+    # First try per-user installation, then fall back to system-wide installation.
+    # Pip output is captured to a log file and only printed when both attempts fail;
+    # on success we emit a single concise confirmation line.
+    script_for_python_packages = header_script + textwrap.dedent(
+        f"""
+        PACKAGES=({packages_str})
+        PIP_OPTS=({options_str})
+        LOG_FILE="{install_log_file}"
+        rm -f "$LOG_FILE"
+
+        if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\
+            --no-warn-script-location "${{PIP_OPTS[@]}}" --user "${{PACKAGES[@]}}" >"$LOG_FILE" 2>&1; then
+            echo "Successfully installed Python packages (user): ${{PACKAGES[*]}}"
+        elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\
+            --no-warn-script-location "${{PIP_OPTS[@]}}" "${{PACKAGES[@]}}" >>"$LOG_FILE" 2>&1; then
+            echo "Successfully installed Python packages (system-wide): ${{PACKAGES[*]}}"
+        else
+            echo "ERROR: Failed to install Python packages: ${{PACKAGES[*]}}" >&2
+            cat "$LOG_FILE" >&2
+            exit 1
+        fi
+
+        """
     )
 
     return script_for_python_packages
@@ -345,6 +369,9 @@ def get_command_using_train_func(
     # The default file location for OpenMPI is: /home/mpiuser/<FILE_NAME>.py
     if is_mpi:
         func_file = os.path.join(constants.DEFAULT_MPI_USER_HOME, func_file)
+        install_log_file = os.path.join(constants.DEFAULT_MPI_USER_HOME, "pip_install.log")
+    else:
+        install_log_file = "pip_install.log"
 
     # Install Python packages if that is required.
     install_packages = ""
@@ -352,6 +379,7 @@ def get_command_using_train_func(
         install_packages = get_script_for_python_packages(
             packages_to_install,
             pip_index_urls,
+            install_log_file=install_log_file,
         )
 
     # Add function code to the Trainer command.
@@ -521,7 +549,7 @@ def get_args_from_peft_config(peft_config: types.LoraConfig) -> list[str]:
     # Override the PEFT fields if they are provided.
     for field, arg_name in field_map.items():
         value = getattr(peft_config, field, None)
-        if value:
+        if value is not None:
             args.append(f"{arg_name}={value}")
 
     # Override the LoRA attention modules if they are provided.
@@ -559,7 +587,7 @@ def get_args_from_dataset_preprocess_config(
         args.append(f"dataset.split={dataset_preprocess_config.split}")
 
     # Override the train_on_input field if it is provided.
-    if dataset_preprocess_config.train_on_input:
+    if dataset_preprocess_config.train_on_input is not None:
         args.append(f"dataset.train_on_input={dataset_preprocess_config.train_on_input}")
 
     # Override the new_system_prompt field if it is provided.
