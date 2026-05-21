@@ -15,6 +15,7 @@
 from collections.abc import Callable, Iterator
 import copy
 import datetime
+from datetime import timezone
 import logging
 import multiprocessing
 import os
@@ -130,8 +131,7 @@ class KubernetesBackend(RuntimeBackend):
         # Sort by creation timestamp (most recent first)
         candidate_pods.sort(
             key=lambda p: (
-                p.metadata.creation_timestamp
-                or datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+                p.metadata.creation_timestamp or datetime.datetime.min.replace(tzinfo=timezone.utc)
             ),
             reverse=True,
         )
