@@ -131,9 +131,6 @@ JOBSET_RJOB_NAME_LABEL = "jobset.sigs.k8s.io/replicatedjob-name"
 # The label key to identify the Job completion index of the Pod.
 JOB_INDEX_LABEL = "batch.kubernetes.io/job-completion-index"
 
-# The Pod pending phase indicates that Pod has been accepted by the Kubernetes cluster,
-# but one or more of the containers has not been made ready to run.
-POD_PENDING = "Pending"
 
 # The label selector for Pods created by the TrainJob.
 # It checks the following rJob.name: dataset-initializer, model-initializer, launcher, node.
