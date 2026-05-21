@@ -27,7 +27,7 @@ from typing import Any
 import uuid
 
 from kubeflow_trainer_api import models
-from kubernetes import client, config, watch
+from kubernetes import client, config
 
 import kubeflow.common.constants as common_constants
 from kubeflow.common.types import KubernetesBackendConfig
@@ -607,16 +607,21 @@ class KubernetesBackend(RuntimeBackend):
         """Read logs from a pod container."""
         try:
             if follow:
-                log_stream = watch.Watch().stream(
-                    self.core_api.read_namespaced_pod_log,
+                # Stream logs using response.stream() after calling read_namespaced_pod_log
+                # with _preload_content=False to get a streaming response.
+                response = self.core_api.read_namespaced_pod_log(
                     name=pod_name,
                     namespace=self.namespace,
                     container=container_name,
                     follow=True,
+                    _preload_content=False,
                 )
 
-                # Stream logs incrementally.
-                yield from log_stream  # type: ignore
+                # Stream logs incrementally using response.stream().
+                for line in response.stream():
+                    if line:
+                        # Decode bytes to string and yield each line.
+                        yield line.decode("utf-8").rstrip("\n")
             else:
                 logs = self.core_api.read_namespaced_pod_log(
                     name=pod_name,
