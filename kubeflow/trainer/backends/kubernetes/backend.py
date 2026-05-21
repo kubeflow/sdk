@@ -655,6 +655,62 @@ class KubernetesBackend(RuntimeBackend):
             ),
         )
 
+    def _select_best_pod_for_role(
+        self, pods: list[models.IoK8sApiCoreV1Pod]
+    ) -> Optional[models.IoK8sApiCoreV1Pod]:
+        """
+        Select the best Pod for a role based on status priority and creation timestamp.
+
+        Priority order (higher priority = preferred):
+        1. Running or Succeeded Pods (equal priority, prefer most recent)
+        2. Failed Pods (prefer most recent)
+        3. Pending Pods (prefer most recent)
+        4. Unknown Pods (prefer most recent)
+
+        Both Running and Succeeded are considered healthy states with equal priority.
+        When multiple pods share the same priority, the most recently created pod is selected.
+        """
+        if not pods:
+            return None
+
+        # Pod status priority (higher number = higher priority)
+        # Running and Succeeded have equal priority as both are healthy states
+        status_priority = {
+            constants.POD_RUNNING: 4,  # Highest priority (healthy)
+            constants.POD_SUCCEEDED: 4,  # Highest priority (healthy)
+            constants.POD_FAILED: 2,  # Lower priority
+            constants.POD_PENDING: 1,  # Low priority
+            constants.POD_UNKNOWN: 0,  # Lowest priority
+        }
+
+        # Group Pods by status priority
+        pods_by_status = {}
+        for pod in pods:
+            status = pod.status.phase if pod.status else constants.POD_UNKNOWN
+            priority = status_priority.get(status, 0)
+
+            if priority not in pods_by_status:
+                pods_by_status[priority] = []
+            pods_by_status[priority].append(pod)
+
+        # Find the highest priority status that has Pods
+        highest_priority = max(pods_by_status.keys()) if pods_by_status else 0
+        candidate_pods = pods_by_status[highest_priority]
+
+        # Among Pods with the same priority, select the most recent one
+        if len(candidate_pods) == 1:
+            return candidate_pods[0]
+
+        # Sort by creation timestamp (most recent first)
+        candidate_pods.sort(
+            key=lambda p: (
+                p.metadata.creation_timestamp or datetime.datetime.min.replace(tzinfo=timezone.utc)
+            ),
+            reverse=True,
+        )
+
+        return candidate_pods[0]
+
     def _read_pod_logs(self, pod_name: str, container_name: str, follow: bool) -> Iterator[str]:
         """Read logs from a pod container."""
         try:
@@ -743,7 +799,7 @@ class KubernetesBackend(RuntimeBackend):
                 # - For training nodes: use role + job index (node-0, node-1, launcher-0, etc.)
                 role = pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL]
                 if role in {constants.LAUNCHER, constants.NODE}:
-                    job_index = pod.metadata.labels.get(constants.JOB_INDEX_LABEL, "0")
+                    job_index = pod.metadata.labels[constants.JOB_INDEX_LABEL]
                     key = f"{role}-{job_index}"
                 else:
                     key = role
@@ -785,7 +841,7 @@ class KubernetesBackend(RuntimeBackend):
                             pod.status,
                             trainjob.runtime,
                             pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL],
-                            int(pod.metadata.labels.get(constants.JOB_INDEX_LABEL, "0")),
+                            int(pod.metadata.labels[constants.JOB_INDEX_LABEL]),
                         )
                     )
         except multiprocessing.TimeoutError as e:
