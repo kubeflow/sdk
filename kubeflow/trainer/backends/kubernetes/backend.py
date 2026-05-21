@@ -14,6 +14,7 @@
 
 from collections.abc import Callable, Iterator
 import copy
+import datetime
 import logging
 import multiprocessing
 import os
@@ -676,14 +677,43 @@ class KubernetesBackend(RuntimeBackend):
             if not pod_list:
                 return trainjob
 
-            for pod in pod_list.items:
+            # Sort Pods by creation timestamp (newest first) to ensure we process
+            # the most recent Pod for each role when duplicates exist (e.g. restarts)
+            pods = sorted(
+                pod_list.items,
+                key=lambda p: (
+                    p.metadata.creation_timestamp
+                    or datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+                ),
+                reverse=True,
+            )
+
+            # Track processed TrainJob component keys to skip older duplicate Pods.
+            seen_roles: set[str] = set()
+
+            for pod in pods:
                 # Pod must have labels to detect the TrainJob step.
                 # Every Pod always has a single TrainJob step.
                 if not (pod.metadata and pod.metadata.name and pod.metadata.labels and pod.spec):
                     raise Exception(f"TrainJob Pod is invalid: {pod}")
 
+                role = pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL]
+
+                # Create unique key for each TrainJob component.
+                # Training nodes include the job index to distinguish replicas.
+                if role in {constants.LAUNCHER, constants.NODE}:
+                    key = f"{role}-{pod.metadata.labels[constants.JOB_INDEX_LABEL]}"
+                else:
+                    key = role
+
+                # Skip older duplicate Pods for the same TrainJob component.
+                if key in seen_roles:
+                    continue
+
+                seen_roles.add(key)
+
                 # Get the Initializer step.
-                if pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL] in {
+                if role in {
                     constants.DATASET_INITIALIZER,
                     constants.MODEL_INITIALIZER,
                 }:
@@ -694,8 +724,9 @@ class KubernetesBackend(RuntimeBackend):
                             pod.status,
                         )
                     )
+
                 # Get the Node step.
-                elif pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL] in {
+                elif role in {
                     constants.LAUNCHER,
                     constants.NODE,
                 }:
@@ -705,7 +736,7 @@ class KubernetesBackend(RuntimeBackend):
                             pod.spec,
                             pod.status,
                             trainjob.runtime,
-                            pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL],
+                            role,
                             int(pod.metadata.labels[constants.JOB_INDEX_LABEL]),
                         )
                     )
