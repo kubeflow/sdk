@@ -1423,6 +1423,175 @@ def test_get_job(kubernetes_backend, test_case):
     print("test execution complete")
 
 
+def test_get_job_with_pod_restarts(kubernetes_backend):
+    """Test that get_job() returns only the most recent Pod when restarts occur.
+
+    This test simulates the scenario where Kubernetes recreates Pods due to restart
+    policies, resulting in multiple Pods with the same role but different creation
+    timestamps. The API should return only the most recently created Pod for each role.
+    """
+    print("Executing test: get_job with pod restarts")
+
+    job_name = "job-with-restarts"
+
+    # Create a mock pod list with duplicate pods (simulating restarts)
+    old_timestamp = datetime.datetime(2025, 6, 1, 10, 0, 0)
+    new_timestamp = datetime.datetime(2025, 6, 1, 11, 0, 0)
+
+    pod_list_with_restarts = models.IoK8sApiCoreV1PodList(
+        items=[
+            # OLD dataset initializer pod (failed and restarted)
+            models.IoK8sApiCoreV1Pod(
+                metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                    name="dataset-initializer-pod-old",
+                    namespace=DEFAULT_NAMESPACE,
+                    creation_timestamp=old_timestamp,
+                    labels={
+                        constants.JOBSET_NAME_LABEL: job_name,
+                        constants.JOBSET_RJOB_NAME_LABEL: constants.DATASET_INITIALIZER,
+                        constants.JOB_INDEX_LABEL: "0",
+                    },
+                ),
+                spec=models.IoK8sApiCoreV1PodSpec(
+                    containers=[
+                        models.IoK8sApiCoreV1Container(
+                            name=constants.DATASET_INITIALIZER,
+                            image="dataset-initializer:latest",
+                        )
+                    ]
+                ),
+                status=models.IoK8sApiCoreV1PodStatus(phase="Failed"),
+            ),
+            # NEW dataset initializer pod (after restart)
+            models.IoK8sApiCoreV1Pod(
+                metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                    name="dataset-initializer-pod-new",
+                    namespace=DEFAULT_NAMESPACE,
+                    creation_timestamp=new_timestamp,
+                    labels={
+                        constants.JOBSET_NAME_LABEL: job_name,
+                        constants.JOBSET_RJOB_NAME_LABEL: constants.DATASET_INITIALIZER,
+                        constants.JOB_INDEX_LABEL: "0",
+                    },
+                ),
+                spec=models.IoK8sApiCoreV1PodSpec(
+                    containers=[
+                        models.IoK8sApiCoreV1Container(
+                            name=constants.DATASET_INITIALIZER,
+                            image="dataset-initializer:latest",
+                        )
+                    ]
+                ),
+                status=models.IoK8sApiCoreV1PodStatus(phase="Running"),
+            ),
+            # OLD training node pod (failed and restarted)
+            models.IoK8sApiCoreV1Pod(
+                metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                    name="node-0-pod-old",
+                    namespace=DEFAULT_NAMESPACE,
+                    creation_timestamp=old_timestamp,
+                    labels={
+                        constants.JOBSET_NAME_LABEL: job_name,
+                        constants.JOBSET_RJOB_NAME_LABEL: constants.NODE,
+                        constants.JOB_INDEX_LABEL: "0",
+                    },
+                ),
+                spec=models.IoK8sApiCoreV1PodSpec(
+                    containers=[
+                        models.IoK8sApiCoreV1Container(
+                            name=constants.NODE,
+                            image="trainer:latest",
+                            resources=get_resource_requirements(),
+                        )
+                    ]
+                ),
+                status=models.IoK8sApiCoreV1PodStatus(phase="Failed"),
+            ),
+            # NEW training node pod (after restart)
+            models.IoK8sApiCoreV1Pod(
+                metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                    name="node-0-pod-new",
+                    namespace=DEFAULT_NAMESPACE,
+                    creation_timestamp=new_timestamp,
+                    labels={
+                        constants.JOBSET_NAME_LABEL: job_name,
+                        constants.JOBSET_RJOB_NAME_LABEL: constants.NODE,
+                        constants.JOB_INDEX_LABEL: "0",
+                    },
+                ),
+                spec=models.IoK8sApiCoreV1PodSpec(
+                    containers=[
+                        models.IoK8sApiCoreV1Container(
+                            name=constants.NODE,
+                            image="trainer:latest",
+                            resources=get_resource_requirements(),
+                        )
+                    ]
+                ),
+                status=models.IoK8sApiCoreV1PodStatus(phase="Running"),
+            ),
+            # Another node without duplicates (to test mixed scenarios)
+            models.IoK8sApiCoreV1Pod(
+                metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                    name="node-1-pod",
+                    namespace=DEFAULT_NAMESPACE,
+                    creation_timestamp=new_timestamp,
+                    labels={
+                        constants.JOBSET_NAME_LABEL: job_name,
+                        constants.JOBSET_RJOB_NAME_LABEL: constants.NODE,
+                        constants.JOB_INDEX_LABEL: "1",
+                    },
+                ),
+                spec=models.IoK8sApiCoreV1PodSpec(
+                    containers=[
+                        models.IoK8sApiCoreV1Container(
+                            name=constants.NODE,
+                            image="trainer:latest",
+                            resources=get_resource_requirements(),
+                        )
+                    ]
+                ),
+                status=models.IoK8sApiCoreV1PodStatus(phase="Running"),
+            ),
+        ]
+    )
+
+    # Mock the pod list response to return our test data
+    mock_thread = Mock()
+    mock_thread.get.return_value = pod_list_with_restarts
+
+    with patch.object(kubernetes_backend.core_api, "list_namespaced_pod", return_value=mock_thread):
+        job = kubernetes_backend.get_job(job_name)
+
+        # Verify that we only got 3 steps (not 5)
+        # - 1 dataset-initializer (newest)
+        # - 2 training nodes (node-0 newest, node-1 only one)
+        assert len(job.steps) == 3, f"Expected 3 steps, got {len(job.steps)}"
+
+        # Verify the correct pods were selected (newest ones)
+        step_pod_names = {step.pod_name for step in job.steps}
+        assert "dataset-initializer-pod-new" in step_pod_names, (
+            "Should select newest dataset initializer pod"
+        )
+        assert "dataset-initializer-pod-old" not in step_pod_names, (
+            "Should NOT select old dataset initializer pod"
+        )
+        assert "node-0-pod-new" in step_pod_names, "Should select newest node-0 pod"
+        assert "node-0-pod-old" not in step_pod_names, "Should NOT select old node-0 pod"
+        assert "node-1-pod" in step_pod_names, "Should select node-1 pod (only one)"
+
+        # Verify the statuses are from the new pods
+        dataset_init_step = next(s for s in job.steps if constants.DATASET_INITIALIZER in s.name)
+        assert dataset_init_step.status == "Running", (
+            "Dataset initializer should have Running status (from new pod)"
+        )
+
+        node_0_step = next(s for s in job.steps if s.name == "node-0")
+        assert node_0_step.status == "Running", "Node-0 should have Running status (from new pod)"
+
+    print("test execution complete")
+
+
 @pytest.mark.parametrize(
     "test_case",
     [

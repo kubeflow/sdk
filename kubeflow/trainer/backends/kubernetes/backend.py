@@ -676,12 +676,39 @@ class KubernetesBackend(RuntimeBackend):
             if not pod_list:
                 return trainjob
 
+            # Group Pods by their role to handle Pod restarts/recreations. select only the most
+            # recently created Pod for each component to show users the current state.
+            pod_groups: dict[str, list] = {}
             for pod in pod_list.items:
                 # Pod must have labels to detect the TrainJob step.
                 # Every Pod always has a single TrainJob step.
                 if not (pod.metadata and pod.metadata.name and pod.metadata.labels and pod.spec):
                     raise Exception(f"TrainJob Pod is invalid: {pod}")
 
+                # Create unique key for each TrainJob component:
+                # - For initializers: use the role name (dataset-initializer, model-initializer)
+                # - For training nodes: use role + job index (node-0, node-1, launcher-0, etc.)
+                role = pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL]
+                if role in {constants.LAUNCHER, constants.NODE}:
+                    job_index = pod.metadata.labels.get(constants.JOB_INDEX_LABEL, "0")
+                    key = f"{role}-{job_index}"
+                else:
+                    key = role
+
+                if key not in pod_groups:
+                    pod_groups[key] = []
+                pod_groups[key].append(pod)
+
+            # Select the most recently created Pod from each group.
+            # This ensures we only show the latest Pod after any restarts.
+            selected_pods = []
+            for pods in pod_groups.values():
+                # Sort by creation timestamp and select the most recent
+                most_recent_pod = max(pods, key=lambda p: p.metadata.creation_timestamp)
+                selected_pods.append(most_recent_pod)
+
+            # Process the selected Pods to create TrainJob steps
+            for pod in selected_pods:
                 # Get the Initializer step.
                 if pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL] in {
                     constants.DATASET_INITIALIZER,
