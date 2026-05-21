@@ -129,7 +129,11 @@ class KubernetesBackend(RuntimeBackend):
 
         # Sort by creation timestamp (most recent first)
         candidate_pods.sort(
-            key=lambda p: p.metadata.creation_timestamp or datetime.datetime.min, reverse=True
+            key=lambda p: (
+                p.metadata.creation_timestamp
+                or datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+            ),
+            reverse=True,
         )
 
         return candidate_pods[0]
