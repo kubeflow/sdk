@@ -51,8 +51,20 @@ TRAINJOB_COMPLETE = "Complete"
 # The failed status of the TrainJob, defined when TrainJob CR has failed condition.
 TRAINJOB_FAILED = "Failed"
 
-# The succeeded phase of the Pods.
+# The succeeded phase of the Pod.
 POD_SUCCEEDED = "Succeeded"
+
+# The running phase of the Pod.
+POD_RUNNING = "Running"
+
+# The failed phase of the Pod.
+POD_FAILED = "Failed"
+
+# The pending phase of the Pod.
+POD_PENDING = "Pending"
+
+# The unknown phase of the Pod.
+POD_UNKNOWN = "Unknown"
 
 # The label key to identify the relationship between TrainJob and Pod template in the runtime.
 # For example, what PodTemplate must be overridden by TrainJob's .spec.trainer APIs.
