@@ -678,21 +678,10 @@ class KubernetesBackend(RuntimeBackend):
             if not pod_list:
                 return trainjob
 
-            # Sort Pods by creation timestamp (newest first) to ensure we process
-            # the most recent Pod for each role when duplicates exist (e.g., restarts)
-            pods = sorted(
-                pod_list.items,
-                key=lambda p: (
-                    p.metadata.creation_timestamp
-                    or datetime.datetime.min.replace(tzinfo=timezone.utc)
-                ),
-                reverse=True,
-            )
-
-            # Track seen role keys to skip duplicate Pods (older ones)
-            seen_roles: set[str] = set()
-
-            for pod in pods:
+            # Group Pods by component role/index and select the most recently created
+            # Pod for each component in O(n) time.
+            best_pods: dict[str, models.IoK8sApiCoreV1Pod] = {}
+            for pod in pod_list.items:
                 # Pod must have labels to detect the TrainJob step.
                 # Every Pod always has a single TrainJob step.
                 if not (pod.metadata and pod.metadata.name and pod.metadata.labels and pod.spec):
@@ -708,11 +697,30 @@ class KubernetesBackend(RuntimeBackend):
                 else:
                     key = role
 
-                # Skip if we've already processed a Pod for this role (newer one)
-                if key in seen_roles:
-                    continue
-                seen_roles.add(key)
+                # Track the Pod with the latest creation_timestamp for this key
+                pod_time = pod.metadata.creation_timestamp or datetime.datetime.min.replace(
+                    tzinfo=timezone.utc
+                )
+                existing_pod = best_pods.get(key)
+                if existing_pod is None:
+                    best_pods[key] = pod
+                else:
+                    if not existing_pod.metadata:
+                        raise Exception(f"TrainJob Pod is invalid: {existing_pod}")
+                    existing_time = (
+                        existing_pod.metadata.creation_timestamp
+                        or datetime.datetime.min.replace(tzinfo=timezone.utc)
+                    )
+                    if pod_time > existing_time:
+                        best_pods[key] = pod
 
+            for pod in best_pods.values():
+                # Pod must have labels to detect the TrainJob step.
+                # Every Pod always has a single TrainJob step.
+                if not (pod.metadata and pod.metadata.name and pod.metadata.labels and pod.spec):
+                    raise Exception(f"TrainJob Pod is invalid: {pod}")
+
+                role = pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL]
                 # Get the Initializer step.
                 if role in {constants.DATASET_INITIALIZER, constants.MODEL_INITIALIZER}:
                     trainjob.steps.append(
