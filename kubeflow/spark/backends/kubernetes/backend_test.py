@@ -536,6 +536,8 @@ def test_get_connect_url(kubernetes_backend, test_case):
     else:
         mock_popen = Mock()
         mock_popen.poll.return_value = None
+        # stderr must be iterable so _drain_stderr background thread doesn't raise
+        mock_popen.stderr = iter([])
         with (
             patch.dict(
                 "os.environ",

@@ -14,6 +14,7 @@
 
 """Kubernetes backend for Spark operations."""
 
+from collections import deque
 from collections.abc import Iterator
 import contextlib
 import logging
@@ -60,6 +61,24 @@ def _enable_spark_debug_logging() -> None:
         h = logging.StreamHandler(sys.stderr)
         h.setLevel(logging.INFO)
         root.addHandler(h)
+
+
+def _drain_stderr(proc: subprocess.Popen) -> deque:
+    """Drain proc.stderr in a background thread to prevent pipe buffer deadlock.
+
+    Returns a deque (maxlen=50) that accumulates the last 50 stderr lines for
+    diagnostics. Must be called immediately after Popen so the buffer never fills.
+    """
+    buf: deque = deque(maxlen=50)
+
+    def _reader() -> None:
+        if proc.stderr is None:
+            return
+        for raw in proc.stderr:
+            buf.append(raw.decode("utf-8", errors="replace").rstrip())
+
+    threading.Thread(target=_reader, daemon=True).start()
+    return buf
 
 
 class KubernetesBackend(RuntimeBackend):
@@ -295,11 +314,22 @@ class KubernetesBackend(RuntimeBackend):
             time.sleep(polling_interval)
 
     def _wait_for_connect_port(
-        self, host: str, port: int, timeout_sec: int = 60, interval_sec: float = 2.0
+        self,
+        host: str,
+        port: int,
+        timeout_sec: int = 60,
+        interval_sec: float = 2.0,
+        proc: subprocess.Popen | None = None,
     ) -> bool:
-        """Wait until a TCP connection to host:port succeeds (Spark Connect server reachable)."""
+        """Wait until a TCP connection to host:port succeeds.
+
+        If proc is provided, returns False immediately when the process exits
+        rather than waiting out the full timeout.
+        """
         deadline = time.monotonic() + timeout_sec
         while time.monotonic() < deadline:
+            if proc is not None and proc.poll() is not None:
+                return False
             try:
                 with socket.create_connection((host, port), timeout=2):
                     return True
@@ -327,10 +357,21 @@ class KubernetesBackend(RuntimeBackend):
             url = build_service_url(info)
             logger.info("In-cluster connect URL: %s", url)
             return (url, None)
+
+        logger.warning(
+            "Running out-of-cluster. Using kubectl port-forward to reach the Spark Connect "
+            "server. This is suitable for local development only. "
+            "For production (EKS, GKE, AKS): expose the SparkConnect service as NodePort or "
+            "LoadBalancer and use: client.connect(base_url='sc://<external-ip>:%d'). "
+            "Set env var SPARK_CONNECT_LOCAL_PORT to pin the local port.",
+            constants.SPARK_CONNECT_PORT,
+        )
+
         port = local_port
         if port is None:
             port_str = os.environ.get("SPARK_CONNECT_LOCAL_PORT")
             port = int(port_str) if port_str else random.randint(15002, 16002)
+
         # Prefer pod when available (bypasses Service/EndpointSlice); then try svc names
         candidates: list[tuple[str, str]] = []
         if info.pod_name:
@@ -338,13 +379,14 @@ class KubernetesBackend(RuntimeBackend):
         for svc in [f"{info.name}-svc", info.service_name, f"{info.name}-server"]:
             if svc and not any(c[0] == "svc" and c[1] == svc for c in candidates):
                 candidates.append(("svc", svc))
+
         seen: set[str] = set()
         for kind, target in candidates:
             key = f"{kind}/{target}"
             if key in seen:
                 continue
             seen.add(key)
-            # Use 127.0.0.1 instead of localhost to force IPv4 (gRPC may prefer IPv6 which can fail)
+            # Use 127.0.0.1 instead of localhost to force IPv4 (gRPC may prefer IPv6 which fails)
             url = f"sc://127.0.0.1:{port}"
             cmd = [
                 "kubectl",
@@ -364,10 +406,21 @@ class KubernetesBackend(RuntimeBackend):
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
             )
-            time.sleep(3.0)  # Allow port-forward to fully establish
+            # Drain stderr immediately in background to prevent pipe buffer deadlock.
+            # On WSL/Linux the 64 KB pipe buffer fills fast; if kubectl blocks on write
+            # the tunnel appears dead even when it is healthy.
+            stderr_buf = _drain_stderr(proc)
+
+            # Active alive-check: poll up to 5 s in short intervals instead of a blind sleep.
+            # A blind sleep(3) is a race — too short on slow systems, wasteful on fast ones.
+            alive_deadline = time.monotonic() + 5.0
+            while time.monotonic() < alive_deadline:
+                if proc.poll() is not None:
+                    break
+                time.sleep(0.2)
+
             if proc.poll() is not None:
-                stderr = (proc.stderr and proc.stderr.read()) or b""
-                err_msg = stderr.decode("utf-8", errors="replace").strip() if stderr else ""
+                err_msg = "\n".join(stderr_buf) or "(no stderr)"
                 logger.warning(
                     "Port-forward to %s failed (exit %s): %s",
                     key,
@@ -375,11 +428,12 @@ class KubernetesBackend(RuntimeBackend):
                     err_msg,
                 )
                 continue
-            if self._wait_for_connect_port("127.0.0.1", port, timeout_sec=90):
-                # Final verification: ensure process is still alive after port check
+
+            # Pass proc so the wait loop returns False immediately if port-forward dies,
+            # rather than hanging for the full timeout_sec probing a dead tunnel.
+            if self._wait_for_connect_port("127.0.0.1", port, timeout_sec=90, proc=proc):
                 if proc.poll() is not None:
-                    stderr = (proc.stderr and proc.stderr.read()) or b""
-                    err_msg = stderr.decode("utf-8", errors="replace").strip() if stderr else ""
+                    err_msg = "\n".join(stderr_buf) or "(no stderr)"
                     logger.warning(
                         "Port-forward to %s died after port check (exit %s): %s",
                         key,
@@ -395,9 +449,17 @@ class KubernetesBackend(RuntimeBackend):
                     info.namespace,
                 )
                 return (url, proc)
+
             proc.terminate()
             proc.wait(timeout=5)
-            logger.warning("Port %s did not become reachable in time for %s", port, key)
+            err_msg = "\n".join(stderr_buf) or "(no stderr)"
+            logger.warning(
+                "Port %s did not become reachable in time for %s. stderr: %s",
+                port,
+                key,
+                err_msg,
+            )
+
         raise RuntimeError(f"Port-forward failed for all candidates in {info.namespace}")
 
     def connect(
@@ -426,18 +488,23 @@ class KubernetesBackend(RuntimeBackend):
             TimeoutError: If connection times out.
             RuntimeError: If port-forward fails.
         """
+        # Pin local_port before the first get_connect_url call so that if the first
+        # attempt fails and a restart is needed, both calls use the same port.
+        # The gRPC client URL is built once; a restart that picks a different port
+        # would silently connect to a tunnel the client never knows about.
+        pinned_local_port: int | None = None
+        if not os.environ.get("KUBERNETES_SERVICE_HOST"):
+            port_str = os.environ.get("SPARK_CONNECT_LOCAL_PORT")
+            pinned_local_port = int(port_str) if port_str else random.randint(15002, 16002)
+
         # Get connect URL (handles port-forwarding for local development)
-        connect_url, pf_proc = self.get_connect_url(info)
-        # Track local port for reconnection attempts
-        local_port = int(connect_url.split(":")[-1]) if pf_proc else None
+        connect_url, pf_proc = self.get_connect_url(info, local_port=pinned_local_port)
+        local_port = pinned_local_port
 
         # Check port-forward process status
         if pf_proc is not None and pf_proc.poll() is not None:
-            stderr_b = pf_proc.stderr.read() if pf_proc.stderr else b""
-            stderr_str = stderr_b.decode("utf-8", errors="replace").strip() if stderr_b else ""
             raise RuntimeError(
-                f"Port-forward process exited with code {pf_proc.returncode} "
-                f"before connect. stderr: {stderr_str}"
+                f"Port-forward process exited with code {pf_proc.returncode} before connect."
             )
 
         # Log connection info
@@ -465,20 +532,16 @@ class KubernetesBackend(RuntimeBackend):
 
         if delay_sec > 0:
             logger.info("Waiting %ss for Spark Connect server gRPC readiness", delay_sec)
-            # Use active probing instead of blind sleep to detect port-forward death early
-            probe_start = time.monotonic()
-            while time.monotonic() - probe_start < delay_sec:
-                # Check if port-forward process died
+            grpc_deadline = time.monotonic() + delay_sec
+            while time.monotonic() < grpc_deadline:
                 if pf_proc is not None and pf_proc.poll() is not None:
                     logger.warning("Port-forward died during gRPC ready wait, restarting...")
+                    # get_connect_url already waits for the port to become reachable internally,
+                    # so we break out of this loop immediately after restart rather than
+                    # re-probing with a 1 s window (which always fails on a brand-new process).
                     connect_url, pf_proc = self.get_connect_url(info, local_port=local_port)
-                    local_port = int(connect_url.split(":")[-1]) if pf_proc else None
-                # Verify port is still reachable
-                if local_port and not self._wait_for_connect_port(
-                    "127.0.0.1", local_port, timeout_sec=1, interval_sec=0.5
-                ):
-                    logger.warning("Port %s not reachable during gRPC ready wait", local_port)
-                time.sleep(1)
+                    break
+                time.sleep(0.5)
 
         # Final port-forward health check before connection attempt
         if pf_proc is not None and pf_proc.poll() is not None:
