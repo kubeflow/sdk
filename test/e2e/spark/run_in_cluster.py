@@ -18,6 +18,7 @@ import contextlib
 import os
 import subprocess
 import tempfile
+import time
 
 
 def run_example_in_cluster(
@@ -90,25 +91,15 @@ spec:
         err = (apply_result.stderr or "").strip() or (apply_result.stdout or "").strip()
         return False, "", f"Failed to create Job: {err or apply_result.returncode}"
 
-    wait_result = subprocess.run(
-        [
-            "kubectl",
-            "wait",
-            "--for=condition=complete",
-            f"job/{job_name}",
-            "-n",
-            namespace,
-            f"--timeout={timeout_sec}s",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=timeout_sec + 30,
-    )
-    wait_stderr = (wait_result.stderr or "").strip()
-    if wait_result.returncode != 0:
-        succeeded = False
-        failed = True
-    else:
+    # Poll for job completion every 5 s instead of `kubectl wait --for=condition=complete`.
+    # `kubectl wait --for=condition=complete` only resolves on the Complete condition;
+    # a failed Job sets condition=Failed, causing kubectl wait to block for the full
+    # --timeout before returning non-zero — which exhausts the CI step time limit.
+    succeeded = False
+    failed = False
+    poll_interval = 5
+    deadline = time.monotonic() + timeout_sec
+    while time.monotonic() < deadline:
         result = subprocess.run(
             [
                 "kubectl",
@@ -124,10 +115,14 @@ spec:
             text=True,
             timeout=10,
         )
-        out = (result.stdout or "").strip() if result.returncode == 0 else "0,0"
-        parts = out.split(",")
-        succeeded = (parts[0] or "0") == "1"
-        failed = (parts[1] or "0") != "0"
+        if result.returncode == 0:
+            out = (result.stdout or "").strip()
+            parts = out.split(",")
+            succeeded = (parts[0] or "0") != "0"
+            failed = (parts[1] or "0") != "0"
+            if succeeded or failed:
+                break
+        time.sleep(poll_interval)
 
     # Get logs from the Job pod
     pod_result = subprocess.run(
@@ -190,8 +185,6 @@ spec:
         timeout=15,
     )
     job_desc = desc_result.stdout or ""
-    if wait_stderr:
-        job_desc = f"--- kubectl wait stderr ---\n{wait_stderr}\n\n{job_desc}"
     if pod_name:
         pod_desc_result = subprocess.run(
             ["kubectl", "describe", "pod", pod_name, "-n", namespace],
