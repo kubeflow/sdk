@@ -100,21 +100,27 @@ def main():
             flags=re.MULTILINE | re.DOTALL,
         )
         # Also remove any orphaned comments before override-dependencies
-        content = re.sub(r"^# Security overrides.*?\n", "", content, flags=re.MULTILINE)
+        content = re.sub(
+            r"^# Security overrides.*?\n(?:[ \t]*\n)?",
+            "",
+            content,
+            flags=re.MULTILINE,
+        )
 
         # Re-add the header after [tool.uv] so insertion logic stays consistent
         content = re.sub(
-            r"(\[tool\.uv\]\n)",
+            r"(\[tool\.uv\]\r?\n)",
             r"\1# Security overrides - Review periodically and remove "
             r"if parent constraints allow natural upgrade\n",
             content,
+            count=1,
         )
 
     # Find [tool.uv] and insert override-dependencies
     if not has_overrides and has_tool_uv:
         # Insert after [tool.uv]
         content = re.sub(
-            r"(\[tool\.uv\]\n)",
+            r"(\[tool\.uv\]\r?\n)",
             r"\1# Security overrides - Review periodically and remove if parent constraints allow natural upgrade\n",
             content,
         )
