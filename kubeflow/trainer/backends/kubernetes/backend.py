@@ -15,7 +15,6 @@
 from collections.abc import Callable, Iterator
 import copy
 import datetime
-from datetime import timezone
 import logging
 import multiprocessing
 import os
@@ -683,10 +682,17 @@ class KubernetesBackend(RuntimeBackend):
             if not pod_list:
                 return trainjob
 
-            # Group Pods by component role/index and select the most recently created
-            # Pod for each component in O(n) time.
-            best_pods: dict[str, models.IoK8sApiCoreV1Pod] = {}
-            for pod in pod_list.items:
+            # Sort pods by creation_timestamp (newest first) for deduplication.
+            sorted_pods = sorted(
+                pod_list.items,
+                key=lambda p: p.metadata.creation_timestamp or datetime.datetime.min,
+                reverse=True,
+            )
+
+            # Track seen (role, index) combinations to filter duplicate pods.
+            # First occurrence (newest) wins.
+            seen_roles: set[str] = set()
+            for pod in sorted_pods:
                 # Pod must have labels to detect the TrainJob step.
                 # Every Pod always has a single TrainJob step.
                 if not (pod.metadata and pod.metadata.name and pod.metadata.labels and pod.spec):
@@ -695,37 +701,29 @@ class KubernetesBackend(RuntimeBackend):
                 # Create unique key for each TrainJob component:
                 # - For initializers: use the role name (dataset-initializer, model-initializer)
                 # - For training nodes: use role + job index (node-0, node-1, launcher-0, etc.)
-                role = pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL]
+                role = pod.metadata.labels.get(constants.JOBSET_RJOB_NAME_LABEL)
+                if role is None:
+                    raise RuntimeError(
+                        f"TrainJob Pod missing label {constants.JOBSET_RJOB_NAME_LABEL}: "
+                        f"{pod.metadata.name}"
+                    )
+
                 if role in {constants.LAUNCHER, constants.NODE}:
-                    job_index = pod.metadata.labels[constants.JOB_INDEX_LABEL]
+                    job_index = pod.metadata.labels.get(constants.JOB_INDEX_LABEL)
+                    if job_index is None:
+                        raise RuntimeError(
+                            f"TrainJob Pod missing label {constants.JOB_INDEX_LABEL}: "
+                            f"{pod.metadata.name}"
+                        )
                     key = f"{role}-{job_index}"
                 else:
                     key = role
 
-                # Track the Pod with the latest creation_timestamp for this key
-                pod_time = pod.metadata.creation_timestamp or datetime.datetime.min.replace(
-                    tzinfo=timezone.utc
-                )
-                existing_pod = best_pods.get(key)
-                if existing_pod is None:
-                    best_pods[key] = pod
-                else:
-                    if not existing_pod.metadata:
-                        raise Exception(f"TrainJob Pod is invalid: {existing_pod}")
-                    existing_time = (
-                        existing_pod.metadata.creation_timestamp
-                        or datetime.datetime.min.replace(tzinfo=timezone.utc)
-                    )
-                    if pod_time > existing_time:
-                        best_pods[key] = pod
+                # Skip if we've already seen this role/index (duplicate pod)
+                if key in seen_roles:
+                    continue
+                seen_roles.add(key)
 
-            for pod in best_pods.values():
-                # Pod must have labels to detect the TrainJob step.
-                # Every Pod always has a single TrainJob step.
-                if not (pod.metadata and pod.metadata.name and pod.metadata.labels and pod.spec):
-                    raise Exception(f"TrainJob Pod is invalid: {pod}")
-
-                role = pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL]
                 # Get the Initializer step.
                 if role in {constants.DATASET_INITIALIZER, constants.MODEL_INITIALIZER}:
                     trainjob.steps.append(
@@ -744,7 +742,7 @@ class KubernetesBackend(RuntimeBackend):
                             pod.status,
                             trainjob.runtime,
                             role,
-                            int(pod.metadata.labels[constants.JOB_INDEX_LABEL]),
+                            int(job_index),
                         )
                     )
         except multiprocessing.TimeoutError as e:
