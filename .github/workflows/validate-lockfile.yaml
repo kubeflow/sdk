@@ -56,13 +56,15 @@ jobs:
       - name: Audit PR branch lockfile
         run: |
           cd pr-code
-          # NOTE: uv audit is experimental (preview feature) and its text output format may
-          # change without notice. If the parsing in the compare step breaks after a uv upgrade,
-          # check the output format or consider switching to osv-scanner JSON output.
+          # NOTE: uv audit text output format may change without notice. If the parsing
+          # in the compare step breaks after a uv upgrade, check the output format or
+          # consider switching to osv-scanner JSON output.
           # Both tools query the same OSV.dev database, but filtering and version-range logic
-          # differ between uv audit (preview) and OSV-Scanner — results may not be identical.
+          # differ between uv audit and OSV-Scanner — results may not be identical.
+          # --preview-features requires naming the feature to opt into ("audit")
+          # to suppress the experimental warning.
           rc=0
-          uv audit --preview-features > ../audit-pr.txt 2>&1 || rc=$?
+          uv audit --preview-features audit > ../audit-pr.txt 2>&1 || rc=$?
           cat ../audit-pr.txt
           # Exit code 1 = vulns found (expected). Non-zero, non-1 = tool failure.
           if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
@@ -74,7 +76,7 @@ jobs:
         run: |
           cd base-code
           rc=0
-          uv audit --preview-features > ../audit-base.txt 2>&1 || rc=$?
+          uv audit --preview-features audit > ../audit-base.txt 2>&1 || rc=$?
           cat ../audit-base.txt
           if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
             echo "::error::uv audit failed on base branch with exit code $rc"
