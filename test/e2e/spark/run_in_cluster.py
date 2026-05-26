@@ -69,6 +69,8 @@ spec:
               value: "{namespace}"
             - name: SPARK_E2E_RUN_IN_CLUSTER
               value: "1"
+            - name: SPARK_E2E_DEBUG
+              value: "{os.environ.get("SPARK_E2E_DEBUG", "0")}"
 """
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         f.write(manifest)
@@ -78,6 +80,19 @@ spec:
         ["kubectl", "delete", "job", job_name, "-n", namespace, "--ignore-not-found=true"],
         capture_output=True,
         timeout=15,
+    )
+    subprocess.run(
+        [
+            "kubectl",
+            "delete",
+            "sparkconnects",
+            "--all",
+            "-n",
+            namespace,
+            "--ignore-not-found=true",
+        ],
+        capture_output=True,
+        timeout=30,
     )
     apply_result = subprocess.run(
         ["kubectl", "apply", "-f", manifest_path],
@@ -91,10 +106,6 @@ spec:
         err = (apply_result.stderr or "").strip() or (apply_result.stdout or "").strip()
         return False, "", f"Failed to create Job: {err or apply_result.returncode}"
 
-    # Poll for job completion every 5 s instead of `kubectl wait --for=condition=complete`.
-    # `kubectl wait --for=condition=complete` only resolves on the Complete condition;
-    # a failed Job sets condition=Failed, causing kubectl wait to block for the full
-    # --timeout before returning non-zero — which exhausts the CI step time limit.
     succeeded = False
     failed = False
     poll_interval = 5
