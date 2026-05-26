@@ -171,6 +171,11 @@ class KubernetesBackend(RuntimeBackend):
             raise TimeoutError(
                 f"Timeout to create {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
             ) from e
+        except client.ApiException as e:
+            raise RuntimeError(
+                f"Failed to create {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name} "
+                f"(HTTP {e.status}: {e.body})"
+            ) from e
         except Exception as e:
             raise RuntimeError(
                 f"Failed to create {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"

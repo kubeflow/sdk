@@ -89,11 +89,14 @@ def example_level2_simple():
     print("LEVEL 2: SIMPLE CONFIGURATION (With custom name)")
     print("=" * 70)
 
+    in_cluster = os.environ.get("SPARK_E2E_RUN_IN_CLUSTER") == "1"
     client = SparkClient(backend_config=_backend_config())
     session_name = _e2e_session_name("my-simple-session")
     spark = client.connect(
-        num_executors=5,
-        resources_per_executor={"cpu": "2", "memory": "4Gi"},
+        num_executors=1 if in_cluster else 5,
+        resources_per_executor={"cpu": "1", "memory": "512Mi"}
+        if in_cluster
+        else {"cpu": "2", "memory": "4Gi"},
         spark_conf={
             "spark.sql.adaptive.enabled": "true",
             "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
@@ -103,7 +106,8 @@ def example_level2_simple():
 
     # Use Spark - more data operations
     df = spark.range(100)
-    print(f"\nGenerated range with {df.count()} rows across 5 executors")
+    num_executors = 1 if in_cluster else 5
+    print(f"\nGenerated range with {df.count()} rows across {num_executors} executor(s)")
     print(f"Session name: {session_name}")
     df.show(10)
 
