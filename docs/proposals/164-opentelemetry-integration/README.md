@@ -43,10 +43,8 @@ OpenTelemetry is the CNCF standard for observability. Adding it to the SDK enabl
   their own providers, exporters, resources, and sampling.
 - Provide an optional `configure_telemetry()` quickstart helper for examples and simple
   scripts that do not need full OTel setup control.
-- Integrate OTel's `LoggingHandler` so existing Python `logging` calls are automatically
-  correlated with active trace context (trace ID and span ID appear in log records).
-- Apply OTel GenAI semantic conventions where they map to training workflows
-  (model references in initializers, training job lifecycle spans).
+- Document opt-in log correlation so users can configure Python logs to include active
+  trace context when they want trace IDs and span IDs in log records.
 
 ### Stretch Goals
 
@@ -356,20 +354,14 @@ the Kubeflow-specific `kubeflow.job.name` attribute instead.
 
 #### GenAI Semantic Conventions
 
-The [OTel GenAI semconv](https://opentelemetry.io/docs/specs/semconv/gen-ai/) defines
-attributes and span conventions for AI/ML workloads. Most of these target inference
-(token counts, prompts, completions) and don't apply to training orchestration. The
-conventions that fit:
+This KEP does not adopt GenAI semantic conventions in the initial implementation. The
+current GenAI conventions are mostly inference-oriented, while this proposal focuses on
+SDK-level training orchestration.
 
-| GenAI Convention | Where it applies in Kubeflow |
-|---|---|
-| `gen_ai.request.model` | When a model initializer references a model by name (e.g., `hf://meta-llama/Llama-3` in `HuggingFaceModelInitializer`) |
-| `gen_ai.system` | Identifies the framework: `"huggingface"`, `"pytorch"`, etc. based on the trainer/runtime |
-| `gen_ai.operation.name` | Maps to training lifecycle operations: `"train"`, `"fine-tune"` |
-
-Inference-specific attributes (token counts, prompt/completion content, sampling parameters)
-are left unused. As the GenAI semconv matures and adds training-specific attributes, we can
-adopt them incrementally.
+The initial implementation uses standard OTel attributes where they map cleanly and
+Kubeflow-specific attributes for TrainerClient and backend operations. GenAI semantic
+conventions can be evaluated later if OTel adds conventions that map cleanly to training
+workflows.
 
 #### Kubeflow-Specific Attributes
 
@@ -460,15 +452,19 @@ To prevent cardinality explosion, per-job identifiers (`kubeflow.job.name`,
 
 ### Log Correlation
 
-The SDK does not replace or wrap existing `logging.getLogger()` calls. Instead, OTel's
-`LoggingHandler` automatically injects trace context (trace ID, span ID) into log records
-when a `TracerProvider` is configured. Existing SDK logs like:
+The SDK does not replace, wrap, or automatically reconfigure existing
+`logging.getLogger()` calls. Existing log output remains unchanged unless the user opts
+into OTel log correlation.
+
+When users configure OTel logging integration, for example with an OTel `LoggingHandler`
+or a formatter/filter that reads the current trace context, log records emitted inside
+active SDK spans can include trace ID and span ID. Existing SDK logs like:
 
 ```
 INFO:kubeflow.trainer:Creating TrainJob a3f8b2c1d9e0f in namespace default
 ```
 
-become correlated with the active span:
+can become correlated with the active span after user logging setup:
 
 ```
 INFO:kubeflow.trainer:Creating TrainJob a3f8b2c1d9e0f in namespace default
@@ -476,9 +472,9 @@ INFO:kubeflow.trainer:Creating TrainJob a3f8b2c1d9e0f in namespace default
 ```
 
 This lets users query logs by trace ID in tools like Grafana Loki and see every log line
-that happened during a specific `train()` call. Users configure OTel's `LoggingHandler`
-on their side. The `configure_telemetry()` helper can optionally set up the logging bridge
-as well.
+that happened during a specific `train()` call. The SDK should not mutate global logging
+configuration automatically. The `configure_telemetry()` helper can optionally set up log
+correlation when users ask for that convenience path.
 
 ### Telemetry Module API
 
@@ -570,8 +566,6 @@ mechanical: wrap public methods with spans, set the right attributes, add unit t
 - The OTel Environment Carriers spec (used for `TRACEPARENT` injection) is currently at
   Alpha status in the OTel specification. The injection mechanism may need to be updated
   as the spec matures.
-- The GenAI semantic conventions are still evolving. Training-specific attributes may be
-  added upstream, which we can adopt incrementally.
 - `configure_telemetry()` requires `opentelemetry-sdk` (not a core dependency). Users who
   call it without the SDK installed get a clear `ImportError`.
 - OTel context propagation uses Python's `contextvars`, which is thread-safe and compatible
@@ -631,9 +625,8 @@ extends `TestCase` with `expected_spans`, `expected_attributes`, and
 - **Alpha:** TrainerClient + all three backends instrumented with traces. Shared telemetry
   module complete. Optional `configure_telemetry()` helper working. Unit tests passing.
   Documentation and examples.
-- **Beta:** Metrics implemented. Log correlation documented and tested. GenAI conventions
-  applied where applicable. Pipelines repo alignment documented for compatible future
-  PipelinesClient instrumentation.
+- **Beta:** Metrics implemented. Log correlation documented and tested. Pipelines repo
+  alignment documented for compatible future PipelinesClient instrumentation.
 - **Stable:** Stretch clients (OptimizerClient, ModelRegistryClient, SparkClient)
   instrumented. E2E tests with OTel Collector. At least one release cycle with no
   breaking changes to span names or attribute keys.
@@ -644,7 +637,7 @@ extends `TestCase` with `expected_spans`, `expected_attributes`, and
 |---|---|---|
 | **Phase 1** | Telemetry module | `kubeflow/common/telemetry/` with `configure_telemetry()`, attribute constants, propagation helpers. `pyproject.toml` dependency changes. Unit tests. |
 | **Phase 2** | TrainerClient tracing | Spans on all 10 public methods. Error recording. Unit tests with `InMemorySpanExporter`. |
-| **Phase 3** | Backend tracing | Spans on all 3 backends. `TRACEPARENT` injection. Span events for sub-operations. GenAI convention attributes where applicable. Unit tests. |
+| **Phase 3** | Backend tracing | Spans on all 3 backends. `TRACEPARENT` injection. Span events for sub-operations. Unit tests. |
 | **Phase 4** | Metrics + log correlation | 4 metrics with attribute dimensions. Log correlation documentation and optional `configure_telemetry()` logging bridge option. Unit tests with `InMemoryMetricReader`. |
 | **Phase 5** | Documentation | Getting started guide, configuration reference, examples with Jaeger + Prometheus. Pipelines repo alignment notes for compatible span names and attributes. |
 | **Phase 6** | Stretch: OptimizerClient | Two-level tracing for OptimizerClient (Katib). Unit tests. |
