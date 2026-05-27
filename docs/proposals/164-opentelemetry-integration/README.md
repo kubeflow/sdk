@@ -11,8 +11,9 @@ Ref: https://github.com/kubeflow/sdk/issues/164
 This KEP adds native OpenTelemetry instrumentation to the Kubeflow SDK so users can get
 distributed traces, metrics, and correlated logs from SDK operations like training job
 submission, status polling, and lifecycle management. The SDK depends on `opentelemetry-api`
-only, which is no-op by default. Users who want telemetry install `opentelemetry-sdk` and
-an exporter separately.
+for no-op-by-default instrumentation and `opentelemetry-semantic-conventions` for standard
+attribute constants. Users who want telemetry export install `opentelemetry-sdk` and an
+exporter separately.
 
 ## Motivation
 
@@ -34,14 +35,14 @@ OpenTelemetry is the CNCF standard for observability. Adding it to the SDK enabl
 
 - Instrument `TrainerClient` and all three backends (Kubernetes, Container, LocalProcess)
   with OTel traces.
-- Instrument `PipelinesClient` ([PR #343](https://github.com/kubeflow/sdk/pull/343),
-  pending merge) with OTel traces across all public methods.
 - Build a shared telemetry module (`kubeflow/common/telemetry/`) that all SDK clients can
   reuse.
 - Propagate trace context across pod boundaries via W3C `TRACEPARENT` env var injection.
 - Collect operational metrics: job counts, operation durations, active jobs, errors.
-- Provide a `configure_telemetry()` convenience helper so users can set up exporters and
-  sampling without writing boilerplate `TracerProvider` setup code.
+- Emit spans and metrics through the standard OTel API so user applications can configure
+  their own providers, exporters, resources, and sampling.
+- Provide an optional `configure_telemetry()` quickstart helper for examples and simple
+  scripts that do not need full OTel setup control.
 - Integrate OTel's `LoggingHandler` so existing Python `logging` calls are automatically
   correlated with active trace context (trace ID and span ID appear in log records).
 - Apply OTel GenAI semantic conventions where they map to training workflows
@@ -53,6 +54,8 @@ OpenTelemetry is the CNCF standard for observability. Adding it to the SDK enabl
 - Instrument `ModelRegistryClient` with single-level tracing (REST API wrapper, no
   backend layer).
 - Instrument `SparkClient` with two-level tracing.
+- Align with `PipelinesClient` instrumentation in the Pipelines repository once
+  `PipelinesClient` lives there.
 
 ### Non-Goals
 
@@ -71,9 +74,15 @@ The SDK calls the OTel API directly from its own code, following the OTel recomm
 for [native library instrumentation](https://opentelemetry.io/docs/concepts/instrumentation/libraries/).
 
 The core implementation covers `TrainerClient` (all three backends: Kubernetes, Container,
-LocalProcess) and `PipelinesClient`. A shared telemetry module in
+LocalProcess). A shared telemetry module in
 `kubeflow/common/telemetry/` provides helpers for tracer/meter access, attribute constants,
-context propagation, and a `configure_telemetry()` quickstart function.
+context propagation, and an optional `configure_telemetry()` quickstart function.
+
+User-owned OTel configuration is the primary path. If a user application configures its
+own `TracerProvider`, `MeterProvider`, exporters, resources, or sampling, the SDK emits
+signals through the OTel API and respects that setup. The `configure_telemetry()` helper
+is optional convenience for quickstarts and simple scripts, not a required Kubeflow-specific
+configuration layer.
 
 Every traced operation produces two spans: one at the client level (`INTERNAL`) and one at
 the backend level (`CLIENT`). This keeps traces readable while preserving debugging detail.
@@ -95,6 +104,9 @@ pip install opentelemetry-sdk opentelemetry-exporter-otlp
 ```
 
 **Usage with `configure_telemetry()` helper (quickstart):**
+
+This helper is optional. It exists for examples and small scripts where users want to see
+their first trace without writing OTel provider/exporter boilerplate.
 
 ```python
 from kubeflow.common.telemetry import configure_telemetry
@@ -232,10 +244,6 @@ kubeflow/
 |   |   +-- localprocess/backend.py   # MODIFIED add spans to backend methods
 |   +-- ...
 |
-+-- pipelines/
-|   +-- api/
-|       +-- pipelines_client.py       # MODIFIED add spans to public methods
-|
 +-- optimizer/                         # Stretch: uses same telemetry module
 +-- hub/                               # Stretch: uses same telemetry module
 +-- spark/                             # Stretch: uses same telemetry module
@@ -263,9 +271,10 @@ dev = [
 
 **`opentelemetry-api` as a core dependency.** The
 [OTel native instrumentation guidelines](https://opentelemetry.io/docs/concepts/instrumentation/libraries/)
-recommend libraries depend on `opentelemetry-api` only. The package is under 100KB
-compressed, with `typing-extensions` and `importlib-metadata` as transitive dependencies,
-and is no-op by default. There is no runtime cost when users don't configure telemetry.
+recommend libraries use `opentelemetry-api` for native instrumentation without requiring
+the OTel SDK or exporters. The package is under 100KB compressed, with `typing-extensions`
+and `importlib-metadata` as transitive dependencies, and is no-op by default. There is no
+runtime cost when users don't configure telemetry.
 
 **`opentelemetry-semantic-conventions`.** Provides Python constants for standard attribute
 names (e.g., `K8S_NAMESPACE_NAME` instead of the raw string `"k8s.namespace.name"`).
@@ -364,9 +373,8 @@ adopt them incrementally.
 
 #### Kubeflow-Specific Attributes
 
-All Kubeflow-specific attributes used by TrainerClient and its backends. PipelinesClient
-attributes are defined in the
-[PipelinesClient Instrumentation](#pipelinesclient-instrumentation) section.
+All Kubeflow-specific attributes used by TrainerClient and its backends. Potential
+PipelinesClient attributes are listed later only as cross-repo compatibility guidance.
 
 | Attribute | Description | Example Values |
 |---|---|---|
@@ -499,13 +507,18 @@ def configure_telemetry(
     ...
 ```
 
-### PipelinesClient Instrumentation
+### PipelinesClient Alignment
 
-`PipelinesClient` ([PR #343](https://github.com/kubeflow/sdk/pull/343), pending merge)
-wraps `kfp.Client` for pipeline operations. Unlike `TrainerClient`, there is no backend
-layer. This means single-level tracing (`INTERNAL` spans only).
+`PipelinesClient` is expected to live in the Pipelines repository
+([kubeflow/pipelines#13405](https://github.com/kubeflow/pipelines/pull/13405)). This KEP
+therefore does not include PipelinesClient file changes in the SDK repository. Pipelines
+instrumentation should be implemented in the Pipelines repo, using compatible span names
+and attributes where it makes sense.
 
-Each public method gets a span:
+Unlike `TrainerClient`, PipelinesClient does not have the same SDK backend layer. A future
+Pipelines KEP or PR can use single-level tracing (`INTERNAL` spans only).
+
+A compatible trace shape could look like:
 
 ```
 PipelinesClient.create_pipeline              [0.8s]  INTERNAL
@@ -528,7 +541,7 @@ PipelinesClient.wait_for_run                 [120s]  INTERNAL
 +-- status: OK
 ```
 
-PipelinesClient-specific attributes:
+Potential PipelinesClient-specific attributes:
 
 | Attribute | Description |
 |---|---|
@@ -546,7 +559,7 @@ same `kubeflow/common/telemetry/` module:
 | Client | Architecture | Tracing Pattern | Complexity |
 |---|---|---|---|
 | `OptimizerClient` | Kubernetes backend only | Two-level: INTERNAL / CLIENT | Medium (same pattern as TrainerClient with fewer methods) |
-| `ModelRegistryClient` | REST API wrapper (delegates to `model_registry.ModelRegistry`) | Single-level: INTERNAL only | Low (no backend layer, similar to PipelinesClient) |
+| `ModelRegistryClient` | REST API wrapper (delegates to `model_registry.ModelRegistry`) | Single-level: INTERNAL only | Low (no backend layer) |
 | `SparkClient` | Kubernetes backend only | Two-level: INTERNAL / CLIENT | Medium (same pattern as TrainerClient) |
 
 The shared telemetry module means instrumenting each additional client is mostly
@@ -616,10 +629,11 @@ extends `TestCase` with `expected_spans`, `expected_attributes`, and
 ### Graduation Criteria
 
 - **Alpha:** TrainerClient + all three backends instrumented with traces. Shared telemetry
-  module complete. `configure_telemetry()` helper working. Unit tests passing.
+  module complete. Optional `configure_telemetry()` helper working. Unit tests passing.
   Documentation and examples.
-- **Beta:** Metrics implemented. PipelinesClient instrumented. Log correlation documented
-  and tested. GenAI conventions applied where applicable.
+- **Beta:** Metrics implemented. Log correlation documented and tested. GenAI conventions
+  applied where applicable. Pipelines repo alignment documented for compatible future
+  PipelinesClient instrumentation.
 - **Stable:** Stretch clients (OptimizerClient, ModelRegistryClient, SparkClient)
   instrumented. E2E tests with OTel Collector. At least one release cycle with no
   breaking changes to span names or attribute keys.
@@ -631,11 +645,10 @@ extends `TestCase` with `expected_spans`, `expected_attributes`, and
 | **Phase 1** | Telemetry module | `kubeflow/common/telemetry/` with `configure_telemetry()`, attribute constants, propagation helpers. `pyproject.toml` dependency changes. Unit tests. |
 | **Phase 2** | TrainerClient tracing | Spans on all 10 public methods. Error recording. Unit tests with `InMemorySpanExporter`. |
 | **Phase 3** | Backend tracing | Spans on all 3 backends. `TRACEPARENT` injection. Span events for sub-operations. GenAI convention attributes where applicable. Unit tests. |
-| **Phase 4** | PipelinesClient tracing | Spans on all public methods. Attributes for pipeline/run/experiment. Unit tests. |
-| **Phase 5** | Metrics + log correlation | 4 metrics with attribute dimensions. Log correlation documentation and `configure_telemetry()` logging bridge option. Unit tests with `InMemoryMetricReader`. |
-| **Phase 6** | Documentation | Getting started guide, configuration reference, examples with Jaeger + Prometheus. |
-| **Phase 7** | Stretch: OptimizerClient | Two-level tracing for OptimizerClient (Katib). Unit tests. |
-| **Phase 8** | Stretch: ModelRegistryClient + SparkClient | Single-level tracing for ModelRegistryClient, two-level tracing for SparkClient. Unit tests. |
+| **Phase 4** | Metrics + log correlation | 4 metrics with attribute dimensions. Log correlation documentation and optional `configure_telemetry()` logging bridge option. Unit tests with `InMemoryMetricReader`. |
+| **Phase 5** | Documentation | Getting started guide, configuration reference, examples with Jaeger + Prometheus. Pipelines repo alignment notes for compatible span names and attributes. |
+| **Phase 6** | Stretch: OptimizerClient | Two-level tracing for OptimizerClient (Katib). Unit tests. |
+| **Phase 7** | Stretch: ModelRegistryClient + SparkClient | Single-level tracing for ModelRegistryClient, two-level tracing for SparkClient. Unit tests. |
 
 ## Implementation History
 
@@ -700,8 +713,8 @@ need finer-grained visibility, it can be added later.
 Add a `TelemetryConfig` parameter to every client constructor or introduce
 `KUBEFLOW_OTEL_*` env vars that override standard OTel configuration.
 
-Rejected in favor of a middle ground: a single `configure_telemetry()` convenience function
-that wraps standard OTel setup. This avoids per-client config objects and custom env vars
-while still reducing boilerplate. Users who need full control configure OTel directly, and
-there is no ambiguity about which config takes precedence because `configure_telemetry()`
-just sets up a standard `TracerProvider` under the hood.
+Rejected in favor of user-owned standard OTel configuration as the primary path, with an
+optional `configure_telemetry()` convenience function for quickstarts and simple scripts.
+This avoids per-client config objects and custom env vars while still reducing boilerplate
+for new users. Users who need full control configure OTel directly, and there is no
+ambiguity about precedence because the helper only sets up standard OTel providers.
