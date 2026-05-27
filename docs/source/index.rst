@@ -147,6 +147,8 @@ Getting Involved
    train/custom-training
    train/distributed
    train/runtimes
+   train/initializers
+   train/options
    train/api
 
 

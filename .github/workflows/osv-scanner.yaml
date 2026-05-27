@@ -1,0 +1,235 @@
+name: OSV-Scanner Vulnerability Scan
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  osv-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install OSV-Scanner
+        # Bump cadence: check https://github.com/google/osv-scanner/releases monthly
+        # Dependabot cannot bump curl-installed binaries — update version + checksum manually
+        run: |
+          OSV_VERSION="2.3.8"
+          EXPECTED_SHA="bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc"
+          curl -fsSL "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64" -o osv-scanner
+          ACTUAL_SHA=$(sha256sum osv-scanner | awk '{print $1}')
+          if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+            echo "::error::OSV-Scanner checksum mismatch! Expected ${EXPECTED_SHA}, got ${ACTUAL_SHA}"
+            exit 1
+          fi
+          chmod +x osv-scanner
+          sudo mv osv-scanner /usr/local/bin/
+
+      - name: Run OSV-Scanner (SARIF for Security Tab)
+        # continue-on-error so a SARIF failure doesn't block the JSON scan + auto-fix below
+        continue-on-error: true
+        run: |
+          rc=0
+          osv-scanner scan \
+            --format sarif \
+            --output osv-results.sarif \
+            -L uv.lock || rc=$?
+          # Exit code 1 = vulns found (expected), 0 = clean. Any other code is a real failure.
+          if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
+            echo "::error::OSV-Scanner failed with unexpected exit code $rc"
+            exit 1
+          fi
+
+      - name: Upload SARIF to GitHub Security tab
+        if: always() && hashFiles('osv-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: osv-results.sarif
+          category: kubeflow-sdk-osv-scanner
+
+      - name: Run OSV-Scanner (JSON for auto-fix)
+        run: |
+          rc=0
+          osv-scanner scan \
+            --format json \
+            --output osv-results.json \
+            -L uv.lock || rc=$?
+          if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
+            echo "::error::OSV-Scanner failed with unexpected exit code $rc"
+            exit 1
+          fi
+          # Validate JSON output is parseable before downstream steps consume it
+          if [ -f osv-results.json ] && [ -s osv-results.json ]; then
+            jq empty osv-results.json
+          fi
+
+      - name: Process vulnerabilities and apply fixes
+        id: fixer
+        run: |
+          if [ ! -f osv-results.json ] || [ ! -s osv-results.json ]; then
+            echo "No scan results found."
+            echo "updates_found=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          CURRENT_DATE=$(date +%Y-%m-%d)
+
+          # Extract fixable vulnerabilities: package name, current version, fix version, advisory ID, URL
+          # The OSV JSON embeds full advisory objects; fixed versions are in affected[].ranges[].events
+          # Use group_by + last to deduplicate: keep the highest fix version per package+advisory pair
+          FIX_DATA=$(jq -r '
+            [
+              .results[]?.packages[]? |
+              .package as $pkg |
+              .vulnerabilities[]? |
+              . as $vuln |
+              .affected[]? |
+              select(.package.name == $pkg.name) |
+              .ranges[]? |
+              .events[] |
+              select(.fixed != null) |
+              {
+                pkg: $pkg.name,
+                ver: $pkg.version,
+                fix: .fixed,
+                id: $vuln.id,
+                url: ($vuln.references[0].url // "https://osv.dev/vulnerability/\($vuln.id)")
+              }
+            ] |
+            group_by([.pkg, .id]) |
+            map(sort_by(.fix | split(".") | map(tonumber? // 0)) | last) |
+            .[] |
+            "\(.pkg)|\(.ver)|\(.fix)|\(.id)|\(.url)"
+          ' osv-results.json 2>/dev/null | sort -u)
+
+          if [ -z "$FIX_DATA" ]; then
+            echo "No fixable vulnerabilities found."
+            echo "updates_found=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Fixable vulnerabilities found:"
+          echo "$FIX_DATA"
+          echo ""
+
+          rm -f applied_fixes.txt
+
+          while IFS='|' read -r pkg current_ver fix_ver advisory_id advisory_url; do
+            [ -z "$pkg" ] && continue
+
+            echo ""
+            echo "=== Processing: $pkg $current_ver -> $fix_ver ($advisory_id) ==="
+
+            # Try natural upgrade first
+            echo "Attempting: uv lock --upgrade-package $pkg"
+            LOCK_RC=0
+            uv lock --upgrade-package "$pkg" 2>&1 || LOCK_RC=$?
+            if [ "$LOCK_RC" -ne 0 ]; then
+              echo "Warning: uv lock failed for $pkg (exit code $LOCK_RC), skipping"
+              continue
+            fi
+
+            # Check resulting version
+            TREE_RC=0
+            TREE_OUTPUT=$(uv tree --package "$pkg" 2>&1) || TREE_RC=$?
+            if [ "$TREE_RC" -ne 0 ]; then
+              echo "Warning: uv tree failed for $pkg (exit code $TREE_RC), skipping"
+              continue
+            fi
+            EXTRACT_RC=0
+            NATURAL_VER=$(echo "$TREE_OUTPUT" | uv run python3 .github/scripts/extract_version.py "$pkg") || EXTRACT_RC=$?
+            if [ "$EXTRACT_RC" -ne 0 ]; then
+              echo "Warning: Could not parse version for $pkg from uv tree output, skipping"
+              continue
+            fi
+
+            if [ -z "$NATURAL_VER" ]; then
+              echo "Warning: Could not determine version for $pkg after upgrade"
+              continue
+            fi
+
+            echo "Natural upgrade resulted in version: $NATURAL_VER"
+
+            # Compare: does natural version meet the fix?
+            # compare_versions.py exits: 0 = upgrade needed, 1 = sufficient, 2 = parse error
+            CMP_EXIT=0
+            uv run python3 .github/scripts/compare_versions.py "$NATURAL_VER" "$fix_ver" || CMP_EXIT=$?
+
+            if [ "$CMP_EXIT" -eq 2 ]; then
+              echo "Warning: Could not parse versions for $pkg ($NATURAL_VER vs $fix_ver), skipping"
+              continue
+            elif [ "$CMP_EXIT" -eq 0 ]; then
+              # NATURAL_VER < fix_ver — natural upgrade insufficient, add override
+              echo "Natural upgrade insufficient ($NATURAL_VER < $fix_ver). Adding override..."
+              uv run python3 .github/scripts/update_overrides.py "$pkg" "${pkg}==${fix_ver}" "$CURRENT_DATE" "$advisory_url"
+              LOCK_RC=0
+              uv lock --upgrade-package "$pkg" 2>&1 || LOCK_RC=$?
+              if [ "$LOCK_RC" -ne 0 ]; then
+                echo "Warning: uv lock failed after adding override for $pkg (exit code $LOCK_RC), skipping"
+                continue
+              fi
+              printf '%s\n' "- ${pkg}==${fix_ver} (override) | [$advisory_id]($advisory_url)" >> applied_fixes.txt
+            else
+              # NATURAL_VER >= fix_ver — natural upgrade worked
+              echo "Natural upgrade sufficient ($NATURAL_VER >= $fix_ver)"
+              printf '%s\n' "- ${pkg}==${NATURAL_VER} (upgraded) | [$advisory_id]($advisory_url)" >> applied_fixes.txt
+            fi
+          done <<< "$FIX_DATA"
+
+          if [ ! -s applied_fixes.txt ]; then
+            echo "No fixes were applied."
+            echo "updates_found=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "updates_found=true" >> $GITHUB_OUTPUT
+          {
+            echo "fix_details<<EOF"
+            cat applied_fixes.txt
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request
+        if: steps.fixer.outputs.updates_found == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "fix: nightly automated dependency update for security vulnerabilities"
+          title: "fix: nightly security dependency updates"
+          add-paths: |
+            pyproject.toml
+            uv.lock
+          body: |
+            ## Security Update
+
+            This is an automated PR triggered by the nightly OSV-Scanner security scan.
+
+            The following dependencies were updated to resolve known vulnerabilities:
+
+            | Package & Version | Advisory Link |
+            | :--- | :--- |
+            ${{ steps.fixer.outputs.fix_details }}
+
+            **Verification:** Updated via `uv lock --upgrade-package` or `override-dependencies`.
+
+            > **Note:** This PR was created with `GITHUB_TOKEN`, which does not trigger `pull_request` workflows.
+            > CI checks will not run automatically. Push an empty commit (`git commit --allow-empty -m "trigger CI"`)
+            > to kick off CI before merging.
+            >
+            > **TODO:** Migrate to a GitHub App token via `actions/create-github-app-token` to trigger CI automatically.
+          branch: security-nightly-updates
+          delete-branch: true
+          labels: |
+            "area/security"

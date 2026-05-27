@@ -1,0 +1,43 @@
+title: PipelinesClient for Kubeflow SDK
+kep-number: 125
+authors:
+  - "@MStokluska"
+status: provisional
+creation-date: "2026-03-02"
+reviewers:
+  - "@andreyvelich"
+  - "@astefanutti"
+  - "@droctothorpe"
+  - "@Electronic-Waste"
+  - "@Fiona-Waters"
+  - "@HumairAK"
+  - "@kramaranya"
+  - "@mprahl"
+  - "@zazulam"
+approvers:
+  - "@andreyvelich"
+  - "@astefanutti"
+  - "@kramaranya"
+  - "@mprahl"
+see-also:
+  - https://github.com/kubeflow/sdk/issues/125
+replaces: []
+
+# alpha  = Phase 1 (core workflow: upload, run, wait, list, delete, experiment management)
+# beta   = Phase 2 (scheduling, run lifecycle, recurring runs...)
+# stable = Phase 3 (health, observability, upstream enhancements...)
+stage: alpha
+
+# Milestones track both repos: kfp (implementation) and kubeflow-sdk (re-export)
+latest-milestone: "TBD"
+
+milestone:
+  alpha:
+    kfp: "TBD"
+    kubeflow-sdk: "TBD"
+  beta:
+    kfp: "TBD"
+    kubeflow-sdk: "TBD"
+  stable:
+    kfp: "TBD"
+    kubeflow-sdk: "TBD"
