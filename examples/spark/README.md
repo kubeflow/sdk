@@ -8,7 +8,7 @@ This directory contains examples for using the Kubeflow Spark SDK.
 - **spark_advanced_options.py** - Advanced configuration with Driver/Executor objects
 - **demo_existing_sparkconnect.py** - Connect to existing SparkConnect cluster
 - **test_connect_url.py** - Test URL-based connection to Spark Connect
-- **iceberg_minio.py** - SparkClient with Apache Iceberg and MinIO (S3-compatible storage)
+- **iceberg_minio.py** - Local PySpark SparkSession with Apache Iceberg and MinIO
 
 ## Prerequisites
 
@@ -53,6 +53,8 @@ python examples/spark/iceberg_minio.py
 ```
 
 You should see:
+
+```text
 --- Reading data ---
 +---+-----+
 | id| name|
@@ -61,6 +63,7 @@ You should see:
 |  2|  Bob|
 +---+-----+
 [SUCCESS] Iceberg + MinIO example complete!
+```
 
 ### Configuration
 
@@ -73,6 +76,9 @@ The example can be configured via environment variables:
 | `MINIO_SECRET_KEY` | `minioadmin` | MinIO secret key |
 | `ICEBERG_REST_URI` | `http://localhost:8181` | Iceberg REST catalog URI |
 | `ICEBERG_WAREHOUSE` | `s3://warehouse/` | Warehouse location |
+
+The compose file also accepts overrides for `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`,
+and `AWS_REGION`. The defaults are intended for local development only.
 
 ### Teardown
 

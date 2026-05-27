@@ -41,6 +41,11 @@ def _backend_config(namespace_default: str = "default"):
     )
 
 
+def _in_cluster_e2e() -> bool:
+    """Return whether the example is running in the in-cluster E2E test path."""
+    return os.environ.get("SPARK_E2E_RUN_IN_CLUSTER") == "1"
+
+
 def example_level1_minimal():
     """
     Level 1: Minimal Usage (KEP-107 lines 104-109)
@@ -61,6 +66,8 @@ def example_level1_minimal():
     spark = client.connect(
         spark_conf={"spark.serializer": "org.apache.spark.serializer.KryoSerializer"},
         options=[Name(session_name)],
+        timeout=180 if _in_cluster_e2e() else 300,
+        connect_timeout=60 if _in_cluster_e2e() else 120,
     )
 
     # Use Spark - simple data operations
@@ -91,19 +98,25 @@ def example_level2_simple():
 
     client = SparkClient(backend_config=_backend_config())
     session_name = _e2e_session_name("my-simple-session")
+    num_executors = 1 if _in_cluster_e2e() else 5
+    resources_per_executor = (
+        {"cpu": "1", "memory": "1Gi"} if _in_cluster_e2e() else {"cpu": "2", "memory": "4Gi"}
+    )
     spark = client.connect(
-        num_executors=5,
-        resources_per_executor={"cpu": "2", "memory": "4Gi"},
+        num_executors=num_executors,
+        resources_per_executor=resources_per_executor,
         spark_conf={
             "spark.sql.adaptive.enabled": "true",
             "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
         },
         options=[Name(session_name)],
+        timeout=180 if _in_cluster_e2e() else 300,
+        connect_timeout=60 if _in_cluster_e2e() else 120,
     )
 
     # Use Spark - more data operations
     df = spark.range(100)
-    print(f"\nGenerated range with {df.count()} rows across 5 executors")
+    print(f"\nGenerated range with {df.count()} rows across {num_executors} executors")
     print(f"Session name: {session_name}")
     df.show(10)
 

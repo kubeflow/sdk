@@ -13,12 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Example: SparkClient with Apache Iceberg and MinIO (S3-compatible storage).
+"""Example: SparkSession with Apache Iceberg and MinIO (S3-compatible storage).
 
-This example demonstrates how to use the Kubeflow SparkClient with:
+This example demonstrates how to use a local PySpark ``SparkSession`` with:
 - Apache Iceberg as the table format
 - MinIO as the S3-compatible object storage backend
 - Iceberg REST catalog for table metadata management
+
+This example does not use ``kubeflow.spark.SparkClient``. It connects directly to a
+local Spark runtime so you can validate Iceberg and MinIO integration without
+provisioning a Spark Connect session.
 
 This is a local development example. For production use, replace the
 MinIO endpoint and credentials with your actual S3/GCS/ABS configuration.
@@ -69,14 +73,15 @@ def create_spark_session() -> SparkSession:
     - spark.jars.packages: pulls Iceberg runtime and AWS SDK v2 from Maven
     - spark.sql.extensions: enables Iceberg SQL extensions (time travel, etc.)
     - spark.sql.catalog.*: configures the Iceberg REST catalog
-    - spark.hadoop.fs.s3a.*: configures S3A filesystem for MinIO access
+    - spark.sql.catalog.lakehouse.io-impl and .s3.*: configure Iceberg S3FileIO for MinIO access
 
     Note: AWS SDK v2 (software.amazon.awssdk) is required for Iceberg 1.9.x.
     """
-    # Set AWS credentials as env vars so the JVM picks them up
-    os.environ["AWS_REGION"] = "us-east-1"
-    os.environ["AWS_ACCESS_KEY_ID"] = MINIO_ACCESS_KEY
-    os.environ["AWS_SECRET_ACCESS_KEY"] = MINIO_SECRET_KEY
+    # Set local defaults for the AWS env vars only when this process has not
+    # already configured credentials or region.
+    os.environ.setdefault("AWS_REGION", "us-east-1")
+    os.environ.setdefault("AWS_ACCESS_KEY_ID", MINIO_ACCESS_KEY)
+    os.environ.setdefault("AWS_SECRET_ACCESS_KEY", MINIO_SECRET_KEY)
 
     return (
         SparkSession.builder.appName("kubeflow-iceberg-minio")
@@ -145,9 +150,9 @@ def run_iceberg_example(spark: SparkSession) -> None:
     spark.sql("DESCRIBE EXTENDED lakehouse.demo.users").show(truncate=False)
 
 
-def main():
+def main() -> None:
     print("=" * 60)
-    print("Kubeflow SparkClient — Iceberg + MinIO Example")
+    print("Local SparkSession — Iceberg + MinIO Example")
     print("=" * 60)
 
     spark = create_spark_session()
