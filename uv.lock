@@ -1063,7 +1063,7 @@ requires-dist = [
     { name = "kubeflow-katib-api", specifier = ">=0.19.0" },
     { name = "kubeflow-spark-api", marker = "extra == 'spark'", specifier = ">=2.4.0" },
     { name = "kubeflow-trainer-api", specifier = ">=2.2.0" },
-    { name = "kubernetes", specifier = ">=27.2.0,!=36.0.0" },
+    { name = "kubernetes", specifier = ">=27.2.0,<36.0.0" },
     { name = "model-registry", marker = "extra == 'hub'", specifier = ">=0.3.6" },
     { name = "podman", marker = "extra == 'podman'", specifier = ">=5.6.0" },
     { name = "pydantic", specifier = ">=2.10.0" },
