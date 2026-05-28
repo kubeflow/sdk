@@ -15,6 +15,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
+
+from pydantic import BaseModel
 
 
 @dataclass
@@ -59,3 +62,27 @@ class StorageConfig:
     storage_key: str | None = None
     storage_path: str | None = None
     service_account_name: str | None = None
+
+
+class S3UploadParams(BaseModel):
+    """Parameters for uploading a model artifact to S3-compatible storage."""
+
+    bucket_name: str
+    s3_prefix: str
+    endpoint_url: str | None = None
+    access_key_id: str | None = None
+    secret_access_key: str | None = None
+    region: str | None = None
+    multipart_threshold: int = 1024 * 1024
+    multipart_chunksize: int = 1024 * 1024
+    max_pool_connections: int = 10
+
+
+class OCIUploadParams(BaseModel):
+    """Parameters for uploading a model artifact to an OCI registry."""
+
+    model_uri: str  # e.g. "ghcr.io/my-org/models/fraud-detector:v1"
+    author: str | None = None
+    model_description: str | None = None
+    model_title: str | None = None
+    custom_oci_backend: Any | None = None  # matches OCIParams.custom_oci_backend
