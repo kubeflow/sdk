@@ -136,9 +136,9 @@ def main():
 
     # Insert after [tool.uv] or the header comment
     if "# Security overrides" in content:
-        content = re.sub(r"(# Security overrides.*?\n)", r"\1" + override_block + "\n", content)
+        content = re.sub(r"(# Security overrides.*?\r?\n)", r"\1" + override_block + "\n", content)
     else:
-        content = re.sub(r"(\[tool\.uv\]\n)", r"\1" + override_block + "\n", content)
+        content = re.sub(r"(\[tool\.uv\]\r?\n)", r"\1" + override_block + "\n", content, count=1)
 
     # Write back
     pyproject_path.write_text(content)
