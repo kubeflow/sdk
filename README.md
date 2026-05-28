@@ -62,7 +62,10 @@ pip install -U kubeflow
 ```
 
 ### Run your first PyTorch distributed job
-
+> Design notes (KEP-936 alignment)
+>
+> - **Namespace binding:** `TrainerClient` binds namespace via `KubernetesBackendConfig(namespace=...)` (not per-call).
+> - **CustomTrainer inputs:** keep SDK API as-is (`func=...`). For MCP/tooling, prefer `script_code: str` to avoid callable serialization; treat it as **trusted-only** (validation is limited; `importlib`-style escapes exist). For untrusted code, route execution through a container/sandbox.
 ```python
 from kubeflow.trainer import TrainerClient, CustomTrainer, TrainJobTemplate
 
