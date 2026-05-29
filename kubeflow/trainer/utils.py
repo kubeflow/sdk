@@ -17,7 +17,7 @@
 This module provides utility functions for training scripts running inside
 Kubeflow TrainJobs, including `update_runtime_status()` for reporting progress.
 
-Environment variables (injected by controller when TrainJobRuntimeStatus feature gate is enabled):
+Environment variables (injected by controller when TrainJobStatus feature gate is enabled):
     - KUBEFLOW_TRAINER_SERVER_URL: HTTPS endpoint URL for status updates
     - KUBEFLOW_TRAINER_SERVER_CA_CERT: Path to CA certificate for TLS verification
     - KUBEFLOW_TRAINER_SERVER_TOKEN: Path to projected service account token
@@ -38,7 +38,8 @@ Example:
     ```
 
 Note:
-    For HuggingFace Transformers, use KubeflowCallback which calls this automatically.
+    HuggingFace Transformers users can use the built-in KubeflowCallback, which has its own
+    implementation of the status update logic and does not depend on this utility.
     See: https://github.com/huggingface/transformers/pull/44487
 """
 
@@ -66,7 +67,9 @@ _ENV_CA_CERT = "KUBEFLOW_TRAINER_SERVER_CA_CERT"
 _ENV_TOKEN_PATH = "KUBEFLOW_TRAINER_SERVER_TOKEN"
 
 # Module-level state for throttling and caching
-_lock = threading.Lock()
+_throttle_lock = threading.Lock()
+_token_lock = threading.Lock()
+_session_lock = threading.Lock()
 _last_update_time: float = 0.0
 _cached_token: str | None = None
 _token_read_time: float = 0.0
@@ -75,32 +78,35 @@ _session: Session | None = None
 # Configuration
 _MIN_UPDATE_INTERVAL_SECONDS = 5.0
 _TOKEN_CACHE_TTL_SECONDS = 300.0
+_MAX_METRICS_COUNT = 256
 
 
 def _get_session() -> Session:
     global _session
-    if _session is None:
-        _session = requests.Session()
-    return _session
+    with _session_lock:
+        if _session is None:
+            _session = requests.Session()
+        return _session
 
 
 def _get_cached_token(token_path: str) -> str | None:
     global _cached_token, _token_read_time
 
     now = time.monotonic()
-    if _cached_token and (now - _token_read_time) < _TOKEN_CACHE_TTL_SECONDS:
-        return _cached_token
-
-    if not token_path or not os.path.exists(token_path):
-        return None
-
-    try:
-        with open(token_path) as f:
-            _cached_token = f.read().strip()
-            _token_read_time = now
+    with _token_lock:
+        if _cached_token and (now - _token_read_time) < _TOKEN_CACHE_TTL_SECONDS:
             return _cached_token
-    except OSError:
-        return None
+
+        if not token_path or not os.path.exists(token_path):
+            return None
+
+        try:
+            with open(token_path) as f:
+                _cached_token = f.read().strip()
+                _token_read_time = now
+                return _cached_token
+        except OSError:
+            return None
 
 
 def _should_throttle() -> bool:
@@ -132,6 +138,7 @@ def update_runtime_status(
         progress_percent: Training completion percentage (0-100).
         estimated_time_remaining: ETA in seconds or as a timedelta.
         metrics: Dict of metric name -> value. Values are converted to strings.
+            Truncated to 256 entries if exceeded (controller enforced limit).
         force: If True, bypass throttling. Use for start/end events.
 
     Returns:
@@ -142,7 +149,7 @@ def update_runtime_status(
         if not url:
             return False
 
-        with _lock:
+        with _throttle_lock:
             if not force and _should_throttle():
                 return False
             _update_last_time()
@@ -168,6 +175,13 @@ def update_runtime_status(
             trainer_status["estimatedRemainingSeconds"] = max(0, estimated_time_remaining)
 
         if metrics:
+            if len(metrics) > _MAX_METRICS_COUNT:
+                logger.warning(
+                    "metrics dict has %d entries, truncating to %d (controller limit)",
+                    len(metrics),
+                    _MAX_METRICS_COUNT,
+                )
+                metrics = dict(list(metrics.items())[:_MAX_METRICS_COUNT])
             trainer_status["metrics"] = [
                 {"name": str(k), "value": str(v)} for k, v in metrics.items()
             ]
@@ -191,12 +205,12 @@ def update_runtime_status(
         )
 
         if response.status_code == 200:
-            logger.debug(f"Status update sent: {progress_percent}%")
+            logger.debug("Status update sent: %s%%", progress_percent)
             return True
         else:
-            logger.warning(f"Status update failed: {response.status_code} {response.text}")
+            logger.warning("Status update failed: %s %s", response.status_code, response.text)
             return False
 
     except Exception as e:
-        logger.warning(f"Failed to send status update: {e}")
+        logger.warning("Failed to send status update: %s", e)
         return False

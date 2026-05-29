@@ -33,6 +33,18 @@ class TestUpdateRuntimeStatus:
         utils._token_read_time = 0.0
         utils._session = None
 
+    def _make_token_file(self, content: str = "test-token") -> str:
+        """Create a temp file with a token and return its path."""
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".token") as f:
+            f.write(content)
+            return f.name
+
+    def _mock_env(self, token_path: str) -> dict:
+        return {
+            "KUBEFLOW_TRAINER_SERVER_URL": "https://test",
+            "KUBEFLOW_TRAINER_SERVER_TOKEN": token_path,
+        }
+
     def test_returns_false_when_not_in_kubeflow(self):
         """Should return False when KUBEFLOW_TRAINER_SERVER_URL is not set."""
         with patch.dict(os.environ, {}, clear=True):
@@ -240,5 +252,113 @@ class TestUpdateRuntimeStatus:
                 call_args = mock_session.return_value.post.call_args
                 payload = call_args.kwargs["json"]
                 assert "lastUpdatedTime" in payload["trainerStatus"]
+        finally:
+            os.unlink(token_path)
+
+    def test_returns_false_on_non_200_response(self):
+        """Should return False when the controller responds with a non-200 status."""
+        token_path = self._make_token_file()
+        try:
+            with (
+                patch.dict(os.environ, self._mock_env(token_path), clear=True),
+                patch("kubeflow.trainer.utils._get_session") as mock_session,
+            ):
+                mock_response = MagicMock()
+                mock_response.status_code = 422
+                mock_response.text = "Unprocessable Entity"
+                mock_session.return_value.post.return_value = mock_response
+
+                result = update_runtime_status(progress_percent=50, force=True)
+                assert result is False
+        finally:
+            os.unlink(token_path)
+
+    def test_returns_false_on_network_exception(self):
+        """Should return False (never raise) when the HTTP call itself fails."""
+        token_path = self._make_token_file()
+        try:
+            with (
+                patch.dict(os.environ, self._mock_env(token_path), clear=True),
+                patch("kubeflow.trainer.utils._get_session") as mock_session,
+            ):
+                mock_session.return_value.post.side_effect = ConnectionError("timeout")
+
+                result = update_runtime_status(progress_percent=50, force=True)
+                assert result is False
+        finally:
+            os.unlink(token_path)
+
+    def test_accepts_int_seconds_for_eta(self):
+        """Should accept a plain int for estimated_time_remaining."""
+        token_path = self._make_token_file()
+        try:
+            with (
+                patch.dict(os.environ, self._mock_env(token_path), clear=True),
+                patch("kubeflow.trainer.utils._get_session") as mock_session,
+            ):
+                mock_response = MagicMock()
+                mock_response.status_code = 200
+                mock_session.return_value.post.return_value = mock_response
+
+                result = update_runtime_status(
+                    progress_percent=50,
+                    estimated_time_remaining=1800,
+                    force=True,
+                )
+                assert result is True
+
+                payload = mock_session.return_value.post.call_args.kwargs["json"]
+                assert payload["trainerStatus"]["estimatedRemainingSeconds"] == 1800
+        finally:
+            os.unlink(token_path)
+
+    def test_uses_ca_cert_for_tls_verification(self):
+        """Should pass CA cert path to requests when the file exists."""
+        token_path = self._make_token_file()
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".crt") as ca:
+                ca.write("fake-cert")
+                ca_path = ca.name
+
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        **self._mock_env(token_path),
+                        "KUBEFLOW_TRAINER_SERVER_CA_CERT": ca_path,
+                    },
+                    clear=True,
+                ),
+                patch("kubeflow.trainer.utils._get_session") as mock_session,
+            ):
+                mock_response = MagicMock()
+                mock_response.status_code = 200
+                mock_session.return_value.post.return_value = mock_response
+
+                update_runtime_status(progress_percent=50, force=True)
+
+                call_kwargs = mock_session.return_value.post.call_args.kwargs
+                assert call_kwargs["verify"] == ca_path
+        finally:
+            os.unlink(token_path)
+            os.unlink(ca_path)
+
+    def test_metrics_truncated_at_256(self):
+        """Should truncate metrics dict to 256 entries with a warning."""
+        token_path = self._make_token_file()
+        try:
+            with (
+                patch.dict(os.environ, self._mock_env(token_path), clear=True),
+                patch("kubeflow.trainer.utils._get_session") as mock_session,
+            ):
+                mock_response = MagicMock()
+                mock_response.status_code = 200
+                mock_session.return_value.post.return_value = mock_response
+
+                oversized = {f"metric_{i}": i for i in range(300)}
+                update_runtime_status(metrics=oversized, force=True)
+
+                payload = mock_session.return_value.post.call_args.kwargs["json"]
+                assert len(payload["trainerStatus"]["metrics"]) == 256
         finally:
             os.unlink(token_path)
