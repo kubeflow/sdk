@@ -120,33 +120,39 @@ Tips and Best Practices
 
 **Report progress to the controller:**
 
-When running with TrainJobProgress enabled, you can report real-time progress:
+When the ``TrainJobStatus`` feature gate is enabled, the controller injects environment
+variables into your training pods and you can report real-time progress:
 
 .. code-block:: python
 
-   def train():
-       from kubeflow.trainer.utils import update_runtime_status
+   import time
+   from kubeflow.trainer.utils import update_runtime_status
 
+   def train():
        total_steps = 1000
-       update_runtime_status(progress_percent=0, force=True)  # Start
+       start_time = time.time()
+       update_runtime_status(progress_percent=0, force=True)  # Training start
 
        for step in range(total_steps):
            # ... training ...
            progress = int((step / total_steps) * 100)
+           elapsed = time.time() - start_time
+           eta = int((elapsed / (step + 1)) * (total_steps - step - 1)) if step > 0 else None
            update_runtime_status(
                progress_percent=progress,
-               metrics={"loss": loss, "step": step}
-           )
+               estimated_time_remaining=eta,
+               metrics={"loss": loss, "step": step},
+           )  # SDK throttles to max 1 update per 5 seconds
 
-       update_runtime_status(progress_percent=100, force=True)  # End
+       update_runtime_status(progress_percent=100, force=True)  # Training end
 
-This function is safe to call in any environment - it returns ``False`` silently
-if not running inside a Kubeflow TrainJob. Includes automatic throttling to avoid
-overwhelming the controller.
+This is safe to call in any environment — it returns ``False`` silently if not running
+inside a Kubeflow TrainJob with the feature gate enabled.
 
 .. note::
 
-   For HuggingFace Transformers, use ``KubeflowCallback`` which reports progress automatically.
+   For HuggingFace Transformers, use ``KubeflowCallback`` which reports progress
+   automatically without any code changes.
 
 **Print progress for monitoring:**
 

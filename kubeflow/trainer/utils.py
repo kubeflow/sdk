@@ -89,7 +89,7 @@ def _get_session() -> Session:
         return _session
 
 
-def _get_cached_token(token_path: str) -> str | None:
+def _get_cached_token(token_path: str | None) -> str | None:
     global _cached_token, _token_read_time
 
     now = time.monotonic()
