@@ -128,10 +128,7 @@ def _upload_to_oci(path: str, params: OCIUploadParams) -> str:
         ) from e
 
     return save_to_oci_registry(
-        model_uri=params.model_uri,
+        base_image=params.base_image,
+        oci_ref=params.oci_ref,
         model_files_path=path,
-        author=params.author,
-        model_description=params.model_description,
-        model_title=params.model_title,
-        custom_oci_backend=params.custom_oci_backend,
     )

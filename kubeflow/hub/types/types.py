@@ -15,7 +15,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from pydantic import BaseModel
 
@@ -81,8 +80,5 @@ class S3UploadParams(BaseModel):
 class OCIUploadParams(BaseModel):
     """Parameters for uploading a model artifact to an OCI registry."""
 
-    model_uri: str  # e.g. "ghcr.io/my-org/models/fraud-detector:v1"
-    author: str | None = None
-    model_description: str | None = None
-    model_title: str | None = None
-    custom_oci_backend: Any | None = None  # matches OCIParams.custom_oci_backend
+    base_image: str  # e.g. "python:3.11"
+    oci_ref: str  # e.g. "ghcr.io/my-org/models/fraud-detector:v1"

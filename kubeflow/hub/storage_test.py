@@ -42,7 +42,7 @@ def test_upload_artifact_delegates_to_oci(monkeypatch):
     mock_upload = Mock(return_value="oci://registry.example.com/model:v1")
     monkeypatch.setattr("kubeflow.hub.storage._upload_to_oci", mock_upload)
 
-    params = OCIUploadParams(model_uri="registry.example.com/model:v1")
+    params = OCIUploadParams(base_image="python:3.11", oci_ref="registry.example.com/model:v1")
     result = upload_artifact("/tmp/model", upload_params=params)
 
     assert result == "oci://registry.example.com/model:v1"
@@ -58,10 +58,10 @@ def test_upload_artifact_raises_type_error_for_unknown_upload_params():
 def test_s3_upload_params_requires_bucket_name():
     """Test S3UploadParams validates required fields."""
     with pytest.raises(ValidationError):
-        S3UploadParams(s3_prefix="prefix")
+        S3UploadParams(s3_prefix="prefix")  # type: ignore[call-arg]
 
 
-def test_oci_upload_params_requires_model_uri():
+def test_oci_upload_params_requires_base_image_and_oci_ref():
     """Test OCIUploadParams validates required fields."""
     with pytest.raises(ValidationError):
-        OCIUploadParams()
+        OCIUploadParams()  # type: ignore[call-arg]
