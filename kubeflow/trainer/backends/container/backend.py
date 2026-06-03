@@ -779,6 +779,7 @@ class ContainerBackend(RuntimeBackend):
         name: str,
         follow: bool = False,
         step: str = constants.NODE + "-0",
+        strict: bool = False,
     ) -> Iterator[str]:
         """Get logs for a training job by querying container runtime."""
         containers = self._get_job_containers(name)

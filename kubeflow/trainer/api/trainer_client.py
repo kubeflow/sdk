@@ -185,6 +185,7 @@ class TrainerClient:
         name: str,
         step: str = constants.NODE + "-0",
         follow: bool | None = False,
+        strict: bool = False,
     ) -> Iterator[str]:
         """Get logs from a specific step of a TrainJob.
 
@@ -200,6 +201,7 @@ class TrainerClient:
             name: Name of the TrainJob.
             step: Step of the TrainJob to collect logs from, like dataset-initializer or node-0.
             follow: Whether to stream logs in realtime as they are produced.
+            strict: If True, raise an error when no pod is found for the requested step.
 
         Returns:
             Iterator of log lines.
@@ -208,8 +210,9 @@ class TrainerClient:
         Raises:
             TimeoutError: Timeout to get a TrainJob.
             RuntimeError: Failed to get a TrainJob.
+            PodNotFoundError: Raised when strict=True and no pod is found for the requested step.
         """
-        return self.backend.get_job_logs(name=name, follow=follow, step=step)
+        return self.backend.get_job_logs(name=name, follow=follow, step=step, strict=strict)
 
     def get_job_events(self, name: str) -> list[types.Event]:
         """Get events for a TrainJob.

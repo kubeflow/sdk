@@ -124,7 +124,8 @@ class OptimizerClient:
         self,
         name: str,
         trial_name: str | None = None,
-        follow: bool = False,
+        follow: bool | None = False,
+        strict: bool = False,
     ) -> Iterator[str]:
         """Get logs from a specific trial of an OptimizationJob.
 
@@ -149,6 +150,7 @@ class OptimizerClient:
                 current best trial are returned. If no best trial is available yet, logs
                 from the first trial are returned.
             follow: Whether to stream logs in realtime as they are produced.
+            strict: If True, raise an error when no pod is found for the selected trial.
 
         Returns:
             Iterator of log lines.
@@ -158,7 +160,12 @@ class OptimizerClient:
             TimeoutError: Timeout to get an OptimizationJob.
             RuntimeError: Failed to get an OptimizationJob.
         """
-        return self.backend.get_job_logs(name=name, trial_name=trial_name, follow=follow)
+        return self.backend.get_job_logs(
+            name=name,
+            trial_name=trial_name,
+            follow=follow,
+            strict=strict,
+        )
 
     def get_best_results(self, name: str) -> Result | None:
         """Get the best hyperparameters and metrics from an OptimizationJob.

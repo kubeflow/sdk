@@ -38,6 +38,12 @@ from kubeflow.trainer.types import types
 logger = logging.getLogger(__name__)
 
 
+class PodNotFoundError(RuntimeError):
+    """No pod resolved for the requested job/step."""
+
+    pass
+
+
 class KubernetesBackend(RuntimeBackend):
     def __init__(self, cfg: KubernetesBackendConfig):
         if cfg.namespace is None:
@@ -426,6 +432,7 @@ class KubernetesBackend(RuntimeBackend):
         name: str,
         follow: bool = False,
         step: str = constants.NODE + "-0",
+        strict: bool = False,
     ) -> Iterator[str]:
         """Get the TrainJob logs"""
         # Get the TrainJob Pod name.
@@ -434,7 +441,12 @@ class KubernetesBackend(RuntimeBackend):
             if c.status != constants.POD_PENDING and c.name == step:
                 pod_name = c.pod_name
                 break
+
         if pod_name is None:
+            if strict:
+                raise PodNotFoundError(
+                    f"No pod found for TrainJob {self.namespace}/{name} step={step}"
+                )
             return
 
         # Remove the number for the node step.
