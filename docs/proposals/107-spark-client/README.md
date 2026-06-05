@@ -428,6 +428,34 @@ class SparkClient:
 
 ---
 
+## TrainerClient API Alignment
+
+SparkClient follows similar API patterns used by TrainerClient to provide a consistent developer experience across Kubeflow SDKs.
+
+Both clients expose lifecycle-oriented APIs for submitting workloads, monitoring execution, retrieving logs, and managing resources. Where applicable, SparkClient reuses naming conventions and behavioral patterns already established by TrainerClient.
+
+### Lifecycle API Alignment
+
+| TrainerClient | SparkClient |
+|---------------|-------------|
+| `train()` | `submit_job()` |
+| `list_jobs()` | `list_jobs()` |
+| `get_job()` | `get_job()` |
+| `get_job_logs()` | `get_job_logs()` |
+| `wait_for_job_status()` | `wait_for_job_status()` |
+| `delete_job()` | `delete_job()` |
+
+### Design Principles
+
+- Consistent lifecycle management APIs across Kubeflow SDKs.
+- Similar naming conventions for job operations where semantics match.
+- Reuse of common Kubeflow SDK patterns for configuration, status tracking, and resource management.
+- Seamless integration between Spark-based data processing workflows and Kubeflow Trainer workloads.
+
+This alignment reduces the learning curve for users who work across multiple Kubeflow components and enables Spark-based preprocessing workflows to integrate naturally with model training workflows.
+
+---
+
 ## User Personas
 
 The SparkClient SDK is designed for different user personas with varying needs:
@@ -594,8 +622,53 @@ trainer.train(
 
 | Parameter | Mode | Use Case |
 |-----------|------|----------|
-| `main_file=...` | File mode | Existing scripts, CI/CD pipelines |
+| `main_file=...` | File mode | Local Python files, remote application URIs, CI/CD pipelines |
 | `func=...` | Function mode | Inline transformations, notebooks |
+
+### File Mode (`main_file`)
+
+File mode supports both local Python files and remote application URIs.
+
+When a local Python file is provided, SparkClient automatically packages the file using a Kubernetes ConfigMap before creating the SparkApplication resource. This allows application code from the user's local environment to be executed inside Kubernetes-managed Spark workloads.
+
+When a remote URI is provided, SparkClient directly references the remote resource without creating a ConfigMap.
+
+Supported URI schemes include:
+
+- `s3://`
+- `s3a://`
+- `gs://`
+- `http://`
+- `https://`
+- `hdfs://`
+
+The following diagram illustrates the high-level batch job submission flow:
+```text
+
+                submit_job()
+                      |
+          +-----------+-----------+
+          |                       |
+          v                       v
+   Local Python File         Remote URI
+          |                       |
+          v                       |
+      ConfigMap                   |
+          |                       |
+          +-----------+-----------+
+                      |
+                      v
+             SparkApplication
+                      |
+                      v
+              Spark Operator
+                      |
+                      v
+          Driver + Executor Pods
+                      |
+                      v
+             Spark Job Execution
+```
 
 ### Example: File Mode (`main_file`)
 
@@ -612,6 +685,23 @@ job_name = client.submit_job(
 
 client.wait_for_job_status(job_name)
 ```
+
+#### Local File Packaging Workflow
+
+When a local Python file is provided, SparkClient automatically packages the file using a Kubernetes ConfigMap before creating the SparkApplication resource.
+
+```python
+client.submit_job(
+    main_file="./etl.py",
+)
+```
+The resulting SparkApplication references the mounted file using a Spark-compatible local path:
+
+```yaml
+mainApplicationFile: local:///opt/spark/app/etl.py
+```
+
+This approach allows Spark workloads running inside Kubernetes to execute application code that originates from a user's local environment.
 
 ### Example: Function Mode (`func`)
 
@@ -644,6 +734,75 @@ client.wait_for_job_status(job_name)
 ```
 
 > **Note**: Function mode (`func=...`) will be available in Phase 2.
+
+---
+
+## Job Status Tracking
+
+SparkClient provides lifecycle management APIs for monitoring and tracking batch Spark jobs submitted through the Spark Operator.
+
+The SDK abstracts SparkApplication status details and exposes a simplified interface for users to monitor job progress, retrieve execution information, and wait for completion.
+
+### Lifecycle Management APIs
+
+```python
+job = client.get_job(job_name)
+
+completed_job = client.wait_for_job_status(
+    job_name,
+    timeout=3600,
+)
+
+client.delete_job(job_name)
+```
+
+These APIs provide a consistent experience for interacting with Spark jobs throughout their lifecycle.
+
+### Job Status Model
+
+Spark jobs transition through a set of SDK-level states that are derived from the underlying SparkApplication status.
+
+| SparkApplication State | SDK State |
+|-----------------------|-----------|
+| Submitted | Submitted |
+| Running | Running |
+| Completed | Completed |
+| Failed | Failed |
+
+This abstraction allows users to work with a stable API without requiring knowledge of Spark Operator implementation details.
+
+### Waiting for Job Completion
+
+The `wait_for_job_status()` API enables applications and pipelines to block until a job reaches a desired state.
+
+```python
+completed_job = client.wait_for_job_status(
+    job_name,
+    timeout=3600,
+)
+```
+
+This API is particularly useful for workflow orchestration and integration with Kubeflow Pipelines and Trainer workflows.
+
+### Job Information
+
+The `get_job()` API returns metadata and execution information associated with a Spark job.
+
+Potential job metadata includes:
+
+- Job name
+- Current status
+- Spark application identifier
+- Creation timestamp
+- Start time
+- Completion time
+- Spark UI URL
+
+This information enables users to track execution progress and navigate to Spark-native tooling for deeper inspection.
+
+### Future Enhancements
+
+Future work may include exposing additional execution metadata and job events through dedicated APIs to simplify troubleshooting and operational monitoring.
 
 ---
 
@@ -823,6 +982,126 @@ print(f"App ID for history: {job.application_id}")
 
 ---
 
+## Observability & Monitoring
+
+SparkClient leverages native Spark and Kubernetes observability capabilities to help users understand job execution, troubleshoot failures, and monitor workload performance.
+
+The SDK aims to expose relevant operational information while maintaining a simple and consistent user experience.
+
+### Spark UI Integration
+
+Spark jobs expose execution details through the Spark UI, including:
+
+- Job execution progress
+- Stage information
+- Task metrics
+- Executor information
+- Resource utilization
+
+Users can access Spark-native tooling for detailed workload inspection and debugging.
+
+### Spark History Server Integration
+
+Completed jobs can be inspected through Spark History Server.
+
+The SDK may expose metadata such as:
+
+- Spark application identifier
+- Spark UI URL
+- History Server URL
+
+This enables users to navigate directly from SDK-managed jobs to Spark-native observability tools.
+
+### Metrics
+
+SparkClient may expose metrics collected from Spark and Kubernetes resources, including:
+
+- Job duration
+- Executor metrics
+- Stage progress
+- Resource utilization
+
+These metrics can be used to understand workload behavior and identify performance bottlenecks.
+
+### Monitoring and Troubleshooting
+
+SparkClient provides visibility into job execution through:
+
+- Job status tracking
+- Log retrieval APIs
+- Spark UI integration
+- History Server integration
+
+Together, these capabilities simplify debugging and operational monitoring of Spark workloads running on Kubernetes.
+
+### Future Enhancements
+
+Future work may include deeper integration with observability systems such as:
+
+- Prometheus
+- Grafana
+- Spark metrics exporters
+- Kubeflow observability tooling
+
+The design remains compatible with existing Spark and Kubernetes monitoring ecosystems while allowing future extensions as requirements evolve.
+
+---
+
+## Testing Strategy
+
+### Unit Testing
+
+Unit tests validate individual SDK components, including:
+
+- Input validation
+- SparkApplication generation
+- Configuration handling
+- Resource specification validation
+- Error handling
+
+These tests provide fast feedback during development and help maintain API stability.
+
+### Integration Testing
+
+Integration tests validate interactions between SparkClient and the underlying Spark Operator components.
+
+Key scenarios include:
+
+- Spark Connect session creation
+- File-based batch job submission (`submit_job(main_file=...)`)
+- Function-based batch job submission (`submit_job(func=...)`)
+- Job status tracking
+- Log retrieval
+- Resource cleanup
+
+### End-to-End Testing
+
+End-to-end tests validate complete user workflows running against real Kubernetes and Spark environments.
+
+Representative workflows include:
+
+- Interactive Spark Connect sessions
+- File-based batch job submission (`submit_job(main_file=...)`)
+- Function-based batch job submission (`submit_job(func=...)`)
+- Spark and Kubeflow integration scenarios
+
+Testing coverage will expand as new SparkClient capabilities are introduced across implementation phases.
+
+### Version Compatibility
+
+Testing should cover supported Spark versions, including:
+
+- Spark 3.5.x
+- Spark 4.x
+
+This ensures that SparkClient remains compatible across multiple Spark releases and deployment environments.
+
+### Future Enhancements
+
+Future work may explore leveraging upstream Apache Spark integration tests where applicable and expanding automated coverage for additional deployment scenarios.
+
+---
+
 ## Implementation Phases
 
 | Phase | Feature | Description |
@@ -834,6 +1113,47 @@ print(f"App ID for history: {job.application_id}")
 | **Phase 2** | `submit_job(func=...)` | Function-based batch job submission |
 
 ---
+
+## Examples and Notebooks
+
+SparkClient will provide example workloads and notebooks that demonstrate common usage patterns across interactive and batch Spark workloads.
+
+These examples serve as reference implementations and help users quickly adopt SparkClient within the Kubeflow ecosystem.
+
+### Example Workloads
+
+Example applications may include:
+
+- Batch ETL pipelines
+- Data transformation workloads
+- Feature engineering workflows
+- Spark and Kubeflow Trainer integration
+- Kubeflow Pipelines integration
+
+### Notebook Examples
+
+Notebook-based examples may be provided for:
+
+- Jupyter Notebook
+- Kubeflow Notebook
+- Google Colab
+
+These examples demonstrate both interactive Spark Connect workflows and batch job submission workflows using SparkClient APIs.
+
+### Kubeflow Ecosystem Examples
+
+Examples may showcase integrations with other Kubeflow components, including:
+
+- Kubeflow Trainer
+- Kubeflow Pipelines
+- Spark History Server
+- Object storage systems such as S3, MinIO, and SeaweedFS
+
+### Future Enhancements
+
+Additional examples and tutorials may be added as SparkClient capabilities expand, including support for function-based job submission, advanced observability workflows, and production deployment patterns.
+---
+
 
 ## Future Vision
 
