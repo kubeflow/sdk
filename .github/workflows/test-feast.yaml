@@ -1,0 +1,64 @@
+name: Feast Compatibility
+
+on:
+  pull_request:
+    paths:
+      - "kubeflow/feast/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "README.md"
+      - ".github/workflows/test-feast.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "kubeflow/feast/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "README.md"
+      - ".github/workflows/test-feast.yaml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  feast-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: minimum-supported
+            python-version: "3.11"
+            feast-version: "0.59.0"
+            test-command: uv run --with 'feast==0.59.0' pytest -q kubeflow/feast/api/feast_client_test.py
+          - name: locked-version
+            python-version: "3.11"
+            feast-version: "uv.lock"
+            test-command: uv run pytest -q kubeflow/feast/api/feast_client_test.py
+
+    name: Feast Tests (${{ matrix.name }}, Python ${{ matrix.python-version }})
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Show Feast target
+        run: |
+          echo "Testing Feast compatibility target: ${{ matrix.feast-version }}"
+
+      - name: Run Feast tests
+        run: ${{ matrix.test-command }}
