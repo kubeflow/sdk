@@ -1,13 +1,11 @@
-# Changelog
+# [0.4.0](https://github.com/kubeflow/sdk/releases/tag/0.4.0) (2026-03-20)
 
-## [0.4.0](https://github.com/kubeflow/sdk/releases/tag/0.4.0) (2026-03-20)
-
-### 🚀 Features
+## 🚀 Features
 
 - feat: Run dataset and model initializers in parallel ([#313](https://github.com/kubeflow/sdk/pull/313) by @priyank766)
 - feat(trainer): replace PodTemplateOverrides with RuntimePatches API ([#381](https://github.com/kubeflow/sdk/pull/381) by @Fiona-Waters)
-- feat(docs): Update README with Spark Support  ([#349](https://github.com/kubeflow/sdk/pull/349) by @andreyvelich)
-- feat(spark): Refactor unit tests to sdk coding standards  ([#293](https://github.com/kubeflow/sdk/pull/293) by @digvijay-y)
+- feat(docs): Update README with Spark Support ([#349](https://github.com/kubeflow/sdk/pull/349) by @andreyvelich)
+- feat(spark): Refactor unit tests to sdk coding standards ([#293](https://github.com/kubeflow/sdk/pull/293) by @digvijay-y)
 - feat: add TrainerClient examples for local PyTorch distributed training ([#312](https://github.com/kubeflow/sdk/pull/312) by @MansiSingh17)
 - feat: Add validate lockfile workflow to complement CVE scanning ([#306](https://github.com/kubeflow/sdk/pull/306) by @Fiona-Waters)
 - feat(trainer): Support namespaced TrainingRuntime in the SDK ([#130](https://github.com/kubeflow/sdk/pull/130) by @shaikmoeed)
@@ -18,7 +16,7 @@
 - feat: Add Kubeflow SDK docs website ([#237](https://github.com/kubeflow/sdk/pull/237) by @kramaranya)
 - feat: add model registry client ([#186](https://github.com/kubeflow/sdk/pull/186) by @jonburdo)
 
-### 🐛 Bug Fixes
+## 🐛 Bug Fixes
 
 - fix: support RC version format in Makefile release target ([#398](https://github.com/kubeflow/sdk/pull/398) by @Fiona-Waters)
 - fix(trainer): add missing wildcard to .pt and .pth ignore patterns ([#372](https://github.com/kubeflow/sdk/pull/372) by @ghazariann)
@@ -39,7 +37,7 @@
 - fix(ci): Bump Kubernetes version for E2E tests ([#253](https://github.com/kubeflow/sdk/pull/253) by @andreyvelich)
 - fix: Remove uv from tools in readthedocs ([#242](https://github.com/kubeflow/sdk/pull/242) by @kramaranya)
 
-### ⚙️ Miscellaneous Tasks
+## ⚙️ Miscellaneous Tasks
 
 - chore(deps): Bump Kubeflow Trainer API to 2.2.0 ([#406](https://github.com/kubeflow/sdk/pull/406) by @andreyvelich)
 - chore(ci): bump aquasecurity/trivy-action from 0.34.0 to 0.34.1 in the actions group ([#319](https://github.com/kubeflow/sdk/pull/319) by @dependabot[bot])
@@ -74,7 +72,7 @@
 - chore(ci): bump actions/upload-artifact from 4 to 6 ([#246](https://github.com/kubeflow/sdk/pull/246) by @dependabot[bot])
 - chore(hub): add OWNERS file to kubeflow.hub ([#244](https://github.com/kubeflow/sdk/pull/244) by @jonburdo)
 
-### New Contributors
+## New Contributors
 
 - @andres75125 made their first contribution in [#394](https://github.com/kubeflow/sdk/pull/394)
 - @ghazariann made their first contribution in [#372](https://github.com/kubeflow/sdk/pull/372)
