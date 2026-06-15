@@ -119,6 +119,10 @@ release: install-dev
 		fi; \
 		echo "Changelog generated at $$CHANGELOG_PATH"; \
 	fi
+	@echo ""
+	@echo "Release commit for $(VERSION) is ready."
+	@echo "Review the changelog changes if needed, then commit with:"
+	@echo "git add -A && git commit -s -m 'Prepare Release $(VERSION)'"
 
 
  # make test-python will produce html coverage by default. Run with `make test-python report=xml` to produce xml report.
