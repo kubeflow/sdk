@@ -2,10 +2,9 @@
 
 ## Prerequisites
 
-- [Write](https://docs.github.com/en/organizations/managing-access-to-your-organizations-repositories/repository-permission-levels-for-an-organization#permission-levels-for-repositories-owned-by-an-organization)
-  permission for the Kubeflow SDK repository.
+- Create a [GitHub Token](https://docs.github.com/en/github/authenticating-to-github/keeping-your-account-and-data-secure/creating-a-personal-access-token).
 
-- Create a [GitHub Token](https://docs.github.com/en/github/authenticating-to-github/keeping-your-account-and-data-secure/creating-a-personal-access-token) and set it as `GITHUB_TOKEN` environment variable.
+- [Docker](https://docs.docker.com/) installed to generate changelog.
 
 ## Versioning Policy
 
@@ -57,26 +56,35 @@ The Kubeflow SDK uses an automated release process with GitHub Actions:
 
 #### 1. Update Version and Changelog
 
+For **the latest minor release**, run the following command from the `main` branch.
+
+For **an older minor series patch** (for example, `0.3.1` when `main` is on `0.4.x`), checkout
+to the corresponding `release-X.Y` branch and run the following command.
+
 1. Generate version and changelog locally (this will sync dependencies automatically):
 
-   ```sh
-   export GITHUB_TOKEN=<your_github_token>
-   make release VERSION=<X.Y.Z>
-   # e.g. make release VERSION=0.3.1
+   ```bash
+   make release VERSION=X.Y.Z GITHUB_TOKEN=<token>
+   # or for a release candidate:
+   make release VERSION=X.Y.ZrcN GITHUB_TOKEN=<token>
    ```
 
-This updates:
-- `kubeflow/__init__.py` with `__version__ = "X.Y.Z"`
-- `CHANGELOG/CHANGELOG-X.Y.md` with a new top entry `# [X.Y.Z] (YYYY-MM-DD)`
+This will:
 
-2. Open a PR:
-   - Review `kubeflow/__init__.py` and `CHANGELOG/CHANGELOG-X.Y.md`
-   - **For latest minor series**: Open a PR to `main` and get it reviewed and merged
-   - **For older minor series patch (e.g. 0.1.1 when main is at 0.2.x)**: Checkout the `release-X.Y` branch, commit changes and then open a PR to the corresponding `release-X.Y` branch
+1. Update `kubeflow/__init__.py` with `__version__ = "X.Y.Z"`
+1. Generate `CHANGELOG/CHANGELOG-X.Y.md` using `git-cliff` (skipped for RC releases).
+
+After reviewing the changes, create a signed commit and open a PR to the appropriate branch
+(e.g. `main` or `release-X.Y`):
+
+```bash
+git add -A && git commit -s -m 'Prepare release X.Y.Z'
+```
 
 #### 2. Automated Release Process
 
-The `Release` GitHub Action automatically:
+When the `kubeflow/__init__.py` change is merged, the
+[release workflow](.github/workflows/release.yml) runs automatically:
 
 1. **Prepare**: Detects the version change in `kubeflow/__init__.py` and creates or updates the `release-X.Y` branch
 2. **Build**: Runs tests and builds the package on the release branch
@@ -98,9 +106,9 @@ The `Release` GitHub Action automatically:
 2. Verify the release on [GitHub Releases](https://github.com/kubeflow/sdk/releases)
 3. Test installation: `pip install kubeflow==X.Y.Z`
 
-
 ## Announcement
 
-**Announce**: Post the announcement for the new Kubeflow SDK release in:
+Post the release announcement for the new Kubeflow SDK release in:
+
 - [#kubeflow-ml-experience](https://www.kubeflow.org/docs/about/community/#slack-channels) Slack channel
 - [kubeflow-discuss](https://www.kubeflow.org/docs/about/community/#kubeflow-mailing-list) mailing list
