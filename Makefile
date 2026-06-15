@@ -84,7 +84,7 @@ release: install-dev
 	@if echo "$(VERSION)" | grep -E -q 'rc[0-9]+$$'; then \
 		echo "Skipping changelog generation for RC release $(VERSION)"; \
 	else \
-		git fetch --all --tags --prune; \
+		git fetch upstream --tags --prune; \
 		MAJOR_MINOR=$$(echo "$(VERSION)" | cut -d. -f1,2); \
 		CHANGELOG_PATH="CHANGELOG/CHANGELOG-$$MAJOR_MINOR.md"; \
 		RELEASE_BRANCH="release-$$MAJOR_MINOR"; \
