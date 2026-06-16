@@ -75,7 +75,7 @@ uv-venv:  ## Create uv virtual environment
 	fi
 
 .PHONY: release
-release: install-dev
+release: ## Create a release commit. Usage: make release VERSION=X.Y.Z GITHUB_TOKEN=<token>
 	@if [ -z "$(VERSION)" ] || ! echo "$(VERSION)" | grep -E -q '^[0-9]+\.[0-9]+\.[0-9]+(rc[0-9]+)?$$'; then \
 		echo "Error: VERSION must be set in X.Y.Z or X.Y.ZrcN format. Usage: make release VERSION=X.Y.Z[rcN]"; \
 		exit 1; \
@@ -88,8 +88,7 @@ release: install-dev
 		MAJOR_MINOR=$$(echo "$(VERSION)" | cut -d. -f1,2); \
 		CHANGELOG_PATH="CHANGELOG/CHANGELOG-$$MAJOR_MINOR.md"; \
 		RELEASE_BRANCH="release-$$MAJOR_MINOR"; \
-		RELEASE_SHA=$$(git rev-parse --verify --quiet "refs/heads/$$RELEASE_BRANCH" \
-			|| git rev-parse --verify --quiet "refs/remotes/upstream/$$RELEASE_BRANCH"); \
+		RELEASE_SHA=$$(git rev-parse --verify --quiet "refs/remotes/upstream/$$RELEASE_BRANCH"); \
 		if [ -n "$$RELEASE_SHA" ]; then \
 			PREV_TAG=$$(git describe --tags --abbrev=0 --match '[0-9]*' --exclude '*rc*' "$$RELEASE_SHA" 2>/dev/null || true); \
 			if [ -n "$$PREV_TAG" ]; then \
