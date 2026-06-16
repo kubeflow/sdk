@@ -65,7 +65,6 @@ dev = [
   "ruff>=0.12.2",
   "pre-commit>=4.2.0",
   "PyGithub>=2.7.0",
-  "git-cliff>=2.11.0",
   "setuptools>=80.9.0",
   "ty>=0.0.11",
 ]
