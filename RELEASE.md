@@ -78,7 +78,7 @@ After reviewing the changes, create a signed commit and open a PR to the appropr
 (e.g. `main` or `release-X.Y`):
 
 ```bash
-git add -A && git commit -s -m 'Prepare release X.Y.Z'
+git add -A && git commit -s -m 'Prepare Release X.Y.Z'
 ```
 
 #### 2. Automated Release Process
