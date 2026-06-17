@@ -492,7 +492,6 @@ class Initializer:
     model: HuggingFaceModelInitializer | S3ModelInitializer | None = None
 
 
-# TODO (andreyvelich): Add train() and optimize() methods to this class.
 @dataclass
 class TrainJobTemplate:
     """TrainJob template configuration.
@@ -515,3 +514,61 @@ class TrainJobTemplate:
 
     def __getitem__(self, key):
         return getattr(self, key)
+
+    def train(self, options: list | None = None) -> str:
+        """Create a TrainJob using this template's configuration.
+
+        Args:
+            options: Optional list of configuration options to apply to the TrainJob.
+                Options can be imported from kubeflow.trainer.options.
+
+        Returns:
+            The unique name of the TrainJob that has been generated.
+
+        Raises:
+            ValueError: Input arguments are invalid.
+            TimeoutError: Timeout to create TrainJob.
+            RuntimeError: Failed to create TrainJob.
+        """
+        from kubeflow.trainer.api.trainer_client import TrainerClient
+
+        return TrainerClient().train(
+            runtime=self.runtime,
+            initializer=self.initializer,
+            trainer=self.trainer,
+            options=options,
+        )
+
+    def optimize(
+        self,
+        search_space: dict,
+        *,
+        trial_config=None,
+        objectives=None,
+        algorithm=None,
+    ) -> str:
+        """Create an Experiment using this template's configuration.
+
+        Args:
+            search_space: Dictionary mapping parameter names to Search specifications.
+            trial_config: Optional configuration to run Trials.
+            objectives: List of objectives to optimize.
+            algorithm: The optimization algorithm to use. Defaults to RandomSearch.
+
+        Returns:
+            The unique name of the Experiment that has been generated.
+
+        Raises:
+            ValueError: Input arguments are invalid.
+            TimeoutError: Timeout to create Experiment.
+            RuntimeError: Failed to create Experiment.
+        """
+        from kubeflow.optimizer.api.optimizer_client import OptimizerClient
+
+        return OptimizerClient().optimize(
+            trial_template=self,
+            trial_config=trial_config,
+            search_space=search_space,
+            objectives=objectives,
+            algorithm=algorithm,
+        )
