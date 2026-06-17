@@ -73,7 +73,7 @@ jobs:
         working-directory: . # Execute make from the root of the SDK repo
 
       - name: Upload Artifacts to GitHub
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always() # Ensure artifacts are uploaded even if previous steps fail
         with:
           name: ${{ matrix.kubernetes-version }}
