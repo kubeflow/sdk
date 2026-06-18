@@ -2,9 +2,10 @@
 
 ## Prerequisites
 
-- Create a [GitHub Token](https://docs.github.com/en/github/authenticating-to-github/keeping-your-account-and-data-secure/creating-a-personal-access-token).
+- Docker available locally (required for changelog generation with
+  [`git-cliff`](https://git-cliff.org/)).
 
-- [Docker](https://docs.docker.com/) installed to generate changelog.
+- Create a [GitHub Token](https://docs.github.com/en/github/authenticating-to-github/keeping-your-account-and-data-secure/creating-a-personal-access-token).
 
 ## Versioning Policy
 
@@ -40,38 +41,27 @@ CHANGELOG/
 └── CHANGELOG-0.3.md    # All 0.3.x releases
 ```
 
-Each file contains releases for that minor series, with the most recent releases at the top.
+Each file contains releases for that minor series. The `make release` target
+prepends new entries automatically using `git-cliff`.
 
-## Release Process
+## Step-by-Step Release Process
 
-### Automated Release Workflow
-
-The Kubeflow SDK uses an automated release process with GitHub Actions:
-
-1. **Local Preparation**: Update version and generate changelog locally
-2. **Automated CI**: GitHub Actions handles branch creation, tagging, building, and publishing
-3. **Manual Approvals**: PyPI and GitHub releases require manual approval
-
-### Step-by-Step Release Process
-
-#### 1. Update Version and Changelog
+### 1. Update Version and Changelog
 
 For **the latest minor release**, run the following command from the `main` branch.
 
 For **an older minor series patch** (for example, `0.3.1` when `main` is on `0.4.x`), checkout
 to the corresponding `release-X.Y` branch and run the following command.
 
-1. Generate version and changelog locally (this will sync dependencies automatically):
-
-   ```bash
-   make release VERSION=X.Y.Z GITHUB_TOKEN=<token>
-   # or for a release candidate:
-   make release VERSION=X.Y.ZrcN GITHUB_TOKEN=<token>
-   ```
+```bash
+make release VERSION=X.Y.Z GITHUB_TOKEN=<token>
+# or for a release candidate:
+make release VERSION=X.Y.ZrcN GITHUB_TOKEN=<token>
+```
 
 This will:
 
-1. Update `kubeflow/__init__.py` with `__version__ = "X.Y.Z"`
+1. Update `kubeflow/__init__.py` with `__version__ = "X.Y.Z"`.
 1. Generate `CHANGELOG/CHANGELOG-X.Y.md` using `git-cliff` (skipped for RC releases).
 
 After reviewing the changes, create a signed commit and open a PR to the appropriate branch
@@ -81,30 +71,22 @@ After reviewing the changes, create a signed commit and open a PR to the appropr
 git add -A && git commit -s -m 'Prepare Release X.Y.Z'
 ```
 
-#### 2. Automated Release Process
+### 2. Automated Release After Merge
 
 When the `kubeflow/__init__.py` change is merged, the
 [release workflow](.github/workflows/release.yml) runs automatically:
 
-1. **Prepare**: Detects the version change in `kubeflow/__init__.py` and creates or updates the `release-X.Y` branch
-2. **Build**: Runs tests and builds the package on the release branch
-3. **Tag**: Creates and pushes the release tag
-4. **Publish**: Publishes to PyPI (requires manual approval)
-5. **Release**: Creates GitHub Release (requires manual approval)
+1. **Prepare**: Detects the version change in `kubeflow/__init__.py` and creates or updates the `release-X.Y` branch.
+2. **Build**: Runs tests and builds the package on the release branch.
+3. **Tag**: Creates and pushes the release tag `X.Y.Z`.
+4. **Publish**: Publishes the package to [PyPI](https://pypi.org/project/kubeflow/) (requires manual approval).
+5. **Release**: Creates a GitHub Release with the generated changelog (requires manual approval).
 
-**Verification**: Confirm the release branch and tag were created!
+### 4. Final Verification
 
-#### 3. Manual Approvals
-
-1. **PyPI Publishing**: Go to [GitHub Actions](https://github.com/kubeflow/sdk/actions) → `Release` workflow → Approve "Publish to PyPI"
-
-2. **GitHub Release**: After PyPI approval → Approve "Create GitHub Release"
-
-#### 4. Final Verification
-
-1. Verify the release on [PyPI](https://pypi.org/project/kubeflow/)
-2. Verify the release on [GitHub Releases](https://github.com/kubeflow/sdk/releases)
-3. Test installation: `pip install kubeflow==X.Y.Z`
+1. Verify the release on [PyPI](https://pypi.org/project/kubeflow/).
+2. Verify the release on [GitHub Releases](https://github.com/kubeflow/sdk/releases).
+3. Test installation: `pip install kubeflow==X.Y.Z`.
 
 ## Announcement
 
