@@ -74,7 +74,7 @@ git add -A && git commit -s -m 'Prepare Release X.Y.Z'
 ### 2. Automated Release After Merge
 
 When the `kubeflow/__init__.py` change is merged, the
-[release workflow](.github/workflows/release.yml) runs automatically:
+[release workflow](.github/workflows/release.yaml) runs automatically:
 
 1. **Prepare**: Detects the version change in `kubeflow/__init__.py` and creates or updates the `release-X.Y` branch.
 2. **Build**: Runs tests and builds the package on the release branch.
