@@ -1,3 +1,14 @@
+# [0.4.1](https://github.com/kubeflow/sdk/releases/tag/0.4.1) (2026-06-19)
+
+## 🐛 Bug Fixes
+
+- fix(deps): pin below kubernetes 36.0.0 (multiple client regressions) ([#526](https://github.com/kubeflow/sdk/pull/526) by @tariq-hasan)
+- [release-0.4] fix: remove validate-lockfile workflow as it uses trivy ([#430](https://github.com/kubeflow/sdk/pull/430) by @Fiona-Waters)
+
+## ⚙️ Miscellaneous Tasks
+
+- [release-0.4] chore(ci): Remove Trivy Action ([#429](https://github.com/kubeflow/sdk/pull/429) by @andreyvelich)
+
 # [0.4.0](https://github.com/kubeflow/sdk/releases/tag/0.4.0) (2026-03-20)
 
 ## 🚀 Features
