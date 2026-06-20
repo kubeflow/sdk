@@ -1,3 +1,18 @@
+# Copyright 2025 The Kubeflow Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+from __future__ import annotations
+
 from collections.abc import Callable
 import inspect
 import os
@@ -6,7 +21,16 @@ import re
 import shutil
 from string import Template
 import textwrap
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from opentelemetry import trace
+
+if TYPE_CHECKING:
+    # Only imported when a type checker runs — never at runtime.
+    # This keeps the runtime import clean (API only) while giving
+    # editors and mypy the correct type information.
+    from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.trace import StatusCode
 
 from kubeflow.trainer.backends.localprocess import constants as local_exec_constants
 from kubeflow.trainer.backends.localprocess.types import LocalRuntimeTrainer
@@ -15,25 +39,11 @@ from kubeflow.trainer.types import types
 
 
 def _extract_name(requirement: str) -> str:
-    """
-    Extract the base distribution name from a requirement string without external deps.
-
-    Supports common PEP 508 patterns:
-      - 'package'
-      - 'package[extra1,extra2]'
-      - 'package==1.2.3', 'package>=1.0', 'package~=1.4', etc.
-      - 'package @ https://...'
-      - markers after ';' are irrelevant for name extraction.
-
-    Returns the *raw* (un-normalized) name as it appears.
-    Raises ValueError if a name cannot be parsed.
-    """
     if requirement is None:
         raise ValueError("Requirement string cannot be None")
     s = requirement.strip()
     if not s:
         raise ValueError("Empty requirement string")
-
     m = local_exec_constants.PYTHON_PACKAGE_NAME_RE.match(s)
     if not m:
         raise ValueError(f"Could not parse package name from requirement: {requirement!r}")
@@ -41,9 +51,6 @@ def _extract_name(requirement: str) -> str:
 
 
 def _canonicalize_name(name: str) -> str:
-    """
-    PEP 503-style normalization: case-insensitive, and collapse runs of -, _, . into '-'.
-    """
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
@@ -51,36 +58,20 @@ def get_install_packages(
     runtime_packages: list[str],
     trainer_packages: list[str] | None = None,
 ) -> list[str]:
-    """
-    Merge two requirement lists into a single list of strings.
-
-    Rules implemented:
-    1) If a package appears in trainer_packages, it overwrites the one in runtime_packages.
-       We keep the *trainer string verbatim* (specifier, markers, extras, spacing).
-    2) Case-insensitive matching of package names (PEP 503-style normalization).
-    3) Output is a list of strings.
-    4) If trainer_packages contains the same dependency multiple times (case-insensitive),
-       raise ValueError.
-    5) If runtime_packages contains duplicates, the last one among *runtime* wins there
-       (no error), but any trainer entry still overwrites it. Runtime packages shouldn't
-        have any duplicates.
-    6) Ordering: keep runtime-only packages in their original order (emitting only their
-       last occurrence), then append all trainer packages in their original order.
-    """
+    # Pure CPU merge — called from get_dependencies_command which is already
+    # spanned. No span here avoids noise without losing any signal.
     if not trainer_packages:
         return runtime_packages
 
-    # --- Parse + normalize runtime ---
-    runtime_parsed: list[tuple[str, str]] = []  # (orig, canonical_name)
+    runtime_parsed: list[tuple[str, str]] = []
     last_runtime_index_by_name: dict[str, int] = {}
 
     for i, orig in enumerate(runtime_packages):
         raw_name = _extract_name(orig)
         canon = _canonicalize_name(raw_name)
         runtime_parsed.append((orig, canon))
-        last_runtime_index_by_name[canon] = i  # last occurrence index wins among runtime
+        last_runtime_index_by_name[canon] = i
 
-    # --- Parse + validate trainer (detect duplicates) ---
     trainer_parsed: list[tuple[str, str]] = []
     seen_trainer: set[str] = set()
     for orig in trainer_packages:
@@ -94,20 +85,16 @@ def get_install_packages(
         trainer_parsed.append((orig, canon))
 
     trainer_names: set[str] = {canon for _, canon in trainer_parsed}
-
-    # --- Build merged list respecting order semantics ---
     merged: list[str] = []
+    emitted: set[str] = set()
 
-    # 1) Runtime-only packages (only emit the last occurrence for each name)
-    emitted_runtime_names: set[str] = set()
     for idx, (orig, canon) in enumerate(runtime_parsed):
         if canon in trainer_names:
-            continue  # overwritten by trainer
-        if last_runtime_index_by_name[canon] == idx and canon not in emitted_runtime_names:
+            continue
+        if last_runtime_index_by_name[canon] == idx and canon not in emitted:
             merged.append(orig)
-            emitted_runtime_names.add(canon)
+            emitted.add(canon)
 
-    # 2) Trainer packages (overwrite and preserve trainer's exact strings, original order)
     for orig, _ in trainer_parsed:
         merged.append(orig)
 
@@ -119,9 +106,8 @@ def get_local_runtime_trainer(
     venv_dir: str,
     framework: str,
 ) -> LocalRuntimeTrainer:
-    """
-    Get the LocalRuntimeTrainer object.
-    """
+    # Pure in-memory construction — no I/O. Spanned at the call site in
+    # backend.train so no span needed here.
     local_runtime = next(
         (rt for rt in local_exec_constants.local_runtimes if rt.name == runtime_name),
         None,
@@ -136,13 +122,10 @@ def get_local_runtime_trainer(
         image=local_exec_constants.LOCAL_RUNTIME_IMAGE,
     )
 
-    # set command to run from venv
     venv_bin_dir = str(Path(venv_dir) / "bin")
     default_cmd = [str(Path(venv_bin_dir) / local_exec_constants.DEFAULT_COMMAND)]
-    # Set the Trainer entrypoint.
     if framework == local_exec_constants.TORCH_FRAMEWORK_TYPE:
-        _c = [os.path.join(venv_bin_dir, local_exec_constants.TORCH_COMMAND)]
-        trainer.set_command(tuple(_c))
+        trainer.set_command((os.path.join(venv_bin_dir, local_exec_constants.TORCH_COMMAND),))
     else:
         trainer.set_command(tuple(default_cmd))
 
@@ -154,28 +137,29 @@ def get_dependencies_command(
     pip_index_urls: list[str],
     trainer_packages: list[str],
     quiet: bool = True,
+    tracer_provider: TracerProvider | None = None,
 ) -> str:
-    # resolve runtime dependencies and trainer dependencies.
-    packages = get_install_packages(
-        runtime_packages=runtime_packages,
-        trainer_packages=trainer_packages,
-    )
+    _provider = tracer_provider or trace.get_tracer_provider()
+    _tracer = _provider.get_tracer(__name__)
 
-    options = [f"--index-url {pip_index_urls[0]}"]
-    options.extend(f"--extra-index-url {extra_index_url}" for extra_index_url in pip_index_urls[1:])
+    with _tracer.start_as_current_span("localprocess.deps.resolve") as span:
+        packages = get_install_packages(
+            runtime_packages=runtime_packages,
+            trainer_packages=trainer_packages,
+        )
+        span.set_attribute("deps.total_packages", len(packages))
+        span.set_attribute("deps.trainer_packages", str(trainer_packages))
+        span.set_attribute("deps.pip_index_urls", str(pip_index_urls))
 
-    """
-           PIP_DISABLE_PIP_VERSION_CHECK=1 pip install $QUIET $AS_USER \
-       --no-warn-script-location $PIP_INDEX $PACKAGE_STR
-       """
-    mapping = {
-        "QUIET": "--quiet" if quiet else "",
-        "PIP_INDEX": " ".join(options),
-        "PACKAGE_STR": '"{}"'.format('" "'.join(packages)),  # quote deps
-    }
-    t = Template(local_exec_constants.DEPENDENCIES_SCRIPT)
-    result = t.substitute(**mapping)
-    return result
+        options = [f"--index-url {pip_index_urls[0]}"]
+        options.extend(f"--extra-index-url {u}" for u in pip_index_urls[1:])
+
+        mapping = {
+            "QUIET": "--quiet" if quiet else "",
+            "PIP_INDEX": " ".join(options),
+            "PACKAGE_STR": '"{}"'.format('" "'.join(packages)),
+        }
+        return Template(local_exec_constants.DEPENDENCIES_SCRIPT).substitute(**mapping)
 
 
 def get_command_using_train_func(
@@ -184,66 +168,47 @@ def get_command_using_train_func(
     train_func_parameters: dict[str, Any] | None,
     venv_dir: str,
     train_job_name: str,
+    tracer_provider: TracerProvider | None = None,
 ) -> str:
-    """
-    Get the Trainer container command from the given training function and parameters.
-    """
-    # Check if the runtime has a Trainer.
-    if not runtime.trainer:
-        raise ValueError(f"Runtime must have a trainer: {runtime}")
+    _provider = tracer_provider or trace.get_tracer_provider()
+    _tracer = _provider.get_tracer(__name__)
 
-    # Check if training function is callable.
-    if not callable(train_func):
-        raise ValueError(
-            f"Training function must be callable, got function type: {type(train_func)}"
-        )
+    with _tracer.start_as_current_span("localprocess.script.write_func") as span:
+        if not runtime.trainer:
+            raise ValueError(f"Runtime must have a trainer: {runtime}")
+        if not callable(train_func):
+            raise ValueError(f"Training function must be callable, got: {type(train_func)}")
 
-    # Extract the function implementation.
-    func_code = inspect.getsource(train_func)
+        func_code = textwrap.dedent(inspect.getsource(train_func))
+        func_file = Path(venv_dir) / local_exec_constants.LOCAL_EXEC_FILENAME.format(train_job_name)
 
-    # Extract the file name where the function is defined and move it the venv directory.
-    func_file = Path(venv_dir) / local_exec_constants.LOCAL_EXEC_FILENAME.format(train_job_name)
+        if train_func_parameters is None:
+            func_code = f"{func_code}\n{train_func.__name__}()\n"
+        else:
+            func_code = f"{func_code}\n{train_func.__name__}({train_func_parameters})\n"
 
-    # Function might be defined in some indented scope (e.g. in another function).
-    # We need to dedent the function code.
-    func_code = textwrap.dedent(func_code)
+        with open(func_file, "w") as f:
+            f.write(func_code)
 
-    # Wrap function code to execute it from the file. For example:
-    # TODO (andreyvelich): Find a better way to run users' scripts.
-    # def train(parameters):
-    #     print('Start Training...')
-    # train({'lr': 0.01})
-    if train_func_parameters is None:
-        func_code = f"{func_code}\n{train_func.__name__}()\n"
-    else:
-        func_code = f"{func_code}\n{train_func.__name__}({train_func_parameters})\n"
+        span.set_attribute("script.func_name", train_func.__name__)
+        span.set_attribute("script.file_path", str(func_file))
+        span.set_attribute("script.has_parameters", train_func_parameters is not None)
 
-    with open(func_file, "w") as f:
-        f.write(func_code)
-    f.close()
-
-    t = Template(local_exec_constants.LOCAL_EXEC_ENTRYPOINT)
-    mapping = {
-        "PARAMETERS": "",  ## Torch Parameters if any
-        "PYENV_LOCATION": venv_dir,
-        "ENTRYPOINT": " ".join(runtime.trainer.command),
-        "FUNC_FILE": func_file,
-    }
-    entrypoint = t.safe_substitute(**mapping)
-
-    return entrypoint
+        mapping = {
+            "PARAMETERS": "",
+            "PYENV_LOCATION": venv_dir,
+            "ENTRYPOINT": " ".join(runtime.trainer.command),
+            "FUNC_FILE": func_file,
+        }
+        return Template(local_exec_constants.LOCAL_EXEC_ENTRYPOINT).safe_substitute(**mapping)
 
 
 def get_cleanup_venv_script(venv_dir: str, cleanup_venv: bool = True) -> str:
-    script = "\n"
     if not cleanup_venv:
-        return script
-
-    t = Template(local_exec_constants.LOCAL_EXEC_JOB_CLEANUP_SCRIPT)
-    mapping = {
-        "PYENV_LOCATION": venv_dir,
-    }
-    return t.substitute(**mapping)
+        return "\n"
+    return Template(local_exec_constants.LOCAL_EXEC_JOB_CLEANUP_SCRIPT).substitute(
+        PYENV_LOCATION=venv_dir
+    )
 
 
 def get_local_train_job_script(
@@ -252,52 +217,54 @@ def get_local_train_job_script(
     trainer: types.CustomTrainer,
     runtime: types.Runtime,
     cleanup_venv: bool = True,
+    tracer_provider: TracerProvider | None = None,
 ) -> tuple:
-    # use local-exec train job template
-    t = Template(local_exec_constants.LOCAL_EXEC_JOB_TEMPLATE)
-    # find os python binary to create venv
-    python_bin = shutil.which("python")
-    if not python_bin:
-        python_bin = shutil.which("python3")
-    if not python_bin:
-        raise ValueError("No python executable found")
+    _provider = tracer_provider or trace.get_tracer_provider()
+    _tracer = _provider.get_tracer(__name__)
 
-    # workout if dependencies needs to be installed
-    if isinstance(runtime.trainer, LocalRuntimeTrainer):
-        runtime_trainer: LocalRuntimeTrainer = runtime.trainer
-    else:
-        raise ValueError("Invalid Runtime Trainer type: {type(runtime.trainer)}")
-    dependency_script = "\n"
-    if trainer.packages_to_install:
-        dependency_script = get_dependencies_command(
-            pip_index_urls=(
-                trainer.pip_index_urls
-                if trainer.pip_index_urls
-                else constants.DEFAULT_PIP_INDEX_URLS
-            ),
-            runtime_packages=runtime_trainer.packages,
-            trainer_packages=trainer.packages_to_install,
-            quiet=False,
+    with _tracer.start_as_current_span("localprocess.script.build") as span:
+        span.set_attribute("trainjob.name", train_job_name)
+        span.set_attribute("trainjob.venv_dir", venv_dir)
+        span.set_attribute("trainjob.cleanup_venv", cleanup_venv)
+
+        python_bin = shutil.which("python") or shutil.which("python3")
+        if not python_bin:
+            span.set_status(StatusCode.ERROR, "No python executable found")
+            raise ValueError("No python executable found")
+
+        span.set_attribute("script.python_bin", python_bin)
+
+        if not isinstance(runtime.trainer, LocalRuntimeTrainer):
+            raise ValueError(f"Invalid Runtime Trainer type: {type(runtime.trainer)}")
+
+        dependency_script = "\n"
+        if trainer.packages_to_install:
+            # Opens child span: localprocess.deps.resolve
+            dependency_script = get_dependencies_command(
+                pip_index_urls=(trainer.pip_index_urls or constants.DEFAULT_PIP_INDEX_URLS),
+                runtime_packages=runtime.trainer.packages,
+                trainer_packages=trainer.packages_to_install,
+                quiet=False,
+                tracer_provider=_provider,
+            )
+
+        # Opens child span: localprocess.script.write_func
+        entrypoint = get_command_using_train_func(
+            venv_dir=venv_dir,
+            runtime=runtime,
+            train_func=trainer.func,
+            train_func_parameters=trainer.func_args,
+            train_job_name=train_job_name,
+            tracer_provider=_provider,
         )
 
-    entrypoint = get_command_using_train_func(
-        venv_dir=venv_dir,
-        runtime=runtime,
-        train_func=trainer.func,
-        train_func_parameters=trainer.func_args,
-        train_job_name=train_job_name,
-    )
+        cleanup_script = get_cleanup_venv_script(cleanup_venv=cleanup_venv, venv_dir=venv_dir)
 
-    cleanup_script = get_cleanup_venv_script(cleanup_venv=cleanup_venv, venv_dir=venv_dir)
-
-    mapping = {
-        "OS_PYTHON_BIN": python_bin,
-        "PYENV_LOCATION": venv_dir,
-        "DEPENDENCIES_SCRIPT": dependency_script,
-        "ENTRYPOINT": entrypoint,
-        "CLEANUP_SCRIPT": cleanup_script,
-    }
-
-    command = t.safe_substitute(**mapping)
-
-    return "bash", "-c", command
+        command = Template(local_exec_constants.LOCAL_EXEC_JOB_TEMPLATE).safe_substitute(
+            OS_PYTHON_BIN=python_bin,
+            PYENV_LOCATION=venv_dir,
+            DEPENDENCIES_SCRIPT=dependency_script,
+            ENTRYPOINT=entrypoint,
+            CLEANUP_SCRIPT=cleanup_script,
+        )
+        return "bash", "-c", command

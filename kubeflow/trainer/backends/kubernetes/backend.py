@@ -26,6 +26,9 @@ import uuid
 
 from kubeflow_trainer_api import models
 from kubernetes import client, config, watch
+from opentelemetry import context, trace
+from opentelemetry.propagate import inject
+from opentelemetry.trace import SpanKind, Status, StatusCode, TracerProvider
 
 import kubeflow.common.constants as common_constants
 from kubeflow.common.types import KubernetesBackendConfig
@@ -37,9 +40,42 @@ from kubeflow.trainer.types import types
 
 logger = logging.getLogger(__name__)
 
+# backend. Consistent with "kubeflow.{component}" naming across the whole SDK.
+# Ref: https://opentelemetry.io/docs/concepts/instrumentation-scope/
+TRACER_NAME = "kf.trainer.k8s.backend"
+
+# ── Shared span attribute keys ───────────────────────────────────────────────
+# Defined once here so every method uses the exact same string and a typo
+# can't silently produce a second, differently-named attribute in the backend.
+
+# Ref (k8s semconv):  https://opentelemetry.io/docs/specs/semconv/resource/k8s/
+# Ref (error semconv):https://opentelemetry.io/docs/specs/semconv/attributes-registry/error/
+# Ref (naming guide): https://github.com/open-telemetry/semantic-conventions/blob/main/docs/general/attribute-naming.md
+
+# Official semconv — K8s objects
+_ATTR_K8S_NAMESPACE = "k8s.namespace.name"
+_ATTR_K8S_CONFIGMAP = "k8s.configmap.name"
+_ATTR_K8S_JOB_NAME = "k8s.job.name"
+
+# Official semconv — errors
+_ATTR_ERROR_TYPE = "error.type"
+
+# Custom kubeflow.* attributes — no official semconv exists for these concepts
+_ATTR_KF_COMPONENT = "kf.component"  # "trainer" — top-level SDK component
+_ATTR_KF_BACKEND = "trainer.backend"  # "kubernetes" — which backend implementation
+_ATTR_KF_RUNTIME = "trainer.runtime.name"  # TrainingRuntime name
+_ATTR_KF_RUNTIME_VERSION = "trainer.runtime.version"  # API group version, e.g. "v1alpha1"
+_ATTR_KF_RUNTIME_SCOPE = "trainer.runtime.scope"  # "namespace" or "cluster"
+
 
 class KubernetesBackend(RuntimeBackend):
-    def __init__(self, cfg: KubernetesBackendConfig):
+    def __init__(self, cfg: KubernetesBackendConfig, tracer_provider: TracerProvider | None):
+        # Accept an explicit provider (for dependency injection / testing) or
+        # fall back to the global, which is a no-op when OTel is not configured.
+        # We never call trace.gettracer() directly because that reads the global at call time
+        _provider = tracer_provider or trace.gettracer_provider()
+        self.tracer = _provider.get_tracer(TRACER_NAME)
+
         if cfg.namespace is None:
             cfg.namespace = common_utils.get_default_target_namespace(cfg.context)
 
@@ -71,18 +107,30 @@ class KubernetesBackend(RuntimeBackend):
         system_namespace = os.getenv("KUBEFLOW_SYSTEM_NAMESPACE", "kubeflow-system")
         config_map_name = "kubeflow-trainer-public"
 
-        try:
-            _ = self.core_api.read_namespaced_config_map(
-                name=config_map_name,
-                namespace=system_namespace,
-            ).data["kubeflow_trainer_version"]
-        except Exception as e:  # noqa: BLE001
-            logger.warning(
-                "Trainer control-plane version info is not available: "
-                f"unable to read 'kubeflow_trainer_version' from ConfigMap "
-                f"'{config_map_name}' in namespace '{system_namespace}': {e}"
-            )
-            return
+        with self.tracer.start_as_current_span("verify backend", kind=SpanKind.CLIENT) as span:
+            # metadata related to this span.
+            span.set_attribute(_ATTR_K8S_NAMESPACE, system_namespace)
+            span.set_attribute(_ATTR_KF_COMPONENT, "trainer")
+            span.set_attribute(_ATTR_KF_BACKEND, "kubernetes")
+            span.set_attribute(_ATTR_K8S_CONFIGMAP, config_map_name)
+
+            try:
+                _ = self.core_api.read_namespaced_config_map(
+                    name=config_map_name,
+                    namespace=system_namespace,
+                ).data["kubeflow_trainer_version"]
+                span.set_status(Status(StatusCode.OK))
+            except Exception as e:  # noqa: BLE001
+                # Ref: https://opentelemetry.io/docs/specs/otel/trace/api/#record-exception
+                span.set_status(Status(StatusCode.ERROR, "unable to read kubeflow_trainer_version"))
+                span.record_exception(e)
+                span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
+                logger.warning(
+                    "Trainer control-plane version info is not available: "
+                    f"unable to read 'kubeflow_trainer_version' from ConfigMap "
+                    f"'{config_map_name}' in namespace '{system_namespace}': {e}"
+                )
+                return
 
     def list_runtimes(self) -> list[types.Runtime]:
         """List available runtimes, preferring namespaced over cluster-scoped for duplicates.
@@ -93,12 +141,14 @@ class KubernetesBackend(RuntimeBackend):
         """
         result: list[types.Runtime] = []
 
+        ctx = context.get_current()
         cluster_thread = self.custom_api.list_cluster_custom_object(
             constants.GROUP,
             constants.VERSION,
             constants.CLUSTER_TRAINING_RUNTIME_PLURAL,
             async_req=True,
         )
+        ctx_after_cluster_thread = context.get_current()
 
         namespace_thread = self.custom_api.list_namespaced_custom_object(
             constants.GROUP,
@@ -108,30 +158,73 @@ class KubernetesBackend(RuntimeBackend):
             async_req=True,
         )
 
-        # Fetch namespace-scoped TrainingRuntimes.
-        namespace_runtimes = None
-        try:
-            namespace_runtimes = models.TrainerV1alpha1TrainingRuntimeList.from_dict(
-                namespace_thread.get(common_constants.DEFAULT_TIMEOUT)
-            )
-        except multiprocessing.TimeoutError as e:
-            raise TimeoutError(f"Timeout to list {constants.TRAINING_RUNTIME_KIND}s") from e
-        except client.ApiException as e:
-            if e.status != 404:
+        with self.tracer.start_as_current_span(
+            "k8s list TrainingRuntimes",
+            context=ctx_after_cluster_thread,
+            kind=SpanKind.CLIENT,
+        ) as span:
+            span.set_attribute(_ATTR_KF_COMPONENT, "trainer")
+            span.set_attribute(_ATTR_KF_BACKEND, "kubernetes")
+            span.set_attribute(_ATTR_KF_RUNTIME_VERSION, constants.VERSION)
+            span.set_attribute(_ATTR_KF_RUNTIME_SCOPE, "namespace")
+            # Fetch namespace-scoped TrainingRuntimes.
+            namespace_runtimes = None
+            try:
+                namespace_runtimes = models.TrainerV1alpha1TrainingRuntimeList.from_dict(
+                    namespace_thread.get(common_constants.DEFAULT_TIMEOUT)
+                )
+                span.set_status(Status(StatusCode.OK))
+            except multiprocessing.TimeoutError as e:
+                span.set_status(Status(StatusCode.ERROR, "Timeout listing namespace runtimes"))
+                span.record_exception(e)
+                span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
+                raise TimeoutError(f"Timeout to list {constants.TRAINING_RUNTIME_KIND}s") from e
+            except client.ApiException as e:
+                if e.status == 404:
+                    # Not  crictical error.
+                    span.add_event("namespace_runtime_not_found", {"runtime.scope": "namespace"})
+                else:
+                    span.set_status(Status(StatusCode.ERROR, "Timeout listing namespace runtimes"))
+                    span.record_exception(e)
+                    span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
+                    raise RuntimeError(f"Failed to list {constants.TRAINING_RUNTIME_KIND}s") from e
+            except Exception as e:
+                span.set_status(
+                    Status(StatusCode.ERROR, "Unexpected error listing namespace runtimes")
+                )
+                span.record_exception(e)
+                span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
                 raise RuntimeError(f"Failed to list {constants.TRAINING_RUNTIME_KIND}s") from e
-        except Exception as e:
-            raise RuntimeError(f"Failed to list {constants.TRAINING_RUNTIME_KIND}s") from e
 
-        # Fetch cluster-scoped ClusterTrainingRuntimes.
-        cluster_runtimes = None
-        try:
-            cluster_runtimes = models.TrainerV1alpha1ClusterTrainingRuntimeList.from_dict(
-                cluster_thread.get(common_constants.DEFAULT_TIMEOUT)
-            )
-        except multiprocessing.TimeoutError as e:
-            raise TimeoutError(f"Timeout to list {constants.CLUSTER_TRAINING_RUNTIME_KIND}s") from e
-        except Exception as e:
-            raise RuntimeError(f"Failed to list {constants.CLUSTER_TRAINING_RUNTIME_KIND}s") from e
+        with self.tracer.start_as_current_span(
+            "k8s list ClusterRuntimes", context=ctx, kind=SpanKind.CLIENT
+        ) as span:
+            span.set_attribute(_ATTR_KF_COMPONENT, "trainer")
+            span.set_attribute(_ATTR_KF_BACKEND, "kubernetes")
+            span.set_attribute(_ATTR_KF_RUNTIME_VERSION, constants.VERSION)
+            span.set_attribute(_ATTR_KF_RUNTIME_SCOPE, "cluster")
+            # Fetch cluster-scoped ClusterTrainingRuntimes.
+            cluster_runtimes = None
+            try:
+                cluster_runtimes = models.TrainerV1alpha1ClusterTrainingRuntimeList.from_dict(
+                    cluster_thread.get(common_constants.DEFAULT_TIMEOUT)
+                )
+            except multiprocessing.TimeoutError as e:
+                span.set_status(Status(StatusCode.ERROR, "Timeout listing cluster runtimes"))
+                span.record_exception(e)
+                span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
+                raise TimeoutError(
+                    f"Timeout to list {constants.CLUSTER_TRAINING_RUNTIME_KIND}s"
+                ) from e
+            except Exception as e:
+                span.set_status(
+                    Status(StatusCode.ERROR, "Unexpected error listing cluster runtimes")
+                )
+                span.record_exception(e)
+                span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
+                raise RuntimeError(
+                    f"Failed to list {constants.CLUSTER_TRAINING_RUNTIME_KIND}s"
+                ) from e
 
         # Collect runtimes in a map, preferring namespaced over cluster-scoped
         runtimes_by_name = {}
@@ -173,54 +266,94 @@ class KubernetesBackend(RuntimeBackend):
 
     def get_runtime(self, name: str) -> types.Runtime:
         """Prefer namespaced runtime, fall back to cluster-scoped only if it does not exist"""
-        try:
-            ns_thread = self.custom_api.get_namespaced_custom_object(
-                constants.GROUP,
-                constants.VERSION,
-                self.namespace,
-                constants.TRAINING_RUNTIME_PLURAL,
-                name,
-                async_req=True,
-            )
-            runtime = models.TrainerV1alpha1TrainingRuntime.from_dict(
-                ns_thread.get(common_constants.DEFAULT_TIMEOUT)
-            )
-            return self.__get_runtime_from_cr(runtime)
+        ctx = context.get_current()
+        with self.tracer.start_as_current_span(
+            "k8s get TrainingRuntimes", kind=SpanKind.CLIENT, context=ctx
+        ) as span:
+            span.set_attribute(_ATTR_KF_COMPONENT, "trainer")
+            span.set_attribute(_ATTR_KF_BACKEND, "kubernetes")
+            span.set_attribute(_ATTR_KF_RUNTIME, name)
+            span.set_attribute(_ATTR_KF_RUNTIME_VERSION, constants.VERSION)
+            span.set_attribute(_ATTR_KF_RUNTIME_SCOPE, "namespace")
+            try:
+                ns_thread = self.custom_api.get_namespaced_custom_object(
+                    constants.GROUP,
+                    constants.VERSION,
+                    self.namespace,
+                    constants.TRAINING_RUNTIME_PLURAL,
+                    name,
+                    async_req=True,
+                )
+                runtime = models.TrainerV1alpha1TrainingRuntime.from_dict(
+                    ns_thread.get(common_constants.DEFAULT_TIMEOUT)
+                )
+                result = self.__get_runtime_from_cr(runtime)
+                span.set_status(Status(StatusCode.OK))
+                return result
 
-        except multiprocessing.TimeoutError as e:
-            raise TimeoutError(
-                f"Timeout to get {constants.TRAINING_RUNTIME_KIND}: {self.namespace}/{name}"
-            ) from e
-        except client.ApiException as e:
-            if e.status != 404:
+            except multiprocessing.TimeoutError as e:
+                span.set_status(Status(StatusCode.ERROR, "Timeout getting namespaced runtime"))
+                span.record_exception(e)
+                span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
+                raise TimeoutError(
+                    f"Timeout to get {constants.TRAINING_RUNTIME_KIND}: {self.namespace}/{name}"
+                ) from e
+            except client.ApiException as e:
+                if e.status != 404:
+                    span.set_status(
+                        Status(StatusCode.ERROR, "ApiException getting namespaced runtime")
+                    )
+                    span.record_exception(e)
+                    span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
+                    raise RuntimeError(
+                        f"Failed to get {constants.TRAINING_RUNTIME_KIND}: {self.namespace}/{name}"
+                    ) from e
+            except Exception as e:
+                span.set_status(
+                    Status(StatusCode.ERROR, "Unexpected error getting namespaced runtime")
+                )
+                span.record_exception(e)
+                span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
                 raise RuntimeError(
                     f"Failed to get {constants.TRAINING_RUNTIME_KIND}: {self.namespace}/{name}"
                 ) from e
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to get {constants.TRAINING_RUNTIME_KIND}: {self.namespace}/{name}"
-            ) from e
-
-        try:
-            cluster_thread = self.custom_api.get_cluster_custom_object(
-                constants.GROUP,
-                constants.VERSION,
-                constants.CLUSTER_TRAINING_RUNTIME_PLURAL,
-                name,
-                async_req=True,
-            )
-            runtime = models.TrainerV1alpha1ClusterTrainingRuntime.from_dict(
-                cluster_thread.get(common_constants.DEFAULT_TIMEOUT)
-            )
-            return self.__get_runtime_from_cr(runtime)
-        except multiprocessing.TimeoutError as e:
-            raise TimeoutError(
-                f"Timeout to get {constants.CLUSTER_TRAINING_RUNTIME_KIND}: {name}"
-            ) from e
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to get Runtime: {name} (checked both namespaced and cluster scope)"
-            ) from e
+        ctx = context.get_current()
+        with self.tracer.start_as_current_span(
+            "k8s get ClusterRuntimes", kind=SpanKind.CLIENT, context=ctx
+        ) as span:
+            span.set_attribute(_ATTR_KF_COMPONENT, "trainer")
+            span.set_attribute(_ATTR_KF_BACKEND, "kubernetes")
+            span.set_attribute(_ATTR_KF_RUNTIME, name)
+            span.set_attribute(_ATTR_KF_RUNTIME_VERSION, constants.VERSION)
+            span.set_attribute(_ATTR_KF_RUNTIME_SCOPE, "cluster")
+            try:
+                cluster_thread = self.custom_api.get_cluster_custom_object(
+                    constants.GROUP,
+                    constants.VERSION,
+                    constants.CLUSTER_TRAINING_RUNTIME_PLURAL,
+                    name,
+                    async_req=True,
+                )
+                runtime = models.TrainerV1alpha1ClusterTrainingRuntime.from_dict(
+                    cluster_thread.get(common_constants.DEFAULT_TIMEOUT)
+                )
+                result = self.__get_runtime_from_cr(runtime)
+                span.set_status(Status(StatusCode.OK))
+                return result
+            except multiprocessing.TimeoutError as e:
+                span.set_status(Status(StatusCode.ERROR, "Timeout getting cluster runtime"))
+                span.record_exception(e)
+                span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
+                raise TimeoutError(
+                    f"Timeout to get {constants.CLUSTER_TRAINING_RUNTIME_KIND}: {name}"
+                ) from e
+            except Exception as e:
+                span.set_status(Status(StatusCode.ERROR, "Failed getting cluster runtime"))
+                span.record_exception(e)
+                span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
+                raise RuntimeError(
+                    f"Failed to get Runtime: {name} (checked both namespaced and cluster scope)"
+                ) from e
 
     def get_runtime_packages(self, runtime: types.Runtime):
         if runtime.trainer.trainer_type == types.TrainerType.BUILTIN_TRAINER:
@@ -308,118 +441,198 @@ class KubernetesBackend(RuntimeBackend):
             random.choice(string.ascii_lowercase)
             + uuid.uuid4().hex[: constants.JOB_NAME_UUID_LENGTH]
         )
+        ctx = context.get_current()
+        with self.tracer.start_as_current_span(
+            "k8s create train job", kind=SpanKind.PRODUCER, context=ctx
+        ) as span:
+            span.set_attribute(_ATTR_KF_COMPONENT, "trainer")
+            span.set_attribute(_ATTR_KF_BACKEND, "kubernetes")
+            span.set_attribute(_ATTR_K8S_JOB_NAME, train_job_name)
+            span.set_attribute(_ATTR_K8S_NAMESPACE, self.namespace)
 
-        # Build the TrainJob spec using the common _get_trainjob_spec method
-        trainjob_spec = self._get_trainjob_spec(
-            runtime=runtime,
-            initializer=initializer,
-            trainer=trainer,
-            trainer_overrides=trainer_overrides,
-            runtime_patches=runtime_patches,
-        )
+            # ── Context propagation into the TrainJob ─────────────────────
+            # We inject the current trace context as env vars on the trainer
+            # container. This allows the training process (running inside the
+            # K8s Job pod) to continue the same trace as a child span.
+            # inject() serialises the current context into a carrier dict using
+            # the globally configured propagator (typically W3C TraceContext).
+            # Ref: https://opentelemetry.io/docs/concepts/context-propagation/
+            carrier = {}
+            inject(carrier)
+            print("DEBUG carrier:", carrier)
+            current_span = trace.get_current_span()
+            print("DEBUG span valid:", current_span.get_span_context().is_valid)
+            print("DEBUG span id:", hex(current_span.get_span_context().span_id))
+            logger.debug(f"carrier {carrier}\n ")
+            trace_env_vars = [
+                models.IoK8sApiCoreV1EnvVar(name=k.upper().replace("-", "_"), value=v)
+                for k, v in carrier.items()
+            ]
 
-        # Build the TrainJob.
-        train_job = models.TrainerV1alpha1TrainJob(
-            apiVersion=constants.API_VERSION,
-            kind=constants.TRAINJOB_KIND,
-            metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
-                name=train_job_name, labels=labels, annotations=annotations
-            ),
-            spec=trainjob_spec,
-        )
-
-        # Create the TrainJob.
-        try:
-            self.custom_api.create_namespaced_custom_object(
-                constants.GROUP,
-                constants.VERSION,
-                self.namespace,
-                constants.TRAINJOB_PLURAL,
-                train_job.to_dict(),
+            trainjob_spec = self._get_trainjob_spec(
+                runtime=runtime,
+                initializer=initializer,
+                trainer=trainer,
+                trainer_overrides=trainer_overrides,
+                runtime_patches=runtime_patches,
             )
-        except multiprocessing.TimeoutError as e:
-            raise TimeoutError(
-                f"Timeout to create {constants.TRAINJOB_KIND}: {self.namespace}/{train_job_name}"
-            ) from e
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to create {constants.TRAINJOB_KIND}: {self.namespace}/{train_job_name}"
-            ) from e
 
-        logger.debug(
-            f"{constants.TRAINJOB_KIND} {self.namespace}/{train_job_name} has been created"
-        )
+            # 4. Merge your overrides into the spec
+            # Inject trace context into trainer env — this is the only allowed path
+            if trainjob_spec.trainer is None:
+                trainjob_spec.trainer = models.TrainerV1alpha1Trainer()
 
+            trainjob_spec.trainer.env = (trainjob_spec.trainer.env or []) + trace_env_vars
+            print(f"DEBUG {trainjob_spec.trainer.env}\n")
+            # Build the TrainJob.
+            train_job = models.TrainerV1alpha1TrainJob(
+                apiVersion=constants.API_VERSION,
+                kind=constants.TRAINJOB_KIND,
+                metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                    name=train_job_name, labels=labels, annotations=annotations
+                ),
+                spec=trainjob_spec,
+            )
+            try:
+                self.custom_api.create_namespaced_custom_object(
+                    constants.GROUP,
+                    constants.VERSION,
+                    self.namespace,
+                    constants.TRAINJOB_PLURAL,
+                    train_job.to_dict(),
+                )
+            except multiprocessing.TimeoutError as e:
+                span.set_status(Status(StatusCode.ERROR, "Timeout creating TrainJob"))
+                span.record_exception(e)
+                span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
+                raise TimeoutError(
+                    f"Timeout to create {constants.TRAINJOB_KIND}: {self.namespace}/{train_job_name}"
+                ) from e
+            except Exception as e:
+                span.set_status(Status(StatusCode.ERROR, "Failed to create TrainJob"))
+                span.record_exception(e)
+                span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
+                raise RuntimeError(
+                    f"Failed to create {constants.TRAINJOB_KIND}: {self.namespace}/{train_job_name}"
+                ) from e
+
+            logger.debug(
+                f"{constants.TRAINJOB_KIND} {self.namespace}/{train_job_name} has been created"
+            )
+            span.set_status(Status(StatusCode.OK))
         return train_job_name
 
     def list_jobs(self, runtime: types.Runtime | None = None) -> list[types.TrainJob]:
-        result = []
-        try:
-            thread = self.custom_api.list_namespaced_custom_object(
-                constants.GROUP,
-                constants.VERSION,
-                self.namespace,
-                constants.TRAINJOB_PLURAL,
-                async_req=True,
-            )
+        ctx = context.get_current()
+        with self.tracer.start_as_current_span(
+            "k8s list jobs", kind=SpanKind.CLIENT, context=ctx
+        ) as span:
+            span.set_attribute(_ATTR_KF_COMPONENT, "trainer")
+            span.set_attribute(_ATTR_KF_BACKEND, "kubernetes")
+            span.set_attribute(_ATTR_K8S_NAMESPACE, self.namespace)
+            if runtime is not None:
+                # Narrow the context: we're listing jobs filtered by a runtime
+                span.set_attribute(_ATTR_KF_RUNTIME, runtime.name)
+            result = []
+            try:
+                thread = self.custom_api.list_namespaced_custom_object(
+                    constants.GROUP,
+                    constants.VERSION,
+                    self.namespace,
+                    constants.TRAINJOB_PLURAL,
+                    async_req=True,
+                )
 
-            trainjob_list = models.TrainerV1alpha1TrainJobList.from_dict(
-                thread.get(common_constants.DEFAULT_TIMEOUT)
-            )
+                trainjob_list = models.TrainerV1alpha1TrainJobList.from_dict(
+                    thread.get(common_constants.DEFAULT_TIMEOUT)
+                )
 
-            if not trainjob_list:
-                return result
+                if not trainjob_list:
+                    return result
 
-            for trainjob in trainjob_list.items:
-                # If runtime object is set, we check the TrainJob's runtime reference.
-                if (
-                    runtime is not None
-                    and trainjob.spec
-                    and trainjob.spec.runtime_ref
-                    and trainjob.spec.runtime_ref.name != runtime.name
-                ):
-                    continue
+                for trainjob in trainjob_list.items:
+                    # If runtime object is set, we check the TrainJob's runtime reference.
+                    if (
+                        runtime is not None
+                        and trainjob.spec
+                        and trainjob.spec.runtime_ref
+                        and trainjob.spec.runtime_ref.name != runtime.name
+                    ):
+                        continue
 
-                result.append(self.__get_trainjob_from_cr(trainjob))
+                    result.append(self.__get_trainjob_from_cr(trainjob))
 
-        except multiprocessing.TimeoutError as e:
-            raise TimeoutError(
-                f"Timeout to list {constants.TRAINJOB_KIND}s in namespace: {self.namespace}"
-            ) from e
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to list {constants.TRAINJOB_KIND}s in namespace: {self.namespace}"
-            ) from e
-
-        return result
+            except multiprocessing.TimeoutError as e:
+                span.set_status(Status(StatusCode.ERROR, "Timeout listing TrainJobs"))
+                span.record_exception(e)
+                span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
+                raise TimeoutError(
+                    f"Timeout to list {constants.TRAINJOB_KIND}s in namespace: {self.namespace}"
+                ) from e
+            except Exception as e:
+                span.set_status(Status(StatusCode.ERROR, "Failed to list TrainJobs"))
+                span.record_exception(e)
+                span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
+                raise RuntimeError(
+                    f"Failed to list {constants.TRAINJOB_KIND}s in namespace: {self.namespace}"
+                ) from e
+            span.set_attribute("trainer.job.count", len(result))
+            span.set_status(Status(StatusCode.OK))
+            return result
 
     def get_job(self, name: str) -> types.TrainJob:
         """Get the TrainJob object"""
+        ctx = context.get_current()
+        with self.tracer.start_as_current_span(
+            "k8s get job", kind=SpanKind.CLIENT, context=ctx
+        ) as span:
+            span.set_attribute(_ATTR_K8S_NAMESPACE, self.namespace)
+            span.set_attribute(_ATTR_KF_COMPONENT, "trainer")
+            span.set_attribute(_ATTR_KF_BACKEND, "kubernetes")
+            span.set_attribute(_ATTR_K8S_JOB_NAME, name)
+            try:
+                thread = self.custom_api.get_namespaced_custom_object(
+                    constants.GROUP,
+                    constants.VERSION,
+                    self.namespace,
+                    constants.TRAINJOB_PLURAL,
+                    name,
+                    async_req=True,
+                )
+                with self.tracer.start_as_current_span(
+                    "k8s await TrainJob response", kind=SpanKind.CLIENT
+                ) as wait_span:
+                    wait_span.set_attribute(_ATTR_K8S_JOB_NAME, name)
+                    trainjob = models.TrainerV1alpha1TrainJob.from_dict(
+                        thread.get(common_constants.DEFAULT_TIMEOUT)
+                    )
+            except multiprocessing.TimeoutError as e:
+                span.set_status(Status(StatusCode.ERROR, "Timeout getting TrainJob"))
+                span.record_exception(e)
+                span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
+                raise TimeoutError(
+                    f"Timeout to get {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
+                ) from e
+            except Exception as e:
+                span.set_status(Status(StatusCode.ERROR, "Failed to get TrainJob"))
+                span.record_exception(e)
+                span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
+                raise RuntimeError(
+                    f"Failed to get {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
+                ) from e
 
-        try:
-            thread = self.custom_api.get_namespaced_custom_object(
-                constants.GROUP,
-                constants.VERSION,
-                self.namespace,
-                constants.TRAINJOB_PLURAL,
-                name,
-                async_req=True,
+            trainjob_result = self.__get_trainjob_from_cr(trainjob)
+            span.add_event(
+                "trainjob_parsed",
+                {
+                    "trainjob.status": trainjob_result.status,
+                    "trainjob.num_workers": trainjob_result.num_nodes,
+                },
             )
-
-            trainjob = models.TrainerV1alpha1TrainJob.from_dict(
-                thread.get(common_constants.DEFAULT_TIMEOUT)  # type: ignore
-            )
-
-        except multiprocessing.TimeoutError as e:
-            raise TimeoutError(
-                f"Timeout to get {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
-            ) from e
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to get {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
-            ) from e
-
-        return self.__get_trainjob_from_cr(trainjob)  # type: ignore
+            span.set_attribute("trainjob.status", trainjob_result.status)
+            span.set_attribute("trainjob.num_workers", trainjob_result.num_nodes)
+            span.set_status(Status(StatusCode.OK))
+            return trainjob_result  # type: ignore
 
     def get_job_logs(
         self,
@@ -451,119 +664,164 @@ class KubernetesBackend(RuntimeBackend):
         polling_interval: int = 2,
         callbacks: list[Callable[[types.TrainJob], None]] | None = None,
     ) -> types.TrainJob:
-        job_statuses = {
-            constants.TRAINJOB_CREATED,
-            constants.TRAINJOB_RUNNING,
-            constants.TRAINJOB_COMPLETE,
-            constants.TRAINJOB_FAILED,
-        }
-        if not status.issubset(job_statuses):
-            raise ValueError(f"Expected status {status} must be a subset of {job_statuses}")
+        with self._tracer.start_as_current_span(
+            "k8s wait for job status",
+            kind=SpanKind.INTERNAL,
+        ) as span:
+            span.set_attribute("trainjob.name", name)
+            span.set_attribute("timeout", timeout)
+            span.set_attribute("polling_interval", polling_interval)
+            span.set_attribute("expected.status", list(status))
 
-        if polling_interval <= 0:
-            raise ValueError(
-                f"Polling interval must be a positive number, got polling_interval={polling_interval}"
-            )
-        if polling_interval >= timeout:
-            raise ValueError(
-                f"Polling interval must be strictly less than timeout. "
-                f"Received polling_interval={polling_interval}, timeout={timeout}"
-            )
+            try:
+                job_statuses = {
+                    constants.TRAINJOB_CREATED,
+                    constants.TRAINJOB_RUNNING,
+                    constants.TRAINJOB_COMPLETE,
+                    constants.TRAINJOB_FAILED,
+                }
 
-        for _ in range(round(timeout / polling_interval)):
-            # Check the status after event is generated for the TrainJob's Pods.
-            trainjob = self.get_job(name)
-            logger.debug(f"TrainJob {name}, status {trainjob.status}")
+                if not status.issubset(job_statuses):
+                    raise ValueError(f"Expected status {status} must be a subset of {job_statuses}")
 
-            # Invoke callbacks if provided
-            if callbacks:
-                for callback in callbacks:
-                    callback(trainjob)
+                if polling_interval <= 0:
+                    raise ValueError(f"Polling interval must be positive, got {polling_interval}")
 
-            # Raise an error if TrainJob is Failed and it is not the expected status.
-            if (
-                constants.TRAINJOB_FAILED not in status
-                and trainjob.status == constants.TRAINJOB_FAILED
-            ):
-                raise RuntimeError(f"TrainJob {name} is Failed")
+                if polling_interval >= timeout:
+                    raise ValueError(
+                        f"Polling interval must be less than timeout. "
+                        f"Got polling_interval={polling_interval}, timeout={timeout}"
+                    )
 
-            # Return the TrainJob if it reaches the expected status.
-            if trainjob.status in status:
-                return trainjob
+                for attempt in range(round(timeout / polling_interval)):
+                    trainjob = self.get_job(name)
 
-            time.sleep(polling_interval)
+                    span.set_attribute("last.observed.status", trainjob.status)
+                    span.set_attribute("poll.attempt", attempt)
 
-        raise TimeoutError(f"Timeout waiting for TrainJob {name} to reach status: {status} status")
+                    logger.debug(f"TrainJob {name}, status {trainjob.status}")
+
+                    if callbacks:
+                        for callback in callbacks:
+                            callback(trainjob)
+
+                    if (
+                        constants.TRAINJOB_FAILED not in status
+                        and trainjob.status == constants.TRAINJOB_FAILED
+                    ):
+                        raise RuntimeError(f"TrainJob {name} is Failed")
+
+                    if trainjob.status in status:
+                        span.set_attribute("final.status", trainjob.status)
+                        return trainjob
+
+                    time.sleep(polling_interval)
+
+                raise TimeoutError(f"Timeout waiting for TrainJob {name} to reach status: {status}")
+
+            except Exception as exc:
+                span.record_exception(exc)
+                span.set_status(Status(StatusCode.ERROR, str(exc)))
+                raise
 
     def delete_job(self, name: str):
-        try:
-            self.custom_api.delete_namespaced_custom_object(
-                constants.GROUP,
-                constants.VERSION,
-                self.namespace,
-                constants.TRAINJOB_PLURAL,
-                name=name,
-            )
-        except multiprocessing.TimeoutError as e:
-            raise TimeoutError(
-                f"Timeout to delete {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
-            ) from e
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to delete {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
-            ) from e
+        ctx = context.get_current()
+        with self.tracer.start_as_current_span(
+            "k8s delete job", kind=SpanKind.CLIENT, context=ctx
+        ) as span:
+            span.set_attribute(_ATTR_K8S_NAMESPACE, self.namespace)
+            span.set_attribute(_ATTR_KF_COMPONENT, "trainer")
+            span.set_attribute(_ATTR_KF_BACKEND, "kubernetes")
+            span.set_attribute(_ATTR_K8S_JOB_NAME, name)
+            try:
+                self.custom_api.delete_namespaced_custom_object(
+                    constants.GROUP,
+                    constants.VERSION,
+                    self.namespace,
+                    constants.TRAINJOB_PLURAL,
+                    name=name,
+                )
+                span.set_status(Status(StatusCode.OK))
+            except multiprocessing.TimeoutError as e:
+                span.set_status(Status(StatusCode.ERROR, "Timeout deleting TrainJob"))
+                span.record_exception(e)
+                span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
+                raise TimeoutError(
+                    f"Timeout to delete {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
+                ) from e
+            except Exception as e:
+                span.set_status(Status(StatusCode.ERROR, "Failed to delete TrainJob"))
+                span.record_exception(e)
+                span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
+                raise RuntimeError(
+                    f"Failed to delete {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
+                ) from e
 
         logger.debug(f"{constants.TRAINJOB_KIND} {self.namespace}/{name} has been deleted")
 
     def get_job_events(self, name: str) -> list[types.Event]:
-        # Get all pod names related to this TrainJob
-        trainjob = self.get_job(name)
+        ctx = context.get_current()
+        with self.tracer.start_as_current_span(
+            "k8s get job events", kind=SpanKind.CLIENT, context=ctx
+        ) as span:
+            span.set_attribute(_ATTR_K8S_NAMESPACE, self.namespace)
+            span.set_attribute(_ATTR_KF_COMPONENT, "trainer")
+            span.set_attribute(_ATTR_KF_BACKEND, "kubernetes")
+            span.set_attribute(_ATTR_K8S_JOB_NAME, name)
 
-        # Create set of all TrainJob-related resource names
-        trainjob_resources = {name}
-        for step in trainjob.steps:
-            trainjob_resources.add(step.name)
-            if step.pod_name:
-                trainjob_resources.add(step.pod_name)
+            # Get all pod names related to this TrainJob
+            trainjob = self.get_job(name)
 
-        events = []
-        try:
-            # Retrieve events from the namespace
-            event_response: models.IoK8sApiCoreV1EventList = self.core_api.list_namespaced_event(
-                namespace=self.namespace,
-                async_req=True,
-            ).get(common_constants.DEFAULT_TIMEOUT)
+            # Create set of all TrainJob-related resource names
+            trainjob_resources = {name}
+            for step in trainjob.steps:
+                trainjob_resources.add(step.name)
+                if step.pod_name:
+                    trainjob_resources.add(step.pod_name)
 
-            # Filter events related to this TrainJob or its pods
-            for event in event_response.items:
-                if not (event.metadata and event.involved_object and event.first_timestamp):
-                    continue
+            events = []
+            try:
+                # Retrieve events from the namespace
+                event_response: models.IoK8sApiCoreV1EventList = (
+                    self.core_api.list_namespaced_event(
+                        namespace=self.namespace,
+                        async_req=True,
+                    ).get(common_constants.DEFAULT_TIMEOUT)
+                )
 
-                involved_object = event.involved_object
+                # Filter events related to this TrainJob or its pods
+                for event in event_response.items:
+                    if not (event.metadata and event.involved_object and event.first_timestamp):
+                        continue
 
-                # Check if event is related to TrainJob resources
-                if (
-                    involved_object.kind in {constants.TRAINJOB_KIND, "JobSet", "Job", "Pod"}
-                    and involved_object.name in trainjob_resources
-                ):
-                    events.append(
-                        types.Event(
-                            involved_object_kind=involved_object.kind,
-                            involved_object_name=involved_object.name,
-                            message=event.message or "",
-                            reason=event.reason or "",
-                            event_time=event.first_timestamp,
+                    involved_object = event.involved_object
+
+                    # Check if event is related to TrainJob resources
+                    if (
+                        involved_object.kind in {constants.TRAINJOB_KIND, "JobSet", "Job", "Pod"}
+                        and involved_object.name in trainjob_resources
+                    ):
+                        events.append(
+                            types.Event(
+                                involved_object_kind=involved_object.kind,
+                                involved_object_name=involved_object.name,
+                                message=event.message or "",
+                                reason=event.reason or "",
+                                event_time=event.first_timestamp,
+                            )
                         )
-                    )
 
-            # Sort events by first occurrence time
-            events.sort(key=lambda e: e.event_time)
-
-            return events
-        except multiprocessing.TimeoutError as e:
-            raise TimeoutError(
-                f"Timeout getting {constants.TRAINJOB_KIND} events: {self.namespace}/{name}"
-            ) from e
+                # Sort events by first occurrence time
+                events.sort(key=lambda e: e.event_time)
+                span.set_status(Status(StatusCode.OK))
+                return events
+            except multiprocessing.TimeoutError as e:
+                span.set_status(Status(StatusCode.ERROR, "Timeout getting events"))
+                span.record_exception(e)
+                span.set_attribute(_ATTR_ERROR_TYPE, type(e).__name__)
+                raise TimeoutError(
+                    f"Timeout getting {constants.TRAINJOB_KIND} events: {self.namespace}/{name}"
+                ) from e
 
     def __get_runtime_from_cr(
         self,
