@@ -679,7 +679,7 @@ def wait_for_run_status(
     run: str | Run,
     *,
     status: set[str] = {constants.RUN_COMPLETE},
-    timeout: int | None = None,
+    timeout: int = 600,
     polling_interval: int = 5,
     callbacks: list[Callable[[types.Run], None]] | None = None,
 ) -> Run:
@@ -691,7 +691,7 @@ def wait_for_run_status(
 
 - **`callbacks` —** Called with the final `Run` object when the wait ends (on any stop condition). Replaces the `raise_on_failure` flag. Callbacks can inspect `run.state` and raise or log as needed.
 
-- **`timeout` —** If set (seconds), `TimeoutError` if the window expires before a stop condition. If omitted, poll until a stop condition.
+- **`timeout` —** Maximum seconds to wait. `TimeoutError` if the window expires before a stop condition. Defaults to 600 (10 minutes), matching `TrainerClient.wait_for_job_status`.
 
 **Example:** You asked for `{"running"}` but the run `failed` first → wait stops immediately; any provided callbacks receive the `Run` object.
 
