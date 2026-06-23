@@ -464,7 +464,7 @@ def get_trainer_cr_from_builtin_trainer(
     trainer_cr.command = list(runtime.trainer.command)
     # Parse args in the TorchTuneConfig to the Trainer, preparing for the mutation of
     # the torchtune config in the runtime plugin.
-    # Ref:https://github.com/kubeflow/trainer/tree/master/docs/proposals/2401-llm-trainer-v2
+    # Ref:https://github.com/kubeflow/trainer/tree/master/proposals/2401-llm-trainer-v2
     trainer_cr.args = get_args_using_torchtune_config(trainer.config, initializer)
 
     return trainer_cr
