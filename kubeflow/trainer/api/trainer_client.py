@@ -63,10 +63,13 @@ class TrainerClient:
             raise ValueError(f"Invalid backend config '{backend_config}'")
 
     def list_runtimes(self) -> list[types.Runtime]:
-        """List of the available runtimes.
+        """List of the available runtimes, preferring namespaced over cluster-scoped for duplicates.
 
         Returns:
-            A list of available training runtimes. If no runtimes exist, an empty list is returned.
+            A list of training runtimes from both namespace-scoped and
+            cluster-scoped resources. If duplicates exist, the
+            namespace-scoped runtime is preferred. Returns an empty list
+            if no runtimes are found.
 
         Raises:
             TimeoutError: Timeout to list runtimes.
@@ -76,11 +79,14 @@ class TrainerClient:
 
     def get_runtime(self, name: str) -> types.Runtime:
         """Get the runtime object
+
         Args:
             name: Name of the runtime.
 
         Returns:
-            A runtime object.
+            A runtime object. If both namespace-scoped and
+            cluster-scoped runtimes exist with the same name, the
+            namespace-scoped runtime is returned.
         """
         return self.backend.get_runtime(name=name)
 
@@ -151,7 +157,7 @@ class TrainerClient:
             runtime: Reference to one of the existing runtimes.
 
         Returns:
-            List of created TrainJobs. If no TrainJob exist, an empty list is returned.
+            List of created TrainJobs. If no TrainJobs exist, an empty list is returned.
 
         Raises:
             TimeoutError: Timeout to list TrainJobs.
@@ -160,7 +166,7 @@ class TrainerClient:
         return self.backend.list_jobs(runtime=runtime)
 
     def get_job(self, name: str) -> types.TrainJob:
-        """Get the TrainJob object
+        """Get the TrainJob object.
 
         Args:
             name: Name of the TrainJob.

@@ -26,6 +26,7 @@ import sys
 import threading
 import time
 
+from kubeflow_spark_api import models
 from kubernetes import client, config
 from pyspark.sql import SparkSession
 
@@ -35,9 +36,9 @@ from kubeflow.spark.backends.base import RuntimeBackend
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.utils import (
     build_service_url,
-    build_spark_connect_crd,
+    build_spark_connect_cr,
     generate_session_name,
-    parse_spark_connect_status,
+    get_spark_connect_info_from_cr,
 )
 from kubeflow.spark.types.options import Name
 from kubeflow.spark.types.types import Driver, Executor, SparkConnectInfo, SparkConnectState
@@ -120,24 +121,10 @@ class KubernetesBackend(RuntimeBackend):
         options: list | None = None,
     ) -> SparkConnectInfo:
         """Create a new SparkConnect session (INTERNAL USE ONLY)."""
-        # Validate input types
-        if resources_per_executor is not None and not isinstance(resources_per_executor, dict):
-            raise TypeError(
-                f"resources_per_executor must be a dict, got {type(resources_per_executor)}"
-            )
-        if spark_conf is not None and not isinstance(spark_conf, dict):
-            raise TypeError(f"spark_conf must be a dict, got {type(spark_conf)}")
-        if num_executors is not None and not isinstance(num_executors, int):
-            raise TypeError(f"num_executors must be an int, got {type(num_executors)}")
-        if driver is not None and not isinstance(driver, Driver):
-            raise TypeError(f"driver must be a Driver instance, got {type(driver)}")
-        if executor is not None and not isinstance(executor, Executor):
-            raise TypeError(f"executor must be an Executor instance, got {type(executor)}")
-
         # Extract Name option if present, or auto-generate
         name, filtered_options = self._extract_name_option(options)
 
-        crd = build_spark_connect_crd(
+        spark_connect = build_spark_connect_cr(
             name=name,
             namespace=self.namespace,
             num_executors=num_executors,
@@ -157,7 +144,7 @@ class KubernetesBackend(RuntimeBackend):
                 version=constants.SPARK_CONNECT_VERSION,
                 namespace=self.namespace,
                 plural=constants.SPARK_CONNECT_PLURAL,
-                body=crd,
+                body=spark_connect.to_dict(),
                 async_req=True,
             )
             response = thread.get(common_constants.DEFAULT_TIMEOUT)
@@ -170,7 +157,8 @@ class KubernetesBackend(RuntimeBackend):
                 f"Failed to create {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
             ) from e
 
-        return parse_spark_connect_status(response)
+        spark_connect_cr = models.SparkV1alpha1SparkConnect.from_dict(response)
+        return get_spark_connect_info_from_cr(spark_connect_cr)
 
     def get_session(self, name: str) -> SparkConnectInfo:
         """Get information about a SparkConnect session."""
@@ -184,7 +172,9 @@ class KubernetesBackend(RuntimeBackend):
                 async_req=True,
             )
             response = thread.get(common_constants.DEFAULT_TIMEOUT)
-            return parse_spark_connect_status(response)
+
+            spark_connect_cr = models.SparkV1alpha1SparkConnect.from_dict(response)
+            return get_spark_connect_info_from_cr(spark_connect_cr)
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(
                 f"Timeout to get {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
@@ -222,7 +212,8 @@ class KubernetesBackend(RuntimeBackend):
                 f"Failed to list {constants.SPARK_CONNECT_KIND}s in namespace: {self.namespace}"
             ) from e
 
-        return [parse_spark_connect_status(item) for item in response.get("items", [])]
+        spark_connect_list = models.SparkV1alpha1SparkConnectList.from_dict(response)
+        return [get_spark_connect_info_from_cr(sc) for sc in spark_connect_list.items]
 
     def delete_session(self, name: str) -> None:
         """Delete a SparkConnect session."""

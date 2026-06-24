@@ -30,7 +30,6 @@ from kubeflow.spark.types.types import (
     SparkConnectInfo,
     SparkConnectState,
 )
-from kubeflow.spark.types.validation import ValidationError
 
 __all__ = [
     # Core API
@@ -49,6 +48,4 @@ __all__ = [
     "Toleration",
     # Configuration
     "KubernetesBackendConfig",
-    # Exceptions
-    "ValidationError",
 ]

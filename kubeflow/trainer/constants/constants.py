@@ -73,7 +73,7 @@ MODEL_INITIALIZER = "model-initializer"
 INITIALIZER_ENV_ACCESS_TOKEN = "ACCESS_TOKEN"
 
 # The default value for initializer to ignore files.
-INITIALIZER_DEFAULT_IGNORE_PATTERNS = ["*.msgpack", "*.h5", "*.bin", ".pt", ".pth"]
+INITIALIZER_DEFAULT_IGNORE_PATTERNS = ["*.msgpack", "*.h5", "*.bin", "*.pt", "*.pth"]
 
 # The default path to the users' workspace.
 # TODO (andreyvelich): Discuss how to keep this path is sync with pkg.initializers.constants
@@ -103,6 +103,12 @@ GPU_MIG_PREFIX = "nvidia.com/mig-"
 
 # The label for TPU in the container resources.
 TPU_LABEL = "google.com/tpu"
+
+# The label for NPU in the container resources.
+# Unlike GPU (nvidia.com/gpu) and TPU (google.com/tpu), NPU vendors don't use
+# a consistent suffix that maps to device type, so we hardcode the full
+# Huawei Ascend 910 resource label until a general strategy is agreed upon.
+NPU_LABEL = "huawei.com/Ascend910"
 
 # The label key to identify the JobSet name of the Pod.
 JOBSET_NAME_LABEL = "jobset.sigs.k8s.io/jobset-name"
