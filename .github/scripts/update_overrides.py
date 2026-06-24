@@ -22,7 +22,8 @@ import sys
 def main():
     if len(sys.argv) != 5:
         print(
-            "Usage: update_overrides.py <package> <target> <date> <advisory_url>", file=sys.stderr
+            "Usage: update_overrides.py <package> <target> <date> <advisory_url>",
+            file=sys.stderr,
         )
         sys.exit(1)
 
@@ -93,16 +94,33 @@ def main():
         # Single-line: override-dependencies = ["pkg==1.0"]
         # Multi-line: override-dependencies = [\n    "pkg",\n]
         content = re.sub(
-            r"^override-dependencies\s*=\s*\[.*?\]", "", content, flags=re.MULTILINE | re.DOTALL
+            r"^override-dependencies\s*=\s*\[.*?\]",
+            "",
+            content,
+            flags=re.MULTILINE | re.DOTALL,
         )
         # Also remove any orphaned comments before override-dependencies
-        content = re.sub(r"^# Security overrides.*?\n", "", content, flags=re.MULTILINE)
+        content = re.sub(
+            r"^# Security overrides.*?\n(?:[ \t]*\n)?",
+            "",
+            content,
+            flags=re.MULTILINE,
+        )
+
+        # Re-add the header after [tool.uv] so insertion logic stays consistent
+        content = re.sub(
+            r"(\[tool\.uv\]\r?\n)",
+            r"\1# Security overrides - Review periodically and remove "
+            r"if parent constraints allow natural upgrade\n",
+            content,
+            count=1,
+        )
 
     # Find [tool.uv] and insert override-dependencies
     if not has_overrides and has_tool_uv:
         # Insert after [tool.uv]
         content = re.sub(
-            r"(\[tool\.uv\]\n)",
+            r"(\[tool\.uv\]\r?\n)",
             r"\1# Security overrides - Review periodically and remove if parent constraints allow natural upgrade\n",
             content,
         )
@@ -118,9 +136,9 @@ def main():
 
     # Insert after [tool.uv] or the header comment
     if "# Security overrides" in content:
-        content = re.sub(r"(# Security overrides.*?\n)", r"\1" + override_block + "\n", content)
+        content = re.sub(r"(# Security overrides.*?\r?\n)", r"\1" + override_block + "\n", content)
     else:
-        content = re.sub(r"(\[tool\.uv\]\n)", r"\1" + override_block + "\n", content)
+        content = re.sub(r"(\[tool\.uv\]\r?\n)", r"\1" + override_block + "\n", content, count=1)
 
     # Write back
     pyproject_path.write_text(content)

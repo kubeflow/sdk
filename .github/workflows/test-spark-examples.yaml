@@ -2,13 +2,6 @@ name: Spark Examples E2E Test
 
 on:
   pull_request:
-    paths:
-      - 'examples/spark/**'
-      - 'kubeflow/spark/**'
-      - 'test/e2e/spark/**'
-      - 'hack/crds/**'
-      - 'hack/e2e-setup-cluster.sh'
-      - '.github/workflows/test-spark-examples.yaml'
   workflow_dispatch:
 
 concurrency:

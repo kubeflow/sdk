@@ -209,17 +209,83 @@ def test_init(test_case, monkeypatch):
                 "model_format_version": "1.0",
                 "version": "v1",
             },
+            expected_output={
+                "storage_key": None,
+                "storage_path": None,
+                "service_account_name": None,
+            },
+        ),
+        TestCase(
+            name="register_model forwards full StorageConfig fields",
+            expected_status=SUCCESS,
+            config={
+                "name": "test",
+                "uri": "s3://bucket/model",
+                "version": "v1",
+                "storage_config_kwargs": {
+                    "storage_key": "my-s3-secret",
+                    "storage_path": "models/v1",
+                    "service_account_name": "model-sa",
+                },
+            },
+            expected_output={
+                "storage_key": "my-s3-secret",
+                "storage_path": "models/v1",
+                "service_account_name": "model-sa",
+            },
+        ),
+        TestCase(
+            name="register_model forwards partial StorageConfig (storage_key only)",
+            expected_status=SUCCESS,
+            config={
+                "name": "test",
+                "uri": "s3://bucket/model",
+                "version": "v1",
+                "storage_config_kwargs": {"storage_key": "my-s3-secret"},
+            },
+            expected_output={
+                "storage_key": "my-s3-secret",
+                "storage_path": None,
+                "service_account_name": None,
+            },
+        ),
+        TestCase(
+            name="register_model forwards partial StorageConfig (service_account_name only)",
+            expected_status=SUCCESS,
+            config={
+                "name": "test",
+                "uri": "s3://bucket/model",
+                "version": "v1",
+                "storage_config_kwargs": {"service_account_name": "model-sa"},
+            },
+            expected_output={
+                "storage_key": None,
+                "storage_path": None,
+                "service_account_name": "model-sa",
+            },
         ),
     ],
 )
 def test_register_model(test_case, client, mock_registry):
     """Test register_model delegates to ModelRegistry.register_model."""
 
+    from kubeflow.hub.types.types import StorageConfig
+
+    config = dict(test_case.config)
+    storage_kwargs = config.pop("storage_config_kwargs", None)
+    if storage_kwargs is not None:
+        config["storage_config"] = StorageConfig(**storage_kwargs)
+
     try:
-        client.register_model(**test_case.config)
+        client.register_model(**config)
 
         assert test_case.expected_status == SUCCESS
         assert mock_registry.register_model.called
+        forwarded = mock_registry.register_model.call_args[1]
+        for field, expected in test_case.expected_output.items():
+            assert forwarded[field] == expected, (
+                f"expected {field}={expected!r}, got {forwarded[field]!r}"
+            )
 
     except Exception as e:
         assert test_case.expected_status == FAILED

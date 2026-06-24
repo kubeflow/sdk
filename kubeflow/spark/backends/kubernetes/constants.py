@@ -20,10 +20,9 @@ SPARK_CONNECT_VERSION = "v1alpha1"
 SPARK_CONNECT_PLURAL = "sparkconnects"
 SPARK_CONNECT_KIND = "SparkConnect"
 
-# Default values; keep major.minor aligned with PySpark in pyproject.toml [spark] extra
-# Pin 3.4.1 to avoid SerializedLambda vs Scala Function3 driver-executor mismatch (3.5.0)
-DEFAULT_SPARK_VERSION = "3.4.1"
-DEFAULT_SPARK_IMAGE = "apache/spark:3.4.1"
+# Default values; keep major.minor aligned with pyspark-connect in pyproject.toml
+DEFAULT_SPARK_VERSION = "4.0.1"
+DEFAULT_SPARK_IMAGE = "apache/spark:4.0.1"
 DEFAULT_NUM_EXECUTORS = 1  # Kind-friendly: 1 driver + 1 executor = 2 cores
 
 # Minimal defaults for Kind / resource-constrained clusters (driver and executor)
@@ -40,4 +39,4 @@ SPARK_CONNECT_PORT = 15002
 SESSION_NAME_PREFIX = "spark-connect"
 
 # Spark Connect Maven package (required for Connect server main class on classpath)
-SPARK_CONNECT_PACKAGE_SCALA_VERSION = "2.12"
+SPARK_CONNECT_PACKAGE_SCALA_VERSION = "2.13"

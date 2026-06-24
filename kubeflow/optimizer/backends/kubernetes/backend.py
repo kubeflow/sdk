@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from collections.abc import Callable, Iterator
+import copy
 import logging
 import multiprocessing
 import random
@@ -81,6 +82,9 @@ class KubernetesBackend(RuntimeBackend):
         # Validate search_space
         if not search_space:
             raise ValueError("Search space must be set.")
+
+        trial_template = copy.deepcopy(trial_template)
+        search_space = copy.deepcopy(search_space)
 
         # Set defaults.
         objectives = objectives or [Objective()]
@@ -280,9 +284,14 @@ class KubernetesBackend(RuntimeBackend):
         if not status.issubset(job_statuses):
             raise ValueError(f"Expected status {status} must be a subset of {job_statuses}")
 
-        if polling_interval > timeout:
+        if polling_interval <= 0:
             raise ValueError(
-                f"Polling interval {polling_interval} must be less than timeout: {timeout}"
+                f"Polling interval must be a positive number, got polling_interval={polling_interval}"
+            )
+        if polling_interval >= timeout:
+            raise ValueError(
+                f"Polling interval must be strictly less than timeout. "
+                f"Received polling_interval={polling_interval}, timeout={timeout}"
             )
 
         for _ in range(round(timeout / polling_interval)):

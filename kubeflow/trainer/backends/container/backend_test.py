@@ -938,6 +938,11 @@ def test_wait_for_job_status(container_backend, test_case):
 
     except Exception as e:
         assert type(e) is test_case.expected_error
+        if test_case.name == "job fails":
+            msg = str(e)
+            assert f"TrainJob {job_name} is Failed" in msg
+            assert "exit_code=1" in msg
+            assert "Last logs:" in msg
     print("test execution complete")
 
 

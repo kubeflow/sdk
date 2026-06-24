@@ -15,7 +15,7 @@
 """Training options for the Kubeflow Trainer SDK.
 
 All options are available from this single import location:
-    from kubeflow.trainer.options import Name, Labels, PodTemplateOverrides, ...
+    from kubeflow.trainer.options import Name, Labels, RuntimePatch, ...
 
 Options self-validate their backend compatibility at runtime.
 Check each option's docstring for supported backends.
@@ -24,15 +24,19 @@ Check each option's docstring for supported backends.
 from kubeflow.trainer.options.common import Name
 from kubeflow.trainer.options.kubernetes import (
     Annotations,
-    ContainerOverride,
+    ContainerPatch,
+    JobSetSpecPatch,
+    JobSetTemplatePatch,
+    JobSpecPatch,
+    JobTemplatePatch,
     Labels,
-    PodSpecOverride,
-    PodTemplateOverride,
-    PodTemplateOverrides,
-    SpecAnnotations,
-    SpecLabels,
+    PodSpecPatch,
+    PodTemplatePatch,
+    ReplicatedJobPatch,
+    RuntimePatch,
     TrainerArgs,
     TrainerCommand,
+    TrainingRuntimeSpecPatch,
 )
 
 __all__ = [
@@ -40,13 +44,17 @@ __all__ = [
     "Name",
     # Kubernetes options
     "Annotations",
-    "ContainerOverride",
+    "ContainerPatch",
+    "JobSetSpecPatch",
+    "JobSetTemplatePatch",
+    "JobSpecPatch",
+    "JobTemplatePatch",
     "Labels",
-    "PodSpecOverride",
-    "PodTemplateOverride",
-    "PodTemplateOverrides",
-    "SpecAnnotations",
-    "SpecLabels",
+    "PodSpecPatch",
+    "PodTemplatePatch",
+    "ReplicatedJobPatch",
+    "RuntimePatch",
     "TrainerArgs",
     "TrainerCommand",
+    "TrainingRuntimeSpecPatch",
 ]

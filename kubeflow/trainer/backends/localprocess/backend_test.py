@@ -31,8 +31,7 @@ from kubeflow.trainer.options import (
     Annotations,
     Labels,
     Name,
-    PodTemplateOverride,
-    PodTemplateOverrides,
+    RuntimePatch,
 )
 from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.types import types
@@ -290,13 +289,7 @@ def test_get_runtime_packages(local_backend, test_case):
                 "trainer": types.CustomTrainer(
                     func=dummy_training_function,
                 ),
-                "options": [
-                    PodTemplateOverrides(
-                        PodTemplateOverride(
-                            target_jobs=["node"],
-                        )
-                    )
-                ],
+                "options": [RuntimePatch()],
             },
             expected_error=ValueError,
         ),
@@ -437,18 +430,40 @@ def test_get_job_logs(local_backend, test_case):
         TestCase(
             name="wait_for_nonexistent_job",
             expected_status=FAILED,
-            config={"job_name": "nonexistent-job"},
+            config={"name": "nonexistent-job"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="polling_interval greater than timeout raises ValueError",
+            expected_status=FAILED,
+            config={"name": BASIC_TRAIN_JOB_NAME, "timeout": 1, "polling_interval": 2},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="polling_interval equal to timeout raises ValueError",
+            expected_status=FAILED,
+            config={"name": BASIC_TRAIN_JOB_NAME, "timeout": 10, "polling_interval": 10},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="zero polling_interval raises ValueError",
+            expected_status=FAILED,
+            config={"name": BASIC_TRAIN_JOB_NAME, "timeout": 10, "polling_interval": 0},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="negative polling_interval raises ValueError",
+            expected_status=FAILED,
+            config={"name": BASIC_TRAIN_JOB_NAME, "timeout": 10, "polling_interval": -1},
             expected_error=ValueError,
         ),
     ],
 )
 def test_wait_for_job_status(local_backend, test_case):
     """Test LocalProcessBackend.wait_for_job_status()."""
-    job_name = test_case.config.get("job_name")
-
     if test_case.expected_status == FAILED:
         with pytest.raises(test_case.expected_error):
-            local_backend.wait_for_job_status(job_name)
+            local_backend.wait_for_job_status(**test_case.config)
 
 
 @pytest.mark.parametrize(
@@ -497,3 +512,65 @@ def test_name_option_sets_job_name(local_backend, mock_train_environment):
     )
 
     assert job_name == custom_name
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="all steps complete returns TRAINJOB_COMPLETE",
+            expected_status=SUCCESS,
+            config={
+                "step_statuses": [constants.TRAINJOB_COMPLETE, constants.TRAINJOB_COMPLETE],
+            },
+            expected_output=constants.TRAINJOB_COMPLETE,
+        ),
+        TestCase(
+            name="any step running returns TRAINJOB_RUNNING",
+            expected_status=SUCCESS,
+            config={
+                "step_statuses": [constants.TRAINJOB_COMPLETE, constants.TRAINJOB_RUNNING],
+            },
+            expected_output=constants.TRAINJOB_RUNNING,
+        ),
+        TestCase(
+            name="any step failed returns TRAINJOB_FAILED",
+            expected_status=SUCCESS,
+            config={
+                "step_statuses": [constants.TRAINJOB_FAILED, constants.TRAINJOB_RUNNING],
+            },
+            expected_output=constants.TRAINJOB_FAILED,
+        ),
+        TestCase(
+            name="any step created returns TRAINJOB_CREATED",
+            expected_status=SUCCESS,
+            config={
+                "step_statuses": [constants.TRAINJOB_CREATED, constants.TRAINJOB_COMPLETE],
+            },
+            expected_output=constants.TRAINJOB_CREATED,
+        ),
+        TestCase(
+            name="no steps registered returns TRAINJOB_CREATED",
+            expected_status=SUCCESS,
+            config={
+                "step_statuses": [],
+            },
+            expected_output=constants.TRAINJOB_CREATED,
+        ),
+    ],
+)
+def test_get_job_status(local_backend, test_case):
+    """Test LocalProcessBackend.__get_job_status() across all status scenarios."""
+    step_statuses = test_case.config["step_statuses"]
+
+    steps = []
+    for s in step_statuses:
+        step = Mock()
+        step.job.status = s
+        steps.append(step)
+
+    job = Mock()
+    job.steps = steps
+
+    status = local_backend._LocalProcessBackend__get_job_status(job)
+    assert status == test_case.expected_output
