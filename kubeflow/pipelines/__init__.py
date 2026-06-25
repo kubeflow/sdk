@@ -53,7 +53,7 @@ _KFP_INSTALL_MSG = (
 
 _DSL_MODULES = {"compiler", "components", "dsl", "kubernetes"}
 
-_KFP_TYPES = {
+_KFP_ATTRS = {
     "Experiment",
     "KubernetesBackendConfig",
     "ListExperimentsResponse",
@@ -69,9 +69,12 @@ _KFP_TYPES = {
 
 def __getattr__(name: str):
     if name == "PipelinesClient":
-        from kubeflow.pipelines.api.pipelines_client import PipelinesClient
+        try:
+            from kubeflow.pipelines.api.pipelines_client import PipelinesClient
 
-        return PipelinesClient
+            return PipelinesClient
+        except ImportError as e:
+            raise ImportError(_KFP_INSTALL_MSG) from e
 
     if name in _DSL_MODULES:
         try:
@@ -81,7 +84,7 @@ def __getattr__(name: str):
         except ImportError as e:
             raise ImportError(_KFP_INSTALL_MSG) from e
 
-    if name in _KFP_TYPES:
+    if name in _KFP_ATTRS:
         try:
             from kfp import kubeflow_client
 
