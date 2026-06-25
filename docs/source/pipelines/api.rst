@@ -8,7 +8,7 @@ All classes below are available via ``from kubeflow.pipelines import ...``.
 Pipelines Client
 ----------------
 
-.. autoclass:: kfp.kubeflow_client.api.pipelines_client.PipelinesClient
+.. autoclass:: kubeflow.pipelines.PipelinesClient
    :members:
    :undoc-members:
    :show-inheritance:
@@ -16,7 +16,7 @@ Pipelines Client
 Backend Configuration
 ---------------------
 
-.. autoclass:: kfp.kubeflow_client.backends.kubernetes.types.KubernetesBackendConfig
+.. autoclass:: kubeflow.pipelines.KubernetesBackendConfig
    :members:
    :undoc-members:
 
@@ -41,42 +41,42 @@ Constants
 
 Available via ``from kubeflow.pipelines import constants``.
 
-.. data:: kfp.kubeflow_client.constants.RUN_SUCCEEDED
+.. data:: kubeflow.pipelines.constants.RUN_SUCCEEDED
 
    ``'succeeded'``
 
-.. data:: kfp.kubeflow_client.constants.RUN_FAILED
+.. data:: kubeflow.pipelines.constants.RUN_FAILED
 
    ``'failed'``
 
-.. data:: kfp.kubeflow_client.constants.RUN_SKIPPED
+.. data:: kubeflow.pipelines.constants.RUN_SKIPPED
 
    ``'skipped'``
 
-.. data:: kfp.kubeflow_client.constants.RUN_CANCELED
+.. data:: kubeflow.pipelines.constants.RUN_CANCELED
 
    ``'canceled'``
 
-.. data:: kfp.kubeflow_client.constants.RUN_CANCELING
+.. data:: kubeflow.pipelines.constants.RUN_CANCELING
 
    ``'canceling'``
 
-.. data:: kfp.kubeflow_client.constants.RUN_RUNNING
+.. data:: kubeflow.pipelines.constants.RUN_RUNNING
 
    ``'running'``
 
-.. data:: kfp.kubeflow_client.constants.RUN_PENDING
+.. data:: kubeflow.pipelines.constants.RUN_PENDING
 
    ``'pending'``
 
-.. data:: kfp.kubeflow_client.constants.RUN_PAUSED
+.. data:: kubeflow.pipelines.constants.RUN_PAUSED
 
    ``'paused'``
 
-.. data:: kfp.kubeflow_client.constants.RUN_COMPLETE
+.. data:: kubeflow.pipelines.constants.RUN_COMPLETE
 
    Alias for :data:`RUN_SUCCEEDED`.
 
-.. data:: kfp.kubeflow_client.constants.TERMINAL_STATES
+.. data:: kubeflow.pipelines.constants.TERMINAL_STATES
 
    ``frozenset({'succeeded', 'failed', 'skipped', 'canceled'})``
