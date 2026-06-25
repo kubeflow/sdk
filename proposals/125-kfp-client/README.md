@@ -495,7 +495,7 @@ class PipelinesBackendConfig:
 | `base_url` | KFP API server URL including scheme and port (e.g. `https://ml-pipeline.example.com:8080`). If omitted, auto-discovered following `kfp.Client` conventions (in-cluster DNS or kubeconfig proxy) |
 | `user_token` | Bearer token for authentication |
 | `is_secure` | Inferred from scheme if omitted |
-| `custom_ca` | Path to PEM-encoded root certificates |
+| `custom_ca` | Path to PEM-encoded root certificates. When omitted, the client probes for a system CA bundle (via `SSL_CERT_FILE`, OpenSSL defaults, or common OS paths) before falling back to `certifi`. This ensures enterprise internal CAs work without explicit configuration |
 | `namespace` | K8s namespace. If omitted, auto-detected following `kfp.Client` conventions |
 
 **Usage:**
@@ -679,7 +679,7 @@ def wait_for_run_status(
     run: str | Run,
     *,
     status: set[str] = {constants.RUN_COMPLETE},
-    timeout: int = 600,
+    timeout: int | None = 600,
     polling_interval: int = 5,
     callbacks: list[Callable[[types.Run], None]] | None = None,
 ) -> Run:
@@ -687,11 +687,11 @@ def wait_for_run_status(
 
 **Semantics**
 
-- **`status` —** Stop when the run state is in `status`, or sooner on any terminal state (`succeeded`, `failed`, `skipped`, `error`, `cancelled`) or `timeout`. Default is `{constants.RUN_COMPLETE}` (`"succeeded"`).
+- **`status` —** Stop when the run state is in `status`, or sooner on any terminal state (`succeeded`, `failed`, `skipped`, `canceled`) or `timeout`. Default is `{constants.RUN_COMPLETE}` (`"succeeded"`).
 
 - **`callbacks` —** Called with the final `Run` object when the wait ends (on any stop condition). Replaces the `raise_on_failure` flag. Callbacks can inspect `run.state` and raise or log as needed.
 
-- **`timeout` —** Maximum seconds to wait. `TimeoutError` if the window expires before a stop condition. Defaults to 600 (10 minutes), matching `TrainerClient.wait_for_job_status`.
+- **`timeout` —** Maximum seconds to wait. `TimeoutError` if the window expires before a stop condition. Defaults to 600 (10 minutes), matching `TrainerClient.wait_for_job_status`. Pass `None` to wait indefinitely (the loop still exits on any terminal state).
 
 **Example:** You asked for `{"running"}` but the run `failed` first → wait stops immediately; any provided callbacks receive the `Run` object.
 
