@@ -61,6 +61,9 @@ class TestLazyImport:
     )
     def test_module_imports_without_kfp(self, test_case, monkeypatch):
         _reload_pipelines_modules()
+        for mod_name in list(sys.modules):
+            if mod_name == "kfp" or mod_name.startswith("kfp."):
+                del sys.modules[mod_name]
         monkeypatch.setattr("builtins.__import__", _block_kfp_import)
 
         # Module-level import must NOT fail — lazy pattern
