@@ -14,21 +14,6 @@
 
 """Re-export PipelinesClient from kfp.kubeflow_client."""
 
-__all__ = ["PipelinesClient"]  # noqa: F822
+from kfp.kubeflow_client.api.pipelines_client import PipelinesClient
 
-
-def __getattr__(name: str):
-    if name == "PipelinesClient":
-        try:
-            from kfp.kubeflow_client.api.pipelines_client import PipelinesClient
-
-            return PipelinesClient
-        except ImportError as e:
-            raise ImportError(
-                "kfp is required for PipelinesClient. "
-                "Install it with: pip install 'kubeflow[pipelines]'"
-            ) from e
-
-    raise AttributeError(
-        f"module 'kubeflow.pipelines.api.pipelines_client' has no attribute {name!r}"
-    )
+__all__ = ["PipelinesClient"]
