@@ -129,6 +129,7 @@ def _replace_v2beta1_in_doctree(_app, doctree, docname):
 def setup(app):
     app.connect("doctree-resolved", _replace_v2beta1_in_doctree)
 
+
 # -- Options for HTML output -------------------------------------------------
 html_theme = "furo"
 html_title = "Kubeflow SDK"
