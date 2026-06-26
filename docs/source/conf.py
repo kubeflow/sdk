@@ -117,7 +117,7 @@ def _replace_v2beta1_in_doctree(_app, doctree, docname):
 
     from docutils import nodes
 
-    for node in doctree.traverse(nodes.Text):
+    for node in doctree.findall(nodes.Text):
         text = str(node)
         new_text = text
         for old, new in _KFP_TYPE_DISPLAY_NAMES.items():

@@ -23,6 +23,8 @@ Usage::
     from kubeflow.pipelines import PipelinesClient, dsl, compiler, components, kubernetes
 """
 
+import importlib
+
 __all__ = [
     # Core API
     "PipelinesClient",
@@ -78,8 +80,6 @@ def __getattr__(name: str):
 
     if name in _DSL_MODULES:
         try:
-            import importlib
-
             return importlib.import_module(f"kfp.{name}")
         except ImportError as e:
             raise ImportError(_KFP_INSTALL_MSG) from e
