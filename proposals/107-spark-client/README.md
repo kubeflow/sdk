@@ -13,7 +13,7 @@ A simple Python SDK to run Spark on Kubernetes. The SDK provides `SparkClient`:
 
 - **`connect()` API** - Creates new Spark Connect sessions or connects to existing servers
 - **Auto-provisions** Spark Connect servers when configuration is provided
-- **Connects** to existing Spark Connect servers when URL is provided
+- **Connects** to existing Spark Connect servers when base URL is provided
 - **Auto-cleans up** resources on exit
 - **Batch job support** - submit and manage SparkApplication jobs via `submit_job()`
 
@@ -66,7 +66,7 @@ The SparkClient SDK is designed for different user personas with varying needs:
 
 ---
 
-## Use Cases
+## User Stories
 
 ### 1. Data Scientist: Quick Data Exploration
 
@@ -102,7 +102,6 @@ spark = client.connect(
         "memory_limit": "40Gi"
     },
     spark_conf={"spark.sql.adaptive.enabled": "true"},
-    app_name="feature-engineering"
 )
 
 raw_data = spark.read.parquet("s3a://data/events/")
@@ -124,7 +123,7 @@ from kubeflow.spark import SparkClient
 
 client = SparkClient()
 spark = client.connect(
-    url="sc://spark-cluster.spark-system.svc:15002",
+    base_url="sc://spark-cluster.spark-system.svc:15002",
     token="team-token",
 )
 
@@ -150,14 +149,25 @@ spark.stop()
 
 ```python
 from kubeflow.spark import SparkClient
+from kubeflow.spark.types.jobs import FileJob
 from kubeflow.common.types import KubernetesBackendConfig
 
 client = SparkClient(backend_config=KubernetesBackendConfig(namespace="etl-jobs"))
 
 job_name = client.submit_job(
-    main_file="s3a://bucket/etl/daily_pipeline.py",
-    arguments=["--date", "2024-01-15", "--output", "s3a://bucket/output/"],
-    name="daily-etl-2024-01-15",
+    job=FileJob(
+        file_source="s3a://bucket/etl/daily_pipeline.py",
+        arguments=[
+            "--date", "2024-01-15",
+            "--output", "s3a://bucket/output/",
+        ],
+    ),
+    spark_conf={
+        "spark.sql.adaptive.enabled": "true",
+    },
+    options=[
+        Name("daily-etl-2024-01-15"),
+    ],
 )
 
 job = client.get_job(job_name)
@@ -220,7 +230,7 @@ spark.stop()
 from kubeflow.spark import SparkClient
 
 client = SparkClient()
-spark = client.connect(url="sc://spark-server:15002")
+spark = client.connect(base_url="sc://spark-server:15002")
 df = spark.read.parquet("s3a://bucket/data/")
 df.show()
 spark.stop()
@@ -251,8 +261,8 @@ spark.stop()
 
 The `connect()` method provides a unified interface for both creating new Spark Connect sessions and connecting to existing servers. The method automatically determines the mode based on the parameters provided:
 
-- **Create Mode**: When `url` is not provided, creates a new Spark Connect session with the specified configuration
-- **Connect Mode**: When `url` is provided, connects to an existing Spark Connect server
+- **Create Mode**: When `base_url` is not provided, creates a new Spark Connect session with the specified configuration
+- **Connect Mode**: When `base_url` is provided, connects to an existing Spark Connect server
 
 This simplification reduces API surface area and makes the SDK easier to use:
 
@@ -266,7 +276,7 @@ spark = client.connect(
     spark_conf={"spark.sql.adaptive.enabled": "true"}
 )
 
-spark = client.connect(url="sc://server:15002")
+spark = client.connect(base_url="sc://server:15002")
 
 spark = client.connect()
 ```
@@ -310,7 +320,7 @@ class Executor:
 class FileJob:
     """File-based Spark application."""
 
-    main_file: str
+    file_source: str
     arguments: Optional[List[str]] = None
     main_class: Optional[str] = None
 
@@ -320,7 +330,7 @@ class FuncJob:
     """Function-based Spark application."""
 
     func: Callable
-    func_args: Optional[Dict[str, Any]] = None
+    func_args: dict | None = None
 ```
 
 ### Options Pattern
@@ -443,7 +453,7 @@ class SparkClient:
 
     def connect(
         self,
-        url: Optional[str] = None,
+        base_url: Optional[str] = None,
         token: Optional[str] = None,
         name: Optional[str] = None,
         app_name: Optional[str] = None,
@@ -457,11 +467,11 @@ class SparkClient:
         """Connect to Spark - unified API for both existing servers and new sessions.
 
         This method supports two modes based on parameters:
-        - **Connect mode**: When `url` is provided, connects to an existing Spark Connect server
-        - **Create mode**: When `url` is not provided, creates a new Spark Connect session
+        - **Connect mode**: When `base_url` is provided, connects to an existing Spark Connect server
+        - **Create mode**: When `base_url` is not provided, creates a new Spark Connect session
 
         Args:
-            url: Optional URL to existing Spark Connect server (e.g., "sc://server:15002").
+            base_url: Optional URL to existing Spark Connect server (e.g., "sc://server:15002").
                  If provided, connects to existing server. If None, creates new session.
             token: Optional authentication token for existing server.
             name: Optional session name. Auto-generated if not provided (create mode only).
@@ -478,7 +488,7 @@ class SparkClient:
             SparkSession connected to Spark (self-managing).
 
         Examples:
-            spark = client.connect(url="sc://server:15002")
+            spark = client.connect(base_url="sc://server:15002")
 
             spark = client.connect(
                 num_executors=5,
@@ -544,14 +554,14 @@ class SparkClient:
 
             client.submit_job(
                 job=FileJob(
-                    main_file="./etl.py",
+                    file_source="./etl.py",
                     arguments=["--date", "2026-06-18"],
                 )
             )
 
             client.submit_job(
                 job=FileJob(
-                    main_file="s3a://jobs/etl.py",
+                    file_source="s3a://jobs/etl.py",
                     arguments=["--date", "2026-06-18"],
                 )
             )
@@ -576,7 +586,7 @@ class SparkClient:
     def get_job_logs(
         self,
         name: str,
-        container: str = "driver",
+        step: str = "driver",
         follow: bool = False,
     ) -> Iterator[str]:
         """Get logs from a Spark job (driver or executor).
@@ -628,7 +638,7 @@ Spark batch workloads share many characteristics with other long-running Kuberne
 | job=FileJob(...) | File mode | Existing scripts, CI/CD pipelines |
 | job=FuncJob(...) | Function mode | Inline transformations, notebooks |
 
-### Example: File Mode (`main_file`)
+### Example: File Mode (`file_source`)
 
 ```python
 from kubeflow.spark import SparkClient
@@ -638,7 +648,7 @@ client = SparkClient(backend_config=KubernetesBackendConfig(namespace="etl-jobs"
 
 job_name = client.submit_job(
     job=FileJob(
-        main_file="s3a://bucket/etl/daily_pipeline.py",
+        file_source="s3a://bucket/etl/daily_pipeline.py",
         arguments=["--date", "2024-01-15"],
     )
 )
@@ -657,7 +667,7 @@ When a local Python file is provided, SparkClient packages the file into a Kuber
 ```python
 client.submit_job(
     job=FileJob(
-        main_file="./etl.py",
+        file_source="./etl.py",
     )
 )
 ```
@@ -673,7 +683,7 @@ When a remote URI is provided, SparkClient references the remote resource direct
 ```python
 client.submit_job(
     job=FileJob(
-        main_file="s3a://bucket/etl.py",
+        file_source="s3a://bucket/etl.py",
     )
 )
 ```
@@ -700,8 +710,9 @@ from kubeflow.common.types import KubernetesBackendConfig
 from pyspark.sql import SparkSession
 import pyspark.sql.functions as F
 
-def etl_pipeline(spark: SparkSession, date: str, output_path: str):
+def etl_pipeline(date: str, output_path: str):
     """ETL logic with Spark transformations."""
+    spark = SparkSession.builder.getOrCreate()
     df = spark.read.parquet(f"s3a://data/raw/{date}/")
 
     result = (
@@ -732,37 +743,51 @@ Function mode is intended for Python-first workflows where users submit Python c
 
 SparkClient follows a similar approach to TrainerClient for function-based execution.
 
-1. The SDK prepares a Python application from the user function and invocation arguments.
-2. The SDK generates a standalone Python application file (for example `spark_job.py`) containing the function definition and execution logic.
-3. An initContainer writes the generated application file into a shared volume mounted by both the initContainer and Spark driver.
-4. The SparkApplication references the generated file through a local Spark URI:
+1. The SDK extracts the user function source code and invocation arguments.
+2. The SDK embeds the extracted function source and invocation directly into the `initContainer` command.
+3. When the `initContainer` starts, it reconstructs a standalone Python application (for example `spark_job.py`) in a shared volume mounted by both the `initContainer` and the Spark driver.
+4. The SparkApplication references the generated application through a local Spark URI:
 
 ```yaml
 mainApplicationFile: local:///opt/spark/app/spark_job.py
 ```
 
-5. The Spark driver executes the generated application using the normal SparkApplication lifecycle.
+5. The Spark driver executes the generated application using the standard SparkApplication lifecycle.
 
-Conceptually, the generated file contains the user function definition and invocation logic:
+A simplified SparkApplication illustrates this execution flow:
 
-```python
-def etl_pipeline(spark, date, output_path):
-    ...
+```yaml
+spec:
+  initContainers:
+    - name: prepare-job
+      command:
+        - bash
+        - -c
+        - |
+          read -r -d '' SCRIPT << 'EOF'
+          def etl_pipeline(date: str, output_path: str):
+              from pyspark.sql import SparkSession
 
-etl_pipeline(
-    spark,
-    date="2024-01-15",
-    output_path="s3a://data/processed/",
-)
+              spark = SparkSession.builder.getOrCreate()
+              # User Spark transformations...
+              ...
+
+          etl_pipeline(
+              date="2024-01-15",
+              output_path="s3a://data/processed/",
+          )
+          EOF
+
+          printf "%s" "$SCRIPT" > /opt/spark/app/spark_job.py
+
+  mainApplicationFile: local:///opt/spark/app/spark_job.py
 ```
 
-For Phase 2, SparkClient follows the same high-level pattern used by TrainerClient: the generated Python source is written by an initContainer into a shared volume, and the Spark driver executes the generated application from a fixed location such as `/opt/spark/app/spark_job.py`.
+This approach allows users to submit Python functions without manually creating or packaging Spark application files, while remaining aligned with the SparkApplication execution model and the existing TrainerClient implementation pattern.
 
-This approach avoids requiring users to manually package application files while remaining aligned with the SparkApplication execution model and the existing TrainerClient implementation pattern.
+> **Note:** The exact command template and generated wrapper may evolve during implementation, but the overall execution flow remains the same.
 
-> **Note:** The exact code-generation mechanism, packaging workflow, and generated application structure may evolve during implementation, but the overall execution flow remains the same.
-
-Once prepared, the SparkApplication executes the generated application using the same lifecycle management APIs as file-based submissions.
+Once the generated application has been prepared by the `initContainer`, the Spark driver executes it using the same lifecycle management APIs as file-based submissions.
 
 > **Note:** Function mode (`job=FuncJob(...)`) will be available in Phase 2.
 
@@ -773,10 +798,14 @@ Once prepared, the SparkApplication executes the generated application using the
 ```python
 @dataclass
 class SparkJob:
+    """Information about a Spark batch job."""
+
     name: str
-    status: SparkJobStatus
-    application_id: str | None = None
-    error_message: str | None = None
+    namespace: str
+    status: SparkJobStatus | None = None
+    creation_timestamp: datetime | None = None
+    num_executors: int | None = None
+    driver_pod_name: str | None = None
 ```
 
 ---
@@ -820,7 +849,7 @@ The SDK intentionally exposes a simplified status model in Phase 1. Additional s
 |---------|-------------|
 | **Unified `connect()` API** | Single method for both creating sessions and connecting to existing servers |
 | **Auto-provisioning** | Creates Spark Connect server when configuration is provided to `connect()` |
-| **Connect mode** | Connect to existing servers via `connect(url=...)` |
+| **Connect mode** | Connect to existing servers via `connect(base_url=...)` |
 | **Self-managing sessions** | `connect()` returns SparkSession that manages itself |
 | **Full PySpark API** | Returns standard `SparkSession` |
 | **Simplified configuration** | Direct parameters like `num_executors`, `resources_per_executor`, `spark_conf` |
@@ -841,7 +870,7 @@ SparkClient (Stateless)
     │   │
     │   ├── connect() ──► Unified API
     │   │   │
-    │   │   ├── connect(url=...) ──► sc://server:15002 ──► SparkSession
+    │   │   ├── connect(base_url=...) ──► sc://server:15002 ──► SparkSession
     │   │   │
     │   │   └── connect(num_executors=...) ──► SparkConnect CRD ──► Server Pod + Executors
     │   │                                                   │
@@ -927,7 +956,7 @@ client = SparkClient.builder().backend(
 | Phase | Feature | Description |
 |-------|---------|-------------|
 | **Phase 1** | `connect()` (unified) | Unified API: connect to existing servers or create new sessions |
-| **Phase 1** | `connect(url=...)` | Connect to existing Spark Connect servers |
+| **Phase 1** | `connect(base_url=...)` | Connect to existing Spark Connect servers |
 | **Phase 1** | `connect(num_executors=...)` | Auto-provision Spark Connect servers with configuration |
 | **Phase 1** | `submit_job(job=FileJob(...))` |  SparkApplication-based batch job submission and lifecycle APIs |
 | **Phase 2** | `submit_job(job=FuncJob(...))` | Function-based batch job submission |
