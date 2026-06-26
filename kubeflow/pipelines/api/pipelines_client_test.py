@@ -22,8 +22,6 @@ import sys
 
 import pytest
 
-from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
-
 _real_import = builtins.__import__
 
 
@@ -50,201 +48,79 @@ def skip_if_no_kfp():
 class TestLazyImport:
     """Test that importing kubeflow.pipelines succeeds without kfp."""
 
-    @pytest.mark.parametrize(
-        "test_case",
-        [
-            TestCase(
-                name="import kubeflow.pipelines succeeds without triggering kfp",
-                expected_status=SUCCESS,
-            ),
-        ],
-    )
-    def test_module_imports_without_kfp(self, test_case, monkeypatch):
+    def test_module_imports_without_kfp(self, monkeypatch):
         _reload_pipelines_modules()
         for mod_name in list(sys.modules):
             if mod_name == "kfp" or mod_name.startswith("kfp."):
                 del sys.modules[mod_name]
         monkeypatch.setattr("builtins.__import__", _block_kfp_import)
 
-        # Module-level import must NOT fail — lazy pattern
         mod = importlib.import_module("kubeflow.pipelines")
         assert mod is not None
-        assert test_case.expected_status == SUCCESS
 
 
 class TestPipelinesClientReExport:
     """Test that PipelinesClient is properly re-exported."""
 
-    @pytest.mark.parametrize(
-        "test_case",
-        [
-            TestCase(
-                name="PipelinesClient importable from kubeflow.pipelines",
-                expected_status=SUCCESS,
-            ),
-        ],
-    )
-    def test_import_pipelines_client(self, test_case):
+    def test_import_from_package(self):
         from kubeflow.pipelines import PipelinesClient
 
         assert PipelinesClient is not None
-        assert test_case.expected_status == SUCCESS
 
-    @pytest.mark.parametrize(
-        "test_case",
-        [
-            TestCase(
-                name="PipelinesClient importable from api module",
-                expected_status=SUCCESS,
-            ),
-        ],
-    )
-    def test_import_from_api_module(self, test_case):
+    def test_import_from_api_module(self):
         from kubeflow.pipelines.api.pipelines_client import PipelinesClient
 
         assert PipelinesClient is not None
-        assert test_case.expected_status == SUCCESS
 
 
 class TestDslReExports:
     """Test that KFP DSL modules are re-exported at kubeflow.pipelines level."""
 
-    @pytest.mark.parametrize(
-        "test_case",
-        [
-            TestCase(
-                name="dsl re-exported from kubeflow.pipelines",
-                config={"module": "dsl"},
-                expected_status=SUCCESS,
-            ),
-            TestCase(
-                name="compiler re-exported from kubeflow.pipelines",
-                config={"module": "compiler"},
-                expected_status=SUCCESS,
-            ),
-            TestCase(
-                name="components re-exported from kubeflow.pipelines",
-                config={"module": "components"},
-                expected_status=SUCCESS,
-            ),
-            TestCase(
-                name="kubernetes re-exported from kubeflow.pipelines",
-                config={"module": "kubernetes"},
-                expected_status=SUCCESS,
-            ),
-        ],
-    )
-    def test_dsl_reexport(self, test_case):
+    @pytest.mark.parametrize("module_name", ["dsl", "compiler", "components", "kubernetes"])
+    def test_dsl_reexport(self, module_name):
         import kfp
 
         import kubeflow.pipelines as kp
 
-        module_name = test_case.config["module"]
         reexported = getattr(kp, module_name)
         original = getattr(kfp, module_name)
         assert reexported is original
-        assert test_case.expected_status == SUCCESS
 
 
 class TestTypeReExports:
     """Test that KFP types are re-exported at kubeflow.pipelines level."""
 
     @pytest.mark.parametrize(
-        "test_case",
+        "type_name",
         [
-            TestCase(
-                name="Pipeline type re-exported",
-                config={"type_name": "Pipeline"},
-                expected_status=SUCCESS,
-            ),
-            TestCase(
-                name="PipelineVersion type re-exported",
-                config={"type_name": "PipelineVersion"},
-                expected_status=SUCCESS,
-            ),
-            TestCase(
-                name="Run type re-exported",
-                config={"type_name": "Run"},
-                expected_status=SUCCESS,
-            ),
-            TestCase(
-                name="Experiment type re-exported",
-                config={"type_name": "Experiment"},
-                expected_status=SUCCESS,
-            ),
-            TestCase(
-                name="KubernetesBackendConfig re-exported",
-                config={"type_name": "KubernetesBackendConfig"},
-                expected_status=SUCCESS,
-            ),
-            TestCase(
-                name="constants module re-exported",
-                config={"type_name": "constants"},
-                expected_status=SUCCESS,
-            ),
-            TestCase(
-                name="ListPipelinesResponse re-exported",
-                config={"type_name": "ListPipelinesResponse"},
-                expected_status=SUCCESS,
-            ),
-            TestCase(
-                name="ListPipelineVersionsResponse re-exported",
-                config={"type_name": "ListPipelineVersionsResponse"},
-                expected_status=SUCCESS,
-            ),
-            TestCase(
-                name="ListRunsResponse re-exported",
-                config={"type_name": "ListRunsResponse"},
-                expected_status=SUCCESS,
-            ),
-            TestCase(
-                name="ListExperimentsResponse re-exported",
-                config={"type_name": "ListExperimentsResponse"},
-                expected_status=SUCCESS,
-            ),
+            "Pipeline",
+            "PipelineVersion",
+            "Run",
+            "Experiment",
+            "KubernetesBackendConfig",
+            "constants",
+            "ListPipelinesResponse",
+            "ListPipelineVersionsResponse",
+            "ListRunsResponse",
+            "ListExperimentsResponse",
         ],
     )
-    def test_type_reexport(self, test_case):
+    def test_type_reexport(self, type_name):
         from kfp import kubeflow_client as kfp_kc
 
         import kubeflow.pipelines as kp
 
-        type_name = test_case.config["type_name"]
         reexported = getattr(kp, type_name)
         original = getattr(kfp_kc, type_name)
         assert reexported is original
-        assert test_case.expected_status == SUCCESS
 
 
 class TestImportErrorHandling:
     """Test that helpful ImportError is raised when kfp is not installed."""
 
-    @pytest.mark.parametrize(
-        "test_case",
-        [
-            TestCase(
-                name="PipelinesClient access raises ImportError without kfp",
-                config={"attr": "PipelinesClient"},
-                expected_status=FAILED,
-                expected_error=ImportError,
-            ),
-            TestCase(
-                name="dsl access raises ImportError without kfp",
-                config={"attr": "dsl"},
-                expected_status=FAILED,
-                expected_error=ImportError,
-            ),
-            TestCase(
-                name="Pipeline type access raises ImportError without kfp",
-                config={"attr": "Pipeline"},
-                expected_status=FAILED,
-                expected_error=ImportError,
-            ),
-        ],
-    )
-    def test_import_error_without_kfp(self, test_case, monkeypatch):
+    @pytest.mark.parametrize("attr", ["PipelinesClient", "dsl", "Pipeline"])
+    def test_import_error_without_kfp(self, attr, monkeypatch):
         _reload_pipelines_modules()
-        # Also remove cached kfp modules so importlib.import_module can't find them
         for mod_name in list(sys.modules):
             if mod_name == "kfp" or mod_name.startswith("kfp."):
                 del sys.modules[mod_name]
@@ -252,71 +128,44 @@ class TestImportErrorHandling:
 
         mod = importlib.import_module("kubeflow.pipelines")
 
-        try:
-            getattr(mod, test_case.config["attr"])
-            assert test_case.expected_status == SUCCESS
-        except ImportError as e:
-            assert test_case.expected_status == FAILED
-            assert "pip install 'kubeflow[pipelines]'" in str(e)
+        with pytest.raises(ImportError, match=r"pip install 'kubeflow\[pipelines\]'"):
+            getattr(mod, attr)
 
 
 class TestAllExports:
     """Test that __all__ is properly defined."""
 
-    @pytest.mark.parametrize(
-        "test_case",
-        [
-            TestCase(
-                name="__all__ contains all expected exports",
-                expected_status=SUCCESS,
-                expected_output=[
-                    "PipelinesClient",
-                    "compiler",
-                    "components",
-                    "dsl",
-                    "kubernetes",
-                    "Experiment",
-                    "Pipeline",
-                    "PipelineVersion",
-                    "Run",
-                    "ListExperimentsResponse",
-                    "ListPipelinesResponse",
-                    "ListPipelineVersionsResponse",
-                    "ListRunsResponse",
-                    "KubernetesBackendConfig",
-                    "constants",
-                ],
-            ),
-        ],
-    )
-    def test_all_exports(self, test_case):
+    _EXPECTED_EXPORTS = [
+        "PipelinesClient",
+        "compiler",
+        "components",
+        "dsl",
+        "kubernetes",
+        "Experiment",
+        "Pipeline",
+        "PipelineVersion",
+        "Run",
+        "ListExperimentsResponse",
+        "ListPipelinesResponse",
+        "ListPipelineVersionsResponse",
+        "ListRunsResponse",
+        "KubernetesBackendConfig",
+        "constants",
+    ]
+
+    def test_all_exports(self):
         import kubeflow.pipelines as kp
 
-        for name in test_case.expected_output:
+        for name in self._EXPECTED_EXPORTS:
             assert name in kp.__all__, f"{name} missing from __all__"
             assert hasattr(kp, name), f"{name} in __all__ but not importable"
-        assert test_case.expected_status == SUCCESS
 
 
 class TestUnknownAttribute:
     """Test that accessing unknown attributes raises AttributeError."""
 
-    @pytest.mark.parametrize(
-        "test_case",
-        [
-            TestCase(
-                name="unknown attribute raises AttributeError",
-                config={"attr": "nonexistent_thing"},
-                expected_status=FAILED,
-                expected_error=AttributeError,
-            ),
-        ],
-    )
-    def test_unknown_attr(self, test_case):
+    def test_unknown_attr(self):
         import kubeflow.pipelines as kp
 
-        try:
-            getattr(kp, test_case.config["attr"])
-            assert test_case.expected_status == SUCCESS
-        except AttributeError:
-            assert test_case.expected_status == FAILED
+        with pytest.raises(AttributeError, match="has no attribute"):
+            kp.nonexistent_thing  # noqa: B018

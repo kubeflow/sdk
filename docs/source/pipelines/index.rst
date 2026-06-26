@@ -59,8 +59,9 @@ How It Works
 3. **Run** - Execute pipelines by name, callable, or YAML file
 4. **Monitor** - Wait for specific run states with ``wait_for_run_status``
 
-The ``PipelinesClient`` uses a name-first API: all methods work with display names
-(pipeline name, experiment name), not internal IDs.
+The ``PipelinesClient`` uses a name-first API: pipeline and experiment operations
+work with display names, not internal IDs. ``wait_for_run_status`` accepts either
+a ``Run`` object or a run ID string; ``get_run`` takes a run ID string.
 
 Key Concepts
 ------------
@@ -71,6 +72,9 @@ Key Concepts
 call creates a new version.
 
 **Run**: A single execution of a pipeline with specific parameters.
+``Run.state`` returns uppercase values from the API (e.g. ``"SUCCEEDED"``),
+while ``constants.RUN_SUCCEEDED`` is lowercase (``"succeeded"``). Use
+``state.lower()`` when comparing against constants.
 
 **Experiment**: A logical grouping of runs for organization.
 
@@ -87,11 +91,17 @@ Common Patterns
    for lr in [0.01, 0.001, 0.0001]:
        client.run("training", params={"lr": lr}, experiment="sweep")
 
-**Quick inline run (no upload):**
+**Quick inline run from a callable (no upload):**
 
 .. code-block:: python
 
    run = client.run(my_pipeline, params={"epochs": 5})
+
+**Quick inline run from a compiled YAML file:**
+
+.. code-block:: python
+
+   run = client.run("pipeline.yaml", params={"epochs": 5})
 
 **Wait for a non-terminal state:**
 
