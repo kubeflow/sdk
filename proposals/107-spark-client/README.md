@@ -318,7 +318,7 @@ class Executor:
 
 @dataclass
 class FileJob:
-    """File-based Spark application."""
+    """Spark application referenced by a local or remote file source."""
 
     file_source: str
     arguments: Optional[List[str]] = None
@@ -451,56 +451,70 @@ class SparkClient:
     def builder(cls) -> SparkClientBuilder:
         """Create a builder for advanced configuration."""
 
+
     def connect(
         self,
         base_url: Optional[str] = None,
         token: Optional[str] = None,
-        name: Optional[str] = None,
-        app_name: Optional[str] = None,
         num_executors: Optional[int] = None,
         resources_per_executor: Optional[Dict[str, str]] = None,
         spark_conf: Optional[Dict[str, str]] = None,
         driver: Optional[Driver] = None,
         executor: Optional[Executor] = None,
         options: Optional[List] = None,
+        timeout: int = 300,
+        connect_timeout: int = 120,
     ) -> SparkSession:
         """Connect to Spark - unified API for both existing servers and new sessions.
 
         This method supports two modes based on parameters:
-        - **Connect mode**: When `base_url` is provided, connects to an existing Spark Connect server
-        - **Create mode**: When `base_url` is not provided, creates a new Spark Connect session
+
+        - **Connect mode**: When `base_url` is provided, connects to an existing Spark Connect server.
+        - **Create mode**: When `base_url` is not provided, creates a new Spark Connect session.
 
         Args:
-            base_url: Optional URL to existing Spark Connect server (e.g., "sc://server:15002").
-                 If provided, connects to existing server. If None, creates new session.
-            token: Optional authentication token for existing server.
-            name: Optional session name. Auto-generated if not provided (create mode only).
-            app_name: Optional Spark application name (create mode only).
+            base_url: Optional URL to an existing Spark Connect server
+                (e.g. ``sc://server:15002``). If provided, connects to the
+                existing server. Otherwise, creates a new session.
+            token: Optional authentication token for an existing server.
             num_executors: Number of executor instances (create mode only).
-            resources_per_executor: Resource requirements per executor as dict.
-                Format: `{"cpu": "5", "memory": "10Gi", "cpu_limit": "8", "memory_limit": "12Gi"}` (create mode only).
-            spark_conf: Spark configuration dictionary (create mode only).
-            driver: Driver configuration object (create mode only).
-            executor: Executor configuration object (create mode only).
-            options: List of configuration options (create mode only).
+            resources_per_executor: Resource requirements per executor.
+                Format: ``{"cpu": "5", "memory": "10Gi"}``.
+            spark_conf: Spark configuration dictionary.
+            driver: Driver configuration object.
+            executor: Executor configuration object.
+            options: List of advanced Spark configuration options.
+            timeout: Timeout in seconds to wait for the Spark Connect session
+                to become ready.
+            connect_timeout: Timeout in seconds for establishing the
+                SparkSession connection.
 
         Returns:
-            SparkSession connected to Spark (self-managing).
+            SparkSession connected to Spark.
 
         Examples:
-            spark = client.connect(base_url="sc://server:15002")
 
+            # Connect to an existing Spark Connect server
+            spark = client.connect(
+                base_url="sc://server:15002",
+                token="team-token",
+            )
+
+            # Create a new Spark Connect session
             spark = client.connect(
                 num_executors=5,
                 resources_per_executor={
                     "cpu": "5",
-                    "memory": "10Gi"
+                    "memory": "10Gi",
                 },
-                spark_conf={"spark.sql.adaptive.enabled": "true"}
+                spark_conf={
+                    "spark.sql.adaptive.enabled": "true",
+                },
             )
 
             spark = client.connect()
         """
+
 
     def list_sessions(self) -> List[SparkConnectInfo]:
         """List active Spark Connect sessions."""
@@ -535,7 +549,7 @@ class SparkClient:
 
         This method supports two job types:
 
-        - **FileJob**: Submit an existing Python or JAR application.
+        - **FileJob**:  Submit an existing Spark application referenced by a local or remote file source.
         - **FuncJob**: Submit a Python function as a Spark batch job.
 
         Args:
@@ -554,7 +568,7 @@ class SparkClient:
 
             client.submit_job(
                 job=FileJob(
-                    file_source="./etl.py",
+                    file_source="local:///opt/spark/app/etl.py",
                     arguments=["--date", "2026-06-18"],
                 )
             )
@@ -638,7 +652,7 @@ Spark batch workloads share many characteristics with other long-running Kuberne
 | job=FileJob(...) | File mode | Existing scripts, CI/CD pipelines |
 | job=FuncJob(...) | Function mode | Inline transformations, notebooks |
 
-### Example: File Mode (`file_source`)
+### Example: File Mode (`job=FileJob(...)`)
 
 ```python
 from kubeflow.spark import SparkClient
@@ -658,27 +672,27 @@ client.wait_for_job_status(job_name)
 
 ### File Mode Implementation
 
-File mode supports both local Python files and remote application URIs.
+File mode supports both local and remote application sources.
 
 SparkClient implements long-running batch job execution by translating user-provided job specifications into SparkApplication resources managed by the Spark Operator.
 
-When a local Python file is provided, SparkClient packages the file into a Kubernetes ConfigMap and mounts it into the Spark driver pod at `/opt/spark/app` before creating the SparkApplication resource.
+When `file_source` uses a remote URI (for example `s3a://`, `gs://`, `hdfs://`, or `https://`), SparkApplication references the remote application directly.
+
+When `file_source` uses a local URI (for example `local:///opt/spark/app/etl.py`), the application file is expected to already be available to the SparkApplication, such as through a mounted PersistentVolumeClaim (PVC) or a pre-built container image. SparkClient does not package or upload local files automatically.
 
 ```python
 client.submit_job(
     job=FileJob(
-        file_source="./etl.py",
+        file_source="local:///opt/spark/app/etl.py",
     )
 )
 ```
-
-The submitted SparkApplication references the mounted file through a Spark-compatible local URI:
 
 ```yaml
 mainApplicationFile: local:///opt/spark/app/etl.py
 ```
 
-When a remote URI is provided, SparkClient references the remote resource directly without creating a ConfigMap.
+Remote application sources can be referenced directly:
 
 ```python
 client.submit_job(
@@ -688,21 +702,12 @@ client.submit_job(
 )
 ```
 
-Because Kubernetes ConfigMaps have size limits, local file packaging is intended for small single-file applications. If the local file exceeds the supported ConfigMap size limit (approximately 1 MB), SparkClient will reject the submission and require the application to be provided through a remote URI such as `s3a://`, `gs://`, `hdfs://`, or `https://`.
+SparkClient relies on the Spark Operator's native application submission and dependency management mechanisms. For local application sources, users are responsible for ensuring the referenced file is available to the SparkApplication. This can be achieved through mechanisms such as mounted PVCs or pre-built container images.
 
-> **Limitations (Phase 1 Local File Submission)**
->
-> Local file submission is intended as a lightweight convenience feature and has several limitations:
->
-> - ConfigMap size limit (~1 MB)
-> - Single-file applications only
-> - No automatic dependency bundling
->
-> For larger applications or workloads with additional Python packages, JARs, archives, or dependency requirements, users should provide the application through a remote URI and use the Spark Operator's native dependency management mechanisms (`deps.files`, `deps.pyFiles`, `deps.jars`, etc.).
+Additional dependencies (Python packages, JARs, archives, and other resources) continue to be managed using the Spark Operator's native dependency mechanisms (`deps.files`, `deps.pyFiles`, `deps.jars`, etc.).
 
-This proposal does not replace the Spark Operator's native dependency management features. SparkClient local-file submission only packages the primary application file. Additional dependencies continue to be handled through the SparkApplication dependency mechanisms already supported by the Spark Operator.
 
-### Example: Function Mode (`func`)
+### Example: Function Mode (`job=FuncJob(...)`)
 
 ```python
 from kubeflow.spark import SparkClient
@@ -745,7 +750,7 @@ SparkClient follows a similar approach to TrainerClient for function-based execu
 
 1. The SDK extracts the user function source code and invocation arguments.
 2. The SDK embeds the extracted function source and invocation directly into the `initContainer` command.
-3. When the `initContainer` starts, it reconstructs a standalone Python application (for example `spark_job.py`) in a shared volume mounted by both the `initContainer` and the Spark driver.
+3. When the `initContainer` starts, it reconstructs a standalone Python application (for example `spark_job.py`) in an `emptyDir` volume shared between the `initContainer` and the Spark driver.
 4. The SparkApplication references the generated application through a local Spark URI:
 
 ```yaml
@@ -758,27 +763,26 @@ A simplified SparkApplication illustrates this execution flow:
 
 ```yaml
 spec:
+  volumes:
+    - name: spark-job
+      emptyDir: {}
+
   initContainers:
     - name: prepare-job
+      volumeMounts:
+        - name: spark-job
+          mountPath: /opt/spark/app
       command:
         - bash
         - -c
         - |
-          read -r -d '' SCRIPT << 'EOF'
-          def etl_pipeline(date: str, output_path: str):
-              from pyspark.sql import SparkSession
-
-              spark = SparkSession.builder.getOrCreate()
-              # User Spark transformations...
-              ...
-
-          etl_pipeline(
-              date="2024-01-15",
-              output_path="s3a://data/processed/",
-          )
-          EOF
-
+          ...
           printf "%s" "$SCRIPT" > /opt/spark/app/spark_job.py
+
+  driver:
+    volumeMounts:
+      - name: spark-job
+        mountPath: /opt/spark/app
 
   mainApplicationFile: local:///opt/spark/app/spark_job.py
 ```
@@ -826,7 +830,7 @@ class SparkJobStatus(str, Enum):
 
     CREATED = "Created"
     RUNNING = "Running"
-    COMPLETE = "Complete"
+    COMPLETED = "Completed"
     FAILED = "Failed"
 ```
 
@@ -836,7 +840,7 @@ SparkApplication-specific states are mapped into these SDK-level states to provi
 |------------|-------------------------|
 | CREATED | SUBMITTED |
 | RUNNING | RUNNING, SUCCEEDING, SUSPENDING, SUSPENDED, RESUMING |
-| COMPLETE | COMPLETED |
+| COMPLETED | COMPLETED |
 | FAILED | FAILED, SUBMISSION_FAILED, FAILING, PENDING_RERUN, INVALIDATING, UNKNOWN |
 
 The SDK intentionally exposes a simplified status model in Phase 1. Additional status categories may be introduced in future releases based on user feedback and operational requirements.
