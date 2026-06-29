@@ -157,7 +157,7 @@ client = SparkClient(backend_config=KubernetesBackendConfig(namespace="etl-jobs"
 job_name = client.submit_job(
     job=FileJob(
         file_source="s3a://bucket/etl/daily_pipeline.py",
-        arguments=[
+        args=[
             "--date", "2024-01-15",
             "--output", "s3a://bucket/output/",
         ],
@@ -177,7 +177,7 @@ print(f"Status: {job.status}")
 completed_job = client.wait_for_job_status(job_name, timeout=3600)
 print(f"Final status: {completed_job.status}")
 
-for line in client.get_job_logs(job_name, container="driver"):
+for line in client.get_job_logs(job_name):
     print(line)
 ```
 
@@ -321,7 +321,7 @@ class FileJob:
     """Spark application referenced by a local or remote file source."""
 
     file_source: str
-    arguments: Optional[List[str]] = None
+    args: Optional[List[str]] = None
     main_class: Optional[str] = None
 
 
@@ -569,14 +569,14 @@ class SparkClient:
             client.submit_job(
                 job=FileJob(
                     file_source="local:///opt/spark/app/etl.py",
-                    arguments=["--date", "2026-06-18"],
+                    args=["--date", "2026-06-18"],
                 )
             )
 
             client.submit_job(
                 job=FileJob(
                     file_source="s3a://jobs/etl.py",
-                    arguments=["--date", "2026-06-18"],
+                    args=["--date", "2026-06-18"],
                 )
             )
 
@@ -600,10 +600,9 @@ class SparkClient:
     def get_job_logs(
         self,
         name: str,
-        step: str = "driver",
         follow: bool = False,
     ) -> Iterator[str]:
-        """Get logs from a Spark job (driver or executor).
+        """Get logs from a Spark job.
 
         Logs are retrieved from the Kubernetes pods associated with the
         SparkApplication. Log retrieval is only available while the target
@@ -663,7 +662,7 @@ client = SparkClient(backend_config=KubernetesBackendConfig(namespace="etl-jobs"
 job_name = client.submit_job(
     job=FileJob(
         file_source="s3a://bucket/etl/daily_pipeline.py",
-        arguments=["--date", "2024-01-15"],
+        args=["--date", "2024-01-15"],
     )
 )
 
@@ -764,24 +763,24 @@ A simplified SparkApplication illustrates this execution flow:
 ```yaml
 spec:
   volumes:
-    - name: spark-job
+    - name: spark-app-source
       emptyDir: {}
 
   initContainers:
-    - name: prepare-job
+    - name: prepare-spark-app
       volumeMounts:
-        - name: spark-job
+        - name: spark-app-source
           mountPath: /opt/spark/app
       command:
         - bash
         - -c
         - |
           ...
-          printf "%s" "$SCRIPT" > /opt/spark/app/spark_job.py
+          printf "%s" "$SCRIPT" > /opt/spark/app/main.py
 
   driver:
     volumeMounts:
-      - name: spark-job
+      - name: spark-app-source
         mountPath: /opt/spark/app
 
   mainApplicationFile: local:///opt/spark/app/spark_job.py
