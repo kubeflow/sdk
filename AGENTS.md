@@ -128,11 +128,11 @@ uv run pre-commit run --all-files           # Run all hooks
 
 Copy-modify from these examples; see [references/common-changes.md](references/common-changes.md) for file lists.
 
-- Kubernetes training option: `kubeflow/trainer/options/kubernetes.py`
-- Execution backend change: `kubeflow/trainer/backends/kubernetes/backend.py`
-- Trainer types / schemas: `kubeflow/trainer/types/types.py`
-- Parametrized backend tests: `kubeflow/trainer/backends/kubernetes/backend_test.py`
-- New SDK client module: `kubeflow/spark/api/spark_client.py` or `kubeflow/optimizer/api/optimizer_client.py`
+- New Kubernetes training option: follow the pattern in `kubeflow/trainer/options/kubernetes.py`
+- Extend an execution backend: follow the pattern in `kubeflow/trainer/backends/kubernetes/backend.py`
+- Add trainer types: see `kubeflow/trainer/types/types.py` for the schema pattern
+- Add backend tests: follow the pattern in `kubeflow/trainer/backends/kubernetes/backend_test.py`
+- New SDK client: see `kubeflow/spark/api/spark_client.py` for reference
 
 ## Pull Requests
 
