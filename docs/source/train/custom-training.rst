@@ -134,7 +134,7 @@ variables into your training pods and you can report real-time progress:
        update_runtime_status(progress_percent=0, force=True)  # Training start
 
        for step in range(total_steps):
-           # ... training ...
+           loss = train_step(batch)
            progress = int((step / total_steps) * 100)
            elapsed = time.time() - start_time
            eta = int((elapsed / (step + 1)) * (total_steps - step - 1)) if step > 0 else None

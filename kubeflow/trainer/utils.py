@@ -1,4 +1,4 @@
-# Copyright 2024 The Kubeflow Authors.
+# Copyright The Kubeflow Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -105,7 +105,8 @@ def _get_cached_token(token_path: str | None) -> str | None:
                 _cached_token = f.read().strip()
                 _token_read_time = now
                 return _cached_token
-        except OSError:
+        except OSError as e:
+            logger.warning("Unable to read token from %s: %s", token_path, e)
             return None
 
 
@@ -138,7 +139,7 @@ def update_runtime_status(
         progress_percent: Training completion percentage (0-100).
         estimated_time_remaining: ETA in seconds or as a timedelta.
         metrics: Dict of metric name -> value. Values are converted to strings.
-            Truncated to 256 entries if exceeded (controller enforced limit).
+            Truncated to 256 entries by the SDK to avoid oversized payloads.
         force: If True, bypass throttling. Use for start/end events.
 
     Returns:
@@ -152,7 +153,6 @@ def update_runtime_status(
         with _throttle_lock:
             if not force and _should_throttle():
                 return False
-            _update_last_time()
 
         ca_file = os.environ.get(_ENV_CA_CERT)
         token_path = os.environ.get(_ENV_TOKEN_PATH)
@@ -177,7 +177,7 @@ def update_runtime_status(
         if metrics:
             if len(metrics) > _MAX_METRICS_COUNT:
                 logger.warning(
-                    "metrics dict has %d entries, truncating to %d (controller limit)",
+                    "metrics dict has %d entries, truncating to %d (SDK limit)",
                     len(metrics),
                     _MAX_METRICS_COUNT,
                 )
@@ -205,12 +205,17 @@ def update_runtime_status(
         )
 
         if response.status_code == 200:
+            _update_last_time()
             logger.debug("Status update sent: %s%%", progress_percent)
             return True
         else:
-            logger.warning("Status update failed: %s %s", response.status_code, response.text)
+            logger.warning("Status update failed: HTTP %s", response.status_code)
+            logger.debug("Response body: %.500s", response.text)
             return False
 
-    except Exception as e:
+    except requests.RequestException as e:
         logger.warning("Failed to send status update: %s", e)
+        return False
+    except Exception as e:
+        logger.warning("Unexpected error in update_runtime_status: %s", e)
         return False
