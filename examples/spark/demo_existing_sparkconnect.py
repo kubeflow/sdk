@@ -219,7 +219,7 @@ print("\nSession details:")
 print(f"   name: {info.name}")
 print(f"   namespace: {info.namespace}")
 print(f"   state: {info.state.value}")
-print(f"   server_pod_name: {info.driver_pod_name}")
+print(f"   driver_pod_name: {info.driver_pod_name}")
 print(f"   service_name: {info.service_name}")
 print(f"   created_at: {info.created_at}")
 
