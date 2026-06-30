@@ -484,7 +484,7 @@ def test_get_session_logs(kubernetes_backend, test_case):
 
         # Mock get_session so execution always reaches the log-reading code path.
         pod_name = test_case.config.get("pod_name", f"{test_case.config['name']}-0")
-        kubernetes_backend.get_session = Mock(return_value=Mock(pod_name=pod_name))
+        kubernetes_backend.get_session = Mock(return_value=Mock(driver_pod_name=pod_name))
 
         logs = list(kubernetes_backend.get_session_logs(test_case.config["name"], follow=False))
 

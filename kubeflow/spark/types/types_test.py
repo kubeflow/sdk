@@ -54,7 +54,7 @@ class TestSparkConnectInfo:
         assert info.name == "test-session"
         assert info.namespace == "default"
         assert info.state == SparkConnectState.READY
-        assert info.pod_name is None
+        assert info.driver_pod_name is None
         assert info.pod_ip is None
         assert info.service_name is None
         assert info.creation_timestamp is None
@@ -66,7 +66,7 @@ class TestSparkConnectInfo:
             name="full-session",
             namespace="spark-ns",
             state=SparkConnectState.READY,
-            pod_name="spark-connect-server-0",
+            driver_pod_name="spark-connect-server-0",
             pod_ip="10.0.0.5",
             service_name="spark-connect-svc",
             creation_timestamp=created,
@@ -74,7 +74,7 @@ class TestSparkConnectInfo:
         assert info.name == "full-session"
         assert info.namespace == "spark-ns"
         assert info.state == SparkConnectState.READY
-        assert info.pod_name == "spark-connect-server-0"
+        assert info.driver_pod_name == "spark-connect-server-0"
         assert info.pod_ip == "10.0.0.5"
         assert info.service_name == "spark-connect-svc"
         assert info.creation_timestamp == created
