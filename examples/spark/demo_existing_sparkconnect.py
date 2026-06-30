@@ -138,7 +138,7 @@ if sessions:
     print("\n# Session Details:")
     print(f"   Name: {info.name}")
     print(f"   State: {info.state.value}")
-    print(f"   Server Pod: {info.driver_pod_name}")
+    print(f"   Driver Pod: {info.driver_pod_name}")
     print(f"   Service: {info.service_name}")
     print(f"   Service URL: {info.service_url}")
 
