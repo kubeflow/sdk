@@ -20,10 +20,12 @@ and follow linked documents for topic-specific detail.
 | [references/core-principles.md](references/core-principles.md) | Writing or reviewing Python — public APIs, style, tests, security, or docstrings |
 | [references/development-workflow.md](references/development-workflow.md) | Full change checklist — pre-edit steps, validation sequence, and commit/PR detail beyond AGENTS.md |
 | [references/common-changes.md](references/common-changes.md) | Implementing a common change — backend options, backends, types, tests, or SDK clients |
+| [docs/design/backend-abstraction.md](docs/design/backend-abstraction.md) | Understanding execution backends — Kubernetes, Container, LocalProcess |
+| [docs/design/train-job-lifecycle.md](docs/design/train-job-lifecycle.md) | How `TrainerClient.train()` becomes a TrainJob CR on Kubernetes |
 
 For code changes, read `agent-behaviors.md` first, then `core-principles.md` when editing Python,
 `common-changes.md` when following an existing pattern, and `development-workflow.md` before
-proposing a commit or PR.
+proposing a commit or PR. Read design docs when changing backend architecture or TrainJob creation.
 
 ## Repository Map
 
@@ -32,6 +34,7 @@ proposing a commit or PR.
 | `.github/` | CI/CD workflows |
 | `CHANGELOG/` | Release changelogs |
 | `docs/` | Project documentation |
+| `docs/design/` | Architecture intent — backends, TrainJob lifecycle |
 | `examples/` | Usage examples |
 | `hack/` | CI/CD and installation scripts |
 | `proposals/` | Kubeflow Enhancement Proposals (KEPs) |
@@ -112,7 +115,7 @@ See **Single-file verification** above for per-file `ruff check` and `mypy` comm
 **Pre-commit**:
 
 ```bash
-uv run pre-commit install                    # Install hooks
+uv run pre-commit install                    # Install pre-commit and commit-msg hooks
 uv run pre-commit run --all-files           # Run all hooks
 ```
 
