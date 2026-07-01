@@ -148,7 +148,10 @@ class KubernetesBackend(RuntimeBackend):
         if cluster_runtimes:
             for runtime in cluster_runtimes.items:
                 if runtime.metadata and runtime.metadata.name:
-                    runtimes_by_name.setdefault(runtime.metadata.name, runtime)
+                    runtimes_by_name.setdefault(
+                        runtime.metadata.name,
+                        runtime,
+                    )
 
         try:
             for runtime in runtimes_by_name.values():
@@ -596,6 +599,7 @@ class KubernetesBackend(RuntimeBackend):
 
         return types.Runtime(
             name=runtime_cr.metadata.name,
+            kind=runtime_cr.kind,
             trainer=utils.get_runtime_trainer(
                 runtime_cr.metadata.labels[constants.RUNTIME_FRAMEWORK_LABEL],
                 runtime_cr.spec.template.spec.replicated_jobs,
@@ -805,7 +809,7 @@ class KubernetesBackend(RuntimeBackend):
             ]
 
         trainjob_spec = models.TrainerV1alpha1TrainJobSpec(
-            runtimeRef=models.TrainerV1alpha1RuntimeRef(name=runtime.name),
+            runtimeRef=models.TrainerV1alpha1RuntimeRef(name=runtime.name, kind=runtime.kind),
             trainer=trainer_cr if trainer_cr != models.TrainerV1alpha1Trainer() else None,
             runtimePatches=runtime_patch_models,
         )

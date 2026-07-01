@@ -346,6 +346,7 @@ def create_mock_trainjob(name: str) -> TrainJob:
         runtime=Runtime(
             name="torch",
             trainer=trainer,
+            kind=trainer_constants.TRAINING_RUNTIME_KIND,
         ),
         steps=[
             Step(
@@ -775,6 +776,7 @@ def test_get_job_logs(optimizer_backend, test_case):
                     device_count="1",
                     image="trainer:latest",
                 ),
+                kind=trainer_constants.TRAINING_RUNTIME_KIND,
             ),
             steps=[
                 Step(

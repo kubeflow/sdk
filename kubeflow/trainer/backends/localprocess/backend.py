@@ -313,4 +313,5 @@ class LocalProcessBackend(RuntimeBackend):
                 device=local_runtime.trainer.device,
                 image=local_runtime.trainer.image,
             ),
+            kind=constants.TRAINING_RUNTIME_KIND,
         )

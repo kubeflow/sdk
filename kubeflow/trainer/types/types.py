@@ -17,6 +17,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from typing import Literal
 from urllib.parse import urlparse
 
 import kubeflow.common.constants as common_constants
@@ -269,6 +270,7 @@ class RuntimeTrainer:
 class Runtime:
     name: str
     trainer: RuntimeTrainer
+    kind: Literal["TrainingRuntime", "ClusterTrainingRuntime"]
     pretrained_model: str | None = None
 
 

@@ -285,6 +285,7 @@ def test_list_training_runtimes_from_sources(test_case):
                         num_nodes=1,
                         image="example.com/container",
                     ),
+                    kind=constants.TRAINING_RUNTIME_KIND,
                 )
                 deepspeed_runtime = base_types.Runtime(
                     name="deepspeed-distributed",
@@ -294,6 +295,7 @@ def test_list_training_runtimes_from_sources(test_case):
                         num_nodes=1,
                         image="example.com/container",
                     ),
+                    kind=constants.TRAINING_RUNTIME_KIND,
                 )
                 mock_github.side_effect = [[torch_runtime], [deepspeed_runtime]]
                 mock_defaults.return_value = []
@@ -307,6 +309,7 @@ def test_list_training_runtimes_from_sources(test_case):
                         num_nodes=1,
                         image="example.com/container",
                     ),
+                    kind=constants.TRAINING_RUNTIME_KIND,
                 )
                 torch_runtime_2 = base_types.Runtime(
                     name=constants.DEFAULT_TRAINING_RUNTIME,
@@ -316,6 +319,7 @@ def test_list_training_runtimes_from_sources(test_case):
                         num_nodes=2,
                         image="example.com/container",
                     ),
+                    kind=constants.TRAINING_RUNTIME_KIND,
                 )
                 mock_github.side_effect = [[torch_runtime_1], [torch_runtime_2]]
                 mock_defaults.return_value = []
@@ -330,6 +334,7 @@ def test_list_training_runtimes_from_sources(test_case):
                         num_nodes=1,
                         image="example.com/container",
                     ),
+                    kind=constants.TRAINING_RUNTIME_KIND,
                 )
                 mock_defaults.return_value = [default_runtime]
 

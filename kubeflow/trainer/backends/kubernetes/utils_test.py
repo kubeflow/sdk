@@ -35,7 +35,11 @@ def _build_runtime() -> types.Runtime:
         image="example.com/image",
     )
     runtime_trainer.set_command(constants.DEFAULT_COMMAND)
-    return types.Runtime(name="test-runtime", trainer=runtime_trainer)
+    return types.Runtime(
+        name="test-runtime",
+        trainer=runtime_trainer,
+        kind=constants.TRAINING_RUNTIME_KIND,
+    )
 
 
 @pytest.mark.parametrize(
@@ -426,7 +430,11 @@ def test_get_script_for_python_packages(test_case):
             config={
                 "func": (lambda: print("Hello World")),
                 "func_args": None,
-                "runtime": types.Runtime(name="no-trainer", trainer=None),
+                "runtime": types.Runtime(
+                    name="no-trainer",
+                    trainer=None,
+                    kind=constants.TRAINING_RUNTIME_KIND,
+                ),
             },
             expected_error=ValueError,
         ),

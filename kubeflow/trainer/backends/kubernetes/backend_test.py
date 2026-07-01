@@ -319,6 +319,7 @@ def get_train_job(
     labels: dict[str, str] | None = None,
     annotations: dict[str, str] | None = None,
     runtime_patches: list[models.TrainerV1alpha1RuntimePatch] | None = None,
+    runtime_kind: str = constants.TRAINING_RUNTIME_KIND,
 ) -> models.TrainerV1alpha1TrainJob:
     """
     Create a mock TrainJob object with optional trainer configurations.
@@ -332,7 +333,10 @@ def get_train_job(
             annotations=annotations,
         ),
         spec=models.TrainerV1alpha1TrainJobSpec(
-            runtimeRef=models.TrainerV1alpha1RuntimeRef(name=runtime_name),
+            runtimeRef=models.TrainerV1alpha1RuntimeRef(
+                name=runtime_name,
+                kind=runtime_kind,
+            ),
             trainer=train_job_trainer,
             runtimePatches=runtime_patches,
         ),
@@ -578,7 +582,9 @@ def create_train_job(
             creationTimestamp=datetime.datetime(2025, 6, 1, 10, 30, 0),
         ),
         spec=models.TrainerV1alpha1TrainJobSpec(
-            runtimeRef=models.TrainerV1alpha1RuntimeRef(name=TORCH_RUNTIME),
+            runtimeRef=models.TrainerV1alpha1RuntimeRef(
+                name=TORCH_RUNTIME, kind=constants.TRAINING_RUNTIME_KIND
+            ),
             trainer=None,
             initializer=(
                 models.TrainerV1alpha1Initializer(
@@ -600,7 +606,7 @@ def create_cluster_training_runtime(
 
     return models.TrainerV1alpha1ClusterTrainingRuntime(
         apiVersion=constants.API_VERSION,
-        kind="ClusterTrainingRuntime",
+        kind=constants.CLUSTER_TRAINING_RUNTIME_KIND,
         metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
             name=name,
             namespace=namespace,
@@ -679,6 +685,7 @@ def get_container() -> models.IoK8sApiCoreV1Container:
 
 def create_runtime_type(
     name: str,
+    kind: str | None = None,
 ) -> types.Runtime:
     """Create a mock Runtime object for testing."""
     trainer = types.RuntimeTrainer(
@@ -690,9 +697,19 @@ def create_runtime_type(
         image="example.com/test-runtime",
     )
     trainer.set_command(constants.TORCH_COMMAND)
-    # Namespaced TrainingRuntime objects and default torch runtime use namespace scope;
-    # other runtimes created as cluster-scoped use cluster scope.
-    return types.Runtime(name=name, trainer=trainer)
+
+    if kind is None:
+        kind = (
+            constants.TRAINING_RUNTIME_KIND
+            if name in {TORCH_RUNTIME, "runtime-1", "ns-runtime-2"}
+            else constants.CLUSTER_TRAINING_RUNTIME_KIND
+        )
+
+    return types.Runtime(
+        name=name,
+        trainer=trainer,
+        kind=kind,
+    )
 
 
 def get_train_job_data_type(
@@ -716,6 +733,7 @@ def get_train_job_data_type(
         runtime=types.Runtime(
             name=runtime_name,
             trainer=trainer,
+            kind=constants.TRAINING_RUNTIME_KIND,
         ),
         steps=[
             types.Step(
@@ -924,7 +942,11 @@ def test_get_runtime(kubernetes_backend, test_case):
                 "name": LIST_RUNTIMES,
             },
             expected_output=[
-                create_runtime_type(name="runtime-1"),
+                types.Runtime(
+                    name="runtime-1",
+                    trainer=create_runtime_type(name="runtime-1").trainer,
+                    kind=constants.CLUSTER_TRAINING_RUNTIME_KIND,
+                ),
                 create_runtime_type(name="runtime-2"),
                 create_runtime_type(name="runtime-3"),
             ],
@@ -1031,6 +1053,7 @@ def test_list_runtimes(kubernetes_backend, test_case):
                         device_count="1",
                         image="example.com/image",
                     ),
+                    kind=constants.TRAINING_RUNTIME_KIND,
                 )
             },
             expected_error=ValueError,
