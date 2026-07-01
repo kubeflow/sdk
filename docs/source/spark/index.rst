@@ -163,7 +163,7 @@ Use the Spark SDK to inspect and manage Spark Connect sessions in the configured
 
    for session in sessions:
        print(session.name)
-       print(session.state)
+       print(session.state.value)
 
 **Get session information:**
 
@@ -174,7 +174,7 @@ Use the Spark SDK to inspect and manage Spark Connect sessions in the configured
    )
 
    print(f"Name: {session.name}")
-   print(f"State: {session.state}")
+   print(f"State: {session.state.value}")
    print(f"Namespace: {session.namespace}")
 
 **View session logs:**
@@ -197,27 +197,7 @@ Use the Spark SDK to inspect and manage Spark Connect sessions in the configured
 When Things Go Wrong
 --------------------
 
-**Check session status:**
-
-.. code-block:: python
-
-   session = client.get_session(
-       "spark-connect-example"
-   )
-
-   print(session.state)
-
-**Get session logs:**
-
-.. code-block:: python
-
-   for line in client.get_session_logs(
-       "spark-connect-example"
-   ):
-       print(line)
-
-Common issues
-^^^^^^^^^^^^^
+**Common issues:**
 
 - **Connection timeout:** Verify that the Spark Connect server is running and reachable.
 
