@@ -32,8 +32,12 @@ Before writing code, agents should:
 
 ```
 .github/                         # GitHub actions for CI/CD
+CHANGELOG/                       # Release changelogs
 docs/                            # Kubeflow SDK documentation
 examples/                        # Kubeflow SDK examples
+hack/                            # Scripts to manage CI/CD and installation
+proposals/                       # Kubeflow Enhancement Proposals (KEPs)
+test/                            # Top-level end-to-end tests
 kubeflow/                        # Main Python package
 ├── common/                        # Shared utilities, types, and constants across all projects
 │
