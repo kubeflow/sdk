@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unit tests for update_runtime_status function."""
+"""Unit tests for update_trainjob_status function."""
 
 from dataclasses import dataclass
 from datetime import timedelta
@@ -23,13 +23,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from kubeflow.trainer import utils
-from kubeflow.trainer.utils import update_runtime_status
+import kubeflow.trainer.backends.kubernetes.utils as k8s_utils
+from kubeflow.trainer.backends.kubernetes.utils import update_trainjob_status
 
 
 @dataclass
 class StatusTestCase:
-    """Parametrized test case for update_runtime_status."""
+    """Parametrized test case for update_trainjob_status."""
 
     name: str
     progress_percent: int | None = None
@@ -107,10 +107,10 @@ PAYLOAD_TEST_CASES = [
 @pytest.fixture(autouse=True)
 def _reset_module_state():
     """Reset module state before each test."""
-    utils._last_update_time = 0.0
-    utils._cached_token = None
-    utils._token_read_time = 0.0
-    utils._session = None
+    k8s_utils._last_update_time = 0.0
+    k8s_utils._cached_token = None
+    k8s_utils._token_read_time = 0.0
+    k8s_utils._http_session = None
 
 
 @pytest.fixture
@@ -134,8 +134,8 @@ def mock_env(token_file):
 
 @pytest.fixture
 def mock_session():
-    """Patch _get_session and return a mock with a 200 response."""
-    with patch("kubeflow.trainer.utils._get_session") as session_fn:
+    """Patch _get_status_session and return a mock with a 200 response."""
+    with patch("kubeflow.trainer.backends.kubernetes.utils._get_status_session") as session_fn:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.text = ""
@@ -144,11 +144,11 @@ def mock_session():
 
 
 class TestUpdateRuntimeStatus:
-    """Tests for update_runtime_status function."""
+    """Tests for update_trainjob_status function."""
 
     def test_returns_false_when_not_in_kubeflow(self):
         with patch.dict(os.environ, {}, clear=True):
-            assert update_runtime_status(progress_percent=50) is False
+            assert update_trainjob_status(progress_percent=50) is False
 
     def test_returns_false_when_token_unavailable(self):
         with patch.dict(
@@ -159,18 +159,18 @@ class TestUpdateRuntimeStatus:
             },
             clear=True,
         ):
-            assert update_runtime_status(progress_percent=50) is False
+            assert update_trainjob_status(progress_percent=50) is False
 
     def test_returns_false_on_non_200_response(self, mock_env, mock_session):
         mock_session.return_value.post.return_value.status_code = 422
         mock_session.return_value.post.return_value.text = "Unprocessable"
         with patch.dict(os.environ, mock_env, clear=True):
-            assert update_runtime_status(progress_percent=50, force=True) is False
+            assert update_trainjob_status(progress_percent=50, force=True) is False
 
     def test_returns_false_on_network_exception(self, mock_env, mock_session):
         mock_session.return_value.post.side_effect = ConnectionError("timeout")
         with patch.dict(os.environ, mock_env, clear=True):
-            assert update_runtime_status(progress_percent=50, force=True) is False
+            assert update_trainjob_status(progress_percent=50, force=True) is False
 
     def test_never_raises_exceptions(self):
         with patch.dict(
@@ -181,7 +181,7 @@ class TestUpdateRuntimeStatus:
             },
             clear=True,
         ):
-            assert update_runtime_status(progress_percent=50) is False
+            assert update_trainjob_status(progress_percent=50) is False
 
 
 class TestPayload:
@@ -190,7 +190,7 @@ class TestPayload:
     @pytest.mark.parametrize("case", PAYLOAD_TEST_CASES, ids=[c.name for c in PAYLOAD_TEST_CASES])
     def test_payload_fields(self, case: StatusTestCase, mock_env, mock_session):
         with patch.dict(os.environ, mock_env, clear=True):
-            result = update_runtime_status(
+            result = update_trainjob_status(
                 progress_percent=case.progress_percent,
                 estimated_time_remaining=case.estimated_time_remaining,
                 metrics=case.metrics,
@@ -216,7 +216,7 @@ class TestPayload:
 
     def test_metrics_values_are_strings(self, mock_env, mock_session):
         with patch.dict(os.environ, mock_env, clear=True):
-            update_runtime_status(
+            update_trainjob_status(
                 metrics={"loss": 0.234, "step": 100, "accuracy": "0.95"},
                 force=True,
             )
@@ -227,7 +227,7 @@ class TestPayload:
     def test_metrics_truncated_at_256(self, mock_env, mock_session):
         with patch.dict(os.environ, mock_env, clear=True):
             oversized = {f"metric_{i}": i for i in range(300)}
-            update_runtime_status(metrics=oversized, force=True)
+            update_trainjob_status(metrics=oversized, force=True)
             payload = mock_session.return_value.post.call_args.kwargs["json"]
             assert len(payload["trainerStatus"]["metrics"]) == 256
 
@@ -237,13 +237,13 @@ class TestAuthAndHeaders:
 
     def test_bearer_token_in_header(self, mock_env, mock_session):
         with patch.dict(os.environ, mock_env, clear=True):
-            update_runtime_status(progress_percent=50, force=True)
+            update_trainjob_status(progress_percent=50, force=True)
             call_kwargs = mock_session.return_value.post.call_args.kwargs
             assert call_kwargs["headers"]["Authorization"] == "Bearer test-token"
 
     def test_request_url_matches_env(self, mock_env, mock_session):
         with patch.dict(os.environ, mock_env, clear=True):
-            update_runtime_status(progress_percent=50, force=True)
+            update_trainjob_status(progress_percent=50, force=True)
             call_args = mock_session.return_value.post.call_args
             assert call_args.args[0] == "https://trainer.example.com/status"
 
@@ -259,7 +259,7 @@ class TestAuthAndHeaders:
                 "KUBEFLOW_TRAINER_SERVER_CA_CERT": ca_path,
             }
             with patch.dict(os.environ, env, clear=True):
-                update_runtime_status(progress_percent=50, force=True)
+                update_trainjob_status(progress_percent=50, force=True)
                 call_kwargs = mock_session.return_value.post.call_args.kwargs
                 assert call_kwargs["verify"] == ca_path
         finally:
@@ -271,17 +271,17 @@ class TestThrottling:
 
     def test_throttled_call_makes_no_http_post(self, mock_env, mock_session):
         with patch.dict(os.environ, mock_env, clear=True):
-            update_runtime_status(progress_percent=10, force=True)
+            update_trainjob_status(progress_percent=10, force=True)
             assert mock_session.return_value.post.call_count == 1
 
-            result = update_runtime_status(progress_percent=20)
+            result = update_trainjob_status(progress_percent=20)
             assert result is False
             assert mock_session.return_value.post.call_count == 1
 
     def test_force_bypasses_throttling(self, mock_env, mock_session):
         with patch.dict(os.environ, mock_env, clear=True):
-            update_runtime_status(progress_percent=10, force=True)
-            result = update_runtime_status(progress_percent=30, force=True)
+            update_trainjob_status(progress_percent=10, force=True)
+            result = update_trainjob_status(progress_percent=30, force=True)
             assert result is True
             assert mock_session.return_value.post.call_count == 2
 
@@ -291,11 +291,11 @@ class TestThrottling:
         mock_session.return_value.post.return_value.text = "error"
 
         with patch.dict(os.environ, mock_env, clear=True):
-            result1 = update_runtime_status(progress_percent=10, force=True)
+            result1 = update_trainjob_status(progress_percent=10, force=True)
             assert result1 is False
 
             mock_session.return_value.post.return_value.status_code = 200
-            result2 = update_runtime_status(progress_percent=20)
+            result2 = update_trainjob_status(progress_percent=20)
             assert result2 is True
 
 
@@ -303,28 +303,28 @@ class TestTokenCaching:
     """Tests for _get_cached_token behavior."""
 
     def test_token_cache_hit_avoids_reread(self, token_file):
-        token1 = utils._get_cached_token(token_file)
+        token1 = k8s_utils._get_cached_token(token_file)
         assert token1 == "test-token"
 
         with open(token_file, "w") as f:
             f.write("new-token")
 
-        token2 = utils._get_cached_token(token_file)
+        token2 = k8s_utils._get_cached_token(token_file)
         assert token2 == "test-token"
 
     def test_token_cache_expires_after_ttl(self, token_file):
-        utils._get_cached_token(token_file)
+        k8s_utils._get_cached_token(token_file)
 
         with open(token_file, "w") as f:
             f.write("refreshed-token")
 
-        utils._token_read_time = time.monotonic() - utils._TOKEN_CACHE_TTL_SECONDS - 1
+        k8s_utils._token_read_time = time.monotonic() - k8s_utils._TOKEN_CACHE_TTL_SECONDS - 1
 
-        token = utils._get_cached_token(token_file)
+        token = k8s_utils._get_cached_token(token_file)
         assert token == "refreshed-token"
 
     def test_oserror_on_token_read_returns_none(self):
-        result = utils._get_cached_token("/nonexistent/path/token")
+        result = k8s_utils._get_cached_token("/nonexistent/path/token")
         assert result is None
 
     def test_oserror_on_unreadable_file_returns_none(self):
@@ -332,9 +332,9 @@ class TestTokenCaching:
             path = f.name
         try:
             os.chmod(path, 0o000)
-            utils._cached_token = None
-            utils._token_read_time = 0.0
-            result = utils._get_cached_token(path)
+            k8s_utils._cached_token = None
+            k8s_utils._token_read_time = 0.0
+            result = k8s_utils._get_cached_token(path)
             assert result is None
         finally:
             os.chmod(path, 0o644)

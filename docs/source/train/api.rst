@@ -68,4 +68,4 @@ Backend Configurations
 Utilities
 ---------
 
-.. autofunction:: kubeflow.trainer.utils.update_runtime_status
+.. autofunction:: kubeflow.trainer.backends.kubernetes.utils.update_trainjob_status

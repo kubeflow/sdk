@@ -22,6 +22,7 @@ from kubeflow.trainer.backends.container.types import (
     ContainerBackendConfig,
     TrainingRuntimeSource,
 )
+from kubeflow.trainer.backends.kubernetes.utils import update_trainjob_status
 from kubeflow.trainer.backends.localprocess.types import LocalProcessBackendConfig
 
 # Import the Kubeflow Trainer constants.
@@ -79,4 +80,5 @@ __all__ = [
     "ContainerBackendConfig",
     "KubernetesBackendConfig",
     "TrainingRuntimeSource",
+    "update_trainjob_status",
 ]
