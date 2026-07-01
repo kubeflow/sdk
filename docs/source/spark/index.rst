@@ -149,7 +149,7 @@ This pattern is useful when Spark Connect is already running and managed indepen
 Session Management
 ------------------
 
-Use the Spark SDK to inspect and manage Spark Connect sessions running in your Kubernetes cluster.
+Use the Spark SDK to inspect and manage Spark Connect sessions in the configured Kubernetes namespace (defaults to ``default``).
 
 **List active sessions:**
 
@@ -197,7 +197,7 @@ Use the Spark SDK to inspect and manage Spark Connect sessions running in your K
 When Things Go Wrong
 --------------------
 
-Check session status:
+**Check session status:**
 
 .. code-block:: python
 
@@ -207,7 +207,7 @@ Check session status:
 
    print(session.state)
 
-Get session logs:
+**Get session logs:**
 
 .. code-block:: python
 
@@ -216,20 +216,13 @@ Get session logs:
    ):
        print(line)
 
-Common issues:
+Common issues
+^^^^^^^^^^^^^
 
-**Connection timeout**
+- **Connection timeout:** Verify that the Spark Connect server is running and reachable.
 
-Verify that the Spark Connect server is running and reachable.
+- **Session creation failure:** Check Spark Connect logs and available cluster resources.
 
-**Session creation failure**
+- **Port-forward errors:** When connecting from outside the cluster, ensure the Spark Connect server is running and reachable. You can also connect directly to an existing Spark Connect endpoint using ``base_url``.
 
-Check Spark Connect logs and available cluster resources.
-
-**Port-forward errors**
-
-When connecting from outside the cluster, ensure the Spark Connect server is running and reachable. You can also connect directly to an existing Spark Connect endpoint using ``base_url``.
-
-**Spark application startup issues**
-
-Inspect the Spark Connect server logs and verify the Spark Operator is running correctly.
+- **Spark application startup issues:** Inspect the Spark Connect server logs and verify the Spark Operator is running correctly.
