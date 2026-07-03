@@ -1,16 +1,6 @@
 # AI Agents Guide for Kubeflow SDK
 
-The Kubeflow SDK is a set of unified Pythonic APIs that let you run any AI workload at any scale –
-without the need to learn Kubernetes. It provides simple and consistent APIs across the Kubeflow
-ecosystem, enabling users to focus on building AI applications rather than managing complex
-infrastructure. This file is the short entry point for AI agents working in this repository. Keep it lean,
-and follow linked documents for topic-specific detail.
-
-## Who This Is For
-
-- **AI agents**: Automate repository tasks with minimal context
-- **Contributors**: Humans using AI assistants or working directly
-- **Maintainers**: Ensure assistants follow project conventions and CI rules
+The Kubeflow SDK provides unified Pythonic APIs for Kubeflow workloads at any scale. This file is the entry point for AI agents — keep it lean and follow linked documents for detail.
 
 ## Start here
 
@@ -22,6 +12,7 @@ and follow linked documents for topic-specific detail.
 | [references/common-changes.md](references/common-changes.md) | Implementing a common change — backend options, backends, types, tests, or SDK clients |
 | [docs/design/backend-abstraction.md](docs/design/backend-abstraction.md) | Understanding execution backends — Kubernetes, Container, LocalProcess |
 | [docs/design/train-job-lifecycle.md](docs/design/train-job-lifecycle.md) | How `TrainerClient.train()` becomes a TrainJob CR on Kubernetes |
+| [.agents/api/surfaces.yaml](.agents/api/surfaces.yaml) | Machine-readable surface index — SDK OpenAPI, CRD schemas, external APIs |
 
 For code changes, read `agent-behaviors.md` first, then `core-principles.md` when editing Python,
 `common-changes.md` when following an existing pattern, and `development-workflow.md` before
@@ -49,6 +40,17 @@ proposing a commit or PR. Read design docs when changing backend architecture or
 | `kubeflow/optimizer/api/` | `OptimizerClient` |
 | `kubeflow/hub/api/` | `ModelRegistryClient` |
 
+## Component context
+
+Path-scoped rules in `.cursor/rules/` provide module detail when editing a component.
+
+| Component | Rule | Scope |
+|-----------|------|-------|
+| Trainer | `.cursor/rules/kubeflow-trainer.mdc` | `kubeflow/trainer/**` |
+| Trainer K8s backend | `.cursor/rules/kubeflow-trainer-kubernetes.mdc` | `kubeflow/trainer/backends/kubernetes/**` |
+| Spark | `.cursor/rules/kubeflow-spark.mdc` | `kubeflow/spark/**` |
+| Optimizer | `.cursor/rules/kubeflow-optimizer.mdc` | `kubeflow/optimizer/**` |
+
 ## Environment & Tooling
 
 - **Package manager**: `uv` (creates `.venv` automatically via targets)
@@ -71,6 +73,7 @@ make install-dev              # Install uv, create .venv, sync deps
 
 ```bash
 make verify                   # Runs ruff check --show-fixes and ruff format --check
+make verify-openapi           # Validate openapi.yaml (OpenAPI 3.x schema)
 ```
 
 **Single-file verification** (fast feedback during edits; no full build; target under 5 seconds per file):

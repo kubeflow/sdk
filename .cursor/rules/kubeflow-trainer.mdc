@@ -1,0 +1,58 @@
+---
+description: Kubeflow Trainer component — client, backends, options, types
+globs: kubeflow/trainer/**
+alwaysApply: false
+---
+
+# Kubeflow Trainer
+
+## Role
+
+`TrainerClient` (`api/trainer_client.py`) is a thin facade. All execution logic lives in `backends/`.
+Backend is selected at construction via `KubernetesBackendConfig`, `ContainerBackendConfig`, or
+`LocalProcessBackendConfig`.
+
+## Package map
+
+| Path | Responsibility |
+|------|----------------|
+| `api/` | Public `TrainerClient` — no backend-specific branching |
+| `backends/base.py` | `RuntimeBackend` ABC — contract for all backends |
+| `backends/kubernetes/` | TrainJob CR creation (production path) |
+| `backends/container/` | Docker/Podman local execution |
+| `backends/localprocess/` | Host subprocess smoke tests |
+| `options/` | Callable options mutating `job_spec` in `train()` |
+| `types/types.py` | Shared schemas (`TrainJob`, `Runtime`, trainers) |
+
+## Invariants
+
+- Never add backend-specific job creation in `TrainerClient`; extend `RuntimeBackend` + config instead.
+- Kubernetes options must guard with `isinstance(backend, KubernetesBackend)` in `__call__`.
+- Local backends (`container`, `localprocess`) support `CustomTrainer` only.
+- Backends return shared status vocabulary: `Created`, `Running`, `Complete`, `Failed`.
+
+## Common changes
+
+- New K8s option → `options/kubernetes.py` + `kubernetes_test.py` (see `references/common-changes.md`)
+- Extend backend → `backends/<name>/backend.py` + co-located `*_test.py`
+- New trainer type → `types/types.py` + exports in `types/__init__.py`
+
+## Pitfalls
+
+- `LocalProcessBackend.train()` accepts `initializer` but ignores it today.
+- `ContainerBackend` v1: `CustomTrainer` only; serializes `func` into container command.
+- Do not import `kubeflow.spark` or `kubeflow.optimizer` from trainer code.
+
+## Verify
+
+```bash
+uv run pytest -q kubeflow/trainer/backends/kubernetes/backend_test.py
+uv run ruff check kubeflow/trainer/path/to/file.py
+```
+
+## Deep dives
+
+- [.agents/api/surfaces.yaml](../../.agents/api/surfaces.yaml) — API surface index
+- [openapi.yaml](../../openapi.yaml) — machine-readable TrainerClient operations
+- `docs/design/backend-abstraction.md` — backend matrix and trade-offs
+- `docs/design/train-job-lifecycle.md` — K8s `train()` → TrainJob CR flow

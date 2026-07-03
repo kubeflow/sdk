@@ -1,0 +1,59 @@
+---
+description: Trainer Kubernetes backend — TrainJob CR lifecycle and spec building
+globs: kubeflow/trainer/backends/kubernetes/**
+alwaysApply: false
+---
+
+# Trainer Kubernetes Backend
+
+## Role
+
+`KubernetesBackend` creates `trainer.kubeflow.org/v1alpha1` TrainJob CRs via the K8s API.
+Pods are started by the Trainer controller — not by the SDK.
+
+## Key files
+
+| File | Role |
+|------|------|
+| `backend.py` | `train()`, `_get_trainjob_spec()`, job CRUD, logs/events |
+| `utils.py` | TrainJob spec assembly, trainer CR fragments, pod templates |
+| `constants.py` | CRD group/version, label keys, defaults |
+| `backend_test.py` | Parametrized `TestCase` pattern — copy for new scenarios |
+| `utils_test.py` | Spec-building unit tests |
+
+## `train()` flow (do not reorder)
+
+1. Build empty `job_spec = {}`
+2. Apply each `option(job_spec, trainer, self)`
+3. Resolve `train_job_name` from `metadata.name` or generated UUID
+4. Call `_get_trainjob_spec(...)` → `TrainerV1alpha1TrainJobSpec`
+5. `create_namespaced_custom_object` → return job name
+
+## Invariants
+
+- TrainJob spec changes go through `utils.py`, not inline in `backend.py`.
+- Trainer types: `CustomTrainer`, `CustomTrainerContainer`, `BuiltinTrainer` — each has runtime validation.
+- Unit tests: mock K8s API only; no real cluster or network calls.
+- Use fixtures from `kubeflow/trainer/test/common.py` (`TestCase`, `SUCCESS`/`FAILED`).
+
+## Pitfalls
+
+- `utils.py` is the highest-churn file — keep changes minimal and test-covered.
+- Options merge into `job_spec` keys: `metadata`, `spec.labels`, `spec.annotations`, `spec.trainer`,
+  `spec.podTemplateOverrides`.
+- Do not add Container/LocalProcess logic here.
+
+## Verify
+
+```bash
+uv run pytest -q kubeflow/trainer/backends/kubernetes/backend_test.py
+uv run pytest -q kubeflow/trainer/backends/kubernetes/utils_test.py
+```
+
+## CRD schemas
+
+TrainJob CRs use `trainer.kubeflow.org/v1alpha1`. CRD YAML lives upstream (not vendored):
+
+- Index: [.agents/api/surfaces.yaml](../../.agents/api/surfaces.yaml)
+- TrainJob CRD: [kubeflow/trainer@v2.2.0](https://raw.githubusercontent.com/kubeflow/trainer/v2.2.0/manifests/base/crds/trainer.kubeflow.org_trainjobs.yaml)
+- Pin matches `kubeflow-trainer-api>=2.2.0` in `pyproject.toml`

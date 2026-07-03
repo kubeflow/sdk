@@ -1,0 +1,52 @@
+---
+description: Kubeflow Spark component — SparkClient and SparkConnect on Kubernetes
+globs: kubeflow/spark/**
+alwaysApply: false
+---
+
+# Kubeflow Spark
+
+## Role
+
+`SparkClient` (`api/spark_client.py`) manages Spark Connect sessions on Kubernetes.
+Kubernetes-only today via `KubernetesBackendConfig`.
+
+## Package map
+
+| Path | Responsibility |
+|------|----------------|
+| `api/spark_client.py` | `connect()` — create or attach to SparkConnect |
+| `backends/kubernetes/backend.py` | SparkConnect CR lifecycle |
+| `backends/kubernetes/utils.py` | CR spec, URL validation |
+| `types/types.py` | `Driver`, `Executor`, `SparkConnectInfo` |
+| `types/options.py` | Spark-specific option callables |
+
+## `connect()` modes
+
+- **Connect mode:** `base_url` provided → attach to existing Spark Connect server
+- **Create mode:** no `base_url` → create SparkConnect CR, wait, return `SparkSession`
+
+## Invariants
+
+- Spark version in `pyspark-connect` must align with `backends/kubernetes/constants.py` and operator image.
+- Optional dep: `pip install 'kubeflow[spark]'` — guard imports accordingly.
+- Do not import from `kubeflow.trainer` or `kubeflow.optimizer`.
+
+## Common changes
+
+- New option → `types/options.py` + `options_test.py`
+- Backend CR changes → `backends/kubernetes/backend.py` + `backend_test.py`
+- Reference: KEP-107 in `proposals/107-spark-client/`
+
+## Verify
+
+```bash
+uv run pytest -q kubeflow/spark/backends/kubernetes/backend_test.py
+uv run pytest -q kubeflow/spark/api/spark_client_test.py
+```
+
+## API surface
+
+- Index: [.agents/api/surfaces.yaml](../../.agents/api/surfaces.yaml)
+- [openapi.yaml](../../openapi.yaml) — `SparkClient.connect`, `SparkClient.list_sessions`
+- CRD: `hack/crds/sparkoperator.k8s.io_sparkconnects.yaml`

@@ -61,6 +61,10 @@ verify: install-dev  ## install all required tools
 	@uv run ruff format --check kubeflow
 	@uv run ty check kubeflow/hub
 
+.PHONY: verify-openapi
+verify-openapi: install-dev  ## Validate openapi.yaml against OpenAPI 3.x schema
+	@uv run openapi-spec-validator openapi.yaml
+
 .PHONY: uv-venv
 uv-venv:  ## Create uv virtual environment
 	@if [ ! -d "$(VENV_DIR)" ]; then \

@@ -1,0 +1,49 @@
+---
+description: Kubeflow Optimizer component — hyperparameter optimization via Katib
+globs: kubeflow/optimizer/**
+alwaysApply: false
+---
+
+# Kubeflow Optimizer
+
+## Role
+
+`OptimizerClient` (`api/optimizer_client.py`) runs hyperparameter search by creating Katib
+experiments from `TrainJobTemplate` trials. Kubernetes-only via `KubernetesBackendConfig`.
+
+## Package map
+
+| Path | Responsibility |
+|------|----------------|
+| `api/optimizer_client.py` | `optimize()`, job listing, results |
+| `backends/kubernetes/backend.py` | Katib Experiment CR lifecycle |
+| `backends/kubernetes/utils.py` | Experiment spec from trial template |
+| `types/optimization_types.py` | `Objective`, `OptimizationJob`, `Result`, `TrialConfig` |
+| `types/algorithm_types.py` | Search algorithms (`BaseAlgorithm` subclasses) |
+| `types/search_types.py` | Search space parameter types |
+
+## Cross-component dependency
+
+- Imports `TrainJobTemplate` from `kubeflow.trainer.types` — this is the **only** allowed trainer import.
+- Do not import `TrainerClient` or trainer backends from optimizer code.
+
+## Invariants
+
+- `optimize(trial_template, objective, algorithm, ...)` builds Katib Experiment CRs.
+- Unit tests mock K8s API; `backend_test.py` is large — add focused cases, don't duplicate.
+- Uses `kubeflow-katib-api` (see `pyproject.toml`).
+
+## Verify
+
+```bash
+uv run pytest -q kubeflow/optimizer/backends/kubernetes/backend_test.py
+uv run ruff check kubeflow/optimizer/path/to/file.py
+```
+
+## CRD schemas
+
+Katib Experiment CRs use `kubeflow.org/v1beta1`:
+
+- Index: [.agents/api/surfaces.yaml](../../.agents/api/surfaces.yaml)
+- Experiment CRD: [kubeflow/katib@v0.19.0](https://raw.githubusercontent.com/kubeflow/katib/v0.19.0/manifests/v1beta1/components/crd/experiment.yaml)
+- Pin matches `kubeflow-katib-api>=0.19.0` in `pyproject.toml`
