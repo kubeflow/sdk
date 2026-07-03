@@ -14,31 +14,20 @@ The Kubeflow SDK provides unified Pythonic APIs for Kubeflow workloads at any sc
 | [docs/design/train-job-lifecycle.md](docs/design/train-job-lifecycle.md) | How `TrainerClient.train()` becomes a TrainJob CR on Kubernetes |
 | [.agents/api/surfaces.yaml](.agents/api/surfaces.yaml) | Machine-readable surface index — SDK OpenAPI, CRD schemas, external APIs |
 
-For code changes, read `agent-behaviors.md` first, then `core-principles.md` when editing Python,
-`common-changes.md` when following an existing pattern, and `development-workflow.md` before
-proposing a commit or PR. Read design docs when changing backend architecture or TrainJob creation.
-
 ## Repository Map
+
+Paths not covered above. Component packages: see **Component context**.
 
 | Path | Use for |
 |------|---------|
 | `.github/` | CI/CD workflows |
 | `CHANGELOG/` | Release changelogs |
-| `docs/` | Project documentation |
-| `docs/design/` | Architecture intent — backends, TrainJob lifecycle |
 | `examples/` | Usage examples |
-| `hack/` | CI/CD and installation scripts |
+| `hack/` | CI/CD scripts, vendored CRDs |
 | `proposals/` | Kubeflow Enhancement Proposals (KEPs) |
 | `test/` | Top-level end-to-end tests |
 | `kubeflow/common/` | Shared utilities and types |
-| `kubeflow/trainer/api/` | `TrainerClient` — main trainer entry point |
-| `kubeflow/trainer/backends/` | Kubernetes, Container, and LocalProcess execution backends |
-| `kubeflow/trainer/options/` | Training job options (e.g. labels, pod overrides) |
-| `kubeflow/trainer/types/` | Trainer schemas (`TrainJob`, `CustomTrainer`, …) |
-| `kubeflow/trainer/test/` | Shared test fixtures (`common.py`) |
-| `kubeflow/spark/api/` | `SparkClient` |
-| `kubeflow/optimizer/api/` | `OptimizerClient` |
-| `kubeflow/hub/api/` | `ModelRegistryClient` |
+| `kubeflow/hub/api/` | `ModelRegistryClient` (no path-scoped rule yet) |
 
 ## Component context
 
@@ -130,13 +119,11 @@ uv run pre-commit run --all-files           # Run all hooks
 
 ## Pattern References
 
-Copy-modify from these examples; see [references/common-changes.md](references/common-changes.md) for file lists.
+Copy-modify from canonical files — details in [references/common-changes.md](references/common-changes.md).
 
-- New Kubernetes training option: follow the pattern in `kubeflow/trainer/options/kubernetes.py`
-- Extend an execution backend: follow the pattern in `kubeflow/trainer/backends/kubernetes/backend.py`
-- Add trainer types: see `kubeflow/trainer/types/types.py` for the schema pattern
-- Add backend tests: follow the pattern in `kubeflow/trainer/backends/kubernetes/backend_test.py`
-- New SDK client: see `kubeflow/spark/api/spark_client.py` for reference
+- K8s training option → follow the pattern in `kubeflow/trainer/options/kubernetes.py`
+- Execution backend → follow the pattern in `kubeflow/trainer/backends/kubernetes/backend.py`
+- New SDK client → see `kubeflow/spark/api/spark_client.py` for reference
 
 ## Pull Requests
 

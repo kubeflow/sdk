@@ -38,8 +38,4 @@ uv run ruff check kubeflow/optimizer/path/to/file.py
 
 ## CRD schemas
 
-Katib Experiment CRs use `kubeflow.org/v1beta1`:
-
-- Index: [.agents/api/surfaces.yaml](../../.agents/api/surfaces.yaml)
-- Experiment CRD: [kubeflow/katib@v0.19.0](https://raw.githubusercontent.com/kubeflow/katib/v0.19.0/manifests/v1beta1/components/crd/experiment.yaml)
-- Pin matches `kubeflow-katib-api>=0.19.0` in `pyproject.toml`
+Katib Experiment CRD: [.agents/api/surfaces.yaml](../../.agents/api/surfaces.yaml) (`Experiment` under `crds`).

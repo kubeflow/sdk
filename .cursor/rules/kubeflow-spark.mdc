@@ -47,6 +47,4 @@ uv run pytest -q kubeflow/spark/api/spark_client_test.py
 
 ## API surface
 
-- Index: [.agents/api/surfaces.yaml](../../.agents/api/surfaces.yaml)
-- [openapi.yaml](../../openapi.yaml) — `SparkClient.connect`, `SparkClient.list_sessions`
-- CRD: `hack/crds/sparkoperator.k8s.io_sparkconnects.yaml`
+OpenAPI, CRDs, and upstream pins: [.agents/api/surfaces.yaml](../../.agents/api/surfaces.yaml).

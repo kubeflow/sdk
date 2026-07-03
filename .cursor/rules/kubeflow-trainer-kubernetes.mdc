@@ -52,8 +52,4 @@ uv run pytest -q kubeflow/trainer/backends/kubernetes/utils_test.py
 
 ## CRD schemas
 
-TrainJob CRs use `trainer.kubeflow.org/v1alpha1`. CRD YAML lives upstream (not vendored):
-
-- Index: [.agents/api/surfaces.yaml](../../.agents/api/surfaces.yaml)
-- TrainJob CRD: [kubeflow/trainer@v2.2.0](https://raw.githubusercontent.com/kubeflow/trainer/v2.2.0/manifests/base/crds/trainer.kubeflow.org_trainjobs.yaml)
-- Pin matches `kubeflow-trainer-api>=2.2.0` in `pyproject.toml`
+TrainJob and TrainingRuntime CRDs: [.agents/api/surfaces.yaml](../../.agents/api/surfaces.yaml) (`crds` entries for `kubeflow.trainer.backends.kubernetes`).

@@ -42,8 +42,14 @@ jobs:
       - name: Verify
         run: make verify
 
+      - name: Run type-check
+        run: uv run ty check kubeflow/hub kubeflow/common
+
       - name: Lint import boundaries
         run: make lint-imports
+
+      - name: Verify OpenAPI spec
+        run: make verify-openapi
 
       - name: Test GitHub Actions Scripts
         run: make test-scripts

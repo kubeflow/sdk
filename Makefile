@@ -59,7 +59,7 @@ verify: install-dev  ## install all required tools
 	@uv lock --check
 	@uv run ruff check --show-fixes --output-format=github .
 	@uv run ruff format --check kubeflow
-	@uv run ty check kubeflow/hub
+	@uv run ty check kubeflow/hub kubeflow/common
 
 .PHONY: verify-openapi
 verify-openapi: install-dev  ## Validate openapi.yaml against OpenAPI 3.x schema
