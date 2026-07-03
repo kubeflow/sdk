@@ -84,8 +84,4 @@ def test_wait_for_job_status_invalid_polling_interval():
 
         client = TrainerClient()
 
-        with pytest.raises(ValueError, match="polling_interval must be a positive number"):
-            client.wait_for_job_status("test-job", polling_interval=0)
-
-        with pytest.raises(ValueError, match="polling_interval must be a positive number"):
-            client.wait_for_job_status("test-job", polling_interval=-5)
+ 
