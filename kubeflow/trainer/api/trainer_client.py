@@ -259,6 +259,9 @@ class TrainerClient:
             RuntimeError: Failed to get TrainJob or TrainJob reaches unexpected Failed status.
             TimeoutError: Timeout to wait for TrainJob status.
         """
+        if polling_interval <= 0:
+            raise ValueError(f"polling_interval must be a positive number, got: {polling_interval}")
+
         return self.backend.wait_for_job_status(
             name=name,
             status=status,

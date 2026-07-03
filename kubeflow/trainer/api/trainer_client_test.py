@@ -70,3 +70,22 @@ def test_backend_selection(test_case):
         client = TrainerClient(backend_config=test_case["backend_config"])
         backend_name = client.backend.__class__.__name__
         assert backend_name == test_case["expected_backend"]
+
+
+def test_wait_for_job_status_invalid_polling_interval():
+    """Test TrainerClient.wait_for_job_status raises ValueError for non-positive polling_interval."""
+    with (
+        patch("kubernetes.config.load_kube_config"),
+        patch("kubernetes.client.CustomObjectsApi") as mock_custom_api,
+        patch("kubernetes.client.CoreV1Api") as mock_core_api,
+    ):
+        mock_custom_api.return_value = Mock()
+        mock_core_api.return_value = Mock()
+
+        client = TrainerClient()
+
+        with pytest.raises(ValueError, match="polling_interval must be a positive number"):
+            client.wait_for_job_status("test-job", polling_interval=0)
+
+        with pytest.raises(ValueError, match="polling_interval must be a positive number"):
+            client.wait_for_job_status("test-job", polling_interval=-5)
