@@ -73,6 +73,7 @@ make install-dev              # Install uv, create .venv, sync deps
 
 ```bash
 make verify                   # Runs ruff check --show-fixes and ruff format --check
+make lint-imports             # SDK component import boundaries (import-linter)
 make verify-openapi           # Validate openapi.yaml (OpenAPI 3.x schema)
 ```
 
@@ -113,8 +114,6 @@ uv run ruff format kubeflow                  # Format kubeflow package
 uv run ty check kubeflow                     # Run type checker (project default)
 ```
 
-See **Single-file verification** above for per-file `ruff check` and `mypy` commands.
-
 **Pre-commit**:
 
 ```bash
@@ -127,7 +126,6 @@ uv run pre-commit run --all-files           # Run all hooks
 ## Key Conventions
 
 - Preserve public API signatures; use keyword-only args for new params
-- Type hints on all functions; line length 100; first-party import is `kubeflow`
 - Unit tests in `*_test.py`; no network calls in unit tests
 
 ## Pattern References
@@ -143,7 +141,7 @@ Copy-modify from these examples; see [references/common-changes.md](references/c
 ## Pull Requests
 
 - Use Conventional Commits for PR titles; see [CONTRIBUTING.md](CONTRIBUTING.md#pull-request-title-conventions)
-- Before proposing: run `make verify` and targeted tests for changed code
+- Before proposing: run `make verify`, `make lint-imports` when changing imports, and targeted tests
 - Keep diffs minimal and scoped to the task; include rationale ("why") in the PR description
 - Do not commit secrets or modify git config
 

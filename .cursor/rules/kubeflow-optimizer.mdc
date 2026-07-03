@@ -22,12 +22,6 @@ experiments from `TrainJobTemplate` trials. Kubernetes-only via `KubernetesBacke
 | `types/algorithm_types.py` | Search algorithms (`BaseAlgorithm` subclasses) |
 | `types/search_types.py` | Search space parameter types |
 
-## Cross-component dependency
-
-- Boundaries enforced by `make lint-imports` (see `.importlinter`).
-- Allowed trainer imports: `kubeflow.trainer.types`, `kubeflow.trainer.backends.kubernetes`, and `kubeflow.trainer.constants` only.
-- Do not import `TrainerClient`, `kubeflow.trainer.options`, or other trainer backends.
-
 ## Invariants
 
 - `optimize(trial_template, objective, algorithm, ...)` builds Katib Experiment CRs.
@@ -37,6 +31,7 @@ experiments from `TrainJobTemplate` trials. Kubernetes-only via `KubernetesBacke
 ## Verify
 
 ```bash
+make lint-imports
 uv run pytest -q kubeflow/optimizer/backends/kubernetes/backend_test.py
 uv run ruff check kubeflow/optimizer/path/to/file.py
 ```

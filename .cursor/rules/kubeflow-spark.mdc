@@ -30,7 +30,6 @@ Kubernetes-only today via `KubernetesBackendConfig`.
 
 - Spark version in `pyspark-connect` must align with `backends/kubernetes/constants.py` and operator image.
 - Optional dep: `pip install 'kubeflow[spark]'` — guard imports accordingly.
-- Do not import from `kubeflow.trainer` or `kubeflow.optimizer`.
 
 ## Common changes
 
@@ -41,6 +40,7 @@ Kubernetes-only today via `KubernetesBackendConfig`.
 ## Verify
 
 ```bash
+make lint-imports
 uv run pytest -q kubeflow/spark/backends/kubernetes/backend_test.py
 uv run pytest -q kubeflow/spark/api/spark_client_test.py
 ```
