@@ -14,7 +14,10 @@ Index of schemas agents can diff against requirements. Start at **[surfaces.yaml
 
 ```bash
 make verify-openapi    # Validate openapi.yaml (openapi-spec-validator via uv)
+make lint-imports      # Enforce SDK component import boundaries (import-linter)
 ```
+
+Cross-component import boundaries (trainer, spark, optimizer, hub) are enforced by `make lint-imports`.
 
 Trainer and Katib CRD schemas are upstream only — see `upstream_url` entries in `surfaces.yaml`.
 

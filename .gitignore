@@ -17,6 +17,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.import_linter_cache/
 
 # Build artifacts
 build/

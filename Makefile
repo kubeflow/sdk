@@ -65,6 +65,10 @@ verify: install-dev  ## install all required tools
 verify-openapi: install-dev  ## Validate openapi.yaml against OpenAPI 3.x schema
 	@uv run openapi-spec-validator openapi.yaml
 
+.PHONY: lint-imports
+lint-imports: install-dev  ## Enforce SDK component import boundaries (import-linter)
+	@uv run lint-imports
+
 .PHONY: uv-venv
 uv-venv:  ## Create uv virtual environment
 	@if [ ! -d "$(VENV_DIR)" ]; then \

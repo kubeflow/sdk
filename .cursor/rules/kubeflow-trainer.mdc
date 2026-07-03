@@ -26,6 +26,7 @@ Backend is selected at construction via `KubernetesBackendConfig`, `ContainerBac
 
 ## Invariants
 
+- Cross-component import boundaries are enforced by `make lint-imports` (see `.importlinter`).
 - Never add backend-specific job creation in `TrainerClient`; extend `RuntimeBackend` + config instead.
 - Kubernetes options must guard with `isinstance(backend, KubernetesBackend)` in `__call__`.
 - Local backends (`container`, `localprocess`) support `CustomTrainer` only.
