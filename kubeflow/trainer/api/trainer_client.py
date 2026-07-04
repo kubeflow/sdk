@@ -16,6 +16,7 @@ from collections.abc import Callable, Iterator
 import logging
 
 from kubeflow.common.types import KubernetesBackendConfig
+import kubeflow.common.utils as common_utils
 from kubeflow.trainer.backends.container.backend import ContainerBackend
 from kubeflow.trainer.backends.container.types import ContainerBackendConfig
 from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
@@ -259,15 +260,7 @@ class TrainerClient:
             RuntimeError: Failed to get TrainJob or TrainJob reaches unexpected Failed status.
             TimeoutError: Timeout to wait for TrainJob status.
         """
-        if polling_interval <= 0:
-            raise ValueError(
-                f"Polling interval must be a positive number, got polling_interval={polling_interval}"
-            )
-        if polling_interval >= timeout:
-            raise ValueError(
-                "Polling interval must be strictly less than timeout. "
-                f"Received polling_interval={polling_interval}, timeout={timeout}"
-            )
+        common_utils.validate_wait_intervals(polling_interval, timeout)
 
         return self.backend.wait_for_job_status(
             name=name,
