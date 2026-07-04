@@ -196,7 +196,7 @@ def build_spark_connect_cr(
     Args:
         name: Session name.
         namespace: Kubernetes namespace.
-        spark_version: Spark version (default: 3.4.1).
+        spark_version: Spark version (default: 4.0.1).
         num_executors: Number of executor instances (simple mode).
         resources_per_executor: Resource requirements per executor (simple mode).
         spark_conf: Spark configuration properties.
