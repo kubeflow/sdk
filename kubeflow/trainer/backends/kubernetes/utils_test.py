@@ -890,7 +890,7 @@ def _build_builtin_runtime() -> types.Runtime:
                     dtype=types.DataType.BF16,
                 ),
             },
-            expected_output=[f"dtype={types.DataType.BF16}"],
+            expected_output=["dtype=bf16"],
         ),
         TestCase(
             name="all scalar fields produce correct args",
@@ -904,10 +904,10 @@ def _build_builtin_runtime() -> types.Runtime:
                 ),
             },
             expected_output=[
-                f"dtype={types.DataType.FP32}",
+                "dtype=fp32",
                 "batch_size=8",
                 "epochs=3",
-                f"loss={types.Loss.CEWithChunkedOutputLoss}",
+                "loss=torchtune.modules.loss.CEWithChunkedOutputLoss",
             ],
         ),
         TestCase(
@@ -956,7 +956,7 @@ def _build_builtin_runtime() -> types.Runtime:
                 ),
             },
             expected_output=[
-                f"dtype={types.DataType.BF16}",
+                "dtype=bf16",
                 f"dataset.data_dir={constants.DATASET_PATH}/.",
             ],
         ),
@@ -973,6 +973,21 @@ def _build_builtin_runtime() -> types.Runtime:
             },
             expected_output=[
                 f"dataset.data_files={constants.DATASET_PATH}/data.json",
+            ],
+        ),
+        TestCase(
+            name="nested directory dataset uri produces data_dir arg",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(),
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(
+                        storage_uri="hf://tatsu-lab/alpaca/train",
+                    ),
+                ),
+            },
+            expected_output=[
+                f"dataset.data_dir={constants.DATASET_PATH}/train",
             ],
         ),
         TestCase(
@@ -1061,6 +1076,48 @@ def test_get_args_using_torchtune_config(test_case: TestCase):
             expected_output=models.TrainerV1alpha1Trainer(
                 command=["tune", "run"],
                 args=[],
+            ),
+        ),
+        TestCase(
+            name="num_nodes=0 is treated as unset",
+            expected_status=SUCCESS,
+            config={
+                "runtime": _build_builtin_runtime(),
+                "trainer": types.BuiltinTrainer(
+                    config=types.TorchTuneConfig(
+                        num_nodes=0,
+                        batch_size=8,
+                    ),
+                ),
+            },
+            # numNodes is intentionally left unset: `if config.num_nodes:` is falsy for 0.
+            expected_output=models.TrainerV1alpha1Trainer(
+                command=["tune", "run"],
+                args=["batch_size=8"],
+            ),
+        ),
+        TestCase(
+            name="initializer threads dataset arg into trainer args",
+            expected_status=SUCCESS,
+            config={
+                "runtime": _build_builtin_runtime(),
+                "trainer": types.BuiltinTrainer(
+                    config=types.TorchTuneConfig(
+                        batch_size=8,
+                    ),
+                ),
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(
+                        storage_uri="hf://tatsu-lab/alpaca/data.json",
+                    ),
+                ),
+            },
+            expected_output=models.TrainerV1alpha1Trainer(
+                command=["tune", "run"],
+                args=[
+                    "batch_size=8",
+                    f"dataset.data_files={constants.DATASET_PATH}/data.json",
+                ],
             ),
         ),
         TestCase(

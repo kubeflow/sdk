@@ -484,7 +484,7 @@ def get_args_using_torchtune_config(
         if not isinstance(fine_tuning_config.dtype, types.DataType):
             raise ValueError(f"Invalid dtype: {fine_tuning_config.dtype}.")
 
-        args.append(f"dtype={fine_tuning_config.dtype}")
+        args.append(f"dtype={fine_tuning_config.dtype.value}")
 
     # Override the batch size if it is provided.
     if fine_tuning_config.batch_size:
@@ -496,7 +496,7 @@ def get_args_using_torchtune_config(
 
     # Override the loss if it is provided.
     if fine_tuning_config.loss:
-        args.append(f"loss={fine_tuning_config.loss}")
+        args.append(f"loss={fine_tuning_config.loss.value}")
 
     # Override the data dir or data files if it is provided.
     if isinstance(initializer, types.Initializer) and isinstance(
