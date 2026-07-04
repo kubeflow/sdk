@@ -119,7 +119,7 @@ class LocalJob(threading.Thread):
                 constants.TRAINJOB_COMPLETE if self._success else (constants.TRAINJOB_FAILED)
             )
             self._stdout += msg
-            logger.debug("Job output: ", self._stdout)
+            logger.debug(f"Job output: {self._stdout}")
 
         except Exception as e:
             with self._lock:
