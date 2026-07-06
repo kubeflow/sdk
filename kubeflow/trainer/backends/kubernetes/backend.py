@@ -318,6 +318,10 @@ class KubernetesBackend(RuntimeBackend):
             runtime_patches=runtime_patches,
         )
 
+        # Propagate W3C trace context into CRD annotations so that traces
+        # started by the SDK can be correlated with controller-side spans.
+        annotations = utils.inject_trace_context(annotations)
+
         # Build the TrainJob.
         train_job = models.TrainerV1alpha1TrainJob(
             apiVersion=constants.API_VERSION,
