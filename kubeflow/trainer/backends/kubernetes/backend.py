@@ -81,7 +81,7 @@ class KubernetesBackend(RuntimeBackend):
                 "Trainer control-plane version info is not available: "
                 f"unable to read 'kubeflow_trainer_version' from ConfigMap "
                 f"'{config_map_name}' in namespace '{system_namespace}': {e}. "
-                "If your Trainer control plane is installed in a different namespace, "
+                "If your Trainer control-plane is installed in a different namespace, "
                 "set the KUBEFLOW_SYSTEM_NAMESPACE environment variable accordingly."
             )
             return
