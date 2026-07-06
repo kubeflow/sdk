@@ -803,6 +803,7 @@ def _run_verify_backend_with_core_api(core_api: Mock) -> tuple[list[str], int]:
                     "Trainer control-plane version info is not available",
                     "kubeflow-trainer-public",
                     "ConfigMap not found",
+                    "KUBEFLOW_SYSTEM_NAMESPACE",
                 ],
             },
         ),
