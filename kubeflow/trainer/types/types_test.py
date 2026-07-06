@@ -113,3 +113,43 @@ def test_data_cache_initializer(test_case: TestCase):
         assert test_case.expected_status == FAILED
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid storage_uri with user and model",
+            expected_status=SUCCESS,
+            config={"storage_uri": "hf://user/model"},
+        ),
+        TestCase(
+            name="invalid storage_uri without hf prefix raises ValueError",
+            expected_status=FAILED,
+            config={"storage_uri": "user/model"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="invalid storage_uri without repo path raises ValueError",
+            expected_status=FAILED,
+            config={"storage_uri": "hf://model"},
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_hugging_face_model_initializer(test_case: TestCase):
+    """Test HuggingFaceModelInitializer creation and validation."""
+    print("Executing test:", test_case.name)
+
+    try:
+        initializer = types.HuggingFaceModelInitializer(
+            storage_uri=test_case.config["storage_uri"],
+        )
+
+        assert test_case.expected_status == SUCCESS
+        assert initializer.storage_uri == test_case.config["storage_uri"]
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
