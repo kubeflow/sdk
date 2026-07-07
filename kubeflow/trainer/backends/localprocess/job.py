@@ -27,9 +27,9 @@ class LocalJob(threading.Thread):
         self,
         name,
         command: list | tuple[str] | str,
-        execution_dir: str = None,
-        env: dict[str, str] = None,
-        dependencies: list = None,
+        execution_dir: str | None = None,
+        env: dict[str, str] | None = None,
+        dependencies: list | None = None,
     ):
         """Creates a LocalJob.
 
