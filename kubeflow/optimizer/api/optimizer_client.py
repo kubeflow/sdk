@@ -210,7 +210,7 @@ class OptimizerClient:
                 Failed status.
             TimeoutError: Timeout to wait for OptimizationJob status.
         """
-        common_utils.validate_wait_intervals(polling_interval, timeout)
+        common_utils.validate_wait_for_job_status(polling_interval, timeout)
 
         return self.backend.wait_for_job_status(
             name=name,

@@ -39,7 +39,7 @@ def get_default_target_namespace(context: str | None = None) -> str:
         return f.readline()
 
 
-def validate_wait_intervals(polling_interval: int, timeout: int) -> None:
+def validate_wait_for_job_status(polling_interval: int, timeout: int) -> None:
     """Validate polling_interval and timeout values used by wait_for_job_status methods.
 
     Args:

@@ -16,18 +16,18 @@ import pytest
 from kubeflow.common import utils
 
 
-def test_validate_wait_intervals():
+def test_validate_wait_for_job_status():
     # Valid case should not raise.
-    utils.validate_wait_intervals(polling_interval=2, timeout=600)
+    utils.validate_wait_for_job_status(polling_interval=2, timeout=600)
 
     with pytest.raises(ValueError, match="Timeout must be a positive number"):
-        utils.validate_wait_intervals(polling_interval=2, timeout=0)
+        utils.validate_wait_for_job_status(polling_interval=2, timeout=0)
 
     with pytest.raises(ValueError, match="Polling interval must be a positive number"):
-        utils.validate_wait_intervals(polling_interval=0, timeout=600)
+        utils.validate_wait_for_job_status(polling_interval=0, timeout=600)
 
     with pytest.raises(ValueError, match="Polling interval must be a positive number"):
-        utils.validate_wait_intervals(polling_interval=-5, timeout=600)
+        utils.validate_wait_for_job_status(polling_interval=-5, timeout=600)
 
     with pytest.raises(ValueError, match="Polling interval must be strictly less than timeout"):
-        utils.validate_wait_intervals(polling_interval=10, timeout=10)
+        utils.validate_wait_for_job_status(polling_interval=10, timeout=10)
