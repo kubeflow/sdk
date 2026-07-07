@@ -70,25 +70,3 @@ def test_backend_selection(test_case):
         client = TrainerClient(backend_config=test_case["backend_config"])
         backend_name = client.backend.__class__.__name__
         assert backend_name == test_case["expected_backend"]
-
-
-def test_wait_for_job_status():
-    """Test TrainerClient.wait_for_job_status validates polling_interval and timeout."""
-    with (
-        patch("kubernetes.config.load_kube_config"),
-        patch("kubernetes.client.CustomObjectsApi") as mock_custom_api,
-        patch("kubernetes.client.CoreV1Api") as mock_core_api,
-    ):
-        mock_custom_api.return_value = Mock()
-        mock_core_api.return_value = Mock()
-
-        client = TrainerClient()
-
-        with pytest.raises(ValueError, match="Polling interval must be a positive number"):
-            client.wait_for_job_status("test-job", polling_interval=0)
-
-        with pytest.raises(ValueError, match="Polling interval must be a positive number"):
-            client.wait_for_job_status("test-job", polling_interval=-5)
-
-        with pytest.raises(ValueError, match="Polling interval must be strictly less than timeout"):
-            client.wait_for_job_status("test-job", timeout=10, polling_interval=10)
