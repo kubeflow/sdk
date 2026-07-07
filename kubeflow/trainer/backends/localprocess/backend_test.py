@@ -155,7 +155,7 @@ def test_get_runtime(local_backend, test_case):
                         num_nodes=1,
                         image=LOCAL_RUNTIME_IMAGE,
                     ),
-                    kind=constants.RuntimeKind.TRAINING_RUNTIME,
+                    kind=types.RuntimeKind.TRAINING_RUNTIME,
                 ),
             },
         ),
@@ -171,7 +171,7 @@ def test_get_runtime(local_backend, test_case):
                         num_nodes=1,
                         image=LOCAL_RUNTIME_IMAGE,
                     ),
-                    kind=constants.RuntimeKind.TRAINING_RUNTIME,
+                    kind=types.RuntimeKind.TRAINING_RUNTIME,
                 ),
             },
             expected_error=ValueError,
@@ -206,7 +206,7 @@ def test_get_runtime_packages(local_backend, test_case):
                         num_nodes=1,
                         image=LOCAL_RUNTIME_IMAGE,
                     ),
-                    kind=constants.RuntimeKind.TRAINING_RUNTIME,
+                    kind=types.RuntimeKind.TRAINING_RUNTIME,
                 ),
                 "trainer": types.CustomTrainer(
                     func=dummy_training_function,
@@ -227,7 +227,7 @@ def test_get_runtime_packages(local_backend, test_case):
                         num_nodes=1,
                         image=LOCAL_RUNTIME_IMAGE,
                     ),
-                    kind=constants.RuntimeKind.TRAINING_RUNTIME,
+                    kind=types.RuntimeKind.TRAINING_RUNTIME,
                 ),
                 "trainer": types.CustomTrainer(
                     func=dummy_training_function,
@@ -249,7 +249,7 @@ def test_get_runtime_packages(local_backend, test_case):
                         num_nodes=1,
                         image=LOCAL_RUNTIME_IMAGE,
                     ),
-                    kind=constants.RuntimeKind.TRAINING_RUNTIME,
+                    kind=types.RuntimeKind.TRAINING_RUNTIME,
                 ),
                 "trainer": types.CustomTrainer(
                     func=dummy_training_function,
@@ -270,7 +270,7 @@ def test_get_runtime_packages(local_backend, test_case):
                         num_nodes=1,
                         image=LOCAL_RUNTIME_IMAGE,
                     ),
-                    kind=constants.RuntimeKind.TRAINING_RUNTIME,
+                    kind=types.RuntimeKind.TRAINING_RUNTIME,
                 ),
                 "trainer": types.CustomTrainer(
                     func=dummy_training_function,
@@ -291,7 +291,7 @@ def test_get_runtime_packages(local_backend, test_case):
                         num_nodes=1,
                         image=LOCAL_RUNTIME_IMAGE,
                     ),
-                    kind=constants.RuntimeKind.TRAINING_RUNTIME,
+                    kind=types.RuntimeKind.TRAINING_RUNTIME,
                 ),
                 "trainer": types.CustomTrainer(
                     func=dummy_training_function,
@@ -324,7 +324,7 @@ def test_get_runtime_packages(local_backend, test_case):
                         num_nodes=1,
                         image=LOCAL_RUNTIME_IMAGE,
                     ),
-                    kind=constants.RuntimeKind.TRAINING_RUNTIME,
+                    kind=types.RuntimeKind.TRAINING_RUNTIME,
                 ),
                 "trainer": None,
             },
@@ -508,7 +508,7 @@ def test_name_option_sets_job_name(local_backend, mock_train_environment):
             framework="torch",
             image=LOCAL_RUNTIME_IMAGE,
         ),
-        kind=constants.RuntimeKind.TRAINING_RUNTIME,
+        kind=types.RuntimeKind.TRAINING_RUNTIME,
     )
 
     trainer = types.CustomTrainer(func=dummy_func)

@@ -38,7 +38,7 @@ def _build_runtime() -> types.Runtime:
     return types.Runtime(
         name="test-runtime",
         trainer=runtime_trainer,
-        kind=constants.RuntimeKind.TRAINING_RUNTIME,
+        kind=types.RuntimeKind.TRAINING_RUNTIME,
     )
 
 
@@ -433,7 +433,7 @@ def test_get_script_for_python_packages(test_case):
                 "runtime": types.Runtime(
                     name="no-trainer",
                     trainer=None,
-                    kind=constants.RuntimeKind.TRAINING_RUNTIME,
+                    kind=types.RuntimeKind.TRAINING_RUNTIME,
                 ),
             },
             expected_error=ValueError,
@@ -881,7 +881,11 @@ def _build_builtin_runtime() -> types.Runtime:
         image="ghcr.io/kubeflow/trainer/torchtune",
     )
     runtime_trainer.set_command(constants.TORCH_TUNE_COMMAND)
-    return types.Runtime(name="torchtune-llama3.2-1b", trainer=runtime_trainer)
+    return types.Runtime(
+        name="torchtune-llama3.2-1b",
+        trainer=runtime_trainer,
+        kind=types.RuntimeKind.TRAINING_RUNTIME,
+    )
 
 
 @pytest.mark.parametrize(
@@ -970,7 +974,7 @@ def _build_builtin_runtime() -> types.Runtime:
             },
             expected_output=[
                 "dtype=bf16",
-                f"dataset.data_dir={constants.DATASET_PATH}/.",
+                f"dataset.data_dir={os.path.join(constants.DATASET_PATH, '.')}",
             ],
         ),
         TestCase(
@@ -985,7 +989,7 @@ def _build_builtin_runtime() -> types.Runtime:
                 ),
             },
             expected_output=[
-                f"dataset.data_files={constants.DATASET_PATH}/data.json",
+                f"dataset.data_files={os.path.join(constants.DATASET_PATH, 'data.json')}",
             ],
         ),
         TestCase(
@@ -1000,7 +1004,7 @@ def _build_builtin_runtime() -> types.Runtime:
                 ),
             },
             expected_output=[
-                f"dataset.data_dir={constants.DATASET_PATH}/train",
+                f"dataset.data_dir={os.path.join(constants.DATASET_PATH, 'train')}",
             ],
         ),
         TestCase(
@@ -1129,7 +1133,7 @@ def test_get_args_using_torchtune_config(test_case: TestCase):
                 command=["tune", "run"],
                 args=[
                     "batch_size=8",
-                    f"dataset.data_files={constants.DATASET_PATH}/data.json",
+                    f"dataset.data_files={os.path.join(constants.DATASET_PATH, 'data.json')}",
                 ],
             ),
         ),

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from enum import Enum
 import os
 import textwrap
 
@@ -20,11 +19,6 @@ import textwrap
 GROUP = "trainer.kubeflow.org"
 VERSION = "v1alpha1"
 API_VERSION = f"{GROUP}/{VERSION}"
-
-# The Kind name for the ClusterTrainingRuntime, TrainingRuntime.
-class RuntimeKind(str, Enum):
-    CLUSTER_TRAINING_RUNTIME = "ClusterTrainingRuntime"
-    TRAINING_RUNTIME = "TrainingRuntime"
 
 
 # The plural for the ClusterTrainingRuntime.

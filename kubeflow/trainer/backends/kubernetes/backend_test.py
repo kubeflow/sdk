@@ -319,7 +319,7 @@ def get_train_job(
     labels: dict[str, str] | None = None,
     annotations: dict[str, str] | None = None,
     runtime_patches: list[models.TrainerV1alpha1RuntimePatch] | None = None,
-    runtime_kind: constants.RuntimeKind = constants.RuntimeKind.TRAINING_RUNTIME,
+    runtime_kind: types.RuntimeKind = types.RuntimeKind.TRAINING_RUNTIME,
 ) -> models.TrainerV1alpha1TrainJob:
     """
     Create a mock TrainJob object with optional trainer configurations.
@@ -335,7 +335,7 @@ def get_train_job(
         spec=models.TrainerV1alpha1TrainJobSpec(
             runtimeRef=models.TrainerV1alpha1RuntimeRef(
                 name=runtime_name,
-                kind=runtime_kind,
+                kind=runtime_kind.value,
             ),
             trainer=train_job_trainer,
             runtimePatches=runtime_patches,
@@ -583,7 +583,7 @@ def create_train_job(
         ),
         spec=models.TrainerV1alpha1TrainJobSpec(
             runtimeRef=models.TrainerV1alpha1RuntimeRef(
-                name=TORCH_RUNTIME, kind=constants.RuntimeKind.TRAINING_RUNTIME
+                name=TORCH_RUNTIME, kind=types.RuntimeKind.TRAINING_RUNTIME.value
             ),
             trainer=None,
             initializer=(
@@ -606,7 +606,7 @@ def create_cluster_training_runtime(
 
     return models.TrainerV1alpha1ClusterTrainingRuntime(
         apiVersion=constants.API_VERSION,
-        kind=constants.RuntimeKind.CLUSTER_TRAINING_RUNTIME,
+        kind=types.RuntimeKind.CLUSTER_TRAINING_RUNTIME.value,
         metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
             name=name,
             namespace=namespace,
@@ -635,7 +635,7 @@ def create_training_runtime(
     """Create a mock namespaced TrainingRuntime object (not cluster-scoped)."""
     return models.TrainerV1alpha1TrainingRuntime(
         apiVersion=constants.API_VERSION,
-        kind=constants.RuntimeKind.TRAINING_RUNTIME,
+        kind=types.RuntimeKind.TRAINING_RUNTIME.value,
         metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
             name=name,
             namespace=namespace,
@@ -700,9 +700,9 @@ def create_runtime_type(
 
     if kind is None:
         kind = (
-            constants.RuntimeKind.TRAINING_RUNTIME
+            types.RuntimeKind.TRAINING_RUNTIME
             if name in {TORCH_RUNTIME, "runtime-1", "ns-runtime-2"}
-            else constants.RuntimeKind.CLUSTER_TRAINING_RUNTIME
+            else types.RuntimeKind.CLUSTER_TRAINING_RUNTIME
         )
 
     return types.Runtime(
@@ -733,7 +733,7 @@ def get_train_job_data_type(
         runtime=types.Runtime(
             name=runtime_name,
             trainer=trainer,
-            kind=constants.RuntimeKind.TRAINING_RUNTIME,
+            kind=types.RuntimeKind.TRAINING_RUNTIME,
         ),
         steps=[
             types.Step(
@@ -945,7 +945,7 @@ def test_get_runtime(kubernetes_backend, test_case):
                 types.Runtime(
                     name="runtime-1",
                     trainer=create_runtime_type(name="runtime-1").trainer,
-                    kind=constants.RuntimeKind.CLUSTER_TRAINING_RUNTIME,
+                    kind=types.RuntimeKind.CLUSTER_TRAINING_RUNTIME,
                 ),
                 create_runtime_type(name="runtime-2"),
                 create_runtime_type(name="runtime-3"),
@@ -1053,7 +1053,7 @@ def test_list_runtimes(kubernetes_backend, test_case):
                         device_count="1",
                         image="example.com/image",
                     ),
-                    kind=constants.RuntimeKind.TRAINING_RUNTIME,
+                    kind=types.RuntimeKind.TRAINING_RUNTIME,
                 )
             },
             expected_error=ValueError,

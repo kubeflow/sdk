@@ -17,7 +17,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Literal
 from urllib.parse import urlparse
 
 import kubeflow.common.constants as common_constants
@@ -89,6 +88,12 @@ class CustomTrainerContainer:
     num_nodes: int | None = None
     resources_per_node: dict | None = None
     env: dict[str, str] | None = None
+
+
+# The Kind name for the ClusterTrainingRuntime, TrainingRuntime.
+class RuntimeKind(Enum):
+    CLUSTER_TRAINING_RUNTIME = "ClusterTrainingRuntime"
+    TRAINING_RUNTIME = "TrainingRuntime"
 
 
 # TODO(Electronic-Waste): Add more loss functions.
@@ -270,7 +275,7 @@ class RuntimeTrainer:
 class Runtime:
     name: str
     trainer: RuntimeTrainer
-    kind: Literal["TrainingRuntime", "ClusterTrainingRuntime"]
+    kind: RuntimeKind
     pretrained_model: str | None = None
 
 

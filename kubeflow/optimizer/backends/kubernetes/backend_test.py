@@ -54,6 +54,7 @@ from kubeflow.trainer.test.common import (
     TIMEOUT,
     TestCase,
 )
+from kubeflow.trainer.types import types as trainer_types
 from kubeflow.trainer.types.types import (
     CustomTrainer,
     Event,
@@ -346,7 +347,7 @@ def create_mock_trainjob(name: str) -> TrainJob:
         runtime=Runtime(
             name="torch",
             trainer=trainer,
-            kind=trainer_constants.RuntimeKind.TRAINING_RUNTIME,
+            kind=trainer_types.RuntimeKind.TRAINING_RUNTIME,
         ),
         steps=[
             Step(
@@ -776,7 +777,7 @@ def test_get_job_logs(optimizer_backend, test_case):
                     device_count="1",
                     image="trainer:latest",
                 ),
-                kind=trainer_constants.RuntimeKind.TRAINING_RUNTIME,
+                kind=trainer_types.RuntimeKind.TRAINING_RUNTIME,
             ),
             steps=[
                 Step(
