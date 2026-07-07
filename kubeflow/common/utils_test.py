@@ -14,20 +14,56 @@
 import pytest
 
 from kubeflow.common import utils
+from kubeflow.trainer.test.common import SUCCESS, TestCase
 
 
-def test_validate_wait_for_job_status():
-    # Valid case should not raise.
-    utils.validate_wait_for_job_status(polling_interval=2, timeout=600)
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid polling_interval and timeout",
+            expected_status=SUCCESS,
+            config={"polling_interval": 2, "timeout": 600},
+        ),
+        TestCase(
+            name="timeout is zero",
+            expected_status=SUCCESS,
+            config={"polling_interval": 2, "timeout": 0},
+            expected_error=ValueError,
+            expected_output="Timeout must be a positive number",
+        ),
+        TestCase(
+            name="polling_interval is zero",
+            expected_status=SUCCESS,
+            config={"polling_interval": 0, "timeout": 600},
+            expected_error=ValueError,
+            expected_output="Polling interval must be a positive number",
+        ),
+        TestCase(
+            name="polling_interval is negative",
+            expected_status=SUCCESS,
+            config={"polling_interval": -5, "timeout": 600},
+            expected_error=ValueError,
+            expected_output="Polling interval must be a positive number",
+        ),
+        TestCase(
+            name="polling_interval equals timeout",
+            expected_status=SUCCESS,
+            config={"polling_interval": 10, "timeout": 10},
+            expected_error=ValueError,
+            expected_output="Polling interval must be strictly less than timeout",
+        ),
+    ],
+)
+def test_validate_wait_for_job_status(test_case):
+    """Test validate_wait_for_job_status across valid and invalid inputs."""
+    print("Executing test:", test_case.name)
 
-    with pytest.raises(ValueError, match="Timeout must be a positive number"):
-        utils.validate_wait_for_job_status(polling_interval=2, timeout=0)
+    polling_interval = test_case.config["polling_interval"]
+    timeout = test_case.config["timeout"]
 
-    with pytest.raises(ValueError, match="Polling interval must be a positive number"):
-        utils.validate_wait_for_job_status(polling_interval=0, timeout=600)
-
-    with pytest.raises(ValueError, match="Polling interval must be a positive number"):
-        utils.validate_wait_for_job_status(polling_interval=-5, timeout=600)
-
-    with pytest.raises(ValueError, match="Polling interval must be strictly less than timeout"):
-        utils.validate_wait_for_job_status(polling_interval=10, timeout=10)
+    if test_case.expected_error:
+        with pytest.raises(test_case.expected_error, match=test_case.expected_output):
+            utils.validate_wait_for_job_status(polling_interval, timeout)
+    else:
+        utils.validate_wait_for_job_status(polling_interval, timeout)
