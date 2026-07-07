@@ -37,7 +37,7 @@ local_runtimes = [
             packages=["torch"],
             image=LOCAL_RUNTIME_IMAGE,
         ),
-        kind=constants.TRAINING_RUNTIME_KIND,
+        kind=constants.RuntimeKind.TRAINING_RUNTIME,
     )
 ]
 

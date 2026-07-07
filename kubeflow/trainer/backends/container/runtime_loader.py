@@ -37,6 +37,7 @@ import urllib.request
 import yaml
 
 from kubeflow.trainer.constants import constants
+import kubeflow.trainer.constants.constants as trainer_constants
 from kubeflow.trainer.types import types as base_types
 
 logger = logging.getLogger(__name__)
@@ -329,7 +330,7 @@ def _create_default_runtimes() -> list[base_types.Runtime]:
                 num_nodes=1,
                 image=image,
             ),
-            kind=constants.TRAINING_RUNTIME_KIND,
+            kind=trainer_constants.RuntimeKind.TRAINING_RUNTIME,
         )
         default_runtimes.append(runtime)
         logger.debug(f"Created default runtime: {runtime.name} with image {image}")
@@ -416,7 +417,7 @@ def _parse_runtime_yaml(data: dict[str, Any], source: str = "unknown") -> base_t
             num_nodes=num_nodes,
             image=image,
         ),
-        kind=constants.TRAINING_RUNTIME_KIND,
+        kind=trainer_constants.RuntimeKind.TRAINING_RUNTIME,
     )
 
 
