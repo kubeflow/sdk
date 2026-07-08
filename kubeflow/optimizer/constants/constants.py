@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Constant values shared across the Kubeflow Optimizer."""
 
 # Common constants.
 GROUP = "kubeflow.org"

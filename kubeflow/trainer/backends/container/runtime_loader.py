@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Runtime loader for container backends (Docker, Podman).
+"""Runtime loader for container backends (Docker, Podman).
 
 We support loading training runtime definitions from multiple sources:
 1. GitHub: Fetches latest runtimes from kubeflow/trainer repository (with caching)
@@ -70,8 +69,7 @@ def _discover_github_runtime_files(
     branch: str = "master",
     path: str = "manifests/base/runtimes",
 ) -> list[str]:
-    """
-    Discover available runtime YAML files from GitHub repository.
+    """Discover available runtime YAML files from GitHub repository.
 
     Fetches the directory listing from GitHub and extracts .yaml filenames,
     excluding kustomization.yaml and other non-runtime files.
@@ -128,8 +126,7 @@ def _fetch_runtime_from_github(
     branch: str = "master",
     path: str = "manifests/base/runtimes",
 ) -> dict[str, Any] | None:
-    """
-    Fetch a runtime YAML from GitHub.
+    """Fetch a runtime YAML from GitHub.
 
     Args:
         runtime_file: YAML filename to fetch
@@ -154,8 +151,7 @@ def _fetch_runtime_from_github(
 
 
 def _get_cached_runtime_list() -> list[str] | None:
-    """
-    Get cached runtime file list if it exists and is not expired.
+    """Get cached runtime file list if it exists and is not expired.
 
     Returns None if cache doesn't exist or is expired.
     """
@@ -202,8 +198,7 @@ def _cache_runtime_list(files: list[str]) -> None:
 
 
 def _get_github_runtime_files() -> list[str]:
-    """
-    Get list of runtime files from GitHub with caching.
+    """Get list of runtime files from GitHub with caching.
 
     Priority:
     1. Check cache (if not expired)
@@ -225,8 +220,7 @@ def _get_github_runtime_files() -> list[str]:
 
 
 def _get_cached_runtime(runtime_file: str) -> dict[str, Any] | None:
-    """
-    Get cached runtime if it exists and is not expired.
+    """Get cached runtime if it exists and is not expired.
 
     Returns None if cache doesn't exist or is expired.
     """
@@ -286,8 +280,7 @@ def _cache_runtime(runtime_file: str, data: dict[str, Any]) -> None:
 
 
 def _load_runtime_from_github_with_cache(runtime_file: str) -> dict[str, Any] | None:
-    """
-    Load runtime from GitHub with caching.
+    """Load runtime from GitHub with caching.
 
     Priority:
     1. Check cache (if not expired)
@@ -312,8 +305,7 @@ def _load_runtime_from_github_with_cache(runtime_file: str) -> dict[str, Any] | 
 
 
 def _create_default_runtimes() -> list[base_types.Runtime]:
-    """
-    Create default Runtime objects from DEFAULT_FRAMEWORK_IMAGES constant.
+    """Create default Runtime objects from DEFAULT_FRAMEWORK_IMAGES constant.
 
     Returns:
         List of default Runtime objects for each framework.
@@ -337,8 +329,7 @@ def _create_default_runtimes() -> list[base_types.Runtime]:
 
 
 def _parse_runtime_yaml(data: dict[str, Any], source: str = "unknown") -> base_types.Runtime:
-    """
-    Parse a runtime YAML dict into a Runtime object.
+    """Parse a runtime YAML dict into a Runtime object.
 
     Args:
         data: The YAML data as a dictionary
@@ -419,8 +410,7 @@ def _parse_runtime_yaml(data: dict[str, Any], source: str = "unknown") -> base_t
 
 
 def _parse_source_url(source: str) -> tuple[str, str]:
-    """
-    Parse a source URL to determine its type and path.
+    """Parse a source URL to determine its type and path.
 
     Args:
         source: Source URL with scheme (github://, https://, file://, or absolute path)
@@ -448,8 +438,7 @@ def _parse_source_url(source: str) -> tuple[str, str]:
 
 
 def _load_from_github_url(github_path: str) -> list[base_types.Runtime]:
-    """
-    Load runtimes from a GitHub URL (github://owner/repo[/path]).
+    """Load runtimes from a GitHub URL (github://owner/repo[/path]).
 
     Args:
         github_path: Path after github:// (e.g., "kubeflow/trainer" or "myorg/myrepo")
@@ -494,8 +483,7 @@ def _load_from_github_url(github_path: str) -> list[base_types.Runtime]:
 
 
 def _load_from_http_url(url: str) -> list[base_types.Runtime]:
-    """
-    Load runtimes from an HTTP(S) URL.
+    """Load runtimes from an HTTP(S) URL.
 
     Args:
         url: HTTP(S) URL to a runtime YAML file or directory listing
@@ -524,8 +512,7 @@ def _load_from_http_url(url: str) -> list[base_types.Runtime]:
 
 
 def _load_from_filesystem(path: str) -> list[base_types.Runtime]:
-    """
-    Load runtimes from local filesystem path.
+    """Load runtimes from local filesystem path.
 
     Args:
         path: Local filesystem path to a directory or YAML file
@@ -564,8 +551,7 @@ def _load_from_filesystem(path: str) -> list[base_types.Runtime]:
 
 
 def list_training_runtimes_from_sources(sources: list[str]) -> list[base_types.Runtime]:
-    """
-    List all available training runtimes from configured sources.
+    """List all available training runtimes from configured sources.
 
     Args:
         sources: List of source URLs with schemes (github://, https://, http://, file://, or paths)
@@ -609,8 +595,7 @@ def list_training_runtimes_from_sources(sources: list[str]) -> list[base_types.R
 
 
 def get_training_runtime_from_sources(name: str, sources: list[str]) -> base_types.Runtime:
-    """
-    Get a specific training runtime by name from configured sources.
+    """Get a specific training runtime by name from configured sources.
 
     Args:
         name: The name of the runtime to get

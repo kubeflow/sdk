@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Unit tests for the convert_value helper in the Kubeflow Optimizer SDK."""
+
 import pytest
 
 from kubeflow.optimizer.backends.kubernetes.utils import convert_value
@@ -34,14 +36,14 @@ from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
         ),
     ],
 )
-def test_convert_value(test_case: TestCase):
+def test_convert_value(test_case: TestCase) -> None:
     """Test convert_value handles both basic types and T | None syntax."""
     print("Executing test:", test_case.name)
     try:
         result = convert_value(*test_case.config["args"])
     except Exception as e:
         assert test_case.expected_status == FAILED
-        assert isinstance(e, test_case.expected_error)
+        assert type(e) is test_case.expected_error
     else:
         assert test_case.expected_status == SUCCESS
         assert result == test_case.expected_output

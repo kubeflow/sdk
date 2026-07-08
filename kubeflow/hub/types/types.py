@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Storage configuration and upload parameter types for the Kubeflow Hub."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

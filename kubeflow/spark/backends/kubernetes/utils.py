@@ -21,6 +21,7 @@ import uuid
 
 from kubeflow_spark_api import models
 
+from kubeflow.spark.backends.base import RuntimeBackend
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.types.types import Driver, Executor, SparkConnectInfo, SparkConnectState
 
@@ -59,6 +60,12 @@ def _memory_kubernetes_to_spark(memory: str) -> str:
     """Convert Kubernetes-style memory (e.g. 4Gi, 512Mi) to Spark/JVM style (4g, 512m).
 
     SparkSubmit expects JVM memory suffixes (k, m, g, t); Kubernetes uses Ki, Mi, Gi, Ti.
+
+    Args:
+        memory: Kubernetes-style memory string (e.g. "4Gi", "512Mi").
+
+    Returns:
+        Spark/JVM-style memory string (e.g. "4g", "512m").
     """
     if not memory or not memory[-1].isalpha():
         return memory
@@ -111,7 +118,7 @@ def get_server_spec_from_driver(
             template = models.IoK8sApiCoreV1PodTemplateSpec(
                 spec=models.IoK8sApiCoreV1PodSpec(
                     containers=[],
-                    service_account_name=driver.service_account,
+                    serviceAccountName=driver.service_account,
                 )
             )
 
@@ -182,8 +189,8 @@ def build_spark_connect_cr(
     spark_conf: dict[str, str] | None = None,
     driver: Driver | None = None,
     executor: Executor | None = None,
-    options: list | None = None,
-    backend: Any | None = None,
+    options: list[Any] | None = None,
+    backend: RuntimeBackend | None = None,
 ) -> models.SparkV1alpha1SparkConnect:
     """Build SparkConnect CR using typed API models (KEP-107 compliant).
 
@@ -196,7 +203,7 @@ def build_spark_connect_cr(
     Args:
         name: Session name.
         namespace: Kubernetes namespace.
-        spark_version: Spark version (default: 4.0.1).
+        spark_version: Spark version (defaults to `DEFAULT_SPARK_VERSION`).
         num_executors: Number of executor instances (simple mode).
         resources_per_executor: Resource requirements per executor (simple mode).
         spark_conf: Spark configuration properties.
@@ -240,18 +247,18 @@ def build_spark_connect_cr(
 
     # Build the typed SparkConnect model
     spark_connect = models.SparkV1alpha1SparkConnect(
-        api_version=f"{constants.SPARK_CONNECT_GROUP}/{constants.SPARK_CONNECT_VERSION}",
+        apiVersion=f"{constants.SPARK_CONNECT_GROUP}/{constants.SPARK_CONNECT_VERSION}",
         kind=constants.SPARK_CONNECT_KIND,
         metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
             name=name,
             namespace=namespace,
         ),
         spec=models.SparkV1alpha1SparkConnectSpec(
-            spark_version=spark_version,
+            sparkVersion=spark_version,
             image=image,
             server=server_spec,
             executor=executor_spec,
-            spark_conf=base_conf,
+            sparkConf=base_conf,
         ),
     )
 
@@ -278,7 +285,11 @@ def get_spark_connect_info_from_cr(
     Raises:
         ValueError: If the CR is invalid.
     """
-    if not (spark_connect_cr.metadata and spark_connect_cr.metadata.name):
+    if not (
+        spark_connect_cr.metadata
+        and spark_connect_cr.metadata.name
+        and spark_connect_cr.metadata.namespace
+    ):
         raise ValueError(f"SparkConnect CR is invalid: {spark_connect_cr}")
 
     # Parse state

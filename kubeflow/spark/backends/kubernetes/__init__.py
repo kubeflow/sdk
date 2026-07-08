@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Kubernetes backend for the Kubeflow Spark client."""
+
 from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 
 __all__ = ["KubernetesBackend"]

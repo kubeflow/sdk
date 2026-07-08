@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Abstract base class defining the runtime backend interface."""
+
 import abc
 from collections.abc import Callable, Iterator
 
@@ -27,14 +29,22 @@ class RuntimeBackend(abc.ABC):
 
     @abc.abstractmethod
     def list_runtimes(self) -> list[types.Runtime]:
+        """List the available runtimes."""
         raise NotImplementedError()
 
     @abc.abstractmethod
     def get_runtime(self, name: str) -> types.Runtime:
+        """Get the runtime with the given name."""
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_runtime_packages(self, runtime: types.Runtime):
+    def get_runtime_packages(self, runtime: types.Runtime) -> list[str] | None:
+        """Report the Python version and packages available in the given runtime.
+
+        Backends may either return the list of package requirement strings (as the
+        local-process backend does) or report them as a side effect and return
+        ``None`` (as the Kubernetes backend does).
+        """
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -48,14 +58,17 @@ class RuntimeBackend(abc.ABC):
         | None = None,
         options: list | None = None,
     ) -> str:
+        """Create a TrainJob and return its name."""
         raise NotImplementedError()
 
     @abc.abstractmethod
     def list_jobs(self, runtime: types.Runtime | None = None) -> list[types.TrainJob]:
+        """List TrainJobs, optionally filtered by runtime."""
         raise NotImplementedError()
 
     @abc.abstractmethod
     def get_job(self, name: str) -> types.TrainJob:
+        """Get the TrainJob with the given name."""
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -65,10 +78,12 @@ class RuntimeBackend(abc.ABC):
         follow: bool = False,
         step: str = constants.NODE + "-0",
     ) -> Iterator[str]:
+        """Stream the logs for the given TrainJob step."""
         raise NotImplementedError()
 
     @abc.abstractmethod
     def get_job_events(self, name: str) -> list[types.Event]:
+        """List the events related to the given TrainJob."""
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -80,8 +95,10 @@ class RuntimeBackend(abc.ABC):
         polling_interval: int = 2,
         callbacks: list[Callable[[types.TrainJob], None]] | None = None,
     ) -> types.TrainJob:
+        """Wait until the TrainJob reaches one of the expected statuses."""
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def delete_job(self, name: str):
+    def delete_job(self, name: str) -> None:
+        """Delete the TrainJob with the given name."""
         raise NotImplementedError()

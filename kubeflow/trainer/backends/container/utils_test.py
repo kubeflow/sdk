@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Unit tests for the Container backend utility functions."""
+
 import pytest
 
 from kubeflow.trainer.backends.container import utils as container_utils
@@ -19,7 +21,8 @@ from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.types import types
 
 
-def simple_train_func():
+def simple_train_func() -> None:
+    """Print a message to stand in for a training run."""
     print("Training...")
 
 
@@ -89,7 +92,7 @@ def simple_train_func():
         ),
     ],
 )
-def test_build_pip_install_cmd(test_case: TestCase):
+def test_build_pip_install_cmd(test_case: TestCase) -> None:
     """Test pip install command generation."""
     print("Executing test:", test_case.name)
     try:

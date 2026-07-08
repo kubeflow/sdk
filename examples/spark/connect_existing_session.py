@@ -36,7 +36,7 @@ from kubeflow.spark import Name, SparkClient
 from kubeflow.spark.backends.kubernetes.utils import build_service_url
 
 
-def _backend_config():
+def _backend_config() -> KubernetesBackendConfig:
     """Backend config; uses SPARK_TEST_NAMESPACE in CI."""
     return KubernetesBackendConfig(namespace=os.environ.get("SPARK_TEST_NAMESPACE", "spark-test"))
 
@@ -46,7 +46,7 @@ def _unique_session_name() -> str:
     return f"connect-existing-{uuid.uuid4().hex[:8]}"
 
 
-def test_connect_to_existing_session():
+def test_connect_to_existing_session() -> None:
     """Test connect(base_url=...) with two clients.
 
     Two-client pattern:
@@ -105,7 +105,7 @@ def test_connect_to_existing_session():
                 print(f"   Warning: {e}")
 
 
-def main():
+def main() -> None:
     """Entry point for E2E test."""
     if os.environ.get("SPARK_E2E_RUN_IN_CLUSTER") != "1":
         print("SKIP: Requires in-cluster execution (SPARK_E2E_RUN_IN_CLUSTER=1)")

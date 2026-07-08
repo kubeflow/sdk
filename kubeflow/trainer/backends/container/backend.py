@@ -12,11 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-ContainerBackend
-----------------
-
-Unified local execution backend for `CustomTrainer` jobs using containers.
+"""Unified local execution backend for `CustomTrainer` jobs using containers.
 
 This backend automatically detects and uses either Docker or Podman.
 It provides a single interface regardless of the underlying container runtime.
@@ -66,14 +62,14 @@ logger = logging.getLogger(__name__)
 
 
 class ContainerBackend(RuntimeBackend):
-    """
-    Unified container backend that auto-detects Docker or Podman.
+    """Unified container backend that auto-detects Docker or Podman.
 
     This backend uses the adapter pattern to abstract away differences between
     Docker and Podman, providing a single consistent interface.
     """
 
-    def __init__(self, cfg: ContainerBackendConfig):
+    def __init__(self, cfg: ContainerBackendConfig) -> None:
+        """Initialize the backend and create the container client adapter."""
         self.cfg = cfg
         self.label_prefix = "trainer.kubeflow.org"
 
@@ -81,8 +77,7 @@ class ContainerBackend(RuntimeBackend):
         self._adapter = self._create_adapter()
 
     def _get_common_socket_locations(self, runtime_name: str) -> list[str | None]:
-        """
-        Get common socket locations to try for the given runtime.
+        """Get common socket locations to try for the given runtime.
 
         Args:
             runtime_name: "docker" or "podman"
@@ -124,8 +119,7 @@ class ContainerBackend(RuntimeBackend):
         return unique_locations
 
     def _create_adapter(self) -> BaseContainerClientAdapter:
-        """
-        Create the appropriate container client adapter.
+        """Create the appropriate container client adapter.
 
         Tries Docker first, then Podman if Docker fails, unless a specific
         runtime is requested in the config. Automatically tries common socket
@@ -201,9 +195,8 @@ class ContainerBackend(RuntimeBackend):
         container_ids: list[str] | None = None,
         network_id: str | None = None,
         stop_timeout: int = 5,
-    ):
-        """
-        Clean up container resources in a best-effort manner.
+    ) -> None:
+        """Clean up container resources in a best-effort manner.
 
         Args:
             container_ids: List of container IDs to stop and remove.
@@ -231,15 +224,15 @@ class ContainerBackend(RuntimeBackend):
 
     # ---- Runtime APIs ----
     def list_runtimes(self) -> list[types.Runtime]:
+        """List available training runtimes from configured sources."""
         return list_training_runtimes_from_sources(self.cfg.runtime_source.sources)
 
     def get_runtime(self, name: str) -> types.Runtime:
+        """Get a specific training runtime by name from configured sources."""
         return get_training_runtime_from_sources(name, self.cfg.runtime_source.sources)
 
-    def get_runtime_packages(self, runtime: types.Runtime):
-        """
-        Spawn a short-lived container to report Python version, pip list, and nvidia-smi.
-        """
+    def get_runtime_packages(self, runtime: types.Runtime) -> None:
+        """Spawn a short-lived container to report Python version, pip list, and nvidia-smi."""
         container_utils.maybe_pull_image(self._adapter, runtime.trainer.image, self.cfg.pull_policy)
 
         command = [
@@ -263,6 +256,7 @@ class ContainerBackend(RuntimeBackend):
         | None = None,
         options: list | None = None,
     ) -> str:
+        """Create a training job and start one container per node."""
         if runtime is None:
             runtime = self.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
         elif isinstance(runtime, str):
@@ -491,8 +485,7 @@ class ContainerBackend(RuntimeBackend):
             raise
 
     def _get_job_containers(self, name: str) -> list[dict]:
-        """
-        Get containers for a specific training job.
+        """Get containers for a specific training job.
 
         Args:
             name: Name of the training job
@@ -517,9 +510,8 @@ class ContainerBackend(RuntimeBackend):
         initializer: types.Initializer,
         workdir: str,
         network_id: str,
-    ):
-        """
-        Run dataset and model initializers in parallel before training starts.
+    ) -> None:
+        """Run dataset and model initializers in parallel before training starts.
 
         Args:
             job_name: Name of the training job.
@@ -571,9 +563,8 @@ class ContainerBackend(RuntimeBackend):
         container_init: container_utils.ContainerInitializer,
         workdir: str,
         network_id: str,
-    ):
-        """
-        Run a single initializer container and wait for completion.
+    ) -> None:
+        """Run a single initializer container and wait for completion.
 
         Args:
             job_name: Name of the training job.
@@ -658,8 +649,7 @@ class ContainerBackend(RuntimeBackend):
     def __get_trainjob_from_containers(
         self, job_name: str, containers: list[dict]
     ) -> types.TrainJob:
-        """
-        Build a TrainJob object from a list of containers.
+        """Build a TrainJob object from a list of containers.
 
         Args:
             job_name: Name of the training job
@@ -804,6 +794,7 @@ class ContainerBackend(RuntimeBackend):
                 yield f"Error getting logs: {e}\n"
 
     def get_job_events(self, name: str) -> list[types.Event]:
+        """Get events for a training job (not implemented for the container backend)."""
         raise NotImplementedError()
 
     def _build_failure_message(self, name: str) -> str:
@@ -847,6 +838,7 @@ class ContainerBackend(RuntimeBackend):
         polling_interval: int = 2,
         callbacks: list[Callable[[types.TrainJob], None]] | None = None,
     ) -> types.TrainJob:
+        """Poll a training job until it reaches one of the requested statuses."""
         import time
 
         end = time.time() + timeout
@@ -866,7 +858,7 @@ class ContainerBackend(RuntimeBackend):
             time.sleep(polling_interval)
         raise TimeoutError(f"Timeout waiting for TrainJob {name} to reach status: {status}")
 
-    def delete_job(self, name: str):
+    def delete_job(self, name: str) -> None:
         """Delete a training job by querying container runtime."""
         containers = self._get_job_containers(name)
 

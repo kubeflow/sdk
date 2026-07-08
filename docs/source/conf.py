@@ -1,7 +1,8 @@
-# Configuration file for the Sphinx documentation builder.
-#
-# For the full list of built-in configuration values, see the documentation:
-# https://www.sphinx-doc.org/en/master/usage/configuration.html
+"""Sphinx configuration for the Kubeflow SDK documentation.
+
+For the full list of built-in configuration values, see the documentation:
+https://www.sphinx-doc.org/en/master/usage/configuration.html
+"""
 
 import os
 import sys
@@ -16,7 +17,9 @@ author = "The Kubeflow Authors"
 
 # Version is read from kubeflow/__init__.py
 try:
-    from kubeflow import __version__ as version
+    from kubeflow import __version__
+
+    version = __version__
 except ImportError:
     version = "dev"
 

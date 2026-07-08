@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Unit tests for ContainerBackend.
+"""Unit tests for ContainerBackend.
 
 Tests the ContainerBackend class with mocked container adapters.
 """
@@ -24,6 +23,7 @@ import os
 from pathlib import Path
 import shutil
 import tempfile
+from typing import Any, cast
 from unittest.mock import Mock, patch
 
 import pytest
@@ -42,7 +42,8 @@ from kubeflow.trainer.types import types
 class MockContainerAdapter(BaseContainerClientAdapter):
     """Mock adapter for testing ContainerBackend without Docker/Podman."""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize the mock adapter with empty tracking collections."""
         self._runtime_type = "mock"
         self.networks_created = []
         self.containers_created = []
@@ -52,15 +53,18 @@ class MockContainerAdapter(BaseContainerClientAdapter):
         self.images_pulled = []
         self.ping_called = False
 
-    def ping(self):
+    def ping(self) -> None:
+        """Record that ping was called."""
         self.ping_called = True
 
     def create_network(self, name: str, labels: dict[str, str]) -> str:
+        """Record a created network and return a synthetic network ID."""
         network_id = f"net-{name}"
         self.networks_created.append({"id": network_id, "name": name, "labels": labels})
         return network_id
 
-    def delete_network(self, network_id: str):
+    def delete_network(self, network_id: str) -> None:
+        """Record a deleted network."""
         self.networks_deleted.append(network_id)
 
     def create_and_start_container(
@@ -74,6 +78,7 @@ class MockContainerAdapter(BaseContainerClientAdapter):
         volumes: dict[str, dict[str, str]],
         working_dir: str,
     ) -> str:
+        """Record a created container and return a synthetic container ID."""
         container_id = f"container-{len(self.containers_created)}"
         self.containers_created.append(
             {
@@ -92,45 +97,55 @@ class MockContainerAdapter(BaseContainerClientAdapter):
         )
         return container_id
 
-    def get_container(self, container_id: str):
+    def get_container(self, container_id: str) -> Any:  # noqa: ANN401
+        """Return a mock container object for the given ID, or None."""
         for container in self.containers_created:
             if container["id"] == container_id:
                 return Mock(id=container_id, status=container["status"])
         return None
 
     def container_logs(self, container_id: str, follow: bool) -> Iterator[str]:
+        """Yield synthetic log lines for the container."""
         if follow:
             yield f"Log line 1 from {container_id}\n"
             yield f"Log line 2 from {container_id}\n"
         else:
             yield f"Complete log from {container_id}\n"
 
-    def stop_container(self, container_id: str, timeout: int = 10):
+    def stop_container(self, container_id: str, timeout: int = 10) -> None:
+        """Record a stopped container and mark it as exited."""
         self.containers_stopped.append(container_id)
         for container in self.containers_created:
             if container["id"] == container_id:
                 container["status"] = "exited"
                 container["exit_code"] = 0
 
-    def remove_container(self, container_id: str, force: bool = True):
+    def remove_container(self, container_id: str, force: bool = True) -> None:
+        """Record a removed container."""
         self.containers_removed.append(container_id)
 
-    def pull_image(self, image: str):
+    def pull_image(self, image: str) -> None:
+        """Record a pulled image."""
         self.images_pulled.append(image)
 
     def image_exists(self, image: str) -> bool:
+        """Return whether the image is considered present locally."""
         return "local" in image or image in self.images_pulled
 
     def run_oneoff_container(self, image: str, command: list[str]) -> str:
+        """Return canned output for a one-off container run."""
         return "Python 3.10.0\npip 21.0.1\nnvidia-smi not found\n"
 
     def container_status(self, container_id: str) -> tuple[str, int | None]:
+        """Return the (status, exit_code) tuple for the container."""
         for container in self.containers_created:
             if container["id"] == container_id:
                 return (container["status"], container.get("exit_code"))
         return ("unknown", None)
 
-    def set_container_status(self, container_id: str, status: str, exit_code: int | None = None):
+    def set_container_status(
+        self, container_id: str, status: str, exit_code: int | None = None
+    ) -> None:
         """Helper method to set container status for testing."""
         for container in self.containers_created:
             if container["id"] == container_id:
@@ -197,8 +212,7 @@ class MockContainerAdapter(BaseContainerClientAdapter):
         return None
 
     def wait_for_container(self, container_id: str, timeout: int | None = None) -> int:
-        """
-        Wait for a container to exit and return its exit code.
+        """Wait for a container to exit and return its exit code.
 
         For testing, immediately returns the container's exit code if it has exited,
         or raises TimeoutError if the container is still running.
@@ -224,7 +238,7 @@ class MockContainerAdapter(BaseContainerClientAdapter):
 
 # Fixtures
 @pytest.fixture
-def container_backend():
+def container_backend() -> ContainerBackend:
     """Provide ContainerBackend with mocked adapter."""
     with patch("kubeflow.trainer.backends.container.backend.DockerClientAdapter") as mock_docker:
         mock_docker.return_value = MockContainerAdapter()
@@ -233,7 +247,7 @@ def container_backend():
 
 
 @pytest.fixture
-def temp_workdir():
+def temp_workdir() -> Iterator[str]:
     """Provide a temporary working directory."""
     tmpdir = tempfile.mkdtemp()
     yield tmpdir
@@ -242,7 +256,7 @@ def temp_workdir():
 
 
 # Helper Function
-def simple_train_func():
+def simple_train_func() -> None:
     """Simple training function for tests."""
     print("Training")
 
@@ -266,7 +280,7 @@ def simple_train_func():
         ),
     ],
 )
-def test_backend_initialization(test_case):
+def test_backend_initialization(test_case: TestCase) -> None:
     """Test ContainerBackend initialization and adapter creation."""
     print("Executing test:", test_case.name)
     try:
@@ -338,7 +352,7 @@ def test_backend_initialization(test_case):
     print("test execution complete")
 
 
-def test_list_runtimes(container_backend):
+def test_list_runtimes(container_backend: ContainerBackend) -> None:
     """Test listing available local runtimes."""
     print("Executing test: list_runtimes")
     runtimes = container_backend.list_runtimes()
@@ -366,7 +380,7 @@ def test_list_runtimes(container_backend):
         ),
     ],
 )
-def test_get_runtime(container_backend, test_case):
+def test_get_runtime(container_backend: ContainerBackend, test_case: TestCase) -> None:
     """Test getting a specific runtime."""
     print("Executing test:", test_case.name)
     try:
@@ -381,15 +395,14 @@ def test_get_runtime(container_backend, test_case):
     print("test execution complete")
 
 
-def test_get_runtime_packages(container_backend):
+def test_get_runtime_packages(container_backend: ContainerBackend) -> None:
     """Test getting runtime packages."""
     print("Executing test: get_runtime_packages")
+    adapter = cast(MockContainerAdapter, container_backend._adapter)
     runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
     container_backend.get_runtime_packages(runtime)
 
-    assert len(
-        container_backend._adapter.images_pulled
-    ) > 0 or container_backend._adapter.image_exists(runtime.trainer.image)
+    assert len(adapter.images_pulled) > 0 or adapter.image_exists(runtime.trainer.image)
     print("test execution complete")
 
 
@@ -572,8 +585,9 @@ def test_get_runtime_packages(container_backend):
         ),
     ],
 )
-def test_train(container_backend, test_case):
+def test_train(container_backend: ContainerBackend, test_case: TestCase) -> None:
     """Test training job creation."""
+    adapter = cast(MockContainerAdapter, container_backend._adapter)
     print("Executing test:", test_case.name)
     try:
         trainer = types.CustomTrainer(
@@ -588,22 +602,22 @@ def test_train(container_backend, test_case):
         # Set up mocking for initializer tests
         initializer = test_case.config.get("initializer")
         if initializer:
-            original_create = container_backend._adapter.create_and_start_container
+            original_create = adapter.create_and_start_container
 
-            def mock_create_with_status(*args, **kwargs):
+            def mock_create_with_status(*args: Any, **kwargs: Any) -> str:  # noqa: ANN401
                 container_id = original_create(*args, **kwargs)
                 # If it's an initializer container, set status based on test config
                 if "initializer" in kwargs.get("name", ""):
                     if "initializer_exit_code" in test_case.config:
-                        container_backend._adapter.set_container_status(
+                        adapter.set_container_status(
                             container_id, "exited", test_case.config["initializer_exit_code"]
                         )
                     else:
                         # Mark as completed successfully
-                        container_backend._adapter.set_container_status(container_id, "exited", 0)
+                        adapter.set_container_status(container_id, "exited", 0)
                 return container_id
 
-            container_backend._adapter.create_and_start_container = mock_create_with_status
+            adapter.create_and_start_container = mock_create_with_status  # ty: ignore[invalid-assignment]
 
         # Handle timeout test case
         if test_case.config.get("initializer_timeout"):
@@ -621,21 +635,18 @@ def test_train(container_backend, test_case):
         assert test_case.expected_status == SUCCESS
         assert job_name is not None
         assert len(job_name) == 12
-        assert (
-            len(container_backend._adapter.containers_created)
-            == test_case.config["expected_containers"]
-        )
-        assert len(container_backend._adapter.networks_created) == 1
+        assert len(adapter.containers_created) == test_case.config["expected_containers"]
+        assert len(adapter.networks_created) == 1
 
         # Check environment if specified
         if "env" in test_case.config:
-            container = container_backend._adapter.containers_created[0]
+            container = adapter.containers_created[0]
             for key, value in test_case.config["env"].items():
                 assert container["environment"][key] == value
 
         # Check packages if specified
         if "packages" in test_case.config:
-            container = container_backend._adapter.containers_created[0]
+            container = adapter.containers_created[0]
             command_str = " ".join(container["command"])
             assert "pip install" in command_str
             for package in test_case.config["packages"]:
@@ -643,7 +654,7 @@ def test_train(container_backend, test_case):
 
         # Check nproc_per_node if specified
         if "expected_nproc_per_node" in test_case.config:
-            container = container_backend._adapter.containers_created[0]
+            container = adapter.containers_created[0]
             command_str = container["command"][2]  # Get bash script content
             expected_nproc = test_case.config["expected_nproc_per_node"]
             assert f"--nproc_per_node={expected_nproc}" in command_str, (
@@ -655,7 +666,7 @@ def test_train(container_backend, test_case):
             # Check that initializer containers have correct labels
             initializer_containers = [
                 c
-                for c in container_backend._adapter.containers_created
+                for c in adapter.containers_created
                 if "initializer" in c["labels"].get(f"{container_backend.label_prefix}/step", "")
             ]
 
@@ -708,7 +719,7 @@ def test_train(container_backend, test_case):
         ),
     ],
 )
-def test_list_jobs(container_backend, test_case):
+def test_list_jobs(container_backend: ContainerBackend, test_case: TestCase) -> None:
     """Test listing training jobs."""
     print("Executing test:", test_case.name)
     try:
@@ -750,7 +761,7 @@ def test_list_jobs(container_backend, test_case):
         ),
     ],
 )
-def test_get_job(container_backend, test_case):
+def test_get_job(container_backend: ContainerBackend, test_case: TestCase) -> None:
     """Test getting a specific job."""
     print("Executing test:", test_case.name)
     try:
@@ -826,9 +837,10 @@ def test_get_job(container_backend, test_case):
         ),
     ],
 )
-def test_get_job_logs(container_backend, test_case):
+def test_get_job_logs(container_backend: ContainerBackend, test_case: TestCase) -> None:
     """Test getting job logs."""
     print("Executing test:", test_case.name)
+    adapter = cast(MockContainerAdapter, container_backend._adapter)
     try:
         trainer = types.CustomTrainer(func=simple_train_func, num_nodes=1)
         runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
@@ -837,15 +849,15 @@ def test_get_job_logs(container_backend, test_case):
 
         # Set up mocking for initializer tests
         if initializer:
-            original_create = container_backend._adapter.create_and_start_container
+            original_create = adapter.create_and_start_container
 
-            def mock_create_with_status(*args, **kwargs):
+            def mock_create_with_status(*args: Any, **kwargs: Any) -> str:  # noqa: ANN401
                 container_id = original_create(*args, **kwargs)
                 if "initializer" in kwargs.get("name", ""):
-                    container_backend._adapter.set_container_status(container_id, "exited", 0)
+                    adapter.set_container_status(container_id, "exited", 0)
                 return container_id
 
-            container_backend._adapter.create_and_start_container = mock_create_with_status
+            adapter.create_and_start_container = mock_create_with_status  # ty: ignore[invalid-assignment]
 
         job_name = container_backend.train(
             runtime=runtime, trainer=trainer, initializer=initializer
@@ -897,8 +909,9 @@ def test_get_job_logs(container_backend, test_case):
         ),
     ],
 )
-def test_wait_for_job_status(container_backend, test_case):
+def test_wait_for_job_status(container_backend: ContainerBackend, test_case: TestCase) -> None:
     """Test waiting for job status."""
+    adapter = cast(MockContainerAdapter, container_backend._adapter)
     print("Executing test:", test_case.name)
     try:
         trainer = types.CustomTrainer(func=simple_train_func, num_nodes=1)
@@ -906,8 +919,8 @@ def test_wait_for_job_status(container_backend, test_case):
         job_name = container_backend.train(runtime=runtime, trainer=trainer)
 
         if test_case.name == "wait for complete":
-            container_id = container_backend._adapter.containers_created[0]["id"]
-            container_backend._adapter.set_container_status(
+            container_id = adapter.containers_created[0]["id"]
+            adapter.set_container_status(
                 container_id, "exited", test_case.config["container_exit_code"]
             )
 
@@ -927,8 +940,8 @@ def test_wait_for_job_status(container_backend, test_case):
             )
 
         elif test_case.name == "job fails":
-            container_id = container_backend._adapter.containers_created[0]["id"]
-            container_backend._adapter.set_container_status(
+            container_id = adapter.containers_created[0]["id"]
+            adapter.set_container_status(
                 container_id, "exited", test_case.config["container_exit_code"]
             )
 
@@ -961,8 +974,11 @@ def test_wait_for_job_status(container_backend, test_case):
         ),
     ],
 )
-def test_delete_job(container_backend, temp_workdir, test_case):
+def test_delete_job(
+    container_backend: ContainerBackend, temp_workdir: str, test_case: TestCase
+) -> None:
     """Test deleting a job."""
+    adapter = cast(MockContainerAdapter, container_backend._adapter)
     print("Executing test:", test_case.name)
     try:
         container_backend.cfg.auto_remove = test_case.config["auto_remove"]
@@ -979,9 +995,9 @@ def test_delete_job(container_backend, temp_workdir, test_case):
         container_backend.delete_job(job_name)
 
         assert test_case.expected_status == SUCCESS
-        assert len(container_backend._adapter.containers_stopped) == test_case.config["num_nodes"]
-        assert len(container_backend._adapter.containers_removed) == test_case.config["num_nodes"]
-        assert len(container_backend._adapter.networks_deleted) == 1
+        assert len(adapter.containers_stopped) == test_case.config["num_nodes"]
+        assert len(adapter.containers_removed) == test_case.config["num_nodes"]
+        assert len(adapter.networks_deleted) == 1
 
         if test_case.config["auto_remove"]:
             assert not job_workdir.exists()
@@ -1025,16 +1041,17 @@ def test_delete_job(container_backend, temp_workdir, test_case):
         ),
     ],
 )
-def test_container_status_mapping(container_backend, test_case):
+def test_container_status_mapping(container_backend: ContainerBackend, test_case: TestCase) -> None:
     """Test container status mapping to TrainJob status."""
+    adapter = cast(MockContainerAdapter, container_backend._adapter)
     print("Executing test:", test_case.name)
     try:
         trainer = types.CustomTrainer(func=simple_train_func, num_nodes=1)
         runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
         job_name = container_backend.train(runtime=runtime, trainer=trainer)
 
-        container_id = container_backend._adapter.containers_created[0]["id"]
-        container_backend._adapter.set_container_status(
+        container_id = adapter.containers_created[0]["id"]
+        adapter.set_container_status(
             container_id, test_case.config["container_status"], test_case.config["exit_code"]
         )
 
@@ -1074,7 +1091,7 @@ def test_container_status_mapping(container_backend, test_case):
         ),
     ],
 )
-def test_get_common_socket_locations(test_case, tmp_path):
+def test_get_common_socket_locations(test_case: TestCase, tmp_path: Path) -> None:
     """Test common socket location detection."""
     print("Executing test:", test_case.name)
 
@@ -1112,7 +1129,7 @@ def test_get_common_socket_locations(test_case, tmp_path):
     print("test execution complete")
 
 
-def test_create_adapter_error_message_format():
+def test_create_adapter_error_message_format() -> None:
     """Test that error message includes attempted connections."""
     cfg = ContainerBackendConfig(container_runtime="docker")
 

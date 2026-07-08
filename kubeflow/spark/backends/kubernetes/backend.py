@@ -25,6 +25,7 @@ import subprocess
 import sys
 import threading
 import time
+from typing import Any
 
 from kubeflow_spark_api import models
 from kubernetes import client, config
@@ -65,9 +66,9 @@ def _enable_spark_debug_logging() -> None:
 class KubernetesBackend(RuntimeBackend):
     """Kubernetes backend for managing SparkConnect sessions."""
 
-    def __init__(self, backend_config: KubernetesBackendConfig):
+    def __init__(self, backend_config: KubernetesBackendConfig) -> None:
         """Initialize Kubernetes Spark backend."""
-        self.namespace = backend_config.namespace or "default"
+        self.namespace = backend_config.namespace or common_constants.DEFAULT_NAMESPACE
 
         if backend_config.config_file:
             config.load_kube_config(config_file=backend_config.config_file)
@@ -82,7 +83,7 @@ class KubernetesBackend(RuntimeBackend):
         self.custom_api = client.CustomObjectsApi()
         self.core_api = client.CoreV1Api()
 
-    def _extract_name_option(self, options: list | None) -> tuple[str, list]:
+    def _extract_name_option(self, options: list[Any] | None) -> tuple[str, list[Any]]:
         """Extract Name option from options list, or generate name if absent.
 
         Args:
@@ -118,7 +119,7 @@ class KubernetesBackend(RuntimeBackend):
         spark_conf: dict[str, str] | None = None,
         driver: Driver | None = None,
         executor: Executor | None = None,
-        options: list | None = None,
+        options: list[Any] | None = None,
     ) -> SparkConnectInfo:
         """Create a new SparkConnect session (INTERNAL USE ONLY)."""
         # Extract Name option if present, or auto-generate
@@ -158,6 +159,10 @@ class KubernetesBackend(RuntimeBackend):
             ) from e
 
         spark_connect_cr = models.SparkV1alpha1SparkConnect.from_dict(response)
+        if spark_connect_cr is None:
+            raise RuntimeError(
+                f"Failed to parse {constants.SPARK_CONNECT_KIND} response: {self.namespace}/{name}"
+            )
         return get_spark_connect_info_from_cr(spark_connect_cr)
 
     def get_session(self, name: str) -> SparkConnectInfo:
@@ -174,6 +179,10 @@ class KubernetesBackend(RuntimeBackend):
             response = thread.get(common_constants.DEFAULT_TIMEOUT)
 
             spark_connect_cr = models.SparkV1alpha1SparkConnect.from_dict(response)
+            if spark_connect_cr is None:
+                raise RuntimeError(
+                    f"Failed to parse {constants.SPARK_CONNECT_KIND} response: {self.namespace}/{name}"
+                )
             return get_spark_connect_info_from_cr(spark_connect_cr)
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(
@@ -213,6 +222,10 @@ class KubernetesBackend(RuntimeBackend):
             ) from e
 
         spark_connect_list = models.SparkV1alpha1SparkConnectList.from_dict(response)
+        if spark_connect_list is None:
+            raise RuntimeError(
+                f"Failed to parse {constants.SPARK_CONNECT_KIND} list in namespace: {self.namespace}"
+            )
         return [get_spark_connect_info_from_cr(sc) for sc in spark_connect_list.items]
 
     def delete_session(self, name: str) -> None:
@@ -295,7 +308,11 @@ class KubernetesBackend(RuntimeBackend):
             time.sleep(polling_interval)
 
     def _wait_for_connect_port(
-        self, host: str, port: int, timeout_sec: int = 60, interval_sec: float = 2.0
+        self,
+        host: str,
+        port: int,
+        timeout_sec: int = 60,
+        interval_sec: float = 2.0,
     ) -> bool:
         """Wait until a TCP connection to host:port succeeds (Spark Connect server reachable)."""
         deadline = time.monotonic() + timeout_sec
@@ -308,7 +325,9 @@ class KubernetesBackend(RuntimeBackend):
         return False
 
     def get_connect_url(
-        self, info: SparkConnectInfo, local_port: int | None = None
+        self,
+        info: SparkConnectInfo,
+        local_port: int | None = None,
     ) -> tuple[str, subprocess.Popen | None]:
         """Build connect URL; when running outside cluster, start port-forward and return localhost URL.
 
@@ -366,8 +385,8 @@ class KubernetesBackend(RuntimeBackend):
             )
             time.sleep(3.0)  # Allow port-forward to fully establish
             if proc.poll() is not None:
-                stderr = (proc.stderr and proc.stderr.read()) or b""
-                err_msg = stderr.decode("utf-8", errors="replace").strip() if stderr else ""
+                stderr_bytes = proc.stderr.read() if proc.stderr else b""
+                err_msg = stderr_bytes.decode("utf-8", errors="replace").strip()
                 logger.warning(
                     "Port-forward to %s failed (exit %s): %s",
                     key,
@@ -378,8 +397,8 @@ class KubernetesBackend(RuntimeBackend):
             if self._wait_for_connect_port("127.0.0.1", port, timeout_sec=90):
                 # Final verification: ensure process is still alive after port check
                 if proc.poll() is not None:
-                    stderr = (proc.stderr and proc.stderr.read()) or b""
-                    err_msg = stderr.decode("utf-8", errors="replace").strip() if stderr else ""
+                    stderr_bytes = proc.stderr.read() if proc.stderr else b""
+                    err_msg = stderr_bytes.decode("utf-8", errors="replace").strip()
                     logger.warning(
                         "Port-forward to %s died after port check (exit %s): %s",
                         key,
@@ -433,8 +452,8 @@ class KubernetesBackend(RuntimeBackend):
 
         # Check port-forward process status
         if pf_proc is not None and pf_proc.poll() is not None:
-            stderr_b = pf_proc.stderr.read() if pf_proc.stderr else b""
-            stderr_str = stderr_b.decode("utf-8", errors="replace").strip() if stderr_b else ""
+            stderr_bytes = pf_proc.stderr.read() if pf_proc.stderr else b""
+            stderr_str = stderr_bytes.decode("utf-8", errors="replace").strip()
             raise RuntimeError(
                 f"Port-forward process exited with code {pf_proc.returncode} "
                 f"before connect. stderr: {stderr_str}"
@@ -486,8 +505,8 @@ class KubernetesBackend(RuntimeBackend):
             connect_url, pf_proc = self.get_connect_url(info, local_port=local_port)
 
         # Create SparkSession with timeout
-        result: list = []
-        exc_holder: list = []
+        result: list[SparkSession] = []
+        exc_holder: list[Exception] = []
 
         def _get_or_create() -> None:
             try:
@@ -516,8 +535,8 @@ class KubernetesBackend(RuntimeBackend):
             "see Spark sql/connect for server config."
         )
         if pf_proc is not None and pf_proc.poll() is not None:
-            stderr_b = pf_proc.stderr.read() if pf_proc.stderr else b""
-            stderr_str = stderr_b.decode("utf-8", errors="replace").strip() if stderr_b else ""
+            stderr_bytes = pf_proc.stderr.read() if pf_proc.stderr else b""
+            stderr_str = stderr_bytes.decode("utf-8", errors="replace").strip()
             base_msg += (
                 f" Port-forward process exited during connect "
                 f"(code={pf_proc.returncode}). stderr: {stderr_str}"
@@ -531,7 +550,7 @@ class KubernetesBackend(RuntimeBackend):
         spark_conf: dict[str, str] | None = None,
         driver: Driver | None = None,
         executor: Executor | None = None,
-        options: list | None = None,
+        options: list[Any] | None = None,
         timeout: int = 300,
         connect_timeout: int = 120,
     ) -> SparkSession:
@@ -582,11 +601,7 @@ class KubernetesBackend(RuntimeBackend):
 
         return self.connect(info, connect_timeout=connect_timeout)
 
-    def get_session_logs(
-        self,
-        name: str,
-        follow: bool = False,
-    ) -> Iterator[str]:
+    def get_session_logs(self, name: str, follow: bool = False) -> Iterator[str]:
         """Get logs from a SparkConnect session."""
         info = self.get_session(name)
 

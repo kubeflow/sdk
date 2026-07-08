@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Types for the Kubeflow Trainer SDK."""
+
 import abc
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -26,8 +28,10 @@ from kubeflow.trainer.constants import constants
 # Configuration for the Custom Trainer.
 @dataclass
 class CustomTrainer:
-    """Custom Trainer configuration. Configure the self-contained function
-        that encapsulates the entire model training process.
+    """Custom Trainer configuration.
+
+    Configure the self-contained function that encapsulates the entire model
+    training process.
 
     Args:
         func (`Callable`): The function that encapsulates the entire model training process.
@@ -66,8 +70,9 @@ class CustomTrainer:
 # Configuration for the Custom Trainer Container.
 @dataclass
 class CustomTrainerContainer:
-    """Custom Trainer Container configuration. Configure the container image
-        that encapsulates the entire model training process.
+    """Custom Trainer Container configuration.
+
+    Configure the container image that encapsulates the entire model training process.
 
     Args:
         image (`str`): The container image that encapsulates the entire model training process.
@@ -121,8 +126,8 @@ class DataFormat(Enum):
 # Configuration for the TorchTune Instruct dataset.
 @dataclass
 class TorchTuneInstructDataset:
-    """
-    Configuration for the custom dataset with user instruction prompts and model responses.
+    """Configuration for the custom dataset with user instruction prompts and model responses.
+
     REF: https://pytorch.org/torchtune/main/generated/torchtune.datasets.instruct_dataset.html
 
     Args:
@@ -152,6 +157,7 @@ class TorchTuneInstructDataset:
 @dataclass
 class LoraConfig:
     """Configuration for the LoRA/QLoRA/DoRA.
+
     REF: https://meta-pytorch.org/torchtune/main/tutorials/memory_optimizations.html
 
     Args:
@@ -190,8 +196,10 @@ class LoraConfig:
 # Configuration for the TorchTune LLM Trainer.
 @dataclass
 class TorchTuneConfig:
-    """TorchTune LLM Trainer configuration. Configure the parameters in
-        the TorchTune LLM Trainer that already includes the fine-tuning logic.
+    """TorchTune LLM Trainer configuration.
+
+    Configure the parameters in the TorchTune LLM Trainer that already includes
+    the fine-tuning logic.
 
     Args:
         dtype (`Optional[Dtype]`):
@@ -225,9 +233,10 @@ class TorchTuneConfig:
 # Configuration for the Builtin Trainer.
 @dataclass
 class BuiltinTrainer:
-    """
-    Builtin Trainer configuration. Configure the builtin trainer that already includes
-        the fine-tuning logic, requiring only parameter adjustments.
+    """Builtin Trainer configuration.
+
+    Configure the builtin trainer that already includes the fine-tuning logic,
+    requiring only parameter adjustments.
 
     Args:
         config (`TorchTuneConfig`): The configuration for the builtin trainer.
@@ -241,6 +250,8 @@ TORCH_TUNE = BuiltinTrainer.__annotations__["config"].__name__.lower().replace("
 
 
 class TrainerType(Enum):
+    """Enumeration of the supported trainer types."""
+
     CUSTOM_TRAINER = CustomTrainer.__name__
     BUILTIN_TRAINER = BuiltinTrainer.__name__
 
@@ -248,6 +259,8 @@ class TrainerType(Enum):
 # Representation for the Trainer of the runtime.
 @dataclass
 class RuntimeTrainer:
+    """Representation for the trainer of the runtime."""
+
     trainer_type: TrainerType
     framework: str
     image: str
@@ -258,15 +271,19 @@ class RuntimeTrainer:
 
     @property
     def command(self) -> tuple[str, ...]:
+        """Return the training command."""
         return self.__command
 
-    def set_command(self, command: tuple[str, ...]):
+    def set_command(self, command: tuple[str, ...]) -> None:
+        """Set the training command."""
         self.__command = command
 
 
 # Representation for the Training Runtime.
 @dataclass
 class Runtime:
+    """Representation for the training runtime."""
+
     name: str
     trainer: RuntimeTrainer
     pretrained_model: str | None = None
@@ -275,6 +292,8 @@ class Runtime:
 # Representation for the TrainJob steps.
 @dataclass
 class Step:
+    """Representation for a TrainJob step."""
+
     name: str
     status: str | None
     pod_name: str
@@ -285,6 +304,8 @@ class Step:
 # Representation for the TrainJob.
 @dataclass
 class TrainJob:
+    """Representation for the TrainJob."""
+
     name: str
     runtime: Runtime
     steps: list[Step]
@@ -317,7 +338,7 @@ class Event:
 
 @dataclass
 class BaseInitializer(abc.ABC):
-    """Base class for all initializers"""
+    """Base class for all initializers."""
 
     storage_uri: str
 
@@ -335,9 +356,8 @@ class HuggingFaceDatasetInitializer(BaseInitializer):
     ignore_patterns: list[str] | None = None
     access_token: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate HuggingFaceDatasetInitializer parameters."""
-
         if not self.storage_uri.startswith("hf://"):
             raise ValueError(f"storage_uri must start with 'hf://', got {self.storage_uri}")
 
@@ -369,9 +389,8 @@ class S3DatasetInitializer(BaseInitializer):
     region: str | None = None
     role_arn: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate S3DatasetInitializer parameters."""
-
         if not self.storage_uri.startswith("s3://"):
             raise ValueError(f"storage_uri must start with 's3://', got {self.storage_uri}")
 
@@ -402,9 +421,8 @@ class DataCacheInitializer(BaseInitializer):
     worker_mem: str | None = None
     iam_role: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate DataCacheInitializer parameters."""
-
         if self.num_data_nodes <= 1:
             raise ValueError(f"num_data_nodes must be greater than 1, got {self.num_data_nodes}")
 
@@ -437,9 +455,8 @@ class HuggingFaceModelInitializer(BaseInitializer):
     )
     access_token: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate HuggingFaceModelInitializer parameters."""
-
         if not self.storage_uri.startswith("hf://"):
             raise ValueError(f"storage_uri must start with 'hf://', got {self.storage_uri}")
 
@@ -468,16 +485,15 @@ class S3ModelInitializer(BaseInitializer):
     region: str | None = None
     role_arn: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate S3ModelInitializer parameters."""
-
         if not self.storage_uri.startswith("s3://"):
             raise ValueError(f"storage_uri must start with 's3://', got {self.storage_uri}")
 
 
 @dataclass
 class Initializer:
-    """Initializer defines configurations for dataset and pre-trained model initialization
+    """Initializer defines configurations for dataset and pre-trained model initialization.
 
     Args:
         dataset (`Optional[Union[HuggingFaceDatasetInitializer, S3DatasetInitializer, DataCacheInitializer]]`):
@@ -510,8 +526,10 @@ class TrainJobTemplate:
     runtime: str | Runtime | None = None
     initializer: Initializer | None = None
 
-    def keys(self):
+    def keys(self) -> list[str]:
+        """Return the field names exposed for mapping-style access."""
         return ["trainer", "runtime", "initializer"]
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> object:
+        """Return the value of the field named by ``key``."""
         return getattr(self, key)

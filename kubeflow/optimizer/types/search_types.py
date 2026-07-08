@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Search space definitions for the Kubeflow Optimizer."""
+
 from dataclasses import dataclass
 from enum import Enum
 
@@ -76,14 +78,17 @@ class Search:
         )
 
 
-# Distribution for the search space.
 class Distribution(Enum):
+    """Distribution for the search space."""
+
     UNIFORM = "uniform"
     LOG_UNIFORM = "logUniform"
 
 
 @dataclass
 class ContinuousSearchSpace:
+    """Continuous search space defined by a numeric range and distribution."""
+
     min: float | int
     max: float | int
     distribution: Distribution
@@ -91,4 +96,6 @@ class ContinuousSearchSpace:
 
 @dataclass
 class CategoricalSearchSpace:
+    """Categorical search space defined by a list of choices."""
+
     choices: list

@@ -12,15 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Search algorithm definitions for the Kubeflow Optimizer."""
+
 import abc
 from dataclasses import dataclass, fields
-from typing import Any
 
 from kubeflow_katib_api import models
 
 
-def algorithm_to_katib_spec(obj: Any) -> models.V1beta1AlgorithmSpec:
-    """Convert any dataclass-based algorithm to a Katib AlgorithmSpec"""
+def algorithm_to_katib_spec(obj: "GridSearch | RandomSearch") -> models.V1beta1AlgorithmSpec:
+    """Convert any dataclass-based algorithm to a Katib AlgorithmSpec."""
     settings = []
     for f in fields(obj):
         value = getattr(obj, f.name)
@@ -31,22 +32,22 @@ def algorithm_to_katib_spec(obj: Any) -> models.V1beta1AlgorithmSpec:
                     value=str(value),
                 )
             )
-
     return models.V1beta1AlgorithmSpec(
         algorithmName=obj.algorithm_name,
         algorithmSettings=settings or None,
     )
 
 
-# Base implementation for the search algorithm.
 class BaseAlgorithm(abc.ABC):
+    """Base implementation for the search algorithm."""
+
     @property
     @abc.abstractmethod
     def algorithm_name(self) -> str:
-        pass
+        """Name of the algorithm as understood by Katib."""
 
     @abc.abstractmethod
-    def _to_katib_spec(self):
+    def _to_katib_spec(self) -> models.V1beta1AlgorithmSpec:
         raise NotImplementedError()
 
 
@@ -56,9 +57,10 @@ class GridSearch(BaseAlgorithm):
 
     @property
     def algorithm_name(self) -> str:
+        """Name of the algorithm as understood by Katib."""
         return "grid"
 
-    def _to_katib_spec(self):
+    def _to_katib_spec(self) -> models.V1beta1AlgorithmSpec:
         return algorithm_to_katib_spec(self)
 
 
@@ -74,9 +76,10 @@ class RandomSearch(BaseAlgorithm):
 
     @property
     def algorithm_name(self) -> str:
+        """Name of the algorithm as understood by Katib."""
         return "random"
 
-    def _to_katib_spec(self):
+    def _to_katib_spec(self) -> models.V1beta1AlgorithmSpec:
         return algorithm_to_katib_spec(self)
 
 

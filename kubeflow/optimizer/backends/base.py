@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Abstract runtime backend interface for the Kubeflow Optimizer."""
+
 import abc
 from collections.abc import Callable, Iterator
 from typing import Any
@@ -28,6 +30,8 @@ from kubeflow.trainer.types.types import Event, TrainJobTemplate
 
 
 class RuntimeBackend(abc.ABC):
+    """Abstract base class for Kubeflow Optimizer runtime backends."""
+
     @abc.abstractmethod
     def optimize(
         self,
@@ -38,14 +42,17 @@ class RuntimeBackend(abc.ABC):
         objectives: list[Objective] | None = None,
         algorithm: RandomSearch | None = None,
     ) -> str:
+        """Create an OptimizationJob for hyperparameter tuning."""
         raise NotImplementedError()
 
     @abc.abstractmethod
     def list_jobs(self) -> list[OptimizationJob]:
+        """List the created OptimizationJobs."""
         raise NotImplementedError()
 
     @abc.abstractmethod
     def get_job(self, name: str) -> OptimizationJob:
+        """Get an OptimizationJob by name."""
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -55,10 +62,12 @@ class RuntimeBackend(abc.ABC):
         trial_name: str | None,
         follow: bool,
     ) -> Iterator[str]:
+        """Get logs from a Trial of an OptimizationJob."""
         raise NotImplementedError()
 
     @abc.abstractmethod
     def get_best_results(self, name: str) -> Result | None:
+        """Get the best hyperparameters and metrics from an OptimizationJob."""
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -70,12 +79,15 @@ class RuntimeBackend(abc.ABC):
         polling_interval: int = 2,
         callbacks: list[Callable[[OptimizationJob], None]] | None = None,
     ) -> OptimizationJob:
+        """Wait for an OptimizationJob to reach a desired status."""
         raise NotImplementedError()
 
     @abc.abstractmethod
     def get_job_events(self, name: str) -> list[Event]:
+        """Get events for an OptimizationJob."""
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def delete_job(self, name: str):
+    def delete_job(self, name: str) -> None:
+        """Delete an OptimizationJob."""
         raise NotImplementedError()

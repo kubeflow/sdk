@@ -19,6 +19,7 @@ from pathlib import Path
 import subprocess
 import sys
 import threading
+from typing import IO
 
 import pytest
 
@@ -55,14 +56,14 @@ def _run_example_with_watcher(
     stdout_lines: list[str] = []
     stderr_lines: list[str] = []
 
-    def read_stdout(pipe) -> None:
+    def read_stdout(pipe: IO[str]) -> None:
         try:
             for line in pipe:
                 stdout_lines.append(line)
         except (ValueError, OSError):
             pass
 
-    def read_stderr(pipe) -> None:
+    def read_stderr(pipe: IO[str]) -> None:
         try:
             for line in pipe:
                 stderr_lines.append(line)
@@ -103,7 +104,7 @@ def _run_example_with_watcher(
 @pytest.mark.integration
 @pytest.mark.smoke
 @pytest.mark.timeout(60)
-def test_spark_connect_crd_smoke():
+def test_spark_connect_crd_smoke() -> None:
     """Create SparkConnect via SDK and verify API accepts it (CRD-only; no operator)."""
     namespace = os.environ.get("SPARK_TEST_NAMESPACE", "spark-test")
     backend = KubernetesBackend(KubernetesBackendConfig(namespace=namespace))
@@ -141,7 +142,7 @@ class TestSparkExamples:
         parts.append(stderr or "(empty)")
         return "\n".join(parts)
 
-    def _run_example(self, example_script_name: str, namespace: str):
+    def _run_example(self, example_script_name: str, namespace: str) -> str:
         """Run example: in-cluster Job if SPARK_E2E_RUN_IN_CLUSTER=1 and image set, else subprocess."""
         if USE_IN_CLUSTER and RUNNER_IMAGE:
             success, logs, job_desc = run_example_in_cluster(
@@ -165,7 +166,8 @@ class TestSparkExamples:
                 or "EXAMPLE" in logs
                 or "E2E: Starting" in logs
             ), f"In-cluster example produced no expected output. Logs:\n{logs or '(empty)'}"
-            return
+            # In-cluster runs assert on the pod logs above; callers ignore the return value.
+            return logs
         example_path = EXAMPLES_DIR / example_script_name
         assert example_path.exists(), f"Example not found: {example_path}"
         returncode, stdout, stderr, watcher_log = _run_example_with_watcher(
@@ -181,7 +183,7 @@ class TestSparkExamples:
         assert returncode == 0, fail_msg
         return stdout
 
-    def test_spark_connect_simple_example(self):
+    def test_spark_connect_simple_example(self) -> None:
         """EX01: Validate spark_connect_simple.py runs without errors."""
         namespace = os.environ.get("SPARK_TEST_NAMESPACE", "spark-test")
         if USE_IN_CLUSTER and RUNNER_IMAGE:
@@ -190,7 +192,7 @@ class TestSparkExamples:
         stdout = self._run_example("spark_connect_simple.py", namespace)
         assert "SparkConnect session created" in stdout or "Session" in stdout
 
-    def test_spark_advanced_options_example(self):
+    def test_spark_advanced_options_example(self) -> None:
         """EX02: Validate spark_advanced_options.py runs without errors."""
         namespace = os.environ.get("SPARK_TEST_NAMESPACE", "spark-test")
         if USE_IN_CLUSTER and RUNNER_IMAGE:
@@ -199,7 +201,7 @@ class TestSparkExamples:
         stdout = self._run_example("spark_advanced_options.py", namespace)
         assert "Driver" in stdout or "Executor" in stdout
 
-    def test_connect_existing_session_example(self):
+    def test_connect_existing_session_example(self) -> None:
         """EX03: Validate connect_existing_session.py - base_url connect via two-client pattern.
 
         Runs in-cluster only (K8s Job mode).

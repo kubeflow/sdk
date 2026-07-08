@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Advanced SparkClient Options Examples (KEP-107 Options Pattern)
+"""Advanced SparkClient Options Examples (KEP-107 Options Pattern).
 
 This example demonstrates the options pattern for advanced Kubernetes configurations.
 The options pattern provides extensibility without API changes - new option types
@@ -37,12 +36,14 @@ def _e2e_session_name(base: str) -> str:
     return base
 
 
-def _backend_config():
+def _backend_config(namespace_default: str = "default") -> KubernetesBackendConfig:
     """Backend config; uses SPARK_TEST_NAMESPACE in CI."""
-    return KubernetesBackendConfig(namespace=os.environ.get("SPARK_TEST_NAMESPACE", "default"))
+    return KubernetesBackendConfig(
+        namespace=os.environ.get("SPARK_TEST_NAMESPACE", namespace_default)
+    )
 
 
-def example_labels_and_annotations():
+def example_labels_and_annotations() -> None:
     """Example 1: Add labels and annotations for organization and tooling.
 
     Labels are used for selection and grouping in Kubernetes.
@@ -89,7 +90,7 @@ def example_labels_and_annotations():
     print("\nExample complete.\n")
 
 
-def example_node_selection():
+def example_node_selection() -> None:
     """Example 2: Schedule Spark pods on specific node types.
 
     Node selectors constrain pods to run only on nodes with matching labels.
@@ -129,7 +130,7 @@ def example_node_selection():
     print("\nExample complete.\n")
 
 
-def example_tolerations():
+def example_tolerations() -> None:
     """Example 3: Tolerate node taints for dedicated workloads.
 
     Tolerations allow pods to schedule on tainted nodes.
@@ -172,7 +173,7 @@ def example_tolerations():
     print("\nExample complete.\n")
 
 
-def example_pod_template_override():
+def example_pod_template_override() -> None:
     """Example 4: Full control with pod template overrides.
 
     Pod template overrides provide complete control over pod specifications.
@@ -230,7 +231,7 @@ def example_pod_template_override():
     print("\nExample complete.\n")
 
 
-def example_name_option():
+def example_name_option() -> None:
     """Example: Set session name via Name option.
 
     The Name option allows you to specify a custom name for your Spark session.
@@ -263,7 +264,7 @@ def example_name_option():
     print("\nExample complete.\n")
 
 
-def example_combined_options():
+def example_combined_options() -> None:
     """Example 5: Combine multiple options for production workloads.
 
     Real-world production deployments often need multiple configurations.
@@ -345,7 +346,7 @@ def example_combined_options():
     print("\nExample complete.\n")
 
 
-def main():
+def main() -> None:
     """Run all option pattern examples."""
     print("E2E: Starting spark_advanced_options.py", flush=True)
     print("\n")

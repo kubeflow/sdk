@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Client wrapper around the Model Registry Python SDK."""
+
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
@@ -46,7 +48,7 @@ class ModelRegistryClient:
         is_secure: bool | None = None,
         user_token: str | None = None,
         custom_ca: str | None = None,
-    ):
+    ) -> None:
         """Initialize the ModelRegistryClient.
 
         Args:
@@ -69,6 +71,7 @@ class ModelRegistryClient:
 
         Raises:
             ImportError: If model-registry is not installed.
+
         Examples:
             ModelRegistryClient("https://example.org", port=456)  # port kwarg
             ModelRegistryClient("https://example.org:456")        # base_url (including port)
@@ -91,7 +94,7 @@ class ModelRegistryClient:
         self._registry = ModelRegistry(
             server_address=base_url,
             port=port,
-            author=author,  # type: ignore[arg-type]
+            author=author,  # type: ignore
             is_secure=is_secure,
             user_token=user_token,
             custom_ca=custom_ca,
@@ -147,8 +150,8 @@ class ModelRegistryClient:
         return self._registry.register_model(
             name=name,
             uri=uri,
-            model_format_name=model_format_name,  # type: ignore[arg-type]
-            model_format_version=model_format_version,  # type: ignore[arg-type]
+            model_format_name=model_format_name,  # type: ignore
+            model_format_version=model_format_version,  # type: ignore
             version=version,
             author=author,
             owner=owner,

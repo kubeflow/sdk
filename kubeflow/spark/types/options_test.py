@@ -19,6 +19,7 @@ from unittest.mock import MagicMock
 from kubeflow_spark_api import models
 import pytest
 
+from kubeflow.spark.backends.base import RuntimeBackend
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.spark.types.options import (
@@ -32,7 +33,7 @@ from kubeflow.spark.types.options import (
 
 
 @pytest.fixture
-def mock_k8s_backend():
+def mock_k8s_backend() -> MagicMock:
     """Create a mock KubernetesBackend for testing."""
     backend = MagicMock(spec=KubernetesBackend)
     # Make isinstance check work
@@ -41,7 +42,7 @@ def mock_k8s_backend():
 
 
 @pytest.fixture
-def mock_non_k8s_backend():
+def mock_non_k8s_backend() -> MagicMock:
     """Create a mock non-Kubernetes backend for testing."""
     backend = MagicMock()
     backend.__class__ = MagicMock
@@ -49,17 +50,17 @@ def mock_non_k8s_backend():
 
 
 @pytest.fixture
-def spark_connect_model():
+def spark_connect_model() -> models.SparkV1alpha1SparkConnect:
     """Create a minimal SparkConnect model for testing."""
     return models.SparkV1alpha1SparkConnect(
-        api_version=f"{constants.SPARK_CONNECT_GROUP}/{constants.SPARK_CONNECT_VERSION}",
+        apiVersion=f"{constants.SPARK_CONNECT_GROUP}/{constants.SPARK_CONNECT_VERSION}",
         kind=constants.SPARK_CONNECT_KIND,
         metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
             name="test-session",
             namespace="default",
         ),
         spec=models.SparkV1alpha1SparkConnectSpec(
-            spark_version=constants.DEFAULT_SPARK_VERSION,
+            sparkVersion=constants.DEFAULT_SPARK_VERSION,
             image=constants.DEFAULT_SPARK_IMAGE,
             server=models.SparkV1alpha1ServerSpec(
                 cores=constants.DEFAULT_DRIVER_CPU,
@@ -77,16 +78,26 @@ def spark_connect_model():
 class TestLabels:
     """Tests for Labels option."""
 
-    def test_labels_apply_to_crd(self, mock_k8s_backend, spark_connect_model):
+    def test_labels_apply_to_crd(
+        self,
+        mock_k8s_backend: KubernetesBackend,
+        spark_connect_model: models.SparkV1alpha1SparkConnect,
+    ) -> None:
         """Labels option adds labels to CRD metadata."""
         option = Labels({"app": "spark", "team": "data-eng"})
 
         option(spark_connect_model, mock_k8s_backend)
 
-        assert spark_connect_model.metadata.labels["app"] == "spark"
-        assert spark_connect_model.metadata.labels["team"] == "data-eng"
+        labels = spark_connect_model.metadata.labels
+        assert labels is not None
+        assert labels["app"] == "spark"
+        assert labels["team"] == "data-eng"
 
-    def test_labels_merge_with_existing(self, mock_k8s_backend, spark_connect_model):
+    def test_labels_merge_with_existing(
+        self,
+        mock_k8s_backend: KubernetesBackend,
+        spark_connect_model: models.SparkV1alpha1SparkConnect,
+    ) -> None:
         """Labels option merges with existing labels."""
         spark_connect_model.metadata.labels = {"existing": "label"}
         option = Labels({"new-label": "value"})
@@ -96,7 +107,11 @@ class TestLabels:
         assert spark_connect_model.metadata.labels["existing"] == "label"
         assert spark_connect_model.metadata.labels["new-label"] == "value"
 
-    def test_labels_incompatible_backend(self, mock_non_k8s_backend, spark_connect_model):
+    def test_labels_incompatible_backend(
+        self,
+        mock_non_k8s_backend: RuntimeBackend,
+        spark_connect_model: models.SparkV1alpha1SparkConnect,
+    ) -> None:
         """Labels option raises error for incompatible backend."""
         option = Labels({"app": "spark"})
 
@@ -107,16 +122,26 @@ class TestLabels:
 class TestAnnotations:
     """Tests for Annotations option."""
 
-    def test_annotations_apply_to_crd(self, mock_k8s_backend, spark_connect_model):
+    def test_annotations_apply_to_crd(
+        self,
+        mock_k8s_backend: KubernetesBackend,
+        spark_connect_model: models.SparkV1alpha1SparkConnect,
+    ) -> None:
         """Annotations option adds annotations to CRD metadata."""
         option = Annotations({"description": "ETL pipeline", "owner": "data-team"})
 
         option(spark_connect_model, mock_k8s_backend)
 
-        assert spark_connect_model.metadata.annotations["description"] == "ETL pipeline"
-        assert spark_connect_model.metadata.annotations["owner"] == "data-team"
+        annotations = spark_connect_model.metadata.annotations
+        assert annotations is not None
+        assert annotations["description"] == "ETL pipeline"
+        assert annotations["owner"] == "data-team"
 
-    def test_annotations_incompatible_backend(self, mock_non_k8s_backend, spark_connect_model):
+    def test_annotations_incompatible_backend(
+        self,
+        mock_non_k8s_backend: RuntimeBackend,
+        spark_connect_model: models.SparkV1alpha1SparkConnect,
+    ) -> None:
         """Annotations option raises error for incompatible backend."""
         option = Annotations({"description": "test"})
 
@@ -127,22 +152,38 @@ class TestAnnotations:
 class TestNodeSelector:
     """Tests for NodeSelector option."""
 
-    def test_node_selector_applies_to_both_roles(self, mock_k8s_backend, spark_connect_model):
+    def test_node_selector_applies_to_both_roles(
+        self,
+        mock_k8s_backend: KubernetesBackend,
+        spark_connect_model: models.SparkV1alpha1SparkConnect,
+    ) -> None:
         """NodeSelector option adds selectors to both driver and executor."""
         option = NodeSelector({"node-type": "spark", "gpu": "true"})
 
         option(spark_connect_model, mock_k8s_backend)
 
         # Check server (driver)
-        server_node_selector = spark_connect_model.spec.server.template.spec.node_selector
+        server_template = spark_connect_model.spec.server.template
+        assert server_template is not None
+        assert server_template.spec is not None
+        server_node_selector = server_template.spec.node_selector
+        assert server_node_selector is not None
         assert server_node_selector["node-type"] == "spark"
         assert server_node_selector["gpu"] == "true"
         # Check executor
-        executor_node_selector = spark_connect_model.spec.executor.template.spec.node_selector
+        executor_template = spark_connect_model.spec.executor.template
+        assert executor_template is not None
+        assert executor_template.spec is not None
+        executor_node_selector = executor_template.spec.node_selector
+        assert executor_node_selector is not None
         assert executor_node_selector["node-type"] == "spark"
         assert executor_node_selector["gpu"] == "true"
 
-    def test_node_selector_incompatible_backend(self, mock_non_k8s_backend, spark_connect_model):
+    def test_node_selector_incompatible_backend(
+        self,
+        mock_non_k8s_backend: RuntimeBackend,
+        spark_connect_model: models.SparkV1alpha1SparkConnect,
+    ) -> None:
         """NodeSelector option raises error for incompatible backend."""
         option = NodeSelector({"node-type": "spark"})
 
@@ -153,7 +194,11 @@ class TestNodeSelector:
 class TestToleration:
     """Tests for Toleration option."""
 
-    def test_toleration_with_value(self, mock_k8s_backend, spark_connect_model):
+    def test_toleration_with_value(
+        self,
+        mock_k8s_backend: KubernetesBackend,
+        spark_connect_model: models.SparkV1alpha1SparkConnect,
+    ) -> None:
         """Toleration option with value."""
         option = Toleration(
             key="spark-workload",
@@ -164,14 +209,22 @@ class TestToleration:
 
         option(spark_connect_model, mock_k8s_backend)
 
-        tolerations = spark_connect_model.spec.server.template.spec.tolerations
+        server_template = spark_connect_model.spec.server.template
+        assert server_template is not None
+        assert server_template.spec is not None
+        tolerations = server_template.spec.tolerations
+        assert tolerations is not None
         assert len(tolerations) == 1
         assert tolerations[0].key == "spark-workload"
         assert tolerations[0].operator == "Equal"
         assert tolerations[0].value == "true"
         assert tolerations[0].effect == "NoSchedule"
 
-    def test_toleration_without_value(self, mock_k8s_backend, spark_connect_model):
+    def test_toleration_without_value(
+        self,
+        mock_k8s_backend: KubernetesBackend,
+        spark_connect_model: models.SparkV1alpha1SparkConnect,
+    ) -> None:
         """Toleration option without value (operator=Exists)."""
         option = Toleration(
             key="dedicated",
@@ -181,14 +234,22 @@ class TestToleration:
 
         option(spark_connect_model, mock_k8s_backend)
 
-        tolerations = spark_connect_model.spec.server.template.spec.tolerations
+        server_template = spark_connect_model.spec.server.template
+        assert server_template is not None
+        assert server_template.spec is not None
+        tolerations = server_template.spec.tolerations
+        assert tolerations is not None
         assert len(tolerations) == 1
         assert tolerations[0].key == "dedicated"
         assert tolerations[0].operator == "Exists"
         assert tolerations[0].value is None  # Value is None when empty
         assert tolerations[0].effect == "NoSchedule"
 
-    def test_toleration_incompatible_backend(self, mock_non_k8s_backend, spark_connect_model):
+    def test_toleration_incompatible_backend(
+        self,
+        mock_non_k8s_backend: RuntimeBackend,
+        spark_connect_model: models.SparkV1alpha1SparkConnect,
+    ) -> None:
         """Toleration option raises error for incompatible backend."""
         option = Toleration(key="test", operator="Exists")
 
@@ -199,7 +260,11 @@ class TestToleration:
 class TestPodTemplateOverride:
     """Tests for PodTemplateOverride option."""
 
-    def test_pod_template_driver(self, mock_k8s_backend, spark_connect_model):
+    def test_pod_template_driver(
+        self,
+        mock_k8s_backend: KubernetesBackend,
+        spark_connect_model: models.SparkV1alpha1SparkConnect,
+    ) -> None:
         """PodTemplateOverride applies to driver."""
         option = PodTemplateOverride(
             role="driver",
@@ -220,7 +285,11 @@ class TestPodTemplateOverride:
         assert crd["spec"]["server"]["template"]["spec"]["securityContext"]["runAsUser"] == 1000
         assert crd["spec"]["server"]["template"]["spec"]["securityContext"]["fsGroup"] == 1000
 
-    def test_pod_template_executor(self, mock_k8s_backend, spark_connect_model):
+    def test_pod_template_executor(
+        self,
+        mock_k8s_backend: KubernetesBackend,
+        spark_connect_model: models.SparkV1alpha1SparkConnect,
+    ) -> None:
         """PodTemplateOverride applies to executor."""
         option = PodTemplateOverride(
             role="executor",
@@ -239,14 +308,22 @@ class TestPodTemplateOverride:
         crd = spark_connect_model.to_dict()
         assert crd["spec"]["executor"]["template"]["spec"]["securityContext"]["runAsUser"] == 1000
 
-    def test_pod_template_invalid_role(self, mock_k8s_backend, spark_connect_model):
+    def test_pod_template_invalid_role(
+        self,
+        mock_k8s_backend: KubernetesBackend,
+        spark_connect_model: models.SparkV1alpha1SparkConnect,
+    ) -> None:
         """PodTemplateOverride raises error for invalid role."""
         option = PodTemplateOverride(role="invalid", template={"spec": {}})
 
         with pytest.raises(ValueError, match="Invalid role"):
             option(spark_connect_model, mock_k8s_backend)
 
-    def test_pod_template_incompatible_backend(self, mock_non_k8s_backend, spark_connect_model):
+    def test_pod_template_incompatible_backend(
+        self,
+        mock_non_k8s_backend: RuntimeBackend,
+        spark_connect_model: models.SparkV1alpha1SparkConnect,
+    ) -> None:
         """PodTemplateOverride option raises error for incompatible backend."""
         option = PodTemplateOverride(role="driver", template={"spec": {}})
 
@@ -257,12 +334,16 @@ class TestPodTemplateOverride:
 class TestNameOption:
     """Tests for Name option."""
 
-    def test_name_option_basic(self):
+    def test_name_option_basic(self) -> None:
         """Create Name option with valid name."""
         option = Name("my-custom-session")
         assert option.name == "my-custom-session"
 
-    def test_name_option_apply_to_crd(self, mock_k8s_backend, spark_connect_model):
+    def test_name_option_apply_to_crd(
+        self,
+        mock_k8s_backend: KubernetesBackend,
+        spark_connect_model: models.SparkV1alpha1SparkConnect,
+    ) -> None:
         """Apply Name option to CRD."""
         option = Name("new-session-name")
 
@@ -270,7 +351,11 @@ class TestNameOption:
 
         assert spark_connect_model.metadata.name == "new-session-name"
 
-    def test_name_option_incompatible_backend(self, mock_non_k8s_backend, spark_connect_model):
+    def test_name_option_incompatible_backend(
+        self,
+        mock_non_k8s_backend: RuntimeBackend,
+        spark_connect_model: models.SparkV1alpha1SparkConnect,
+    ) -> None:
         """Name option raises error for incompatible backend."""
         option = Name("test-session")
 

@@ -25,7 +25,7 @@ from kubeflow.hub.storage import upload_artifact
 from kubeflow.hub.types import OCIUploadParams, S3UploadParams
 
 
-def test_upload_artifact_delegates_to_s3(monkeypatch):
+def test_upload_artifact_delegates_to_s3(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test upload_artifact delegates S3 uploads to the S3 implementation."""
     mock_upload = Mock(return_value="s3://bucket/prefix")
     monkeypatch.setattr("kubeflow.hub.storage._upload_to_s3", mock_upload)
@@ -37,7 +37,7 @@ def test_upload_artifact_delegates_to_s3(monkeypatch):
     mock_upload.assert_called_once_with("/tmp/model", params)
 
 
-def test_upload_artifact_delegates_to_oci(monkeypatch):
+def test_upload_artifact_delegates_to_oci(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test upload_artifact delegates OCI uploads to the OCI implementation."""
     mock_upload = Mock(return_value="oci://registry.example.com/model:v1")
     monkeypatch.setattr("kubeflow.hub.storage._upload_to_oci", mock_upload)
@@ -49,19 +49,19 @@ def test_upload_artifact_delegates_to_oci(monkeypatch):
     mock_upload.assert_called_once_with("/tmp/model", params)
 
 
-def test_upload_artifact_raises_type_error_for_unknown_upload_params():
+def test_upload_artifact_raises_type_error_for_unknown_upload_params() -> None:
     """Test upload_artifact rejects unsupported upload parameter types."""
     with pytest.raises(TypeError, match="upload_params must be"):
-        upload_artifact("/tmp/model", upload_params=object())  # type: ignore[arg-type]
+        upload_artifact("/tmp/model", upload_params=object())  # type: ignore
 
 
-def test_s3_upload_params_requires_bucket_name():
+def test_s3_upload_params_requires_bucket_name() -> None:
     """Test S3UploadParams validates required fields."""
     with pytest.raises(ValidationError):
-        S3UploadParams(s3_prefix="prefix")  # type: ignore[call-arg]
+        S3UploadParams(s3_prefix="prefix")  # type: ignore
 
 
-def test_oci_upload_params_requires_base_image_and_oci_ref():
+def test_oci_upload_params_requires_base_image_and_oci_ref() -> None:
     """Test OCIUploadParams validates required fields."""
     with pytest.raises(ValidationError):
-        OCIUploadParams()  # type: ignore[call-arg]
+        OCIUploadParams()  # type: ignore

@@ -12,15 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Test SparkClient.connect(url=...) with a local Spark Connect server.
+r"""Test SparkClient.connect(url=...) with a local Spark Connect server.
 
 Prerequisites:
     Start a Spark Connect server using Docker:
 
-    docker run -d --name spark-connect -p 15002:15002 \\
-        apache/spark:3.5.0 \\
-        /opt/spark/sbin/start-connect-server.sh \\
+    docker run -d --name spark-connect -p 15002:15002 \
+        apache/spark:3.5.0 \
+        /opt/spark/sbin/start-connect-server.sh \
         --packages org.apache.spark:spark-connect_2.12:3.5.0
 
 Run:

@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Podman client adapter implementation.
+"""Podman client adapter implementation.
 
 This module provides the PodmanClientAdapter class that implements the
 BaseContainerClientAdapter interface for Podman runtime.
@@ -25,6 +24,7 @@ Key differences from Docker:
 """
 
 from collections.abc import Iterator
+from typing import Any
 
 from kubeflow.trainer.backends.container.adapters.base import BaseContainerClientAdapter
 
@@ -32,29 +32,32 @@ from kubeflow.trainer.backends.container.adapters.base import BaseContainerClien
 class PodmanClientAdapter(BaseContainerClientAdapter):
     """Adapter for Podman client."""
 
-    def __init__(self, host: str | None = None):
-        """
-        Initialize Podman client.
+    def __init__(self, host: str | None = None) -> None:
+        """Initialize Podman client.
 
         Args:
             host: Podman host URL, or None to use environment defaults
         """
         try:
-            import podman  # type: ignore
+            import podman
         except ImportError as e:
             raise ImportError(
                 "The 'podman' Python package is not installed. Install with extras: "
                 "pip install kubeflow[podman]"
             ) from e
 
+        # The optional 'podman' dependency ships without complete type information, so
+        # reach the client factory through an ``Any`` alias to avoid unresolved-attribute
+        # errors while keeping runtime behavior unchanged.
+        podman_client: Any = podman
         if host:
-            self.client = podman.PodmanClient(base_url=host)
+            self.client = podman_client.PodmanClient(base_url=host)
         else:
-            self.client = podman.PodmanClient()
+            self.client = podman_client.PodmanClient()
 
         self._runtime_type = "podman"
 
-    def ping(self):
+    def ping(self) -> None:
         """Test connection to Podman."""
         self.client.ping()
 
@@ -74,7 +77,7 @@ class PodmanClientAdapter(BaseContainerClientAdapter):
         )
         return name
 
-    def delete_network(self, network_id: str):
+    def delete_network(self, network_id: str) -> None:
         """Delete Podman network."""
         try:
             net = self.client.networks.get(network_id)
@@ -108,7 +111,7 @@ class PodmanClientAdapter(BaseContainerClientAdapter):
         )
         return container.id
 
-    def get_container(self, container_id: str):
+    def get_container(self, container_id: str) -> Any:  # noqa: ANN401
         """Get Podman container by ID."""
         return self.client.containers.get(container_id)
 
@@ -128,17 +131,17 @@ class PodmanClientAdapter(BaseContainerClientAdapter):
             else:
                 yield str(logs)
 
-    def stop_container(self, container_id: str, timeout: int = 10):
+    def stop_container(self, container_id: str, timeout: int = 10) -> None:
         """Stop Podman container."""
         container = self.get_container(container_id)
         container.stop(timeout=timeout)
 
-    def remove_container(self, container_id: str, force: bool = True):
+    def remove_container(self, container_id: str, force: bool = True) -> None:
         """Remove Podman container."""
         container = self.get_container(container_id)
         container.remove(force=force)
 
-    def pull_image(self, image: str):
+    def pull_image(self, image: str) -> None:
         """Pull Podman image."""
         self.client.images.pull(image)
 
@@ -210,11 +213,12 @@ class PodmanClientAdapter(BaseContainerClientAdapter):
     def list_containers(self, filters: dict[str, list[str]] | None = None) -> list[dict]:
         """List Podman containers with optional filters."""
         # Work-around for https://github.com/containers/podman-py/issues/542
-        for k, v in filters.items():
-            if len(v) == 1:
-                filters[k] = v[0]
+        normalized_filters: dict[str, str | list[str]] = dict(filters) if filters else {}
+        for k, v in normalized_filters.items():
+            if isinstance(v, list) and len(v) == 1:
+                normalized_filters[k] = v[0]
         try:
-            containers = self.client.containers.list(all=True, filters=filters)
+            containers = self.client.containers.list(all=True, filters=normalized_filters)
             result = []
             for c in containers:
                 # The container status needs to be reloaded when the container
@@ -255,8 +259,7 @@ class PodmanClientAdapter(BaseContainerClientAdapter):
             return None
 
     def wait_for_container(self, container_id: str, timeout: int | None = None) -> int:
-        """
-        Wait for a Podman container to exit and return its exit code.
+        """Wait for a Podman container to exit and return its exit code.
 
         Args:
             container_id: Container ID

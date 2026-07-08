@@ -15,7 +15,7 @@
 """SparkClient for Kubeflow SDK."""
 
 from collections.abc import Iterator
-import logging
+from typing import Any
 
 from pyspark.sql import SparkSession
 
@@ -24,13 +24,11 @@ from kubeflow.spark.backends.kubernetes import KubernetesBackend
 from kubeflow.spark.backends.kubernetes.utils import validate_spark_connect_url
 from kubeflow.spark.types.types import Driver, Executor, SparkConnectInfo
 
-logger = logging.getLogger(__name__)
-
 
 class SparkClient:
     """Stateless Spark client for Kubeflow."""
 
-    def __init__(self, backend_config: KubernetesBackendConfig | None = None):
+    def __init__(self, backend_config: KubernetesBackendConfig | None = None) -> None:
         """Initialize SparkClient."""
         if backend_config is None:
             backend_config = KubernetesBackendConfig()
@@ -49,7 +47,7 @@ class SparkClient:
         spark_conf: dict[str, str] | None = None,
         driver: Driver | None = None,
         executor: Executor | None = None,
-        options: list | None = None,
+        options: list[Any] | None = None,
         timeout: int = 300,
         connect_timeout: int = 120,
     ) -> SparkSession:
@@ -61,7 +59,7 @@ class SparkClient:
 
         Args:
             base_url: Optional URL to existing Spark Connect server (e.g., "sc://server:15002").
-                 If provided, connects to existing server. If None, creates new session.
+                If provided, connects to existing server. If None, creates new session.
             token: Optional authentication token for existing server.
             num_executors: Number of executor instances (create mode only).
             resources_per_executor: Resource requirements per executor as dict.

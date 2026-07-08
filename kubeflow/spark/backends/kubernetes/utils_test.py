@@ -14,6 +14,8 @@
 
 """Unit tests for Kubernetes Spark backend utilities."""
 
+import datetime
+
 from kubeflow_spark_api import models
 import pytest
 
@@ -45,19 +47,20 @@ class TestMemoryKubernetesToSpark:
         ],
     )
     def test_conversion(self, k8s_memory: str, expected_spark: str) -> None:
+        """Convert Kubernetes-style memory strings to Spark/JVM style."""
         assert _memory_kubernetes_to_spark(k8s_memory) == expected_spark
 
 
 class TestGenerateSessionName:
     """Tests for generate_session_name function."""
 
-    def test_generates_unique_name(self):
+    def test_generates_unique_name(self) -> None:
         """U11: Generate unique session name with prefix."""
         name = generate_session_name()
         assert name.startswith("spark-connect-")
         assert len(name) > len("spark-connect-")
 
-    def test_generates_different_names(self):
+    def test_generates_different_names(self) -> None:
         """Generated names should be unique."""
         names = {generate_session_name() for _ in range(10)}
         assert len(names) == 10
@@ -66,17 +69,17 @@ class TestGenerateSessionName:
 class TestValidateSparkConnectUrl:
     """Tests for validate_spark_connect_url function."""
 
-    def test_valid_url(self):
+    def test_valid_url(self) -> None:
         """U12: Valid Spark Connect URL passes."""
         assert validate_spark_connect_url("sc://localhost:15002") is True
         assert validate_spark_connect_url("sc://spark-server:15002") is True
 
-    def test_invalid_scheme(self):
+    def test_invalid_scheme(self) -> None:
         """U13: Invalid scheme raises ValueError."""
         with pytest.raises(ValueError, match="Invalid scheme"):
             validate_spark_connect_url("http://localhost:15002")
 
-    def test_missing_port(self):
+    def test_missing_port(self) -> None:
         """U14: Missing port raises ValueError."""
         with pytest.raises(ValueError, match="Port is required"):
             validate_spark_connect_url("sc://localhost")
@@ -85,7 +88,7 @@ class TestValidateSparkConnectUrl:
 class TestBuildServiceUrl:
     """Tests for build_service_url function."""
 
-    def test_build_from_session_info(self):
+    def test_build_from_session_info(self) -> None:
         """U15: Build service URL from SparkConnectInfo."""
         info = SparkConnectInfo(
             name="my-session",
@@ -96,7 +99,7 @@ class TestBuildServiceUrl:
         url = build_service_url(info)
         assert url == "sc://my-session-svc.spark.svc.cluster.local:15002"
 
-    def test_build_without_service_name(self):
+    def test_build_without_service_name(self) -> None:
         """Build URL when service_name is None."""
         info = SparkConnectInfo(
             name="my-session",
@@ -110,7 +113,7 @@ class TestBuildServiceUrl:
 class TestBuildSparkConnectCr:
     """Tests for build_spark_connect_cr function."""
 
-    def test_minimal_cr(self):
+    def test_minimal_cr(self) -> None:
         """U01: Build SparkConnect CR with minimal config."""
         spark_connect = build_spark_connect_cr(name="test-session", namespace="default")
 
@@ -127,9 +130,11 @@ class TestBuildSparkConnectCr:
         assert spark_connect.spec.executor.memory == "512m"
         assert spark_connect.spec.server.cores == constants.DEFAULT_DRIVER_CPU
         assert spark_connect.spec.server.memory == "512m"
-        assert spark_connect.spec.spark_conf["spark.connect.grpc.binding.address"] == "0.0.0.0"
+        conf = spark_connect.spec.spark_conf
+        assert conf is not None
+        assert conf["spark.connect.grpc.binding.address"] == "0.0.0.0"
 
-    def test_with_num_executors(self):
+    def test_with_num_executors(self) -> None:
         """U02: Build CR with num_executors."""
         spark_connect = build_spark_connect_cr(
             name="test-session",
@@ -138,7 +143,7 @@ class TestBuildSparkConnectCr:
         )
         assert spark_connect.spec.executor.instances == 3
 
-    def test_with_resources(self):
+    def test_with_resources(self) -> None:
         """U03: Build CR with resources_per_executor."""
         spark_connect = build_spark_connect_cr(
             name="test-session",
@@ -148,7 +153,7 @@ class TestBuildSparkConnectCr:
         assert spark_connect.spec.executor.cores == 2
         assert spark_connect.spec.executor.memory == "4g"
 
-    def test_with_spark_conf(self):
+    def test_with_spark_conf(self) -> None:
         """U04: Build CR with spark_conf."""
         spark_conf = {"spark.sql.adaptive.enabled": "true"}
         spark_connect = build_spark_connect_cr(
@@ -156,21 +161,25 @@ class TestBuildSparkConnectCr:
             namespace="default",
             spark_conf=spark_conf,
         )
-        assert spark_connect.spec.spark_conf["spark.jars"].endswith(
+        conf = spark_connect.spec.spark_conf
+        assert conf is not None
+        assert conf["spark.jars"].endswith(
             f"spark-connect_{constants.SPARK_CONNECT_PACKAGE_SCALA_VERSION}-{constants.DEFAULT_SPARK_VERSION}.jar"
         )
-        assert spark_connect.spec.spark_conf["spark.sql.adaptive.enabled"] == "true"
+        assert conf["spark.sql.adaptive.enabled"] == "true"
 
-    def test_spark_conf_overrides_binding_address(self):
+    def test_spark_conf_overrides_binding_address(self) -> None:
         """User spark_conf can override default grpc binding address."""
         spark_connect = build_spark_connect_cr(
             name="test-session",
             namespace="default",
             spark_conf={"spark.connect.grpc.binding.address": "127.0.0.1"},
         )
-        assert spark_connect.spec.spark_conf["spark.connect.grpc.binding.address"] == "127.0.0.1"
+        conf = spark_connect.spec.spark_conf
+        assert conf is not None
+        assert conf["spark.connect.grpc.binding.address"] == "127.0.0.1"
 
-    def test_with_driver_image(self):
+    def test_with_driver_image(self) -> None:
         """U05: Build CR with custom image via Driver."""
         driver = Driver(image="custom-spark:v1")
         spark_connect = build_spark_connect_cr(
@@ -180,7 +189,7 @@ class TestBuildSparkConnectCr:
         )
         assert spark_connect.spec.image == "custom-spark:v1"
 
-    def test_with_driver_config(self):
+    def test_with_driver_config(self) -> None:
         """U06: Build CR with Driver config (KEP-107 resources dict)."""
         driver = Driver(resources={"cpu": "2", "memory": "2Gi"})
         spark_connect = build_spark_connect_cr(
@@ -191,7 +200,7 @@ class TestBuildSparkConnectCr:
         assert spark_connect.spec.server.cores == 2
         assert spark_connect.spec.server.memory == "2g"
 
-    def test_with_service_account(self):
+    def test_with_service_account(self) -> None:
         """U07: Build CR with service account."""
         driver = Driver(service_account="spark-sa")
         spark_connect = build_spark_connect_cr(
@@ -199,9 +208,12 @@ class TestBuildSparkConnectCr:
             namespace="default",
             driver=driver,
         )
-        assert spark_connect.spec.server.template.spec.service_account_name == "spark-sa"
+        template = spark_connect.spec.server.template
+        assert template is not None
+        assert template.spec is not None
+        assert template.spec.service_account_name == "spark-sa"
 
-    def test_with_executor_config(self):
+    def test_with_executor_config(self) -> None:
         """Build CR with Executor config (KEP-107 resources_per_executor)."""
         executor = Executor(
             num_instances=5,
@@ -216,19 +228,21 @@ class TestBuildSparkConnectCr:
         assert spark_connect.spec.executor.cores == 4
         assert spark_connect.spec.executor.memory == "8g"
 
-    def test_app_name(self):
+    def test_app_name(self) -> None:
         """Build CR with spark.app.name via spark_conf."""
         spark_connect = build_spark_connect_cr(
             name="test-session",
             namespace="default",
             spark_conf={"spark.app.name": "my-spark-app"},
         )
-        assert spark_connect.spec.spark_conf["spark.jars"].endswith(
+        conf = spark_connect.spec.spark_conf
+        assert conf is not None
+        assert conf["spark.jars"].endswith(
             f"spark-connect_{constants.SPARK_CONNECT_PACKAGE_SCALA_VERSION}-{constants.DEFAULT_SPARK_VERSION}.jar"
         )
-        assert spark_connect.spec.spark_conf["spark.app.name"] == "my-spark-app"
+        assert conf["spark.app.name"] == "my-spark-app"
 
-    def test_precedence_executor_instances(self):
+    def test_precedence_executor_instances(self) -> None:
         """Test precedence: executor.num_instances > num_executors."""
         executor = Executor(num_instances=10)
         spark_connect = build_spark_connect_cr(
@@ -240,7 +254,7 @@ class TestBuildSparkConnectCr:
         # Executor object should override simple parameter
         assert spark_connect.spec.executor.instances == 10
 
-    def test_precedence_executor_resources(self):
+    def test_precedence_executor_resources(self) -> None:
         """Test precedence: executor.resources_per_executor > resources_per_executor."""
         executor = Executor(
             resources_per_executor={"cpu": "8", "memory": "16Gi"},
@@ -255,7 +269,7 @@ class TestBuildSparkConnectCr:
         assert spark_connect.spec.executor.cores == 8
         assert spark_connect.spec.executor.memory == "16g"
 
-    def test_kep107_level2_simple(self):
+    def test_kep107_level2_simple(self) -> None:
         """Test KEP-107 Level 2 (simple mode) example."""
         spark_connect = build_spark_connect_cr(
             name="test-session",
@@ -267,7 +281,7 @@ class TestBuildSparkConnectCr:
         assert spark_connect.spec.executor.cores == 5
         assert spark_connect.spec.executor.memory == "10g"
 
-    def test_kep107_level3_advanced(self):
+    def test_kep107_level3_advanced(self) -> None:
         """Test KEP-107 Level 3 (advanced mode) example."""
         driver = Driver(
             resources={"cpu": "4", "memory": "8Gi"},
@@ -285,7 +299,10 @@ class TestBuildSparkConnectCr:
         )
         assert spark_connect.spec.server.cores == 4
         assert spark_connect.spec.server.memory == "8g"
-        assert spark_connect.spec.server.template.spec.service_account_name == "spark-driver-prod"
+        template = spark_connect.spec.server.template
+        assert template is not None
+        assert template.spec is not None
+        assert template.spec.service_account_name == "spark-driver-prod"
         assert spark_connect.spec.executor.instances == 20
         assert spark_connect.spec.executor.cores == 8
         assert spark_connect.spec.executor.memory == "32g"
@@ -295,7 +312,7 @@ class TestGetSparkConnectInfoFromCr:
     """Tests for get_spark_connect_info_from_cr function."""
 
     @pytest.fixture
-    def minimal_spec(self):
+    def minimal_spec(self) -> models.SparkV1alpha1SparkConnectSpec:
         """Create minimal spec required for SparkConnect model."""
         return models.SparkV1alpha1SparkConnectSpec(
             sparkVersion=constants.DEFAULT_SPARK_VERSION,
@@ -303,13 +320,15 @@ class TestGetSparkConnectInfoFromCr:
             executor=models.SparkV1alpha1ExecutorSpec(),
         )
 
-    def test_parse_ready_status(self, minimal_spec):
+    def test_parse_ready_status(self, minimal_spec: models.SparkV1alpha1SparkConnectSpec) -> None:
         """U08: Parse CR with Ready state."""
         spark_connect_cr = models.SparkV1alpha1SparkConnect(
             metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
                 name="my-session",
                 namespace="default",
-                creationTimestamp="2025-01-12T10:30:00Z",
+                creationTimestamp=datetime.datetime(
+                    2025, 1, 12, 10, 30, 0, tzinfo=datetime.timezone.utc
+                ),
             ),
             spec=minimal_spec,
             status=models.SparkV1alpha1SparkConnectStatus(
@@ -331,7 +350,9 @@ class TestGetSparkConnectInfoFromCr:
         assert info.service_name == "my-session-svc"
         assert info.creation_timestamp is not None
 
-    def test_parse_provisioning_status(self, minimal_spec):
+    def test_parse_provisioning_status(
+        self, minimal_spec: models.SparkV1alpha1SparkConnectSpec
+    ) -> None:
         """U09: Parse CR with Provisioning state."""
         spark_connect_cr = models.SparkV1alpha1SparkConnect(
             metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
@@ -347,7 +368,7 @@ class TestGetSparkConnectInfoFromCr:
         assert info.namespace == "spark"
         assert info.state == SparkConnectState.PROVISIONING
 
-    def test_parse_failed_status(self, minimal_spec):
+    def test_parse_failed_status(self, minimal_spec: models.SparkV1alpha1SparkConnectSpec) -> None:
         """U10: Parse CR with Failed state."""
         spark_connect_cr = models.SparkV1alpha1SparkConnect(
             metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
@@ -361,7 +382,7 @@ class TestGetSparkConnectInfoFromCr:
 
         assert info.state == SparkConnectState.FAILED
 
-    def test_parse_running_status(self, minimal_spec):
+    def test_parse_running_status(self, minimal_spec: models.SparkV1alpha1SparkConnectSpec) -> None:
         """Parse CR with Running state (operator may set this when server is up)."""
         spark_connect_cr = models.SparkV1alpha1SparkConnect(
             metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
@@ -381,7 +402,7 @@ class TestGetSparkConnectInfoFromCr:
         assert info.state == SparkConnectState.RUNNING
         assert info.service_name == "run-session-svc"
 
-    def test_parse_empty_status(self, minimal_spec):
+    def test_parse_empty_status(self, minimal_spec: models.SparkV1alpha1SparkConnectSpec) -> None:
         """Parse CR with empty status."""
         spark_connect_cr = models.SparkV1alpha1SparkConnect(
             metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
@@ -395,7 +416,9 @@ class TestGetSparkConnectInfoFromCr:
         assert info.state == SparkConnectState.PROVISIONING
         assert info.driver_pod_name is None
 
-    def test_invalid_cr_missing_name_raises_error(self, minimal_spec):
+    def test_invalid_cr_missing_name_raises_error(
+        self, minimal_spec: models.SparkV1alpha1SparkConnectSpec
+    ) -> None:
         """Test that CR without name in metadata raises ValueError."""
         spark_connect_cr = models.SparkV1alpha1SparkConnect(
             metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(

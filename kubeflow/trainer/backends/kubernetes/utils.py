@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Utility helpers for building Kubernetes Trainer resources from SDK types."""
+
 from collections.abc import Callable
 from dataclasses import fields
 import inspect
@@ -30,10 +32,7 @@ from kubeflow.trainer.types import types
 def get_container_devices(
     resources: models.IoK8sApiCoreV1ResourceRequirements | None,
 ) -> tuple[str, str] | None:
-    """
-    Get the device type and device count for the given container.
-    """
-
+    """Get the device type and device count for the given container."""
     # If containers resource limits are empty, return Unknown.
     if resources is None or resources.limits is None:
         return None
@@ -75,10 +74,7 @@ def get_container_devices(
 def get_runtime_trainer_container(
     replicated_jobs: list[models.JobsetV1alpha2ReplicatedJob],
 ) -> models.IoK8sApiCoreV1Container | None:
-    """
-    Get the runtime node container from the given replicated jobs.
-    """
-
+    """Get the runtime node container from the given replicated jobs."""
     for rjob in replicated_jobs:
         if not (rjob.template.spec and rjob.template.spec.template.spec):
             raise Exception(f"Invalid ReplicatedJob template: {rjob}")
@@ -102,10 +98,7 @@ def get_runtime_trainer(
     replicated_jobs: list[models.JobsetV1alpha2ReplicatedJob],
     ml_policy: models.TrainerV1alpha1MLPolicy,
 ) -> types.RuntimeTrainer:
-    """
-    Get the RuntimeTrainer object.
-    """
-
+    """Get the RuntimeTrainer object."""
     trainer_container = get_runtime_trainer_container(replicated_jobs)
 
     if not (trainer_container and trainer_container.image):
@@ -155,10 +148,7 @@ def get_trainjob_initializer_step(
     pod_spec: models.IoK8sApiCoreV1PodSpec,
     pod_status: models.IoK8sApiCoreV1PodStatus | None,
 ) -> types.Step:
-    """
-    Get the TrainJob initializer step from the given Pod name, spec, and status.
-    """
-
+    """Get the TrainJob initializer step from the given Pod name, spec, and status."""
     container = next(
         c
         for c in pod_spec.containers
@@ -185,10 +175,7 @@ def get_trainjob_node_step(
     replicated_job_name: str,
     job_index: int,
 ) -> types.Step:
-    """
-    Get the TrainJob trainer node step from the given Pod name, spec, and status.
-    """
-
+    """Get the TrainJob trainer node step from the given Pod name, spec, and status."""
     container = next(c for c in pod_spec.containers if c.name == constants.NODE)
 
     step = types.Step(
@@ -226,10 +213,7 @@ def get_trainjob_node_step(
 def get_resources_per_node(
     resources_per_node: dict,
 ) -> models.IoK8sApiCoreV1ResourceRequirements:
-    """
-    Get the Trainer resources for the training node from the given dict.
-    """
-
+    """Get the Trainer resources for the training node from the given dict."""
     # Convert only standard resource keys and aliases to lowercase.
     # Extended resources (e.g., "example.com/Custom-NPU") preserve their original case.
     standard_resources = {constants.CPU_LABEL, "memory", "gpu", "storage", "ephemeral-storage"}
@@ -266,9 +250,7 @@ def get_script_for_python_packages(
     pip_index_urls: list[str],
     install_log_file: str = "pip_install.log",
 ) -> str:
-    """
-    Get init script to install Python packages from the given pip index URLs.
-    """
+    """Get init script to install Python packages from the given pip index URLs."""
     # Quote package names and URLs with shlex.quote() to prevent shell injection.
     # Use a bash array so that quotes are interpreted during array initialization;
     # storing shlex-quoted values in a plain string variable breaks because bash
@@ -328,9 +310,7 @@ def get_command_using_train_func(
     pip_index_urls: list[str],
     packages_to_install: list[str] | None,
 ) -> list[str]:
-    """
-    Get the Trainer container command from the given training function and parameters.
-    """
+    """Get the Trainer container command from the given training function and parameters."""
     # Check if the runtime has a Trainer.
     if not runtime.trainer:
         raise ValueError(f"Runtime must have a trainer: {runtime}")
@@ -356,11 +336,12 @@ def get_command_using_train_func(
     # def train(parameters):
     #   print('Start Training...')
     # train({'lr': 0.01})
+    func_name = getattr(train_func, "__name__", "train")
     if train_func_parameters is None:
-        func_call = f"{train_func.__name__}()"
+        func_call = f"{func_name}()"
     else:
         # Always unpack kwargs for training function calls.
-        func_call = f"{train_func.__name__}(**{train_func_parameters})"
+        func_call = f"{func_name}(**{train_func_parameters})"
 
     # Combine everything into the final code string.
     func_code = f"{func_code}\n{func_call}\n"
@@ -400,8 +381,7 @@ def get_trainer_cr_from_custom_trainer(
     runtime: types.Runtime,
     trainer: types.CustomTrainer | types.CustomTrainerContainer,
 ) -> models.TrainerV1alpha1Trainer:
-    """
-    Get the Trainer CR from the custom trainer.
+    """Get the Trainer CR from the custom trainer.
 
     Args:
         runtime: The runtime configuration.
@@ -445,9 +425,7 @@ def get_trainer_cr_from_builtin_trainer(
     trainer: types.BuiltinTrainer,
     initializer: types.Initializer | None = None,
 ) -> models.TrainerV1alpha1Trainer:
-    """
-    Get the Trainer CR from the builtin trainer.
-    """
+    """Get the Trainer CR from the builtin trainer."""
     if not isinstance(trainer.config, types.TorchTuneConfig):
         raise ValueError(f"The BuiltinTrainer config is invalid: {trainer.config}")
 
@@ -474,9 +452,7 @@ def get_args_using_torchtune_config(
     fine_tuning_config: types.TorchTuneConfig,
     initializer: types.Initializer | None = None,
 ) -> list[str]:
-    """
-    Get the Trainer args from the TorchTuneConfig.
-    """
+    """Get the Trainer args from the TorchTuneConfig."""
     args = []
 
     # Override the dtype if it is provided.
@@ -484,7 +460,7 @@ def get_args_using_torchtune_config(
         if not isinstance(fine_tuning_config.dtype, types.DataType):
             raise ValueError(f"Invalid dtype: {fine_tuning_config.dtype}.")
 
-        args.append(f"dtype={fine_tuning_config.dtype.value}")
+        args.append(f"dtype={fine_tuning_config.dtype}")
 
     # Override the batch size if it is provided.
     if fine_tuning_config.batch_size:
@@ -496,7 +472,7 @@ def get_args_using_torchtune_config(
 
     # Override the loss if it is provided.
     if fine_tuning_config.loss:
-        args.append(f"loss={fine_tuning_config.loss.value}")
+        args.append(f"loss={fine_tuning_config.loss}")
 
     # Override the data dir or data files if it is provided.
     if isinstance(initializer, types.Initializer) and isinstance(
@@ -528,9 +504,7 @@ def get_args_using_torchtune_config(
 
 
 def get_args_from_peft_config(peft_config: types.LoraConfig) -> list[str]:
-    """
-    Get the args from the given PEFT config.
-    """
+    """Get the args from the given PEFT config."""
     args = []
 
     if not isinstance(peft_config, types.LoraConfig):
@@ -562,9 +536,7 @@ def get_args_from_peft_config(peft_config: types.LoraConfig) -> list[str]:
 def get_args_from_dataset_preprocess_config(
     dataset_preprocess_config: types.TorchTuneInstructDataset,
 ) -> list[str]:
-    """
-    Get the args from the given dataset preprocess config.
-    """
+    """Get the args from the given dataset preprocess config."""
     args = []
 
     if not isinstance(dataset_preprocess_config, types.TorchTuneInstructDataset):
@@ -604,7 +576,7 @@ def get_args_from_dataset_preprocess_config(
 def get_optional_initializer_envs(
     initializer: types.BaseInitializer, required_fields: set
 ) -> list[models.IoK8sApiCoreV1EnvVar]:
-    """Get the optional envs from the initializer config"""
+    """Get the optional envs from the initializer config."""
     envs = []
     for f in fields(initializer):
         if f.name not in required_fields:
@@ -622,9 +594,7 @@ def get_dataset_initializer(
     | types.S3DatasetInitializer
     | types.DataCacheInitializer,
 ) -> models.TrainerV1alpha1DatasetInitializer:
-    """
-    Get the TrainJob dataset initializer from the given config.
-    """
+    """Get the TrainJob dataset initializer from the given config."""
     if isinstance(dataset, (types.HuggingFaceDatasetInitializer, types.S3DatasetInitializer)):
         return models.TrainerV1alpha1DatasetInitializer(
             storageUri=dataset.storage_uri,
@@ -652,9 +622,7 @@ def get_dataset_initializer(
 def get_model_initializer(
     model: types.HuggingFaceModelInitializer | types.S3ModelInitializer,
 ) -> models.TrainerV1alpha1ModelInitializer:
-    """
-    Get the TrainJob model initializer from the given config.
-    """
+    """Get the TrainJob model initializer from the given config."""
     if isinstance(model, (types.HuggingFaceModelInitializer, types.S3ModelInitializer)):
         return models.TrainerV1alpha1ModelInitializer(
             storageUri=model.storage_uri,

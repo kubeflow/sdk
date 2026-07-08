@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Shared constants for the Kubeflow SDK."""
+
 # The default Kubernetes namespace.
 DEFAULT_NAMESPACE = "default"
 

@@ -12,16 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Shared configuration types for the Kubeflow SDK backends."""
 
 from kubernetes import client
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class KubernetesBackendConfig(BaseModel):
+    """Configuration for connecting to a Kubernetes backend."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     namespace: str | None = None
     config_file: str | None = None
     context: str | None = None
     client_configuration: client.Configuration | None = None
-
-    class Config:
-        arbitrary_types_allowed = True

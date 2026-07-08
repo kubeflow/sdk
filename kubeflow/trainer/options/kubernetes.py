@@ -40,7 +40,7 @@ class ContainerPatch:
     volume_mounts: list[dict] | None = None
     security_context: dict | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate the container patch configuration."""
         if not self.name or not self.name.strip():
             raise ValueError("Container name must be a non-empty string")
@@ -259,7 +259,7 @@ def _to_camel_case(snake_str: str) -> str:
     return parts[0] + "".join(word.capitalize() for word in parts[1:])
 
 
-def _patch_to_dict(obj: Any) -> Any:
+def _patch_to_dict(obj: object) -> object:
     """Recursively convert a patch dataclass to its API dict representation.
 
     Converts snake_case field names to camelCase and strips None/empty values.

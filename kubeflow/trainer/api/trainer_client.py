@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Kubeflow Trainer client for managing ML training workloads."""
+
 from collections.abc import Callable, Iterator
 import logging
 
@@ -30,13 +32,15 @@ logger = logging.getLogger(__name__)
 
 
 class TrainerClient:
+    """Client for creating and managing Kubeflow TrainJobs across backends."""
+
     def __init__(
         self,
         backend_config: KubernetesBackendConfig
         | LocalProcessBackendConfig
         | ContainerBackendConfig
         | None = None,
-    ):
+    ) -> None:
         """Initialize a Kubeflow Trainer client.
 
         Args:
@@ -78,7 +82,7 @@ class TrainerClient:
         return self.backend.list_runtimes()
 
     def get_runtime(self, name: str) -> types.Runtime:
-        """Get the runtime object
+        """Get the runtime object.
 
         Args:
             name: Name of the runtime.
@@ -90,9 +94,10 @@ class TrainerClient:
         """
         return self.backend.get_runtime(name=name)
 
-    def get_runtime_packages(self, runtime: types.Runtime):
-        """Print the installed Python packages for the given runtime. If a runtime has GPUs it also
-        prints available GPUs on the single training node.
+    def get_runtime_packages(self, runtime: types.Runtime) -> list[str] | None:
+        """Print the installed Python packages for the given runtime.
+
+        If a runtime has GPUs it also prints available GPUs on the single training node.
 
         Args:
             runtime: Reference to one of existing runtimes.
@@ -114,7 +119,9 @@ class TrainerClient:
         | None = None,
         options: list | None = None,
     ) -> str:
-        """Create a TrainJob. You can configure the TrainJob using one of these trainers:
+        """Create a TrainJob.
+
+        You can configure the TrainJob using one of these trainers:
 
         - CustomTrainer: Runs training with a user-defined function that fully encapsulates the
             training process.
@@ -150,8 +157,9 @@ class TrainerClient:
         )
 
     def list_jobs(self, runtime: types.Runtime | None = None) -> list[types.TrainJob]:
-        """List of the created TrainJobs. If a runtime is specified, only TrainJobs associated with
-        that runtime are returned.
+        """List the created TrainJobs.
+
+        If a runtime is specified, only TrainJobs associated with that runtime are returned.
 
         Args:
             runtime: Reference to one of the existing runtimes.
@@ -178,7 +186,6 @@ class TrainerClient:
             TimeoutError: Timeout to get a TrainJob.
             RuntimeError: Failed to get a TrainJob.
         """
-
         return self.backend.get_job(name=name)
 
     def get_job_logs(
@@ -210,7 +217,7 @@ class TrainerClient:
             TimeoutError: Timeout to get a TrainJob.
             RuntimeError: Failed to get a TrainJob.
         """
-        return self.backend.get_job_logs(name=name, follow=follow, step=step)
+        return self.backend.get_job_logs(name=name, follow=bool(follow), step=step)
 
     def get_job_events(self, name: str) -> list[types.Event]:
         """Get events for a TrainJob.
@@ -267,7 +274,7 @@ class TrainerClient:
             callbacks=callbacks,
         )
 
-    def delete_job(self, name: str):
+    def delete_job(self, name: str) -> None:
         """Delete the TrainJob.
 
         Args:

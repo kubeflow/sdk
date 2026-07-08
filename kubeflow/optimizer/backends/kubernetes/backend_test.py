@@ -19,6 +19,7 @@ It tests KubernetesBackend's behavior across job listing, resource creation, del
 log retrieval, event filtering, and status waiting.
 """
 
+from collections.abc import Iterator
 from dataclasses import asdict
 import datetime
 import multiprocessing
@@ -77,7 +78,7 @@ BASIC_TRIAL_NAME_2 = "basic-trial-2"
 
 
 @pytest.fixture
-def optimizer_backend():
+def optimizer_backend() -> Iterator[KubernetesBackend]:
     """Provide an optimizer KubernetesBackend with mocked Kubernetes APIs."""
     with (
         patch("kubernetes.config.load_kube_config", return_value=None),
@@ -119,12 +120,13 @@ def optimizer_backend():
 # --------------------------
 
 
-def conditional_error_handler(*args: Any, **kwargs: Any) -> None:
+def conditional_error_handler(*args: object, **kwargs: object) -> None:
     """Raise simulated errors based on namespace.
 
     Args:
         args: Positional args from the K8s API call.
             args[2] is the namespace for create/delete/list_namespaced_custom_object.
+        kwargs: Keyword args from the K8s API call (unused).
     """
     if args[2] == TIMEOUT:
         raise multiprocessing.TimeoutError()
@@ -132,12 +134,13 @@ def conditional_error_handler(*args: Any, **kwargs: Any) -> None:
         raise RuntimeError()
 
 
-def get_namespaced_custom_object_response(*args, **kwargs):
+def get_namespaced_custom_object_response(*args: object, **kwargs: object) -> Mock:
     """Return a mocked Experiment object.
 
     Args:
         args: Positional args from the K8s API call.
             args[4] is the resource name for get_namespaced_custom_object.
+        kwargs: Keyword args from the K8s API call (unused).
     """
     mock_thread = Mock()
     if args[4] == TIMEOUT:
@@ -145,17 +148,18 @@ def get_namespaced_custom_object_response(*args, **kwargs):
     if args[4] == RUNTIME:
         raise RuntimeError()
     if args[3] == constants.EXPERIMENT_PLURAL:
-        experiment = create_experiment_cr(name=args[4])
+        experiment = create_experiment_cr(name=str(args[4]))
         mock_thread.get.return_value = normalize_model(experiment, models.V1beta1Experiment)
     return mock_thread
 
 
-def list_namespaced_custom_object_response(*args, **kwargs):
+def list_namespaced_custom_object_response(*args: object, **kwargs: object) -> Mock:
     """Return a list of mocked Experiment or Trial objects.
 
     Args:
         args: Positional args from the K8s API call.
             args[2] is the namespace for list_namespaced_custom_object.
+        kwargs: Keyword args from the K8s API call (unused).
     """
     mock_thread = Mock()
     if args[2] == TIMEOUT:
@@ -183,7 +187,7 @@ def list_namespaced_custom_object_response(*args, **kwargs):
     return mock_thread
 
 
-def mock_list_namespaced_event(*args, **kwargs):
+def mock_list_namespaced_event(*args: object, **kwargs: object) -> Mock:
     """Simulate event listing from namespace."""
     namespace = kwargs.get("namespace")
 
@@ -246,9 +250,11 @@ def mock_trainer_get_job(name: str) -> TrainJob:
     return create_mock_trainjob(name)
 
 
-def normalize_model(model_obj: Any, model_class: type[T]) -> T:
+def normalize_model(model_obj: object, model_class: type[T]) -> T:
     """Simulate real API behavior via dict round-trip."""
-    return model_class.from_dict(model_obj.to_dict())
+    obj_any: Any = model_obj
+    cls_any: Any = model_class
+    return cls_any.from_dict(obj_any.to_dict())
 
 
 # --------------------------
@@ -462,7 +468,7 @@ def get_optimization_job_data_type(
         ),
     ],
 )
-def test_optimize(optimizer_backend, test_case):
+def test_optimize(optimizer_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.optimize with success and error paths."""
     print("Executing test:", test_case.name)
 
@@ -479,7 +485,7 @@ def test_optimize(optimizer_backend, test_case):
             num_nodes=1,
         ),
     )
-    original_func_args = dict(trial_template.trainer.func_args)
+    original_func_args = dict(trial_template.trainer.func_args or {})
 
     try:
         optimizer_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
@@ -499,8 +505,8 @@ def test_optimize(optimizer_backend, test_case):
         assert trial_template.trainer.func_args == original_func_args
 
         # Verify the Experiment CR was created with expected payload.
-        optimizer_backend.custom_api.create_namespaced_custom_object.assert_called_once()
-        call_args = optimizer_backend.custom_api.create_namespaced_custom_object.call_args
+        optimizer_backend.custom_api.create_namespaced_custom_object.assert_called_once()  # ty: ignore[unresolved-attribute]
+        call_args = optimizer_backend.custom_api.create_namespaced_custom_object.call_args  # ty: ignore[unresolved-attribute]
         payload = call_args[0][4]
         assert payload["kind"] == constants.EXPERIMENT_KIND
         assert len(payload["spec"]["parameters"]) == len(search_space)
@@ -539,13 +545,14 @@ def test_optimize(optimizer_backend, test_case):
         ),
     ],
 )
-def test_get_job(optimizer_backend, test_case):
+def test_get_job(optimizer_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.get_job with success and error paths."""
     print("Executing test:", test_case.name)
     try:
         job = optimizer_backend.get_job(**test_case.config)
 
         assert test_case.expected_status == SUCCESS
+        assert test_case.expected_output is not None
         assert asdict(job) == asdict(test_case.expected_output)
 
     except Exception as e:
@@ -618,7 +625,9 @@ def test_get_job(optimizer_backend, test_case):
         ),
     ],
 )
-def test_get_job_status_conditions(optimizer_backend, test_case):
+def test_get_job_status_conditions(
+    optimizer_backend: KubernetesBackend, test_case: TestCase
+) -> None:
     """Test status-mapping logic in __get_optimization_job_from_cr."""
     print("Executing test:", test_case.name)
 
@@ -628,13 +637,13 @@ def test_get_job_status_conditions(optimizer_backend, test_case):
 
     experiment = create_experiment_cr(name=job_name, status_conditions=conditions)
 
-    def patched_get(*args, **kwargs):
+    def patched_get(*args: object, **kwargs: object) -> Mock:
         mock_thread = Mock()
         if args[3] == constants.EXPERIMENT_PLURAL and args[4] == job_name:
             mock_thread.get.return_value = normalize_model(experiment, models.V1beta1Experiment)
         return mock_thread
 
-    optimizer_backend.custom_api.get_namespaced_custom_object.side_effect = patched_get
+    optimizer_backend.custom_api.get_namespaced_custom_object.side_effect = patched_get  # ty: ignore[unresolved-attribute]
 
     def patched_trainer_get_job(name: str) -> TrainJob:
         job = create_mock_trainjob(name)
@@ -644,6 +653,7 @@ def test_get_job_status_conditions(optimizer_backend, test_case):
     optimizer_backend.trainer_backend.get_job = Mock(side_effect=patched_trainer_get_job)
 
     job = optimizer_backend.get_job(name=job_name)
+    assert test_case.expected_output is not None
     assert job.status == test_case.expected_output.status
     print("test execution complete")
 
@@ -674,7 +684,7 @@ def test_get_job_status_conditions(optimizer_backend, test_case):
         ),
     ],
 )
-def test_list_jobs(optimizer_backend, test_case):
+def test_list_jobs(optimizer_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.list_jobs with success and error paths."""
     print("Executing test:", test_case.name)
     try:
@@ -684,6 +694,7 @@ def test_list_jobs(optimizer_backend, test_case):
         assert test_case.expected_status == SUCCESS
         assert isinstance(jobs, list)
         assert len(jobs) == 2
+        assert test_case.expected_output is not None
         assert [asdict(j) for j in jobs] == [asdict(r) for r in test_case.expected_output]
 
     except Exception as e:
@@ -743,7 +754,7 @@ def test_list_jobs(optimizer_backend, test_case):
         ),
     ],
 )
-def test_get_job_logs(optimizer_backend, test_case):
+def test_get_job_logs(optimizer_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.get_job_logs with success and error paths."""
     print("Executing test:", test_case.name)
 
@@ -780,7 +791,7 @@ def test_get_job_logs(optimizer_backend, test_case):
                 Step(
                     name="node-0",
                     status=trainer_constants.POD_PENDING,
-                    pod_name=None,
+                    pod_name=None,  # ty: ignore[invalid-argument-type]
                     device="gpu",
                     device_count="1",
                 ),
@@ -793,7 +804,7 @@ def test_get_job_logs(optimizer_backend, test_case):
     try:
         optimizer_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
         logs = optimizer_backend.get_job_logs(
-            test_case.config.get("name"),
+            test_case.config["name"],
             trial_name=test_case.config.get("trial_name"),
             follow=test_case.config.get("follow", False),
         )
@@ -802,7 +813,7 @@ def test_get_job_logs(optimizer_backend, test_case):
         assert logs_list == test_case.expected_output
 
         if test_case.config.get("follow"):
-            optimizer_backend.trainer_backend._read_pod_logs.assert_called_once_with(
+            optimizer_backend.trainer_backend._read_pod_logs.assert_called_once_with(  # ty: ignore[unresolved-attribute]
                 pod_name=f"{BASIC_TRIAL_NAME}-node-0-pod",
                 container_name=constants.METRICS_COLLECTOR_CONTAINER,
                 follow=True,
@@ -846,7 +857,7 @@ def test_get_job_logs(optimizer_backend, test_case):
         ),
     ],
 )
-def test_get_best_results(optimizer_backend, test_case):
+def test_get_best_results(optimizer_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.get_best_results with success and error paths."""
     print("Executing test:", test_case.name)
 
@@ -866,9 +877,9 @@ def test_get_best_results(optimizer_backend, test_case):
             name=BASIC_OPTIMIZATION_JOB_NAME,
             best_trial=best_trial,
         )
-        original_handler = optimizer_backend.custom_api.get_namespaced_custom_object.side_effect
+        original_handler = optimizer_backend.custom_api.get_namespaced_custom_object.side_effect  # ty: ignore[unresolved-attribute]
 
-        def patched_get(*args, **kwargs):
+        def patched_get(*args: object, **kwargs: object) -> Mock:
             if args[3] == constants.EXPERIMENT_PLURAL:
                 mock_thread = Mock()
                 mock_thread.get.return_value = normalize_model(
@@ -877,7 +888,7 @@ def test_get_best_results(optimizer_backend, test_case):
                 return mock_thread
             return original_handler(*args, **kwargs)
 
-        optimizer_backend.custom_api.get_namespaced_custom_object.side_effect = patched_get
+        optimizer_backend.custom_api.get_namespaced_custom_object.side_effect = patched_get  # ty: ignore[unresolved-attribute]
 
     try:
         result = optimizer_backend.get_best_results(name=test_case.config["name"])
@@ -886,6 +897,7 @@ def test_get_best_results(optimizer_backend, test_case):
         if test_case.expected_output is None:
             assert result is None
         else:
+            assert result is not None
             assert asdict(result) == asdict(test_case.expected_output)
 
     except Exception as e:
@@ -1031,7 +1043,7 @@ def test_get_best_results(optimizer_backend, test_case):
         ),
     ],
 )
-def test_wait_for_job_status(optimizer_backend, test_case):
+def test_wait_for_job_status(optimizer_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.wait_for_job_status with various scenarios."""
     print("Executing test:", test_case.name)
 
@@ -1040,13 +1052,13 @@ def test_wait_for_job_status(optimizer_backend, test_case):
 
     experiment = create_experiment_cr(name=job_name, status_conditions=status_conditions)
 
-    def patched_get(*args, **kwargs):
+    def patched_get(*args: object, **kwargs: object) -> Mock:
         mock_thread = Mock()
         if args[3] == constants.EXPERIMENT_PLURAL:
             mock_thread.get.return_value = normalize_model(experiment, models.V1beta1Experiment)
         return mock_thread
 
-    optimizer_backend.custom_api.get_namespaced_custom_object.side_effect = patched_get
+    optimizer_backend.custom_api.get_namespaced_custom_object.side_effect = patched_get  # ty: ignore[unresolved-attribute]
 
     trail_status = test_case.config.get("_trial_status", trainer_constants.TRAINJOB_COMPLETE)
 
@@ -1071,6 +1083,7 @@ def test_wait_for_job_status(optimizer_backend, test_case):
         assert test_case.expected_status == SUCCESS
         assert isinstance(job, OptimizationJob)
         assert job.status in test_case.config.get("status", {constants.OPTIMIZATION_JOB_COMPLETE})
+        assert test_case.expected_output is not None
         assert asdict(job) == asdict(test_case.expected_output)
 
         if test_case.config.get("_has_callback"):
@@ -1108,12 +1121,12 @@ def test_wait_for_job_status(optimizer_backend, test_case):
         ),
     ],
 )
-def test_delete_job(optimizer_backend, test_case):
+def test_delete_job(optimizer_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.delete_job with success and error paths."""
     print("Executing test:", test_case.name)
     try:
         optimizer_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
-        optimizer_backend.delete_job(test_case.config.get("name"))
+        optimizer_backend.delete_job(test_case.config["name"])
         assert test_case.expected_status == SUCCESS
 
     except Exception as e:
@@ -1154,15 +1167,16 @@ def test_delete_job(optimizer_backend, test_case):
         ),
     ],
 )
-def test_get_job_events(optimizer_backend, test_case):
+def test_get_job_events(optimizer_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.get_job_events with various scenarios."""
     print("Executing test:", test_case.name)
     try:
         optimizer_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
-        events = optimizer_backend.get_job_events(test_case.config.get("name"))
+        events = optimizer_backend.get_job_events(test_case.config["name"])
 
         assert test_case.expected_status == SUCCESS
         assert isinstance(events, list)
+        assert test_case.expected_output is not None
         assert len(events) == len(test_case.expected_output)
         assert [asdict(e) for e in events] == [asdict(e) for e in test_case.expected_output]
 

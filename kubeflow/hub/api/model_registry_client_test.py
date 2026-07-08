@@ -16,21 +16,27 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+from types import ModuleType
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, Mock
 
 import pytest
 
 from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 
+if TYPE_CHECKING:
+    from kubeflow.hub.api.model_registry_client import ModelRegistryClient
+
 
 @pytest.fixture(autouse=True)
-def skip_if_no_model_registry():
+def skip_if_no_model_registry() -> None:
     """Skip tests if model-registry not installed."""
     pytest.importorskip("model_registry")
 
 
 @pytest.fixture
-def mock_registry():
+def mock_registry() -> MagicMock:
     """Create a mock ModelRegistry with all methods we wrap."""
     registry = MagicMock()
     # Set up return values for list methods to be iterable
@@ -40,7 +46,7 @@ def mock_registry():
 
 
 @pytest.fixture
-def client(mock_registry, monkeypatch):
+def client(mock_registry: MagicMock, monkeypatch: pytest.MonkeyPatch) -> ModelRegistryClient:
     """Create ModelRegistryClient with mock registry."""
     from kubeflow.hub.api.model_registry_client import ModelRegistryClient
 
@@ -65,16 +71,21 @@ def client(mock_registry, monkeypatch):
         ),
     ],
 )
-def test_init_import_error(test_case, monkeypatch):
+def test_init_import_error(test_case: TestCase, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that __init__ raises helpful ImportError when model-registry missing."""
-
     from kubeflow.hub.api.model_registry_client import ModelRegistryClient
 
     # Simulate missing model_registry by making import fail
-    def mock_import(name, *args, **kwargs):
+    def mock_import(
+        name: str,
+        globals: Mapping[str, object] | None = None,
+        locals: Mapping[str, object] | None = None,
+        fromlist: Sequence[str] = (),
+        level: int = 0,
+    ) -> ModuleType:
         if name == "model_registry":
             raise ImportError("No module named 'model_registry'")
-        return __import__(name, *args, **kwargs)
+        return __import__(name, globals, locals, fromlist, level)
 
     monkeypatch.setattr("builtins.__import__", mock_import)
 
@@ -172,9 +183,8 @@ def test_init_import_error(test_case, monkeypatch):
         ),
     ],
 )
-def test_init(test_case, monkeypatch):
+def test_init(test_case: TestCase, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test ModelRegistryClient initialization with different URL schemes."""
-
     from kubeflow.hub.api.model_registry_client import ModelRegistryClient
 
     mock_registry_class = MagicMock()
@@ -266,9 +276,10 @@ def test_init(test_case, monkeypatch):
         ),
     ],
 )
-def test_register_model(test_case, client, mock_registry):
+def test_register_model(
+    test_case: TestCase, client: ModelRegistryClient, mock_registry: MagicMock
+) -> None:
     """Test register_model delegates to ModelRegistry.register_model."""
-
     from kubeflow.hub.types.types import StorageConfig
 
     config = dict(test_case.config)
@@ -282,6 +293,7 @@ def test_register_model(test_case, client, mock_registry):
         assert test_case.expected_status == SUCCESS
         assert mock_registry.register_model.called
         forwarded = mock_registry.register_model.call_args[1]
+        assert test_case.expected_output is not None
         for field, expected in test_case.expected_output.items():
             assert forwarded[field] == expected, (
                 f"expected {field}={expected!r}, got {forwarded[field]!r}"
@@ -304,9 +316,10 @@ def test_register_model(test_case, client, mock_registry):
         ),
     ],
 )
-def test_get_model(test_case, client, mock_registry):
+def test_get_model(
+    test_case: TestCase, client: ModelRegistryClient, mock_registry: MagicMock
+) -> None:
     """Test get_model delegates to get_registered_model."""
-
     try:
         client.get_model(test_case.config["name"])
 
@@ -331,9 +344,10 @@ def test_get_model(test_case, client, mock_registry):
         ),
     ],
 )
-def test_get_model_version(test_case, client, mock_registry):
+def test_get_model_version(
+    test_case: TestCase, client: ModelRegistryClient, mock_registry: MagicMock
+) -> None:
     """Test get_model_version delegates to ModelRegistry.get_model_version."""
-
     try:
         client.get_model_version(test_case.config["name"], test_case.config["version"])
 
@@ -360,9 +374,10 @@ def test_get_model_version(test_case, client, mock_registry):
         ),
     ],
 )
-def test_get_model_artifact(test_case, client, mock_registry):
+def test_get_model_artifact(
+    test_case: TestCase, client: ModelRegistryClient, mock_registry: MagicMock
+) -> None:
     """Test get_model_artifact delegates to ModelRegistry.get_model_artifact."""
-
     try:
         client.get_model_artifact(test_case.config["name"], test_case.config["version"])
 
@@ -397,9 +412,10 @@ def test_get_model_artifact(test_case, client, mock_registry):
         ),
     ],
 )
-def test_list_models(test_case, client, mock_registry):
+def test_list_models(
+    test_case: TestCase, client: ModelRegistryClient, mock_registry: MagicMock
+) -> None:
     """Test list_models returns an iterator that yields from pager."""
-
     mock_models = [Mock() for _ in range(test_case.config["mock_models_count"])]
     mock_registry.get_registered_models.return_value = iter(mock_models)
 
@@ -446,9 +462,10 @@ def test_list_models(test_case, client, mock_registry):
         ),
     ],
 )
-def test_update_model(test_case, client, mock_registry):
+def test_update_model(
+    test_case: TestCase, client: ModelRegistryClient, mock_registry: MagicMock
+) -> None:
     """Test update_model delegates to ModelRegistry.update and validates types."""
-
     from model_registry.types import ModelArtifact, ModelVersion, RegisteredModel
 
     try:
@@ -462,7 +479,7 @@ def test_update_model(test_case, client, mock_registry):
                 wrong_type = ModelVersion(name=test_case.config["name"])
             else:
                 wrong_type = ModelArtifact(name=test_case.config["name"], uri="s3://bucket/model")
-            client.update_model(wrong_type)
+            client.update_model(wrong_type)  # type: ignore
 
         assert test_case.expected_status == SUCCESS
 
@@ -495,9 +512,10 @@ def test_update_model(test_case, client, mock_registry):
         ),
     ],
 )
-def test_update_model_version(test_case, client, mock_registry):
+def test_update_model_version(
+    test_case: TestCase, client: ModelRegistryClient, mock_registry: MagicMock
+) -> None:
     """Test update_model_version delegates to ModelRegistry.update and validates types."""
-
     from model_registry.types import ModelVersion, RegisteredModel
 
     try:
@@ -508,7 +526,7 @@ def test_update_model_version(test_case, client, mock_registry):
         else:
             # Test type checking
             wrong_type = RegisteredModel(name=test_case.config["name"])
-            client.update_model_version(wrong_type)
+            client.update_model_version(wrong_type)  # type: ignore
 
         assert test_case.expected_status == SUCCESS
 
@@ -542,9 +560,10 @@ def test_update_model_version(test_case, client, mock_registry):
         ),
     ],
 )
-def test_update_model_artifact(test_case, client, mock_registry):
+def test_update_model_artifact(
+    test_case: TestCase, client: ModelRegistryClient, mock_registry: MagicMock
+) -> None:
     """Test update_model_artifact delegates to ModelRegistry.update and validates types."""
-
     from model_registry.types import ModelArtifact, RegisteredModel
 
     try:
@@ -558,7 +577,7 @@ def test_update_model_artifact(test_case, client, mock_registry):
         else:
             # Test type checking
             wrong_type = RegisteredModel(name=test_case.config["name"])
-            client.update_model_artifact(wrong_type)
+            client.update_model_artifact(wrong_type)  # type: ignore
 
         assert test_case.expected_status == SUCCESS
 

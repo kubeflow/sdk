@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-SparkClient Demo with Existing SparkConnect Cluster.
+"""SparkClient Demo with Existing SparkConnect Cluster.
 
 Prerequisites:
     1. Kind cluster with Spark Operator installed:
@@ -45,7 +44,18 @@ print("=" * 70)
 
 
 def kubectl(cmd: str, check: bool = True) -> str:
-    """Run kubectl command and return output."""
+    """Run a kubectl command and return its stdout.
+
+    Args:
+        cmd: The kubectl subcommand to run (namespace is added automatically).
+        check: Whether to raise if the command exits non-zero.
+
+    Returns:
+        The command's standard output.
+
+    Raises:
+        RuntimeError: If ``check`` is True and the command fails.
+    """
     full_cmd = f"kubectl -n {NAMESPACE} {cmd}"
     print(f"\n$ {full_cmd}")
     result = subprocess.run(full_cmd, shell=True, capture_output=True, text=True)
@@ -58,8 +68,16 @@ def kubectl(cmd: str, check: bool = True) -> str:
     return result.stdout
 
 
-def wait_and_show(name: str, timeout: int = 120):
-    """Wait for SparkConnect to be ready and show status."""
+def wait_and_show(name: str, timeout: int = 120) -> bool:
+    """Wait for a SparkConnect resource to become Ready.
+
+    Args:
+        name: Name of the SparkConnect resource.
+        timeout: Maximum number of seconds to wait.
+
+    Returns:
+        True if the resource became Ready within the timeout, else False.
+    """
     print(f"\nWaiting for {name} to be Ready (timeout={timeout}s)...")
     start = time.time()
     while time.time() - start < timeout:
@@ -104,6 +122,7 @@ print("=" * 70)
 
 from kubeflow.common.types import KubernetesBackendConfig  # noqa: E402
 from kubeflow.spark import Driver, Executor, Name, SparkClient, SparkConnectState  # noqa: E402
+from kubeflow.spark.backends.kubernetes.utils import build_service_url  # noqa: E402
 
 client = SparkClient(backend_config=KubernetesBackendConfig(namespace=NAMESPACE))
 print("SparkClient initialized")
@@ -120,33 +139,34 @@ print("=" * 70)
 print("\n# Python API:")
 print("spark = client.connect(timeout=120)")
 spark = client.connect(timeout=120)
-session_name = None
 
-# Get the session name from list
+# Get the session name from the list (connect() creates exactly one session).
 sessions = client.list_sessions()
-if sessions:
-    session_name = sessions[-1].name
-    info = sessions[-1]
-    print(f"\nSession created: {info.name}")
-    print(f"   State: {info.state.value}")
-    print(f"   Namespace: {info.namespace}")
+if not sessions:
+    raise RuntimeError("No SparkConnect session was created by connect()")
 
-    print("\n# Verify with kubectl:")
-    kubectl(f"get sparkconnect {session_name} -o wide")
+info = sessions[-1]
+session_name = info.name
+print(f"\nSession created: {info.name}")
+print(f"   State: {info.state.value}")
+print(f"   Namespace: {info.namespace}")
 
-    # Session is ready because connect() waits
-    print("\n# Session Details:")
-    print(f"   Name: {info.name}")
-    print(f"   State: {info.state.value}")
-    print(f"   Driver Pod: {info.driver_pod_name}")
-    print(f"   Service: {info.service_name}")
-    print(f"   Service URL: {info.service_url}")
+print("\n# Verify with kubectl:")
+kubectl(f"get sparkconnect {session_name} -o wide")
 
-    print("\n# Verify pods:")
-    kubectl("get pods -l app.kubernetes.io/component=server")
+# Session is ready because connect() waits.
+print("\n# Session Details:")
+print(f"   Name: {info.name}")
+print(f"   State: {info.state.value}")
+print(f"   Pod: {info.driver_pod_name}")
+print(f"   Service: {info.service_name}")
+print(f"   Service URL: {build_service_url(info)}")
 
-    print("\n# Verify service:")
-    kubectl(f"get svc {info.service_name}")
+print("\n# Verify pods:")
+kubectl("get pods -l app.kubernetes.io/component=server")
+
+print("\n# Verify service:")
+kubectl(f"get svc {info.service_name}")
 
 spark.stop()
 
@@ -159,8 +179,8 @@ print("=" * 70)
 
 print("\n# Python API:")
 print("""
-driver = Driver(cores=1, memory="512m")
-executor = Executor(cores=1, memory="512m", num_instances=2)
+driver = Driver(resources={"cpu": "1", "memory": "512m"})
+executor = Executor(num_instances=2, resources_per_executor={"cpu": "1", "memory": "512m"})
 spark2 = client.connect(
     options=[Name("my-spark-session")],
     driver=driver,
@@ -169,8 +189,8 @@ spark2 = client.connect(
 )
 """)
 
-driver = Driver(cores=1, memory="512m")
-executor = Executor(cores=1, memory="512m", num_instances=2)
+driver = Driver(resources={"cpu": "1", "memory": "512m"})
+executor = Executor(num_instances=2, resources_per_executor={"cpu": "1", "memory": "512m"})
 spark2 = client.connect(
     options=[Name("my-spark-session")], driver=driver, executor=executor, timeout=120
 )
@@ -219,9 +239,9 @@ print("\nSession details:")
 print(f"   name: {info.name}")
 print(f"   namespace: {info.namespace}")
 print(f"   state: {info.state.value}")
-print(f"   driver_pod_name: {info.driver_pod_name}")
+print(f"   pod_name: {info.driver_pod_name}")
 print(f"   service_name: {info.service_name}")
-print(f"   created_at: {info.created_at}")
+print(f"   creation_timestamp: {info.creation_timestamp}")
 
 # ============================================================
 # Example 5: SparkClient.connect() - Get PySpark SparkSession
@@ -248,9 +268,10 @@ try:
 
     print(f"\npyspark is installed (version {pyspark.__version__})")
 
-    # Session is already ready from connect()
-    if info and info.state == SparkConnectState.READY and info.service_url:
-        print(f"\n# Connected to: {info.service_url}")
+    # Session is already ready from connect().
+    if info.state == SparkConnectState.READY and info.service_name:
+        service_url = build_service_url(info)
+        print(f"\n# Connected to: {service_url}")
         print("# Note: To connect from outside cluster, use port-forward")
         print("\n# Run in another terminal:")
         print(f"  kubectl -n {NAMESPACE} port-forward svc/{info.service_name} 15002:15002")
@@ -317,8 +338,8 @@ client = SparkClient(backend_config=KubernetesBackendConfig(namespace="spark-tes
 # Create and connect (session is ready when connect() returns)
 spark = client.connect(
     options=[Name("my-session")],
-    driver=Driver(cores=2, memory="2g"),
-    executor=Executor(cores=2, memory="4g", num_instances=3),
+    driver=Driver(resources={"cpu": "2", "memory": "2g"}),
+    executor=Executor(num_instances=3, resources_per_executor={"cpu": "2", "memory": "4g"}),
     timeout=120
 )
 
