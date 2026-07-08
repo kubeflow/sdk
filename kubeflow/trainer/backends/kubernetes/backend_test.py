@@ -314,6 +314,7 @@ def get_builtin_trainer(
 
 def get_train_job(
     runtime_name: str,
+    runtime_kind: str | None = None,
     train_job_name: str = BASIC_TRAIN_JOB_NAME,
     train_job_trainer: models.TrainerV1alpha1Trainer | None = None,
     labels: dict[str, str] | None = None,
@@ -332,7 +333,7 @@ def get_train_job(
             annotations=annotations,
         ),
         spec=models.TrainerV1alpha1TrainJobSpec(
-            runtimeRef=models.TrainerV1alpha1RuntimeRef(name=runtime_name),
+            runtimeRef=models.TrainerV1alpha1RuntimeRef(name=runtime_name,kind=runtime_kind),
             trainer=train_job_trainer,
             runtimePatches=runtime_patches,
         ),
@@ -679,6 +680,7 @@ def get_container() -> models.IoK8sApiCoreV1Container:
 
 def create_runtime_type(
     name: str,
+    kind: str | None = None
 ) -> types.Runtime:
     """Create a mock Runtime object for testing."""
     trainer = types.RuntimeTrainer(
@@ -692,12 +694,13 @@ def create_runtime_type(
     trainer.set_command(constants.TORCH_COMMAND)
     # Namespaced TrainingRuntime objects and default torch runtime use namespace scope;
     # other runtimes created as cluster-scoped use cluster scope.
-    return types.Runtime(name=name, trainer=trainer)
+    return types.Runtime(name=name, trainer=trainer, kind=kind)
 
 
 def get_train_job_data_type(
     runtime_name: str,
     train_job_name: str,
+    runtime_kind: str | None = None,
 ) -> types.TrainJob:
     """Create a mock TrainJob object with the expected structure for testing."""
 
@@ -716,6 +719,7 @@ def get_train_job_data_type(
         runtime=types.Runtime(
             name=runtime_name,
             trainer=trainer,
+            kind=runtime_kind,
         ),
         steps=[
             types.Step(
@@ -846,6 +850,7 @@ def test_verify_backend(test_case):
             config={"name": TORCH_RUNTIME},
             expected_output=create_runtime_type(
                 name=TORCH_RUNTIME,
+                kind = "TrainingRuntime",
             ),
         ),
         TestCase(
@@ -866,6 +871,7 @@ def test_verify_backend(test_case):
             config={"name": NOT_FOUND},
             expected_output=create_runtime_type(
                 name=NOT_FOUND,
+                kind = "ClusterTrainingRuntime"
             ),
         ),
         TestCase(
@@ -902,10 +908,10 @@ def test_get_runtime(kubernetes_backend, test_case):
             expected_status=SUCCESS,
             config={"name": LIST_RUNTIMES},
             expected_output=[
-                create_runtime_type(name="runtime-1"),
-                create_runtime_type(name="ns-runtime-2"),
-                create_runtime_type(name="runtime-2"),
-                create_runtime_type(name="runtime-3"),
+                create_runtime_type(name="runtime-1", kind="TrainingRuntime"),
+                create_runtime_type(name="ns-runtime-2", kind="TrainingRuntime"),
+                create_runtime_type(name="runtime-2", kind="ClusterTrainingRuntime"),
+                create_runtime_type(name="runtime-3", kind="ClusterTrainingRuntime"),
             ],
         ),
         # namespace retrieval fails (timeout) -> expect TimeoutError (raised immediately)
@@ -923,9 +929,9 @@ def test_get_runtime(kubernetes_backend, test_case):
                 "name": LIST_RUNTIMES,
             },
             expected_output=[
-                create_runtime_type(name="runtime-1"),
-                create_runtime_type(name="runtime-2"),
-                create_runtime_type(name="runtime-3"),
+                create_runtime_type(name="runtime-1", kind="ClusterTrainingRuntime"),
+                create_runtime_type(name="runtime-2", kind="ClusterTrainingRuntime"),
+                create_runtime_type(name="runtime-3", kind="ClusterTrainingRuntime"),
             ],
         ),
         # cluster retrieval fails (timeout) -> expect TimeoutError (raised immediately)
@@ -1057,6 +1063,7 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             config={},
             expected_output=get_train_job(
                 runtime_name=TORCH_RUNTIME,
+                runtime_kind="TrainingRuntime",
                 train_job_name=BASIC_TRAIN_JOB_NAME,
             ),
         ),
@@ -1076,6 +1083,7 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             },
             expected_output=get_train_job(
                 runtime_name=TORCH_TUNE_RUNTIME,
+                runtime_kind="TrainingRuntime",
                 train_job_name=TRAIN_JOB_WITH_BUILT_IN_TRAINER,
                 train_job_trainer=get_builtin_trainer(
                     args=["batch_size=2", "epochs=2", "loss=Loss.CEWithChunkedOutputLoss"],
@@ -1101,6 +1109,7 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             },
             expected_output=get_train_job(
                 runtime_name=TORCH_TUNE_RUNTIME,
+                runtime_kind="TrainingRuntime",
                 train_job_name=TRAIN_JOB_WITH_BUILT_IN_TRAINER,
                 train_job_trainer=get_builtin_trainer(
                     args=[
@@ -1127,6 +1136,7 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             },
             expected_output=get_train_job(
                 runtime_name=TORCH_RUNTIME,
+                runtime_kind="TrainingRuntime",
                 train_job_name=TRAIN_JOB_WITH_CUSTOM_TRAINER,
                 train_job_trainer=get_custom_trainer(
                     pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
@@ -1153,6 +1163,7 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             },
             expected_output=get_train_job(
                 runtime_name=TORCH_RUNTIME,
+                runtime_kind="TrainingRuntime",
                 train_job_name=TRAIN_JOB_WITH_CUSTOM_TRAINER,
                 train_job_trainer=get_custom_trainer(
                     env=[
@@ -1181,6 +1192,7 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             },
             expected_output=get_train_job(
                 runtime_name=TORCH_RUNTIME,
+                runtime_kind="TrainingRuntime",
                 train_job_name=TRAIN_JOB_WITH_CUSTOM_TRAINER,
                 train_job_trainer=get_custom_trainer_container(
                     image="example.com/my-image",
@@ -1241,6 +1253,7 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             },
             expected_output=get_train_job(
                 runtime_name=TORCH_RUNTIME,
+                runtime_kind="TrainingRuntime",
                 train_job_name=BASIC_TRAIN_JOB_NAME,
                 labels={"team": "ml-platform"},
                 annotations={"created-by": "sdk"},
@@ -1277,6 +1290,7 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             },
             expected_output=get_train_job(
                 runtime_name=TORCH_RUNTIME,
+                runtime_kind="TrainingRuntime",
                 train_job_name=BASIC_TRAIN_JOB_NAME,
                 runtime_patches=[
                     models.TrainerV1alpha1RuntimePatch(
@@ -1327,6 +1341,7 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             },
             expected_output=get_train_job(
                 runtime_name=TORCH_RUNTIME,
+                runtime_kind="TrainingRuntime",
                 train_job_name=BASIC_TRAIN_JOB_NAME,
                 labels={"owner": "ml-team"},
                 annotations={"description": "Fine-tuning job"},
@@ -1392,6 +1407,7 @@ def test_train(kubernetes_backend, test_case):
             config={"name": BASIC_TRAIN_JOB_NAME},
             expected_output=get_train_job_data_type(
                 runtime_name=TORCH_RUNTIME,
+                runtime_kind="TrainingRuntime",
                 train_job_name=BASIC_TRAIN_JOB_NAME,
             ),
         ),
@@ -1433,10 +1449,12 @@ def test_get_job(kubernetes_backend, test_case):
             expected_output=[
                 get_train_job_data_type(
                     runtime_name=TORCH_RUNTIME,
+                    runtime_kind="TrainingRuntime",
                     train_job_name="basic-job-1",
                 ),
                 get_train_job_data_type(
                     runtime_name=TORCH_RUNTIME,
+                    runtime_kind="TrainingRuntime",
                     train_job_name="basic-job-2",
                 ),
             ],

@@ -269,6 +269,7 @@ class RuntimeTrainer:
 class Runtime:
     name: str
     trainer: RuntimeTrainer
+    kind: str | None = None
     pretrained_model: str | None = None
 
 
