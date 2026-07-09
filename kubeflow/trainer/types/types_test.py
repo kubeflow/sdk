@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Unit tests for Kubeflow Trainer types."""
+
 import pytest
 
 from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
@@ -93,7 +95,7 @@ from kubeflow.trainer.types import types
         ),
     ],
 )
-def test_data_cache_initializer(test_case: TestCase):
+def test_data_cache_initializer(test_case: TestCase) -> None:
     """Test DataCacheInitializer creation and validation."""
     print("Executing test:", test_case.name)
 

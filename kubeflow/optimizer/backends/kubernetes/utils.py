@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Helpers to translate Katib API specs into Kubeflow Optimizer types."""
+
 from dataclasses import fields
 from types import NoneType, UnionType
 from typing import Any, Union, get_args, get_origin
@@ -32,12 +34,12 @@ from kubeflow.optimizer.types.search_types import (
 )
 
 
-def convert_value(raw_value: str, target_type: Any):
+def convert_value(raw_value: str, target_type: object) -> int | float | bool | str:
     """Convert a string value to the target type, handling optional types.
 
     Args:
         raw_value: String value to convert.
-        target_type: Target type. `Optional[T]` and `T | None` will be treated as `T`
+        target_type: Target type. `Optional[T]` and `T | None` will be treated as `T`.
 
     Returns:
         Converted value in the target type.
@@ -45,7 +47,7 @@ def convert_value(raw_value: str, target_type: Any):
     origin = get_origin(target_type)
 
     # `T | None` produces UnionType instead of Union before Python 3.14.
-    # `Optional[T]` always produces Union
+    # `Optional[T]` always produces Union.
     if origin is Union or origin is UnionType:
         args = get_args(target_type)
         non_none_types = [arg for arg in args if arg is not NoneType]
@@ -64,12 +66,23 @@ def convert_value(raw_value: str, target_type: Any):
 def get_algorithm_from_katib_spec(
     algorithm: models.V1beta1AlgorithmSpec,
 ) -> GridSearch | RandomSearch:
+    """Build an algorithm object from a Katib AlgorithmSpec.
+
+    Args:
+        algorithm: The Katib AlgorithmSpec to convert.
+
+    Returns:
+        The GridSearch or RandomSearch object described by the spec.
+
+    Raises:
+        ValueError: The algorithm name is not supported by the Kubeflow SDK.
+    """
     alg_cls = ALGORITHM_REGISTRY.get(algorithm.algorithm_name or "")
 
     if alg_cls is None:
         raise ValueError(f"Kubeflow SDK doesn't support {algorithm.algorithm_name} algorithm.")
 
-    kwargs = {}
+    kwargs: dict[str, Any] = {}
     settings = {s.name: s.value for s in algorithm.algorithm_settings or []}
 
     for f in fields(alg_cls):
@@ -84,6 +97,17 @@ def get_algorithm_from_katib_spec(
 
 
 def get_objectives_from_katib_spec(objective: models.V1beta1ObjectiveSpec) -> list[Objective]:
+    """Build the list of objectives from a Katib ObjectiveSpec.
+
+    Args:
+        objective: The Katib ObjectiveSpec to convert.
+
+    Returns:
+        The list of objectives, where the first entry is the primary objective.
+
+    Raises:
+        ValueError: The objective metric name is empty.
+    """
     if objective.objective_metric_name is None:
         raise ValueError("Objective metric name cannot be empty")
 
@@ -98,9 +122,23 @@ def get_objectives_from_katib_spec(objective: models.V1beta1ObjectiveSpec) -> li
 def get_search_space_from_katib_spec(
     parameters: list[models.V1beta1ParameterSpec],
 ) -> dict[str, ContinuousSearchSpace | CategoricalSearchSpace]:
+    """Build the search space from a list of Katib ParameterSpecs.
+
+    Args:
+        parameters: The Katib ParameterSpecs to convert.
+
+    Returns:
+        Mapping of parameter names to their continuous or categorical search space.
+
+    Raises:
+        ValueError: A parameter has an invalid feasible space.
+    """
     search_space = {}
 
     for p in parameters:
+        if p.name is None:
+            raise ValueError(f"Katib parameter is missing a name: {parameters}")
+
         if p.parameter_type == constants.CATEGORICAL_PARAMETERS:
             if not (p.feasible_space and p.feasible_space.list):
                 raise ValueError(f"Katib categorical parameters are invalid: {parameters}")

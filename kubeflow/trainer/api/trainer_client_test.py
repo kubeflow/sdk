@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Unit tests for TrainerClient backend selection.
-"""
+"""Unit tests for TrainerClient backend selection."""
 
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
@@ -48,7 +47,7 @@ from kubeflow.trainer.backends.localprocess.types import LocalProcessBackendConf
         },
     ],
 )
-def test_backend_selection(test_case):
+def test_backend_selection(test_case: dict[str, Any]) -> None:
     """Test TrainerClient backend selection logic."""
     if test_case["use_k8s_mocks"]:
         with (

@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Docker client adapter implementation.
+"""Docker client adapter implementation.
 
 This module provides the DockerClientAdapter class that implements the
 BaseContainerClientAdapter interface for Docker runtime.
 """
 
 from collections.abc import Iterator
+from typing import Any
 
 from kubeflow.trainer.backends.container.adapters.base import BaseContainerClientAdapter
 
@@ -27,29 +27,32 @@ from kubeflow.trainer.backends.container.adapters.base import BaseContainerClien
 class DockerClientAdapter(BaseContainerClientAdapter):
     """Adapter for Docker client."""
 
-    def __init__(self, host: str | None = None):
-        """
-        Initialize Docker client.
+    def __init__(self, host: str | None = None) -> None:
+        """Initialize Docker client.
 
         Args:
             host: Docker host URL, or None to use environment defaults
         """
         try:
-            import docker  # type: ignore
+            import docker
         except ImportError as e:
             raise ImportError(
                 "The 'docker' Python package is not installed. Install with extras: "
                 "pip install kubeflow[docker]"
             ) from e
 
+        # The optional 'docker' dependency ships without complete type information, so
+        # reach the client factory through an ``Any`` alias to avoid unresolved-attribute
+        # errors while keeping runtime behavior unchanged.
+        docker_client: Any = docker
         if host:
-            self.client = docker.DockerClient(base_url=host)
+            self.client = docker_client.DockerClient(base_url=host)
         else:
-            self.client = docker.from_env()
+            self.client = docker_client.from_env()
 
         self._runtime_type = "docker"
 
-    def ping(self):
+    def ping(self) -> None:
         """Test connection to Docker daemon."""
         self.client.ping()
 
@@ -68,7 +71,7 @@ class DockerClientAdapter(BaseContainerClientAdapter):
         )
         return name
 
-    def delete_network(self, network_id: str):
+    def delete_network(self, network_id: str) -> None:
         """Delete Docker network."""
         try:
             net = self.client.networks.get(network_id)
@@ -102,7 +105,7 @@ class DockerClientAdapter(BaseContainerClientAdapter):
         )
         return container.id
 
-    def get_container(self, container_id: str):
+    def get_container(self, container_id: str) -> Any:  # noqa: ANN401
         """Get Docker container by ID."""
         return self.client.containers.get(container_id)
 
@@ -122,17 +125,17 @@ class DockerClientAdapter(BaseContainerClientAdapter):
             else:
                 yield str(logs)
 
-    def stop_container(self, container_id: str, timeout: int = 10):
+    def stop_container(self, container_id: str, timeout: int = 10) -> None:
         """Stop Docker container."""
         container = self.get_container(container_id)
         container.stop(timeout=timeout)
 
-    def remove_container(self, container_id: str, force: bool = True):
+    def remove_container(self, container_id: str, force: bool = True) -> None:
         """Remove Docker container."""
         container = self.get_container(container_id)
         container.remove(force=force)
 
-    def pull_image(self, image: str):
+    def pull_image(self, image: str) -> None:
         """Pull Docker image."""
         self.client.images.pull(image)
 
@@ -228,8 +231,7 @@ class DockerClientAdapter(BaseContainerClientAdapter):
             return None
 
     def wait_for_container(self, container_id: str, timeout: int | None = None) -> int:
-        """
-        Wait for a Docker container to exit and return its exit code.
+        """Wait for a Docker container to exit and return its exit code.
 
         Args:
             container_id: Container ID

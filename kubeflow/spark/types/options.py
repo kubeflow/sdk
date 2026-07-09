@@ -365,7 +365,6 @@ class Name:
         name: Custom name for the session. Must be a valid Kubernetes resource name.
 
     Example:
-        ```python
         from kubeflow.spark import SparkClient
         from kubeflow.spark.types.options import Name
 
@@ -376,7 +375,6 @@ class Name:
 
         # Auto-generated name
         spark = client.connect()  # Creates "spark-connect-a1b2c3d4"
-        ```
 
     Note:
         This option is extracted early in the backend flow before CRD building,

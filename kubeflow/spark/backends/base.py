@@ -16,6 +16,9 @@
 
 import abc
 from collections.abc import Iterator
+from typing import Any
+
+from pyspark.sql import SparkSession
 
 from kubeflow.spark.types.types import Driver, Executor, SparkConnectInfo
 
@@ -27,15 +30,17 @@ class RuntimeBackend(abc.ABC):
     """
 
     @abc.abstractmethod
-    def connect(
+    def create_and_connect(
         self,
         num_executors: int | None = None,
         resources_per_executor: dict[str, str] | None = None,
         spark_conf: dict[str, str] | None = None,
         driver: Driver | None = None,
         executor: Executor | None = None,
-        options: list | None = None,
-    ) -> SparkConnectInfo:
+        options: list[Any] | None = None,
+        timeout: int = 300,
+        connect_timeout: int = 120,
+    ) -> SparkSession:
         """Create a new SparkConnect session (INTERNAL USE ONLY).
 
         This is an internal method used by SparkClient.connect().
@@ -48,9 +53,11 @@ class RuntimeBackend(abc.ABC):
             driver: Driver configuration.
             executor: Executor configuration.
             options: List of configuration options (use Name option for custom name).
+            timeout: Timeout in seconds to wait for session ready.
+            connect_timeout: Timeout in seconds for SparkSession.getOrCreate().
 
         Returns:
-            SparkConnectInfo with session details (may be in PROVISIONING state).
+            SparkSession with session details.
 
         Raises:
             TimeoutError: If the creation request times out.
@@ -129,11 +136,7 @@ class RuntimeBackend(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_session_logs(
-        self,
-        name: str,
-        follow: bool = False,
-    ) -> Iterator[str]:
+    def get_session_logs(self, name: str, follow: bool = False) -> Iterator[str]:
         """Get logs from a SparkConnect session.
 
         Args:

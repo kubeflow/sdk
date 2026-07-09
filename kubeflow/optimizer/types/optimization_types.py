@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Data types describing Kubeflow Optimizer jobs, trials, and their results."""
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -43,7 +45,8 @@ class Objective:
     metric: str = "loss"
     direction: Direction = Direction.MINIMIZE
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
+        """Normalize a string direction into a Direction enum member."""
         if isinstance(self.direction, str):
             self.direction = Direction(self.direction)
 
@@ -66,6 +69,8 @@ class TrialConfig:
 
 @dataclass
 class Metric:
+    """Observed metric name and its latest, minimum, and maximum values."""
+
     name: str
     min: str
     max: str

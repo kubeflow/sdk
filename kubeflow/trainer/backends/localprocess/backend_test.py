@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Unit tests for the LocalProcessBackend class in the Kubeflow Trainer SDK.
-"""
+"""Unit tests for the LocalProcessBackend class in the Kubeflow Trainer SDK."""
 
+from collections.abc import Iterator
+from typing import Any, cast
 from unittest.mock import Mock, patch
 
 import pytest
@@ -41,24 +41,26 @@ TORCH_RUNTIME = constants.DEFAULT_TRAINING_RUNTIME
 BASIC_TRAIN_JOB_NAME = "test-job"
 
 
-def dummy_training_function():
+def dummy_training_function() -> dict:
     """Dummy training function for testing."""
     print("Training started")
     return {"loss": 0.5, "accuracy": 0.95}
 
 
 @pytest.fixture
-def local_backend():
+def local_backend() -> Iterator[LocalProcessBackend]:
     """Create LocalProcessBackend for testing."""
     cfg = LocalProcessBackendConfig()
     backend = LocalProcessBackend(cfg)
     yield backend
-    # Cleanup: Clear jobs to prevent test pollution
-    backend._LocalProcessBackend__local_jobs.clear()
+    # Cleanup: Clear jobs to prevent test pollution.
+    # The jobs list is a name-mangled private attribute; access it through an ``Any``
+    # cast so static analysis doesn't flag it as an unknown attribute.
+    cast(Any, backend)._LocalProcessBackend__local_jobs.clear()
 
 
 @pytest.fixture
-def mock_train_environment():
+def mock_train_environment() -> Iterator[dict[str, Any]]:
     """Mock the training environment to avoid actual subprocess execution."""
     with (
         patch("kubeflow.trainer.backends.localprocess.job.LocalJob.start") as mock_start,
@@ -104,7 +106,7 @@ def mock_train_environment():
         ),
     ],
 )
-def test_list_runtimes(local_backend, test_case):
+def test_list_runtimes(local_backend: LocalProcessBackend, test_case: TestCase) -> None:
     """Test LocalProcessBackend.list_runtimes()."""
     runtimes = local_backend.list_runtimes()
     assert len(runtimes) > 0
@@ -127,11 +129,12 @@ def test_list_runtimes(local_backend, test_case):
         ),
     ],
 )
-def test_get_runtime(local_backend, test_case):
+def test_get_runtime(local_backend: LocalProcessBackend, test_case: TestCase) -> None:
     """Test LocalProcessBackend.get_runtime()."""
     runtime_name = test_case.config.get("runtime_name")
 
     if test_case.expected_status == FAILED:
+        assert test_case.expected_error is not None
         with pytest.raises(test_case.expected_error):
             local_backend.get_runtime(runtime_name)
     else:
@@ -176,11 +179,12 @@ def test_get_runtime(local_backend, test_case):
         ),
     ],
 )
-def test_get_runtime_packages(local_backend, test_case):
+def test_get_runtime_packages(local_backend: LocalProcessBackend, test_case: TestCase) -> None:
     """Test LocalProcessBackend.get_runtime_packages()."""
     runtime = test_case.config.get("runtime")
 
     if test_case.expected_status == FAILED:
+        assert test_case.expected_error is not None
         with pytest.raises(test_case.expected_error):
             local_backend.get_runtime_packages(runtime)
     else:
@@ -324,7 +328,11 @@ def test_get_runtime_packages(local_backend, test_case):
         ),
     ],
 )
-def test_train(local_backend, mock_train_environment, test_case):
+def test_train(
+    local_backend: LocalProcessBackend,
+    mock_train_environment: dict[str, Any],
+    test_case: TestCase,
+) -> None:
     """Test LocalProcessBackend.train() with success and failure cases."""
     runtime = test_case.config.get("runtime")
     trainer = test_case.config.get("trainer")
@@ -333,6 +341,7 @@ def test_train(local_backend, mock_train_environment, test_case):
     mocks = mock_train_environment
 
     if test_case.expected_status == FAILED:
+        assert test_case.expected_error is not None
         with pytest.raises(test_case.expected_error) as exc_info:
             local_backend.train(
                 runtime=runtime,
@@ -377,11 +386,12 @@ def test_train(local_backend, mock_train_environment, test_case):
         ),
     ],
 )
-def test_get_job(local_backend, test_case):
+def test_get_job(local_backend: LocalProcessBackend, test_case: TestCase) -> None:
     """Test LocalProcessBackend.get_job()."""
     job_name = test_case.config.get("job_name")
 
     if test_case.expected_status == FAILED:
+        assert test_case.expected_error is not None
         with pytest.raises(test_case.expected_error):
             local_backend.get_job(job_name)
 
@@ -396,7 +406,7 @@ def test_get_job(local_backend, test_case):
         ),
     ],
 )
-def test_list_jobs(local_backend, test_case):
+def test_list_jobs(local_backend: LocalProcessBackend, test_case: TestCase) -> None:
     """Test LocalProcessBackend.list_jobs()."""
     runtime = test_case.config.get("runtime")
     jobs = local_backend.list_jobs(runtime=runtime)
@@ -414,12 +424,13 @@ def test_list_jobs(local_backend, test_case):
         ),
     ],
 )
-def test_get_job_logs(local_backend, test_case):
+def test_get_job_logs(local_backend: LocalProcessBackend, test_case: TestCase) -> None:
     """Test LocalProcessBackend.get_job_logs()."""
     job_name = test_case.config.get("job_name")
     step = test_case.config.get("step", "train")
 
     if test_case.expected_status == FAILED:
+        assert test_case.expected_error is not None
         with pytest.raises(test_case.expected_error):
             list(local_backend.get_job_logs(job_name, step=step))
 
@@ -459,9 +470,10 @@ def test_get_job_logs(local_backend, test_case):
         ),
     ],
 )
-def test_wait_for_job_status(local_backend, test_case):
+def test_wait_for_job_status(local_backend: LocalProcessBackend, test_case: TestCase) -> None:
     """Test LocalProcessBackend.wait_for_job_status()."""
     if test_case.expected_status == FAILED:
+        assert test_case.expected_error is not None
         with pytest.raises(test_case.expected_error):
             local_backend.wait_for_job_status(**test_case.config)
 
@@ -477,20 +489,23 @@ def test_wait_for_job_status(local_backend, test_case):
         ),
     ],
 )
-def test_delete_job(local_backend, test_case):
+def test_delete_job(local_backend: LocalProcessBackend, test_case: TestCase) -> None:
     """Test LocalProcessBackend.delete_job()."""
     job_name = test_case.config.get("job_name")
 
     if test_case.expected_status == FAILED:
+        assert test_case.expected_error is not None
         with pytest.raises(test_case.expected_error):
             local_backend.delete_job(job_name)
 
 
-def test_name_option_sets_job_name(local_backend, mock_train_environment):
+def test_name_option_sets_job_name(
+    local_backend: LocalProcessBackend, mock_train_environment: dict[str, Any]
+) -> None:
     """Test that Name option sets the custom job name."""
     custom_name = "my-custom-job-name"
 
-    def dummy_func():
+    def dummy_func() -> None:
         pass
 
     runtime = types.Runtime(
@@ -559,7 +574,7 @@ def test_name_option_sets_job_name(local_backend, mock_train_environment):
         ),
     ],
 )
-def test_get_job_status(local_backend, test_case):
+def test_get_job_status(local_backend: LocalProcessBackend, test_case: TestCase) -> None:
     """Test LocalProcessBackend.__get_job_status() across all status scenarios."""
     step_statuses = test_case.config["step_statuses"]
 
@@ -572,5 +587,7 @@ def test_get_job_status(local_backend, test_case):
     job = Mock()
     job.steps = steps
 
-    status = local_backend._LocalProcessBackend__get_job_status(job)
+    # ``__get_job_status`` is a name-mangled private method; access it through an ``Any``
+    # cast so static analysis doesn't flag it as an unknown attribute.
+    status = cast(Any, local_backend)._LocalProcessBackend__get_job_status(job)
     assert status == test_case.expected_output

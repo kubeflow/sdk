@@ -44,9 +44,8 @@ from kubeflow.spark.test.common import FAILED, SUCCESS, TestCase
         ),
     ],
 )
-def test_create_and_connect(test_case: TestCase):
+def test_create_and_connect(test_case: TestCase) -> None:
     """Test SparkClient initialization scenarios."""
-
     try:
         if "namespace" in test_case.config:
             with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock:

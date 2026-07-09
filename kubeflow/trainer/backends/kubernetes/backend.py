@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Kubernetes runtime backend for managing Kubeflow Trainer resources."""
+
 from collections.abc import Callable, Iterator
 import copy
 import logging
@@ -39,7 +41,10 @@ logger = logging.getLogger(__name__)
 
 
 class KubernetesBackend(RuntimeBackend):
-    def __init__(self, cfg: KubernetesBackendConfig):
+    """Runtime backend that manages TrainJobs and runtimes through the Kubernetes API."""
+
+    def __init__(self, cfg: KubernetesBackendConfig) -> None:
+        """Initialize the backend and its Kubernetes API clients from the given config."""
         if cfg.namespace is None:
             cfg.namespace = common_utils.get_default_target_namespace(cfg.context)
 
@@ -67,7 +72,6 @@ class KubernetesBackend(RuntimeBackend):
         and contains a ``kubeflow_trainer_version`` field. It does not
         enforce version compatibility and never raises.
         """
-
         system_namespace = os.getenv("KUBEFLOW_SYSTEM_NAMESPACE", "kubeflow-system")
         config_map_name = "kubeflow-trainer-public"
 
@@ -174,7 +178,7 @@ class KubernetesBackend(RuntimeBackend):
         return result
 
     def get_runtime(self, name: str) -> types.Runtime:
-        """Prefer namespaced runtime, fall back to cluster-scoped only if it does not exist"""
+        """Prefer namespaced runtime, fall back to cluster-scoped only if it does not exist."""
         try:
             ns_thread = self.custom_api.get_namespaced_custom_object(
                 constants.GROUP,
@@ -187,6 +191,10 @@ class KubernetesBackend(RuntimeBackend):
             runtime = models.TrainerV1alpha1TrainingRuntime.from_dict(
                 ns_thread.get(common_constants.DEFAULT_TIMEOUT)
             )
+            if runtime is None:
+                raise RuntimeError(
+                    f"Failed to parse {constants.TRAINING_RUNTIME_KIND}: {self.namespace}/{name}"
+                )
             return self.__get_runtime_from_cr(runtime)
 
         except multiprocessing.TimeoutError as e:
@@ -214,6 +222,10 @@ class KubernetesBackend(RuntimeBackend):
             runtime = models.TrainerV1alpha1ClusterTrainingRuntime.from_dict(
                 cluster_thread.get(common_constants.DEFAULT_TIMEOUT)
             )
+            if runtime is None:
+                raise RuntimeError(
+                    f"Failed to parse {constants.CLUSTER_TRAINING_RUNTIME_KIND}: {name}"
+                )
             return self.__get_runtime_from_cr(runtime)
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(
@@ -224,7 +236,8 @@ class KubernetesBackend(RuntimeBackend):
                 f"Failed to get Runtime: {name} (checked both namespaced and cluster scope)"
             ) from e
 
-    def get_runtime_packages(self, runtime: types.Runtime):
+    def get_runtime_packages(self, runtime: types.Runtime) -> None:
+        """Run a TrainJob that prints the Python version and packages for the given runtime."""
         if runtime.trainer.trainer_type == types.TrainerType.BUILTIN_TRAINER:
             raise ValueError("Cannot get Runtime packages for BuiltinTrainer")
 
@@ -237,7 +250,7 @@ class KubernetesBackend(RuntimeBackend):
             mpi_command[1:3] = ["-np", "1"]
             runtime_copy.trainer.set_command(tuple(mpi_command))
 
-        def print_packages():
+        def print_packages() -> None:
             import shutil
             import subprocess
             import sys
@@ -283,6 +296,7 @@ class KubernetesBackend(RuntimeBackend):
         | None = None,
         options: list | None = None,
     ) -> str:
+        """Create a TrainJob from the given runtime, trainer, initializer, and options."""
         # Process options to extract configuration
         job_spec = {}
         labels = None
@@ -355,6 +369,7 @@ class KubernetesBackend(RuntimeBackend):
         return train_job_name
 
     def list_jobs(self, runtime: types.Runtime | None = None) -> list[types.TrainJob]:
+        """List TrainJobs in the namespace, optionally filtered by runtime reference."""
         result = []
         try:
             thread = self.custom_api.list_namespaced_custom_object(
@@ -396,8 +411,7 @@ class KubernetesBackend(RuntimeBackend):
         return result
 
     def get_job(self, name: str) -> types.TrainJob:
-        """Get the TrainJob object"""
-
+        """Get the TrainJob object."""
         try:
             thread = self.custom_api.get_namespaced_custom_object(
                 constants.GROUP,
@@ -409,7 +423,7 @@ class KubernetesBackend(RuntimeBackend):
             )
 
             trainjob = models.TrainerV1alpha1TrainJob.from_dict(
-                thread.get(common_constants.DEFAULT_TIMEOUT)  # type: ignore
+                thread.get(common_constants.DEFAULT_TIMEOUT)
             )
 
         except multiprocessing.TimeoutError as e:
@@ -421,7 +435,10 @@ class KubernetesBackend(RuntimeBackend):
                 f"Failed to get {constants.TRAINJOB_KIND}: {self.namespace}/{name}"
             ) from e
 
-        return self.__get_trainjob_from_cr(trainjob)  # type: ignore
+        if trainjob is None:
+            raise RuntimeError(f"Failed to get {constants.TRAINJOB_KIND}: {self.namespace}/{name}")
+
+        return self.__get_trainjob_from_cr(trainjob)
 
     def get_job_logs(
         self,
@@ -429,7 +446,7 @@ class KubernetesBackend(RuntimeBackend):
         follow: bool = False,
         step: str = constants.NODE + "-0",
     ) -> Iterator[str]:
-        """Get the TrainJob logs"""
+        """Get the TrainJob logs."""
         # Get the TrainJob Pod name.
         pod_name = None
         for c in self.get_job(name).steps:
@@ -453,6 +470,7 @@ class KubernetesBackend(RuntimeBackend):
         polling_interval: int = 2,
         callbacks: list[Callable[[types.TrainJob], None]] | None = None,
     ) -> types.TrainJob:
+        """Poll the TrainJob until it reaches one of the expected statuses or times out."""
         job_statuses = {
             constants.TRAINJOB_CREATED,
             constants.TRAINJOB_RUNNING,
@@ -497,7 +515,8 @@ class KubernetesBackend(RuntimeBackend):
 
         raise TimeoutError(f"Timeout waiting for TrainJob {name} to reach status: {status} status")
 
-    def delete_job(self, name: str):
+    def delete_job(self, name: str) -> None:
+        """Delete the TrainJob with the given name from the namespace."""
         try:
             self.custom_api.delete_namespaced_custom_object(
                 constants.GROUP,
@@ -518,6 +537,7 @@ class KubernetesBackend(RuntimeBackend):
         logger.debug(f"{constants.TRAINJOB_KIND} {self.namespace}/{name} has been deleted")
 
     def get_job_events(self, name: str) -> list[types.Event]:
+        """Return events related to the TrainJob and its pods, sorted by first occurrence."""
         # Get all pod names related to this TrainJob
         trainjob = self.get_job(name)
 
@@ -577,6 +597,7 @@ class KubernetesBackend(RuntimeBackend):
             and runtime_cr.metadata.name
             and runtime_cr.spec
             and runtime_cr.spec.ml_policy
+            and runtime_cr.spec.template
             and runtime_cr.spec.template.spec
             and runtime_cr.spec.template.spec.replicated_jobs
         ):
@@ -616,7 +637,7 @@ class KubernetesBackend(RuntimeBackend):
                 )
 
                 # Stream logs incrementally.
-                yield from log_stream  # type: ignore
+                yield from log_stream
             else:
                 logs = self.core_api.read_namespaced_pod_log(
                     name=pod_name,
@@ -760,7 +781,6 @@ class KubernetesBackend(RuntimeBackend):
         runtime_patches: list[dict[str, Any]] | None = None,
     ) -> models.TrainerV1alpha1TrainJobSpec:
         """Get TrainJob spec from the given parameters."""
-
         if runtime is None:
             runtime = self.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
         elif isinstance(runtime, str):
@@ -798,10 +818,12 @@ class KubernetesBackend(RuntimeBackend):
                 trainer_cr.args = trainer_overrides["args"]
 
         # Convert runtime patches dicts to native model objects.
-        runtime_patch_models = None
+        runtime_patch_models: list[models.TrainerV1alpha1RuntimePatch] | None = None
         if runtime_patches:
             runtime_patch_models = [
-                models.TrainerV1alpha1RuntimePatch.from_dict(p) for p in runtime_patches
+                patch
+                for p in runtime_patches
+                if (patch := models.TrainerV1alpha1RuntimePatch.from_dict(p)) is not None
             ]
 
         trainjob_spec = models.TrainerV1alpha1TrainJobSpec(

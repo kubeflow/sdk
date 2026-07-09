@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Container client adapters for Docker and Podman.
+"""Container client adapters for Docker and Podman.
 
 This module implements the adapter pattern to abstract away differences between
 Docker and Podman APIs, allowing the backend to work with either runtime through
@@ -24,18 +23,20 @@ from __future__ import annotations
 
 import abc
 from collections.abc import Iterator
+from typing import Any
 
 
 class BaseContainerClientAdapter(abc.ABC):
-    """
-    Abstract adapter interface for container clients.
+    """Abstract adapter interface for container clients.
 
     This adapter abstracts the container runtime API, allowing the backend
     to work with Docker and Podman through a unified interface.
     """
 
+    _runtime_type: str
+
     @abc.abstractmethod
-    def ping(self):
+    def ping(self) -> None:
         """Test the connection to the container runtime."""
         raise NotImplementedError()
 
@@ -45,8 +46,7 @@ class BaseContainerClientAdapter(abc.ABC):
         name: str,
         labels: dict[str, str],
     ) -> str:
-        """
-        Create a container network.
+        """Create a container network.
 
         Args:
             name: Network name
@@ -58,7 +58,7 @@ class BaseContainerClientAdapter(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def delete_network(self, network_id: str):
+    def delete_network(self, network_id: str) -> None:
         """Delete a network."""
         raise NotImplementedError()
 
@@ -74,8 +74,7 @@ class BaseContainerClientAdapter(abc.ABC):
         volumes: dict[str, dict[str, str]],
         working_dir: str,
     ) -> str:
-        """
-        Create and start a container.
+        """Create and start a container.
 
         Args:
             image: Container image
@@ -93,7 +92,7 @@ class BaseContainerClientAdapter(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_container(self, container_id: str):
+    def get_container(self, container_id: str) -> Any:  # noqa: ANN401
         """Get container object by ID."""
         raise NotImplementedError()
 
@@ -103,17 +102,17 @@ class BaseContainerClientAdapter(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def stop_container(self, container_id: str, timeout: int = 10):
+    def stop_container(self, container_id: str, timeout: int = 10) -> None:
         """Stop a container."""
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def remove_container(self, container_id: str, force: bool = True):
+    def remove_container(self, container_id: str, force: bool = True) -> None:
         """Remove a container."""
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def pull_image(self, image: str):
+    def pull_image(self, image: str) -> None:
         """Pull an image."""
         raise NotImplementedError()
 
@@ -124,8 +123,7 @@ class BaseContainerClientAdapter(abc.ABC):
 
     @abc.abstractmethod
     def run_oneoff_container(self, image: str, command: list[str]) -> str:
-        """
-        Run a short-lived container and return its output.
+        """Run a short-lived container and return its output.
 
         Args:
             image: Container image
@@ -138,8 +136,7 @@ class BaseContainerClientAdapter(abc.ABC):
 
     @abc.abstractmethod
     def container_status(self, container_id: str) -> tuple[str, int | None]:
-        """
-        Get container status.
+        """Get container status.
 
         Returns:
             Tuple of (status_string, exit_code)
@@ -150,8 +147,7 @@ class BaseContainerClientAdapter(abc.ABC):
 
     @abc.abstractmethod
     def get_container_ip(self, container_id: str, network_id: str) -> str | None:
-        """
-        Get container's IP address on a specific network.
+        """Get container's IP address on a specific network.
 
         Args:
             container_id: Container ID
@@ -164,8 +160,7 @@ class BaseContainerClientAdapter(abc.ABC):
 
     @abc.abstractmethod
     def list_containers(self, filters: dict[str, list[str]] | None = None) -> list[dict]:
-        """
-        List containers, optionally filtered by labels.
+        """List containers, optionally filtered by labels.
 
         Args:
             filters: Dictionary of filters (e.g., {"label": ["key=value"]})
@@ -182,8 +177,7 @@ class BaseContainerClientAdapter(abc.ABC):
 
     @abc.abstractmethod
     def get_network(self, network_id: str) -> dict | None:
-        """
-        Get network information by ID or name.
+        """Get network information by ID or name.
 
         Args:
             network_id: Network ID or name
@@ -195,8 +189,7 @@ class BaseContainerClientAdapter(abc.ABC):
 
     @abc.abstractmethod
     def wait_for_container(self, container_id: str, timeout: int | None = None) -> int:
-        """
-        Wait for a container to exit and return its exit code.
+        """Wait for a container to exit and return its exit code.
 
         This is a blocking call that waits until the container stops.
 

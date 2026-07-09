@@ -14,7 +14,9 @@
 
 """Unit tests for KubernetesBackend."""
 
+from collections.abc import Iterator
 import multiprocessing
+from typing import Any, cast
 from unittest.mock import Mock, patch
 
 from kubeflow_spark_api import models
@@ -45,7 +47,7 @@ from kubeflow.spark.types.types import SparkConnectInfo, SparkConnectState
 
 
 @pytest.fixture
-def kubernetes_backend():
+def kubernetes_backend() -> Iterator[KubernetesBackend]:
     """Provide KubernetesBackend with mocked K8s APIs."""
     with (
         patch("kubernetes.config.load_kube_config", return_value=None),
@@ -73,14 +75,14 @@ def kubernetes_backend():
 # --------------------------
 
 
-def create_mock_thread(response=None):
+def create_mock_thread(response: object = None) -> Mock:
     """Create mock thread that returns response on .get()."""
     mock_thread = Mock()
     mock_thread.get.return_value = response
     return mock_thread
 
 
-def create_error_thread(exc: Exception):
+def create_error_thread(exc: Exception) -> Mock:
     """Create mock thread whose .get() raises the given exception."""
     mock_thread = Mock()
     mock_thread.get.side_effect = exc
@@ -95,14 +97,14 @@ def get_spark_connect(
 ) -> models.SparkV1alpha1SparkConnect:
     """Create a mock SparkConnect model for testing."""
     return models.SparkV1alpha1SparkConnect(
-        api_version=f"{constants.SPARK_CONNECT_GROUP}/{constants.SPARK_CONNECT_VERSION}",
+        apiVersion=f"{constants.SPARK_CONNECT_GROUP}/{constants.SPARK_CONNECT_VERSION}",
         kind=constants.SPARK_CONNECT_KIND,
         metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
             name=name,
             namespace=namespace,
         ),
         spec=models.SparkV1alpha1SparkConnectSpec(
-            spark_version=constants.DEFAULT_SPARK_VERSION,
+            sparkVersion=constants.DEFAULT_SPARK_VERSION,
             image=constants.DEFAULT_SPARK_IMAGE,
             server=models.SparkV1alpha1ServerSpec(
                 cores=constants.DEFAULT_DRIVER_CPU,
@@ -130,8 +132,8 @@ def mock_get_response(name: str) -> dict:
             name=name,
             state="Ready",
             server_status=models.SparkV1alpha1SparkConnectServerStatus(
-                pod_name=f"{name}-0",
-                pod_ip="10.0.0.5",
+                podName=f"{name}-0",
+                podIp="10.0.0.5",
             ),
         ).to_dict()
     elif name == SPARK_CONNECT_PROVISIONING:
@@ -141,10 +143,10 @@ def mock_get_response(name: str) -> dict:
     raise ApiException(status=404, reason="Not Found")
 
 
-def mock_list_response(*args, **kwargs) -> dict:
+def mock_list_response(*args: object, **kwargs: object) -> dict:
     """Return mock list response."""
     spark_connect_list = models.SparkV1alpha1SparkConnectList(
-        api_version=f"{constants.SPARK_CONNECT_GROUP}/{constants.SPARK_CONNECT_VERSION}",
+        apiVersion=f"{constants.SPARK_CONNECT_GROUP}/{constants.SPARK_CONNECT_VERSION}",
         kind="SparkConnectList",
         items=[
             get_spark_connect(name="session-1", state="Ready"),
@@ -154,11 +156,12 @@ def mock_list_response(*args, **kwargs) -> dict:
     return spark_connect_list.to_dict()
 
 
-def mock_create_response(*args, **kwargs) -> dict:
+def mock_create_response(*args: object, **kwargs: object) -> dict:
     """Return mock create response."""
-    body = kwargs.get("body", {})
+    body = cast("dict[str, Any]", kwargs.get("body", {}))
     # Parse the request body and add status
     spark_connect = models.SparkV1alpha1SparkConnect.from_dict(body)
+    assert spark_connect is not None
     spark_connect.status = models.SparkV1alpha1SparkConnectStatus(state="Provisioning")
     return spark_connect.to_dict()
 
@@ -170,7 +173,7 @@ def mock_delete_response(name: str) -> None:
     return None
 
 
-def _mock_create(*args, **kw):
+def _mock_create(*args: object, **kw: object) -> Mock:
     """Mock create_namespaced_custom_object: returns thread whose .get() raises on sentinel."""
     namespace = kw.get("namespace", args[2] if len(args) > 2 else None)
     if namespace == TIMEOUT:
@@ -180,34 +183,34 @@ def _mock_create(*args, **kw):
     return create_mock_thread(response=mock_create_response(**kw))
 
 
-def _mock_get(*args, **kw):
+def _mock_get(*args: object, **kw: object) -> Mock:
     """Mock get_namespaced_custom_object: returns thread whose .get() raises on sentinel."""
     namespace = kw.get("namespace", args[2] if len(args) > 2 else None)
-    name = kw.get("name", args[4] if len(args) > 4 else None)
+    name = cast(str, kw.get("name", args[4] if len(args) > 4 else None))
     if namespace == TIMEOUT:
         return create_error_thread(multiprocessing.TimeoutError())
     elif namespace == RUNTIME:
         return create_error_thread(RuntimeError())
     mock_thread = Mock()
 
-    def get_with_exception(timeout=None):
+    def get_with_exception(timeout: object = None) -> dict:
         return mock_get_response(name)
 
     mock_thread.get = Mock(side_effect=get_with_exception)
     return mock_thread
 
 
-def _mock_delete(*args, **kw):
+def _mock_delete(*args: object, **kw: object) -> Mock:
     """Mock delete_namespaced_custom_object: returns thread whose .get() raises on sentinel."""
     namespace = kw.get("namespace", args[2] if len(args) > 2 else None)
-    name = kw.get("name", args[4] if len(args) > 4 else None)
+    name = cast(str, kw.get("name", args[4] if len(args) > 4 else None))
     if namespace == TIMEOUT:
         return create_error_thread(multiprocessing.TimeoutError())
     elif namespace == RUNTIME:
         return create_error_thread(RuntimeError())
     mock_thread = Mock()
 
-    def get_with_exception(timeout=None):
+    def get_with_exception(timeout: object = None) -> None:
         mock_delete_response(name)
         return None
 
@@ -215,7 +218,7 @@ def _mock_delete(*args, **kw):
     return mock_thread
 
 
-def _mock_list(*args, **kw):
+def _mock_list(*args: object, **kw: object) -> Mock:
     """Mock list_namespaced_custom_object: returns thread whose .get() raises on sentinel."""
     namespace = kw.get("namespace", args[2] if len(args) > 2 else None)
     if namespace == TIMEOUT:
@@ -225,7 +228,7 @@ def _mock_list(*args, **kw):
     return create_mock_thread(response=mock_list_response())
 
 
-def _mock_read_logs(*args, **kw):
+def _mock_read_logs(*args: object, **kw: object) -> Mock:
     """Mock read_namespaced_pod_log: returns thread whose .get() raises on sentinel."""
     name = kw.get("name", args[1] if len(args) > 1 else None)
     if name == TIMEOUT:
@@ -275,7 +278,7 @@ def _mock_read_logs(*args, **kw):
         ),
     ],
 )
-def test_create_session(kubernetes_backend, test_case):
+def test_create_session(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend._create_session with success and error scenarios."""
     print("Executing test:", test_case.name)
     try:
@@ -326,7 +329,7 @@ def test_create_session(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_get_session(kubernetes_backend, test_case):
+def test_get_session(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.get_session with success and error scenarios."""
     print("Executing test:", test_case.name)
     try:
@@ -364,7 +367,7 @@ def test_get_session(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_list_sessions(kubernetes_backend, test_case):
+def test_list_sessions(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.list_sessions with success and error scenarios."""
     print("Executing test:", test_case.name)
     try:
@@ -409,7 +412,7 @@ def test_list_sessions(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_delete_session(kubernetes_backend, test_case):
+def test_delete_session(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.delete_session with success and error scenarios."""
     print("Executing test:", test_case.name)
     try:
@@ -440,7 +443,7 @@ def test_delete_session(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_wait_for_session_ready(kubernetes_backend, test_case):
+def test_wait_for_session_ready(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend._wait_for_session_ready with different session states."""
     print("Executing test:", test_case.name)
     try:
@@ -476,7 +479,7 @@ def test_wait_for_session_ready(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_get_session_logs(kubernetes_backend, test_case):
+def test_get_session_logs(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.get_session_logs with success and error scenarios."""
     print("Executing test:", test_case.name)
     try:
@@ -493,6 +496,7 @@ def test_get_session_logs(kubernetes_backend, test_case):
             assert logs[0] == "log line 1"
         else:
             # Should not reach here for failed test cases
+            assert test_case.expected_error is not None
             raise AssertionError(f"Expected {test_case.expected_error.__name__} but test succeeded")
 
     except Exception as e:
@@ -520,7 +524,7 @@ def test_get_session_logs(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_get_connect_url(kubernetes_backend, test_case):
+def test_get_connect_url(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test get_connect_url for in-cluster and port-forward scenarios."""
     print("Executing test:", test_case.name)
     info = SparkConnectInfo(
@@ -551,6 +555,7 @@ def test_get_connect_url(kubernetes_backend, test_case):
         ):
             url, proc = kubernetes_backend.get_connect_url(info)
 
+    assert test_case.expected_output is not None
     if "url_contains" in test_case.expected_output:
         assert test_case.expected_output["url_contains"] in url
     else:
@@ -581,7 +586,7 @@ def test_get_connect_url(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_wait_for_connect_port(kubernetes_backend, test_case):
+def test_wait_for_connect_port(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test _wait_for_connect_port returns True on success and False on timeout."""
     print("Executing test:", test_case.name)
     if test_case.config["side_effect"] is None:
@@ -624,7 +629,7 @@ def test_wait_for_connect_port(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_validate_spark_connect_url(test_case):
+def test_validate_spark_connect_url(test_case: TestCase) -> None:
     """Test URL validation for Spark Connect URLs."""
     print("Executing test:", test_case.name)
     try:
@@ -651,7 +656,7 @@ def test_validate_spark_connect_url(test_case):
         ),
     ],
 )
-def test_create_and_connect(kubernetes_backend, test_case):
+def test_create_and_connect(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test create_and_connect with and without Name option."""
     print("Executing test:", test_case.name)
     try:
@@ -719,13 +724,14 @@ def test_create_and_connect(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_extract_name_option(kubernetes_backend, test_case):
+def test_extract_name_option(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend._extract_name_option for name extraction and auto-generation."""
     print("Executing test:", test_case.name)
     try:
         name, filtered = kubernetes_backend._extract_name_option(test_case.config["options"])
 
         assert test_case.expected_status == SUCCESS
+        assert test_case.expected_output is not None
         if "name" in test_case.expected_output:
             assert name == test_case.expected_output["name"]
         else:

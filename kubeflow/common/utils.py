@@ -11,6 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+"""Helpers for resolving the Kubernetes namespace and cluster context."""
+
 import os
 
 from kubernetes import config
@@ -19,10 +22,27 @@ from kubeflow.common import constants
 
 
 def is_running_in_k8s() -> bool:
+    """Check whether the current process is running inside a Kubernetes cluster.
+
+    Returns:
+        ``True`` if the in-cluster service account directory is present,
+        ``False`` otherwise.
+    """
     return os.path.isdir("/var/run/secrets/kubernetes.io/")
 
 
 def get_default_target_namespace(context: str | None = None) -> str:
+    """Resolve the default namespace for Kubernetes API requests.
+
+    Args:
+        context: Optional kube-config context name. When provided, the
+            namespace is read from that context; otherwise the current
+            context's namespace is used.
+
+    Returns:
+        The resolved namespace, falling back to the default namespace when it
+        cannot be determined from the kube-config.
+    """
     if not is_running_in_k8s():
         try:
             all_contexts, current_context = config.list_kube_config_contexts()

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-SparkClient Examples - KEP-107 Three-Level API Pattern
+"""SparkClient Examples - KEP-107 Three-Level API Pattern.
 
 This example demonstrates the three usage levels of SparkClient,
 following the KEP-107 specification:
@@ -34,16 +33,15 @@ def _e2e_session_name(base: str) -> str:
     return base
 
 
-def _backend_config(namespace_default: str = "default"):
+def _backend_config(namespace_default: str = "default") -> KubernetesBackendConfig:
     """Backend config; uses SPARK_TEST_NAMESPACE in CI."""
     return KubernetesBackendConfig(
         namespace=os.environ.get("SPARK_TEST_NAMESPACE", namespace_default)
     )
 
 
-def example_level1_minimal():
-    """
-    Level 1: Minimal Usage (KEP-107 lines 104-109)
+def example_level1_minimal() -> None:
+    """Level 1: Minimal Usage (KEP-107 lines 104-109).
 
     Uses all default values:
     - Default namespace
@@ -75,9 +73,8 @@ def example_level1_minimal():
     print("\nLevel 1 complete.\n")
 
 
-def example_level2_simple():
-    """
-    Level 2: Simple Parameters (KEP-107 lines 54-67)
+def example_level2_simple() -> None:
+    """Level 2: Simple Parameters (KEP-107 lines 54-67).
 
     Configure executors and resources using simple parameters:
     - num_executors: Number of executor instances
@@ -113,9 +110,8 @@ def example_level2_simple():
     print("\nLevel 2 complete.\n")
 
 
-def example_level3_advanced():
-    """
-    Level 3: Advanced Configuration (KEP-107 advanced example)
+def example_level3_advanced() -> None:
+    """Level 3: Advanced Configuration (KEP-107 advanced example).
 
     Full control using Driver and Executor objects:
     - Driver: Configure driver pod resources and service account
@@ -164,9 +160,8 @@ def example_level3_advanced():
     print("\nLevel 3 complete.\n")
 
 
-def example_connect_existing():
-    """
-    Connect to Existing Spark Connect Server (KEP-107 lines 88-97)
+def example_connect_existing() -> None:
+    """Connect to Existing Spark Connect Server (KEP-107 lines 88-97).
 
     Connect to a server that's already running using its URL.
     """
@@ -184,9 +179,8 @@ def example_connect_existing():
     print("\nExample shown.\n")
 
 
-def example_with_namespace():
-    """
-    Configure with Custom Namespace (KEP-107 lines 69-85)
+def example_with_namespace() -> None:
+    """Configure with Custom Namespace (KEP-107 lines 69-85).
 
     Deploy Spark sessions to a specific Kubernetes namespace.
     """
@@ -210,7 +204,7 @@ def example_with_namespace():
     print("\nCustom namespace example complete.\n")
 
 
-def main():
+def main() -> None:
     """Run all examples sequentially."""
     print("E2E: Starting spark_connect_simple.py", flush=True)
     print("\n")

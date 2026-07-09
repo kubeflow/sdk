@@ -11,6 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+"""Backend that runs Kubeflow TrainJobs as local subprocesses."""
+
 from collections.abc import Callable, Iterator
 from datetime import datetime
 import logging
@@ -28,6 +31,7 @@ from kubeflow.trainer.backends.localprocess.types import (
     LocalBackendJobs,
     LocalBackendStep,
     LocalProcessBackendConfig,
+    LocalRuntimeTrainer,
 )
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
@@ -36,18 +40,37 @@ logger = logging.getLogger(__name__)
 
 
 class LocalProcessBackend(RuntimeBackend):
+    """Execute TrainJobs as local subprocesses inside per-job virtual environments."""
+
     def __init__(
         self,
         cfg: LocalProcessBackendConfig,
-    ):
+    ) -> None:
+        """Initialize the backend with the given configuration.
+
+        Args:
+            cfg: Configuration controlling the local execution behavior.
+        """
         # list of running subprocesses
         self.__local_jobs: list[LocalBackendJobs] = []
         self.cfg = cfg
 
     def list_runtimes(self) -> list[types.Runtime]:
+        """Return all runtimes supported by the local backend."""
         return [self.__convert_local_runtime_to_runtime(local_runtime=rt) for rt in local_runtimes]
 
     def get_runtime(self, name: str) -> types.Runtime:
+        """Return the runtime with the given name.
+
+        Args:
+            name: Name of the runtime to look up.
+
+        Returns:
+            The matching runtime.
+
+        Raises:
+            ValueError: If no runtime with the given name exists.
+        """
         runtime = next(
             (
                 self.__convert_local_runtime_to_runtime(rt)
@@ -61,10 +84,24 @@ class LocalProcessBackend(RuntimeBackend):
 
         return runtime
 
-    def get_runtime_packages(self, runtime: types.Runtime):
+    def get_runtime_packages(self, runtime: types.Runtime) -> list[str]:
+        """Return the packages installed by the given runtime.
+
+        Args:
+            runtime: Runtime whose packages should be returned.
+
+        Returns:
+            The list of package requirement strings.
+
+        Raises:
+            ValueError: If no runtime with the given name exists.
+        """
         local_runtime = next((rt for rt in local_runtimes if rt.name == runtime.name), None)
         if not local_runtime:
             raise ValueError(f"Runtime '{runtime.name}' not found.")
+
+        if not isinstance(local_runtime.trainer, LocalRuntimeTrainer):
+            raise ValueError(f"Runtime '{runtime.name}' does not expose local packages.")
 
         return local_runtime.trainer.packages
 
@@ -78,6 +115,20 @@ class LocalProcessBackend(RuntimeBackend):
         | None = None,
         options: list | None = None,
     ) -> str:
+        """Start a training job as a local subprocess.
+
+        Args:
+            runtime: Runtime (or its name) to train with.
+            initializer: Unused by the local backend; accepted for interface parity.
+            trainer: The trainer describing the workload. Only CustomTrainer is supported.
+            options: Optional list of job options. Kubernetes-only options are rejected.
+
+        Returns:
+            The generated (or user-provided) TrainJob name.
+
+        Raises:
+            ValueError: If the runtime is missing or the trainer is not a CustomTrainer.
+        """
         if runtime is None:
             raise ValueError("Runtime must be provided for LocalProcessBackend")
         if isinstance(runtime, str):
@@ -147,16 +198,28 @@ class LocalProcessBackend(RuntimeBackend):
         return trainjob_name
 
     def list_jobs(self, runtime: types.Runtime | None = None) -> list[types.TrainJob]:
+        """Return all tracked TrainJobs, optionally filtered by runtime.
+
+        Args:
+            runtime: If provided, only jobs for this runtime are returned.
+
+        Returns:
+            The list of matching TrainJobs.
+        """
         result = []
 
         for _job in self.__local_jobs:
-            if runtime and _job.runtime.name != runtime.name:
+            job_runtime = _job.runtime
+            created = _job.created
+            if job_runtime is None or created is None:
+                continue
+            if runtime and job_runtime.name != runtime.name:
                 continue
             result.append(
                 types.TrainJob(
                     name=_job.name,
-                    creation_timestamp=_job.created,
-                    runtime=runtime,
+                    creation_timestamp=created,
+                    runtime=job_runtime,
                     num_nodes=1,
                     steps=[
                         types.Step(name=s.step_name, pod_name=s.step_name, status=s.job.status)
@@ -167,16 +230,32 @@ class LocalProcessBackend(RuntimeBackend):
         return result
 
     def get_job(self, name: str) -> types.TrainJob:
+        """Return the TrainJob with the given name.
+
+        Args:
+            name: Name of the TrainJob to fetch.
+
+        Returns:
+            The matching TrainJob with its aggregated status.
+
+        Raises:
+            ValueError: If no TrainJob with the given name exists.
+        """
         _job = next((j for j in self.__local_jobs if j.name == name), None)
         if _job is None:
             raise ValueError(f"No TrainJob with name {name}")
+
+        runtime = _job.runtime
+        created = _job.created
+        if runtime is None or created is None:
+            raise ValueError(f"TrainJob {name} is missing runtime or creation metadata")
 
         # check and set the correct job status to match `TrainerClient` supported statuses
         status = self.__get_job_status(_job)
 
         return types.TrainJob(
             name=_job.name,
-            creation_timestamp=_job.created,
+            creation_timestamp=created,
             steps=[
                 types.Step(
                     name=_step.step_name,
@@ -185,7 +264,7 @@ class LocalProcessBackend(RuntimeBackend):
                 )
                 for _step in _job.steps
             ],
-            runtime=_job.runtime,
+            runtime=runtime,
             num_nodes=1,
             status=status,
         )
@@ -196,6 +275,19 @@ class LocalProcessBackend(RuntimeBackend):
         follow: bool = False,
         step: str = constants.NODE + "-0",
     ) -> Iterator[str]:
+        """Yield logs for a TrainJob, for a single step or for all steps.
+
+        Args:
+            name: Name of the TrainJob.
+            follow: If True, stream logs live as they are produced.
+            step: Step to read logs from. The default reads all steps.
+
+        Yields:
+            Chunks of log output.
+
+        Raises:
+            ValueError: If no TrainJob with the given name exists.
+        """
         _job = [j for j in self.__local_jobs if j.name == name]
         if not _job:
             raise ValueError(f"No TrainJob with name {name}")
@@ -210,6 +302,14 @@ class LocalProcessBackend(RuntimeBackend):
             yield from _step.job.logs(follow=follow)
 
     def get_job_events(self, name: str) -> list[types.Event]:
+        """Return events for a TrainJob (not supported by the local backend).
+
+        Args:
+            name: Name of the TrainJob.
+
+        Raises:
+            NotImplementedError: Always, since local jobs do not emit events.
+        """
         raise NotImplementedError()
 
     def wait_for_job_status(
@@ -220,6 +320,23 @@ class LocalProcessBackend(RuntimeBackend):
         polling_interval: int = 2,
         callbacks: list[Callable[[types.TrainJob], None]] | None = None,
     ) -> types.TrainJob:
+        """Poll a TrainJob until it reaches one of the desired statuses.
+
+        Args:
+            name: Name of the TrainJob to wait for.
+            status: Set of statuses that are considered terminal for this wait.
+            timeout: Maximum number of seconds to wait.
+            polling_interval: Seconds between status checks; must be < timeout.
+            callbacks: Callables invoked with the TrainJob on every poll.
+
+        Returns:
+            The TrainJob once it reaches one of the desired statuses.
+
+        Raises:
+            ValueError: If polling_interval is not positive or is >= timeout, or the job
+                does not exist.
+            TimeoutError: If the timeout elapses before a desired status is reached.
+        """
         if polling_interval <= 0:
             raise ValueError(
                 f"Polling interval must be a positive number, got polling_interval={polling_interval}"
@@ -254,7 +371,15 @@ class LocalProcessBackend(RuntimeBackend):
         # Timeout reached
         raise TimeoutError(f"Timeout waiting for TrainJob {name} to reach status: {status}")
 
-    def delete_job(self, name: str):
+    def delete_job(self, name: str) -> None:
+        """Cancel and remove the TrainJob with the given name.
+
+        Args:
+            name: Name of the TrainJob to delete.
+
+        Raises:
+            ValueError: If no TrainJob with the given name exists.
+        """
         # find job first.
         _job = next((j for j in self.__local_jobs if j.name == name), None)
         if _job is None:
@@ -287,7 +412,7 @@ class LocalProcessBackend(RuntimeBackend):
         step_name: str,
         job: LocalJob,
         runtime: types.Runtime,
-    ):
+    ) -> None:
         existing_jobs = [j for j in self.__local_jobs if j.name == train_job_name]
         if not existing_jobs:
             _job = LocalBackendJobs(name=train_job_name, runtime=runtime, created=datetime.now())
@@ -302,7 +427,7 @@ class LocalProcessBackend(RuntimeBackend):
         else:
             logger.warning(f"Step '{step_name}' already registered.")
 
-    def __convert_local_runtime_to_runtime(self, local_runtime) -> types.Runtime:
+    def __convert_local_runtime_to_runtime(self, local_runtime: types.Runtime) -> types.Runtime:
         return types.Runtime(
             name=local_runtime.name,
             trainer=types.RuntimeTrainer(

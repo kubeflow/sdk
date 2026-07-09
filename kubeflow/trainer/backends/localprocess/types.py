@@ -12,39 +12,46 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Data types used by the LocalProcessBackend."""
 
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from kubeflow.trainer.backends.localprocess.job import LocalJob
 from kubeflow.trainer.types import types
 
 
 class LocalProcessBackendConfig(BaseModel):
+    """Configuration for the LocalProcessBackend."""
+
     cleanup_venv: bool = True
 
 
 @dataclass
 class LocalRuntimeTrainer(types.RuntimeTrainer):
+    """Runtime trainer that also tracks the packages installed in the venv."""
+
     packages: list[str] = field(default_factory=list)
 
 
 class LocalBackendStep(BaseModel):
+    """A single step of a local TrainJob, backed by a LocalJob thread."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     step_name: str
     job: LocalJob
 
-    class Config:
-        arbitrary_types_allowed = True
-
 
 class LocalBackendJobs(BaseModel):
-    steps: list[LocalBackendStep] | None = []
+    """A local TrainJob and the steps that make it up."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    steps: list[LocalBackendStep] = Field(default_factory=list)
     runtime: types.Runtime | None = None
     name: str
     created: datetime | None = None
     completed: datetime | None = None
-
-    class Config:
-        arbitrary_types_allowed = True

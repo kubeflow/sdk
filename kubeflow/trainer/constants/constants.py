@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Constants for the Kubeflow Trainer SDK."""
+
 import os
 import textwrap
 

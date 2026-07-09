@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Client for creating and managing Kubeflow Optimizer hyperparameter tuning jobs."""
+
 from collections.abc import Callable, Iterator
 import logging
 from typing import Any
@@ -32,10 +34,12 @@ logger = logging.getLogger(__name__)
 
 
 class OptimizerClient:
+    """Client to create and manage OptimizationJobs on a Kubeflow backend."""
+
     def __init__(
         self,
         backend_config: KubernetesBackendConfig | None = None,
-    ):
+    ) -> None:
         """Initialize a Kubeflow Optimizer client.
 
         Args:
@@ -44,7 +48,6 @@ class OptimizerClient:
 
         Raises:
             ValueError: Invalid backend configuration.
-
         """
         # Set the default backend config.
         if not backend_config:
@@ -69,9 +72,9 @@ class OptimizerClient:
         Args:
             trial_template: The TrainJob template defining the training script.
             trial_config: Optional configuration to run Trials.
-            objectives: List of objectives to optimize.
             search_space: Dictionary mapping parameter names to Search specifications using
                 Search.uniform(), Search.loguniform(), Search.choice(), etc.
+            objectives: List of objectives to optimize.
             algorithm: The optimization algorithm to use. Defaults to RandomSearch.
 
         Returns:
@@ -91,7 +94,7 @@ class OptimizerClient:
         )
 
     def list_jobs(self) -> list[OptimizationJob]:
-        """List of the created OptimizationJobs
+        """List the created OptimizationJobs.
 
         Returns:
             List of created OptimizationJobs. If no OptimizationJob exist,
@@ -101,11 +104,10 @@ class OptimizerClient:
             TimeoutError: Timeout to list OptimizationJobs.
             RuntimeError: Failed to list OptimizationJobs.
         """
-
         return self.backend.list_jobs()
 
     def get_job(self, name: str) -> OptimizationJob:
-        """Get the OptimizationJob object
+        """Get the OptimizationJob object.
 
         Args:
             name: Name of the OptimizationJob.
@@ -117,7 +119,6 @@ class OptimizerClient:
             TimeoutError: Timeout to get a OptimizationJob.
             RuntimeError: Failed to get a OptimizationJob.
         """
-
         return self.backend.get_job(name=name)
 
     def get_job_logs(
@@ -152,7 +153,6 @@ class OptimizerClient:
 
         Returns:
             Iterator of log lines.
-
 
         Raises:
             TimeoutError: Timeout to get an OptimizationJob.
@@ -216,7 +216,7 @@ class OptimizerClient:
             callbacks=callbacks,
         )
 
-    def delete_job(self, name: str):
+    def delete_job(self, name: str) -> None:
         """Delete the OptimizationJob.
 
         Args:

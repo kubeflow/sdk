@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Utility functions for the Container backend.
-"""
+"""Utility functions for the Container backend."""
 
 from dataclasses import dataclass
 import logging
@@ -23,6 +21,8 @@ from pathlib import Path
 import shlex
 
 from kubeflow.common.constants import UNKNOWN
+from kubeflow.trainer.backends.container.adapters.base import BaseContainerClientAdapter
+from kubeflow.trainer.backends.container.types import ContainerBackendConfig
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 
@@ -30,8 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_workdir(job_name: str) -> str:
-    """
-    Create per-job working directory on host.
+    """Create per-job working directory on host.
 
     Working directories are created under ~/.kubeflow/trainer/containers/<job_name>
 
@@ -49,8 +48,7 @@ def create_workdir(job_name: str) -> str:
 
 
 def get_training_script_code(trainer: types.CustomTrainer) -> str:
-    """
-    Generate the training script code from the trainer function.
+    """Generate the training script code from the trainer function.
 
     This extracts the function source and appends a function call,
     similar to how the Kubernetes backend handles training scripts.
@@ -66,16 +64,16 @@ def get_training_script_code(trainer: types.CustomTrainer) -> str:
 
     code = inspect.getsource(trainer.func)
     code = textwrap.dedent(code)
+    func_name = getattr(trainer.func, "__name__", "train")
     if trainer.func_args is None:
-        code += f"\n{trainer.func.__name__}()\n"
+        code += f"\n{func_name}()\n"
     else:
-        code += f"\n{trainer.func.__name__}(**{trainer.func_args})\n"
+        code += f"\n{func_name}(**{trainer.func_args})\n"
     return code
 
 
 def build_environment(trainer: types.CustomTrainer) -> dict[str, str]:
-    """
-    Build environment variables for containers.
+    """Build environment variables for containers.
 
     Args:
         trainer: CustomTrainer configuration.
@@ -87,8 +85,7 @@ def build_environment(trainer: types.CustomTrainer) -> dict[str, str]:
 
 
 def build_pip_install_cmd(trainer: types.CustomTrainer) -> str:
-    """
-    Build pip install command for packages.
+    """Build pip install command for packages.
 
     Generates a shell snippet that installs packages with retry logic and
     fallback from per-user to system-wide installation, matching the resilience
@@ -123,13 +120,12 @@ def build_pip_install_cmd(trainer: types.CustomTrainer) -> str:
     )
 
 
-def container_status_to_trainjob_status(status: str, exit_code: int) -> str:
-    """
-    Convert container status to TrainJob status.
+def container_status_to_trainjob_status(status: str, exit_code: int | None) -> str:
+    """Convert container status to TrainJob status.
 
     Args:
         status: Container status (e.g., "running", "exited", "created").
-        exit_code: Container exit code.
+        exit_code: Container exit code, or None if the container has not exited.
 
     Returns:
         TrainJob status constant.
@@ -145,8 +141,7 @@ def container_status_to_trainjob_status(status: str, exit_code: int) -> str:
 
 
 def aggregate_status_from_containers(container_statuses: list[str]) -> str:
-    """
-    Aggregate status from multiple container statuses.
+    """Aggregate status from multiple container statuses.
 
     Args:
         container_statuses: List of container status strings.
@@ -165,9 +160,8 @@ def aggregate_status_from_containers(container_statuses: list[str]) -> str:
     return UNKNOWN
 
 
-def maybe_pull_image(adapter, image: str, pull_policy: str):
-    """
-    Pull image based on pull policy.
+def maybe_pull_image(adapter: BaseContainerClientAdapter, image: str, pull_policy: str) -> None:
+    """Pull image based on pull policy.
 
     Args:
         adapter: Container client adapter (DockerClientAdapter or PodmanClientAdapter).
@@ -195,9 +189,8 @@ def maybe_pull_image(adapter, image: str, pull_policy: str):
         raise RuntimeError(f"Failed to ensure image '{image}': {e}") from e
 
 
-def get_container_status(adapter, container_id: str) -> str:
-    """
-    Get the TrainJob status of a container.
+def get_container_status(adapter: BaseContainerClientAdapter, container_id: str) -> str:
+    """Get the TrainJob status of a container.
 
     Args:
         adapter: Container client adapter (DockerClientAdapter or PodmanClientAdapter).
@@ -213,9 +206,10 @@ def get_container_status(adapter, container_id: str) -> str:
         return UNKNOWN
 
 
-def aggregate_container_statuses(adapter, containers: list[dict]) -> str:
-    """
-    Aggregate TrainJob status from container info dicts.
+def aggregate_container_statuses(
+    adapter: BaseContainerClientAdapter, containers: list[dict]
+) -> str:
+    """Aggregate TrainJob status from container info dicts.
 
     Args:
         adapter: Container client adapter (DockerClientAdapter or PodmanClientAdapter).
@@ -241,8 +235,7 @@ class ContainerInitializer:
 def get_optional_initializer_envs(
     initializer: types.BaseInitializer, required_fields: set[str]
 ) -> dict[str, str]:
-    """
-    Get optional environment variables from the initializer config.
+    """Get optional environment variables from the initializer config.
 
     Iterates over dataclass fields and converts non-required, non-None values
     to environment variables with uppercase names.
@@ -268,9 +261,10 @@ def get_optional_initializer_envs(
     return env
 
 
-def get_dataset_initializer(dataset: types.BaseInitializer, config) -> ContainerInitializer:
-    """
-    Get container initializer configuration for dataset initialization.
+def get_dataset_initializer(
+    dataset: types.BaseInitializer, config: ContainerBackendConfig
+) -> ContainerInitializer:
+    """Get container initializer configuration for dataset initialization.
 
     Args:
         dataset: Dataset initializer configuration (HuggingFace or S3).
@@ -302,9 +296,10 @@ def get_dataset_initializer(dataset: types.BaseInitializer, config) -> Container
     )
 
 
-def get_model_initializer(model: types.BaseInitializer, config) -> ContainerInitializer:
-    """
-    Get container initializer configuration for model initialization.
+def get_model_initializer(
+    model: types.BaseInitializer, config: ContainerBackendConfig
+) -> ContainerInitializer:
+    """Get container initializer configuration for model initialization.
 
     Args:
         model: Model initializer configuration (HuggingFace or S3).

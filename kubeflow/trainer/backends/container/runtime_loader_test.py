@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Unit tests for runtime_loader module.
+"""Unit tests for runtime_loader module.
 
 Tests runtime loading from various sources including GitHub, HTTP, and filesystem.
 """
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -28,7 +28,7 @@ from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.types import types as base_types
 
 # Sample runtime YAML data for testing
-SAMPLE_RUNTIME_YAML = {
+SAMPLE_RUNTIME_YAML: dict[str, Any] = {
     "apiVersion": "trainer.kubeflow.org/v1alpha1",
     "kind": "ClusterTrainingRuntime",
     "metadata": {
@@ -129,7 +129,7 @@ SAMPLE_RUNTIME_YAML = {
         ),
     ],
 )
-def test_parse_source_url(test_case):
+def test_parse_source_url(test_case: TestCase) -> None:
     """Test parsing various source URL formats."""
     print("Executing test:", test_case.name)
     try:
@@ -186,7 +186,7 @@ def test_parse_source_url(test_case):
         ),
     ],
 )
-def test_load_from_github_url(test_case):
+def test_load_from_github_url(test_case: TestCase) -> None:
     """Test loading runtimes from GitHub URLs."""
     print("Executing test:", test_case.name)
     try:
@@ -264,7 +264,7 @@ def test_load_from_github_url(test_case):
         ),
     ],
 )
-def test_list_training_runtimes_from_sources(test_case):
+def test_list_training_runtimes_from_sources(test_case: TestCase) -> None:
     """Test listing runtimes from multiple sources."""
     print("Executing test:", test_case.name)
     try:
@@ -349,7 +349,7 @@ def test_list_training_runtimes_from_sources(test_case):
     print("test execution complete")
 
 
-def test_create_default_runtimes():
+def test_create_default_runtimes() -> None:
     """Test creating default runtimes from constants."""
     print("Executing test: create default runtimes")
     runtimes = runtime_loader._create_default_runtimes()
@@ -410,7 +410,7 @@ def test_create_default_runtimes():
         ),
     ],
 )
-def test_discover_github_runtime_files(test_case):
+def test_discover_github_runtime_files(test_case: TestCase) -> None:
     """Test discovering runtime files from GitHub."""
     print("Executing test:", test_case.name)
     try:
@@ -492,7 +492,7 @@ metadata:
         ),
     ],
 )
-def test_fetch_runtime_from_github(test_case):
+def test_fetch_runtime_from_github(test_case: TestCase) -> None:
     """Test fetching runtime YAML from GitHub."""
     print("Executing test:", test_case.name)
     try:
@@ -569,9 +569,9 @@ def test_fetch_runtime_from_github(test_case):
         ),
     ],
 )
-def test_parse_runtime_yaml_extracts_image(test_case):
-    """
-    Test that _parse_runtime_yaml correctly extracts and stores the container image.
+def test_parse_runtime_yaml_extracts_image(test_case: TestCase) -> None:
+    """Test that _parse_runtime_yaml correctly extracts and stores the container image.
+
     This prevents regression of bugs where custom images are ignored.
     """
     print("Executing test:", test_case.name)

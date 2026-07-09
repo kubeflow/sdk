@@ -12,4 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from kubeflow.spark.backends.base import RuntimeBackend as RuntimeBackend
+"""Backend implementations for the Kubeflow Spark client."""
+
+from kubeflow.spark.backends.base import RuntimeBackend
+
+__all__ = ["RuntimeBackend"]

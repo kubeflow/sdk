@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Kubernetes backend that runs Kubeflow Optimizer jobs as Katib Experiments."""
+
 from collections.abc import Callable, Iterator
 import copy
 import logging
@@ -48,7 +50,14 @@ logger = logging.getLogger(__name__)
 
 
 class KubernetesBackend(RuntimeBackend):
-    def __init__(self, cfg: KubernetesBackendConfig):
+    """Backend that manages OptimizationJobs through the Kubernetes and Katib APIs."""
+
+    def __init__(self, cfg: KubernetesBackendConfig) -> None:
+        """Initialize the Kubernetes backend from the given configuration.
+
+        Args:
+            cfg: Configuration used to connect to the Kubernetes cluster.
+        """
         if cfg.namespace is None:
             cfg.namespace = common_utils.get_default_target_namespace(cfg.context)
 
@@ -76,6 +85,7 @@ class KubernetesBackend(RuntimeBackend):
         objectives: list[Objective] | None = None,
         algorithm: BaseAlgorithm | None = None,
     ) -> str:
+        """Create an OptimizationJob for hyperparameter tuning."""
         # Generate unique name for the OptimizationJob.
         optimization_job_name = random.choice(string.ascii_lowercase) + uuid.uuid4().hex[:11]
 
@@ -180,7 +190,7 @@ class KubernetesBackend(RuntimeBackend):
         return optimization_job_name
 
     def list_jobs(self) -> list[OptimizationJob]:
-        """List of the created OptimizationJobs"""
+        """List the created OptimizationJobs."""
         result = []
 
         try:
@@ -214,7 +224,7 @@ class KubernetesBackend(RuntimeBackend):
         return result
 
     def get_job(self, name: str) -> OptimizationJob:
-        """Get the OptimizationJob object"""
+        """Get the OptimizationJob object."""
         optimization_job = self.__get_experiment_cr(name)
         return self.__get_optimization_job_from_cr(optimization_job)
 
@@ -224,7 +234,7 @@ class KubernetesBackend(RuntimeBackend):
         trial_name: str | None = None,
         follow: bool = False,
     ) -> Iterator[str]:
-        """Get the OptimizationJob logs from a Trial"""
+        """Get the OptimizationJob logs from a Trial."""
         # Determine what trial to get logs from.
         if trial_name is None:
             # Get logs from the best current trial.
@@ -255,7 +265,7 @@ class KubernetesBackend(RuntimeBackend):
         )
 
     def get_best_results(self, name: str) -> Result | None:
-        """Get the best hyperparameters and metrics from an OptimizationJob"""
+        """Get the best hyperparameters and metrics from an OptimizationJob."""
         best_trial = self._get_best_trial(name)
 
         if best_trial is None:
@@ -274,6 +284,7 @@ class KubernetesBackend(RuntimeBackend):
         polling_interval: int = 2,
         callbacks: list[Callable[[OptimizationJob], None]] | None = None,
     ) -> OptimizationJob:
+        """Wait for an OptimizationJob to reach a desired status."""
         job_statuses = {
             constants.OPTIMIZATION_JOB_CREATED,
             constants.OPTIMIZATION_JOB_RUNNING,
@@ -321,9 +332,8 @@ class KubernetesBackend(RuntimeBackend):
             f"{status}"
         )
 
-    def delete_job(self, name: str):
-        """Delete the OptimizationJob"""
-
+    def delete_job(self, name: str) -> None:
+        """Delete the OptimizationJob."""
         try:
             self.custom_api.delete_namespaced_custom_object(
                 constants.GROUP,
@@ -344,6 +354,7 @@ class KubernetesBackend(RuntimeBackend):
         logger.debug(f"{constants.OPTIMIZATION_JOB_KIND} {self.namespace}/{name} has been deleted")
 
     def get_job_events(self, name: str) -> list[Event]:
+        """Get events for an OptimizationJob."""
         # Get the OptimizationJob to ensure it exists
         job = self.get_job(name)
 
@@ -391,7 +402,7 @@ class KubernetesBackend(RuntimeBackend):
             ) from e
 
     def _get_best_trial(self, name: str) -> Trial | None:
-        """Get the best current Trial for the OptimizationJob"""
+        """Get the best current Trial for the OptimizationJob."""
         optimization_job = self.__get_experiment_cr(name)
 
         # Get the best trial from currentOptimalTrial
@@ -436,7 +447,7 @@ class KubernetesBackend(RuntimeBackend):
         return None
 
     def __get_experiment_cr(self, name: str) -> models.V1beta1Experiment:
-        """Get the Experiment CR from Kubernetes API"""
+        """Get the Experiment CR from Kubernetes API."""
         try:
             thread = self.custom_api.get_namespaced_custom_object(
                 constants.GROUP,
@@ -448,7 +459,7 @@ class KubernetesBackend(RuntimeBackend):
             )
 
             optimization_job = models.V1beta1Experiment.from_dict(
-                thread.get(common_constants.DEFAULT_TIMEOUT)  # type: ignore
+                thread.get(common_constants.DEFAULT_TIMEOUT)
             )
 
         except multiprocessing.TimeoutError as e:
@@ -459,6 +470,11 @@ class KubernetesBackend(RuntimeBackend):
             raise RuntimeError(
                 f"Failed to get {constants.OPTIMIZATION_JOB_KIND}: {self.namespace}/{name}"
             ) from e
+
+        if optimization_job is None:
+            raise RuntimeError(
+                f"Failed to get {constants.OPTIMIZATION_JOB_KIND}: {self.namespace}/{name}"
+            )
 
         return optimization_job
 

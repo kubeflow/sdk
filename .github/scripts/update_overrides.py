@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
-"""
-Update override-dependencies in pyproject.toml.
+"""Update override-dependencies in ``pyproject.toml``.
 
-This script manages the [tool.uv] override-dependencies section by:
-1. Reading existing overrides
-2. Adding or updating a package override
-3. Rewriting the entire section in consistent multi-line format
+This script manages the ``[tool.uv]`` override-dependencies section by reading
+the existing overrides, adding or updating a single package override, and
+rewriting the entire section in a consistent multi-line format.
 
-Usage:
+Typical usage example:
+
     python update_overrides.py <package> <target> <date> <advisory_url>
-
-Example:
     python update_overrides.py requests "requests==2.31.0" "2025-01-15" "https://..."
 """
 
@@ -19,7 +16,18 @@ import re
 import sys
 
 
-def main():
+def main() -> None:
+    """Add or update a security override in ``pyproject.toml``.
+
+    Reads the package name, target specifier, date, and advisory URL from
+    ``sys.argv``, merges the new override into any existing ``[tool.uv]``
+    override-dependencies section, and writes the rewritten ``pyproject.toml``
+    back to disk.
+
+    Raises:
+        SystemExit: Raised with exit code 1 when the required arguments are
+            missing or ``pyproject.toml`` cannot be found.
+    """
     if len(sys.argv) != 5:
         print(
             "Usage: update_overrides.py <package> <target> <date> <advisory_url>",

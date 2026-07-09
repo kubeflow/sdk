@@ -18,12 +18,14 @@ This module uses pytest and unittest.mock to simulate Kubernetes API interaction
 It tests KubernetesBackend's behavior across job listing, resource creation etc.
 """
 
+from collections.abc import Iterator
 from dataclasses import asdict
 import datetime
 import logging
 import multiprocessing
 import random
 import string
+from typing import TypeVar, cast
 from unittest.mock import Mock, patch
 import uuid
 
@@ -58,6 +60,8 @@ from kubeflow.trainer.test.common import (
 )
 from kubeflow.trainer.types import types
 
+T = TypeVar("T")
+
 NOT_FOUND = "not_found"
 FORBIDDEN = "forbidden"
 
@@ -82,7 +86,7 @@ TRAIN_JOB_WITH_CUSTOM_TRAINER = "train-job-with-custom-trainer"
 
 
 @pytest.fixture
-def kubernetes_backend(request):
+def kubernetes_backend(request: pytest.FixtureRequest) -> Iterator[KubernetesBackend]:
     """Provide a KubernetesBackend with mocked Kubernetes APIs."""
     with (
         patch("kubernetes.config.load_kube_config", return_value=None),
@@ -119,7 +123,7 @@ def kubernetes_backend(request):
 # --------------------------
 
 
-def conditional_error_handler(*args, **kwargs):
+def conditional_error_handler(*args: object, **kwargs: object) -> None:
     """Raise simulated errors based on resource name."""
     if args[2] == TIMEOUT:
         raise multiprocessing.TimeoutError()
@@ -127,7 +131,7 @@ def conditional_error_handler(*args, **kwargs):
         raise RuntimeError()
 
 
-def list_namespaced_pod_response(*args, **kwargs):
+def list_namespaced_pod_response(*args: object, **kwargs: object) -> Mock:
     """Return mock pod list response."""
     pod_list = get_mock_pod_list()
     mock_thread = Mock()
@@ -135,7 +139,7 @@ def list_namespaced_pod_response(*args, **kwargs):
     return mock_thread
 
 
-def get_mock_pod_list():
+def get_mock_pod_list() -> models.IoK8sApiCoreV1PodList:
     """Create a mocked Kubernetes PodList object with pods for different training steps."""
     return models.IoK8sApiCoreV1PodList(
         items=[
@@ -226,13 +230,11 @@ def get_resource_requirements() -> models.IoK8sApiCoreV1ResourceRequirements:
 
 def get_custom_trainer(
     env: list[models.IoK8sApiCoreV1EnvVar] | None = None,
-    pip_index_urls: list[str] | None = constants.DEFAULT_PIP_INDEX_URLS,
+    pip_index_urls: list[str] = constants.DEFAULT_PIP_INDEX_URLS,
     packages_to_install: list[str] = ["torch", "numpy"],
     image: str | None = None,
 ) -> models.TrainerV1alpha1Trainer:
-    """
-    Get the custom trainer for the TrainJob.
-    """
+    """Get the custom trainer for the TrainJob."""
     # Use the same helper as production code to build the pip install script so
     # tests stay in sync with the runtime behavior.
     install_script = utils.get_script_for_python_packages(
@@ -271,10 +273,7 @@ def get_custom_trainer_container(
     resources_per_node: models.IoK8sApiCoreV1ResourceRequirements,
     env: list[models.IoK8sApiCoreV1EnvVar],
 ) -> models.TrainerV1alpha1Trainer:
-    """
-    Get the custom trainer container for the TrainJob.
-    """
-
+    """Get the custom trainer container for the TrainJob."""
     return models.TrainerV1alpha1Trainer(
         image=image,
         numNodes=num_nodes,
@@ -286,9 +285,8 @@ def get_custom_trainer_container(
 def _build_core_api_mock(
     config_map_data: dict | None = None,
     error: Exception | None = None,
-):
+) -> Mock:
     """Helper to construct a CoreV1Api mock for version checks."""
-
     core_api = Mock()
 
     if error is not None:
@@ -302,9 +300,7 @@ def _build_core_api_mock(
 def get_builtin_trainer(
     args: list[str],
 ) -> models.TrainerV1alpha1Trainer:
-    """
-    Get the builtin trainer for the TrainJob.
-    """
+    """Get the builtin trainer for the TrainJob."""
     return models.TrainerV1alpha1Trainer(
         args=args,
         command=["tune", "run"],
@@ -320,9 +316,7 @@ def get_train_job(
     annotations: dict[str, str] | None = None,
     runtime_patches: list[models.TrainerV1alpha1RuntimePatch] | None = None,
 ) -> models.TrainerV1alpha1TrainJob:
-    """
-    Create a mock TrainJob object with optional trainer configurations.
-    """
+    """Create a mock TrainJob object with optional trainer configurations."""
     train_job = models.TrainerV1alpha1TrainJob(
         apiVersion=constants.API_VERSION,
         kind=constants.TRAINJOB_KIND,
@@ -341,7 +335,7 @@ def get_train_job(
     return train_job
 
 
-def get_cluster_custom_object_response(*args, **kwargs):
+def get_cluster_custom_object_response(*args: str, **kwargs: object) -> Mock:
     """Return a mocked ClusterTrainingRuntime object."""
     mock_thread = Mock()
     if args[3] == TIMEOUT:
@@ -357,7 +351,7 @@ def get_cluster_custom_object_response(*args, **kwargs):
     return mock_thread
 
 
-def get_namespaced_custom_object_response(*args, **kwargs):
+def get_namespaced_custom_object_response(*args: str, **kwargs: object) -> Mock:
     """Return a mocked TrainJob or TrainingRuntime object."""
     mock_thread = Mock()
     if args[2] == TIMEOUT or args[4] == TIMEOUT:
@@ -383,9 +377,7 @@ def get_namespaced_custom_object_response(*args, **kwargs):
 def add_status(
     train_job: models.TrainerV1alpha1TrainJob,
 ) -> models.TrainerV1alpha1TrainJob:
-    """
-    Add status information to the train job.
-    """
+    """Add status information to the train job."""
     # Set initial status to Created
     status = models.TrainerV1alpha1TrainJobStatus(
         conditions=[
@@ -402,7 +394,7 @@ def add_status(
     return train_job
 
 
-def list_namespaced_custom_object_response(*args, **kwargs):
+def list_namespaced_custom_object_response(*args: object, **kwargs: object) -> Mock:
     """Return a list of mocked TrainJob or TrainingRuntime objects."""
     mock_thread = Mock()
     if args[2] == TIMEOUT:
@@ -432,7 +424,7 @@ def list_namespaced_custom_object_response(*args, **kwargs):
     return mock_thread
 
 
-def list_cluster_custom_object(*args, **kwargs):
+def list_cluster_custom_object(*args: object, **kwargs: object) -> Mock:
     """Return a generic mocked response for cluster object listing."""
     mock_thread = Mock()
     if args[2] == TIMEOUT:
@@ -453,14 +445,14 @@ def list_cluster_custom_object(*args, **kwargs):
     return mock_thread
 
 
-def mock_read_namespaced_pod_log(*args, **kwargs):
+def mock_read_namespaced_pod_log(*args: object, **kwargs: object) -> str:
     """Simulate log retrieval from a pod."""
     if kwargs.get("namespace") == FAIL_LOGS:
         raise Exception("Failed to read logs")
     return "test log content"
 
 
-def mock_list_namespaced_event(*args, **kwargs):
+def mock_list_namespaced_event(*args: object, **kwargs: object) -> Mock:
     """Simulate event listing from namespace."""
     namespace = kwargs.get("namespace")
 
@@ -506,8 +498,8 @@ def mock_list_namespaced_event(*args, **kwargs):
     return mock_thread
 
 
-def mock_watch(*args, **kwargs):
-    """Simulate watch event"""
+def mock_watch(*args: object, **kwargs: object) -> Iterator[dict]:
+    """Simulate watch event."""
     if kwargs.get("timeout_seconds") == 1:
         raise TimeoutError("Watch timeout")
 
@@ -532,14 +524,15 @@ def mock_watch(*args, **kwargs):
     return iter(events)
 
 
-def normalize_model(model_obj, model_class):
+def normalize_model(model_obj: object, model_class: type[T]) -> T:
+    """Round-trip a model through dict form to mimic a real API response."""
     # Simulate real api behavior
     # Converts model to raw dictionary, like a real API response
     # Parses dict and ensures correct model instantiation and type validation
-    return model_class.from_dict(model_obj.to_dict())
+    return model_class.from_dict(model_obj.to_dict())  # type: ignore
 
 
-def make_error_thread(exc_type):
+def make_error_thread(exc_type: object) -> Mock:
     """Helper: return a mock thread whose .get() raises exc_type when called."""
     t = Mock()
     if exc_type is TIMEOUT:
@@ -551,7 +544,7 @@ def make_error_thread(exc_type):
         if isinstance(exc_type, Exception):
             t.get.side_effect = exc_type
         else:
-            t.get.side_effect = exc_type()
+            t.get.side_effect = exc_type()  # type: ignore
     return t
 
 
@@ -582,8 +575,16 @@ def create_train_job(
             trainer=None,
             initializer=(
                 models.TrainerV1alpha1Initializer(
-                    dataset=utils.get_dataset_initializer(initializer.dataset),
-                    model=utils.get_model_initializer(initializer.model),
+                    dataset=(
+                        utils.get_dataset_initializer(initializer.dataset)
+                        if initializer.dataset
+                        else None
+                    ),
+                    model=(
+                        utils.get_model_initializer(initializer.model)
+                        if initializer.model
+                        else None
+                    ),
                 )
                 if initializer
                 else None
@@ -597,7 +598,6 @@ def create_cluster_training_runtime(
     namespace: str = "default",
 ) -> models.TrainerV1alpha1ClusterTrainingRuntime:
     """Create a mock ClusterTrainingRuntime object."""
-
     return models.TrainerV1alpha1ClusterTrainingRuntime(
         apiVersion=constants.API_VERSION,
         kind="ClusterTrainingRuntime",
@@ -652,6 +652,7 @@ def create_training_runtime(
 
 
 def get_replicated_job() -> models.JobsetV1alpha2ReplicatedJob:
+    """Create a mock ReplicatedJob for a runtime's node step."""
     return models.JobsetV1alpha2ReplicatedJob(
         name="node",
         replicas=1,
@@ -669,6 +670,7 @@ def get_replicated_job() -> models.JobsetV1alpha2ReplicatedJob:
 
 
 def get_container() -> models.IoK8sApiCoreV1Container:
+    """Create a mock node container for a runtime."""
     return models.IoK8sApiCoreV1Container(
         name="node",
         image="example.com/test-runtime",
@@ -700,7 +702,6 @@ def get_train_job_data_type(
     train_job_name: str,
 ) -> types.TrainJob:
     """Create a mock TrainJob object with the expected structure for testing."""
-
     trainer = types.RuntimeTrainer(
         trainer_type=types.TrainerType.CUSTOM_TRAINER,
         framework=runtime_name,
@@ -747,7 +748,6 @@ def get_train_job_data_type(
 
 def _run_verify_backend_with_core_api(core_api: Mock) -> tuple[list[str], int]:
     """Helper to run verify_backend and capture warning logs."""
-
     logger_name = "kubeflow.trainer.backends.kubernetes.backend"
     logger_obj = logging.getLogger(logger_name)
 
@@ -809,9 +809,8 @@ def _run_verify_backend_with_core_api(core_api: Mock) -> tuple[list[str], int]:
         ),
     ],
 )
-def test_verify_backend(test_case):
+def test_verify_backend(test_case: TestCase) -> None:
     """Test KubernetesBackend.verify_backend across version metadata scenarios."""
-
     print("Executing test:", test_case.name)
 
     core_api: Mock = test_case.config["core_api"]
@@ -877,7 +876,7 @@ def test_verify_backend(test_case):
         ),
     ],
 )
-def test_get_runtime(kubernetes_backend, test_case):
+def test_get_runtime(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.get_runtime with basic success path."""
     print("Executing test:", test_case.name)
     try:
@@ -956,7 +955,7 @@ def test_get_runtime(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_list_runtimes(kubernetes_backend, test_case):
+def test_list_runtimes(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.list_runtimes with both success and error scenarios."""
     print("Executing test:", test_case.name)
 
@@ -1000,6 +999,7 @@ def test_list_runtimes(kubernetes_backend, test_case):
         # Compare as dicts for stable ordering and equality semantics
         assert [asdict(r) for r in runtimes] == [asdict(r) for r in test_case.expected_output]
     else:
+        assert test_case.expected_error is not None
         with pytest.raises(test_case.expected_error):
             kubernetes_backend.list_runtimes()
     print("test execution complete")
@@ -1037,7 +1037,7 @@ def test_list_runtimes(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_get_runtime_packages(kubernetes_backend, test_case):
+def test_get_runtime_packages(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.get_runtime_packages with basic success path."""
     print("Executing test:", test_case.name)
 
@@ -1079,11 +1079,7 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                 runtime_name=TORCH_TUNE_RUNTIME,
                 train_job_name=TRAIN_JOB_WITH_BUILT_IN_TRAINER,
                 train_job_trainer=get_builtin_trainer(
-                    args=[
-                        "batch_size=2",
-                        "epochs=2",
-                        "loss=torchtune.modules.loss.CEWithChunkedOutputLoss",
-                    ],
+                    args=["batch_size=2", "epochs=2", "loss=Loss.CEWithChunkedOutputLoss"],
                 ),
             ),
         ),
@@ -1286,17 +1282,17 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                 runtime_patches=[
                     models.TrainerV1alpha1RuntimePatch(
                         manager="trainer.kubeflow.org/kubeflow-sdk",
-                        training_runtime_spec=models.TrainerV1alpha1TrainingRuntimeSpecPatch(
+                        trainingRuntimeSpec=models.TrainerV1alpha1TrainingRuntimeSpecPatch(
                             template=models.TrainerV1alpha1JobSetTemplatePatch(
                                 spec=models.TrainerV1alpha1JobSetSpecPatch(
-                                    replicated_jobs=[
+                                    replicatedJobs=[
                                         models.TrainerV1alpha1ReplicatedJobPatch(
                                             name="node",
                                             template=models.TrainerV1alpha1JobTemplatePatch(
                                                 spec=models.TrainerV1alpha1JobSpecPatch(
                                                     template=models.TrainerV1alpha1PodTemplatePatch(
                                                         spec=models.TrainerV1alpha1PodSpecPatch(
-                                                            node_selector={"node-type": "gpu-a100"},
+                                                            nodeSelector={"node-type": "gpu-a100"},
                                                         ),
                                                     ),
                                                 ),
@@ -1338,13 +1334,11 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                 runtime_patches=[
                     models.TrainerV1alpha1RuntimePatch(
                         manager="trainer.kubeflow.org/kubeflow-sdk",
-                        training_runtime_spec=models.TrainerV1alpha1TrainingRuntimeSpecPatch(
+                        trainingRuntimeSpec=models.TrainerV1alpha1TrainingRuntimeSpecPatch(
                             template=models.TrainerV1alpha1JobSetTemplatePatch(
-                                metadata={
-                                    "labels": {
-                                        "app": "training",
-                                    },
-                                },
+                                metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                                    labels={"app": "training"},
+                                ),
                             ),
                         ),
                     ),
@@ -1353,7 +1347,7 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_train(kubernetes_backend, test_case):
+def test_train(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.train with basic success path."""
     print("Executing test:", test_case.name)
     try:
@@ -1375,7 +1369,9 @@ def test_train(kubernetes_backend, test_case):
         expected_output = test_case.expected_output
         expected_output.metadata.name = train_job_name
 
-        kubernetes_backend.custom_api.create_namespaced_custom_object.assert_called_with(
+        cast(
+            Mock, kubernetes_backend.custom_api.create_namespaced_custom_object
+        ).assert_called_with(
             constants.GROUP,
             constants.VERSION,
             DEFAULT_NAMESPACE,
@@ -1414,7 +1410,7 @@ def test_train(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_get_job(kubernetes_backend, test_case):
+def test_get_job(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.get_job with basic success path."""
     print("Executing test:", test_case.name)
     try:
@@ -1460,7 +1456,7 @@ def test_get_job(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_list_jobs(kubernetes_backend, test_case):
+def test_list_jobs(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.list_jobs with basic success path."""
     print("Executing test:", test_case.name)
     try:
@@ -1494,7 +1490,7 @@ def test_list_jobs(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_get_job_logs(kubernetes_backend, test_case):
+def test_get_job_logs(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.get_job_logs with basic success path."""
     print("Executing test:", test_case.name)
     try:
@@ -1592,20 +1588,20 @@ def test_get_job_logs(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_wait_for_job_status(kubernetes_backend, test_case):
+def test_wait_for_job_status(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.wait_for_job_status with various scenarios."""
     print("Executing test:", test_case.name)
 
     original_get_job = kubernetes_backend.get_job
 
     # TrainJob has unexpected failed status.
-    def mock_get_job(name):
+    def mock_get_job(name: str) -> types.TrainJob:
         job = original_get_job(name)
         if test_case.config.get("name") == "failed-job":
             job.status = constants.TRAINJOB_FAILED
         return job
 
-    kubernetes_backend.get_job = mock_get_job
+    kubernetes_backend.get_job = mock_get_job  # type: ignore
 
     try:
         job = kubernetes_backend.wait_for_job_status(**test_case.config)
@@ -1644,7 +1640,7 @@ def test_wait_for_job_status(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_delete_job(kubernetes_backend, test_case):
+def test_delete_job(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.delete_job with basic success path."""
     print("Executing test:", test_case.name)
     try:
@@ -1695,7 +1691,7 @@ def test_delete_job(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_get_job_events(kubernetes_backend, test_case):
+def test_get_job_events(kubernetes_backend: KubernetesBackend, test_case: TestCase) -> None:
     """Test KubernetesBackend.get_job_events with various scenarios."""
     print("Executing test:", test_case.name)
     try:

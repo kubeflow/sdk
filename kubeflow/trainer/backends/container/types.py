@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Types and configuration for the unified Container backend.
+"""Types and configuration for the unified Container backend.
 
 This backend automatically detects and uses either Docker or Podman.
 It provides a single interface for container-based execution regardless
@@ -57,6 +56,8 @@ class TrainingRuntimeSource(BaseModel):
 
 
 class ContainerBackendConfig(BaseModel):
+    """Configuration for the unified Container backend."""
+
     pull_policy: str = Field(default="IfNotPresent")
     auto_remove: bool = Field(default=True)
     container_host: str | None = Field(default=None)

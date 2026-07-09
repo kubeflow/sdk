@@ -66,7 +66,7 @@ dev = [
   "pre-commit>=4.2.0",
   "PyGithub>=2.7.0",
   "setuptools>=80.9.0",
-  "ty>=0.0.11",
+  "ty>=0.0.56",
 ]
 
 [project.urls]
@@ -123,6 +123,8 @@ select = [
   "B",   # flake8-bugbear
   "C4",  # flake8-comprehensions
   "SIM", # flake8-simplify
+  "D",   # pydocstyle (docstring presence + style)
+  "ANN", # flake8-annotations (public signatures fully typed)
 ]
 
 ignore = [
@@ -130,6 +132,9 @@ ignore = [
   "E501", # Embedded HTML/SVG has long lines
 ]
 
+[tool.ruff.lint.pydocstyle]
+# Enforce Google-style (Args:/Returns:/Raises:) docstring.
+convention = "google"
 
 [tool.ruff.lint.isort]
 # Make import sorting deterministic and "first-party aware"

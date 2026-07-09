@@ -14,6 +14,8 @@
 
 """Unit tests for Kubernetes options."""
 
+from typing import Any, cast
+
 import pytest
 
 from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
@@ -38,17 +40,17 @@ from kubeflow.trainer.options import (
 
 
 @pytest.fixture
-def mock_kubernetes_backend():
+def mock_kubernetes_backend() -> KubernetesBackend:
     """Mock Kubernetes backend for testing."""
     from unittest.mock import Mock
 
     backend = Mock(spec=KubernetesBackend)
     backend.__class__ = KubernetesBackend
-    return backend
+    return cast(KubernetesBackend, backend)
 
 
 @pytest.fixture
-def mock_localprocess_backend():
+def mock_localprocess_backend() -> LocalProcessBackend:
     """Mock LocalProcess backend for testing."""
     from unittest.mock import MagicMock
 
@@ -56,7 +58,7 @@ def mock_localprocess_backend():
     backend = MagicMock(spec=LocalProcessBackend)
     # Make type(backend).__name__ return the correct class name
     type(backend).__name__ = "LocalProcessBackend"
-    return backend
+    return cast(LocalProcessBackend, backend)
 
 
 class TestKubernetesOptionBackendValidation:
@@ -72,8 +74,11 @@ class TestKubernetesOptionBackendValidation:
         ],
     )
     def test_kubernetes_options_reject_wrong_backend(
-        self, option_class, option_args, mock_localprocess_backend
-    ):
+        self,
+        option_class: type,
+        option_args: object,
+        mock_localprocess_backend: LocalProcessBackend,
+    ) -> None:
         """Test Kubernetes-specific options reject non-Kubernetes backends."""
         if option_class == TrainerCommand:
             option = option_class(command=option_args)
@@ -90,7 +95,9 @@ class TestKubernetesOptionBackendValidation:
         assert "not compatible with" in str(exc_info.value)
         assert "LocalProcessBackend" in str(exc_info.value)
 
-    def test_runtime_patch_rejects_wrong_backend(self, mock_localprocess_backend):
+    def test_runtime_patch_rejects_wrong_backend(
+        self, mock_localprocess_backend: LocalProcessBackend
+    ) -> None:
         """Test RuntimePatch rejects non-Kubernetes backends."""
         patch = RuntimePatch()
 
@@ -132,8 +139,12 @@ class TestKubernetesOptionApplication:
         ],
     )
     def test_option_application(
-        self, option_class, option_args, expected_spec, mock_kubernetes_backend
-    ):
+        self,
+        option_class: type,
+        option_args: object,
+        expected_spec: dict,
+        mock_kubernetes_backend: KubernetesBackend,
+    ) -> None:
         """Test each option applies correctly to job spec with Kubernetes backend."""
         if option_class == TrainerCommand:
             option = option_class(command=option_args)
@@ -165,8 +176,13 @@ class TestTrainerOptionValidation:
         ],
     )
     def test_trainer_option_validation(
-        self, option_class, option_args, trainer_type, should_fail, mock_kubernetes_backend
-    ):
+        self,
+        option_class: type,
+        option_args: object,
+        trainer_type: str,
+        should_fail: bool,
+        mock_kubernetes_backend: KubernetesBackend,
+    ) -> None:
         """Test trainer option validation with different trainer types."""
         from kubeflow.trainer.types.types import (
             BuiltinTrainer,
@@ -178,7 +194,7 @@ class TestTrainerOptionValidation:
         # Create appropriate trainer instance
         if trainer_type == "CustomTrainer":
 
-            def dummy_func():
+            def dummy_func() -> None:
                 pass
 
             trainer = CustomTrainer(func=dummy_func)
@@ -226,7 +242,7 @@ class TestContainerPatch:
             ),
         ],
     )
-    def test_container_patch_validation(self, kwargs, expected_error):
+    def test_container_patch_validation(self, kwargs: dict[str, Any], expected_error: str) -> None:
         """Test ContainerPatch validates inputs correctly."""
         with pytest.raises(ValueError) as exc_info:
             ContainerPatch(**kwargs)
@@ -236,12 +252,12 @@ class TestContainerPatch:
 class TestRuntimePatch:
     """Test RuntimePatch validation."""
 
-    def test_runtime_patch_auto_sets_manager(self):
+    def test_runtime_patch_auto_sets_manager(self) -> None:
         """Test RuntimePatch automatically sets manager."""
         patch = RuntimePatch()
         assert patch.manager == "trainer.kubeflow.org/kubeflow-sdk"
 
-    def test_runtime_patch_with_training_runtime_spec(self):
+    def test_runtime_patch_with_training_runtime_spec(self) -> None:
         """Test RuntimePatch with training runtime spec."""
         patch = RuntimePatch(
             training_runtime_spec=TrainingRuntimeSpecPatch(
@@ -257,7 +273,7 @@ class TestRuntimePatch:
 class TestRuntimePatchApplication:
     """Test RuntimePatch application functionality."""
 
-    def test_runtime_patch_basic(self, mock_kubernetes_backend):
+    def test_runtime_patch_basic(self, mock_kubernetes_backend: KubernetesBackend) -> None:
         """Test basic RuntimePatch application with manager only."""
         patch = RuntimePatch()
 
@@ -271,7 +287,9 @@ class TestRuntimePatchApplication:
             "manager": "trainer.kubeflow.org/kubeflow-sdk"
         }
 
-    def test_runtime_patch_with_node_selector(self, mock_kubernetes_backend):
+    def test_runtime_patch_with_node_selector(
+        self, mock_kubernetes_backend: KubernetesBackend
+    ) -> None:
         """Test RuntimePatch with node selector configuration."""
         patch = RuntimePatch(
             training_runtime_spec=TrainingRuntimeSpecPatch(
@@ -333,7 +351,9 @@ class TestRuntimePatchApplication:
 
         assert job_spec == expected
 
-    def test_runtime_patch_with_volume_and_container(self, mock_kubernetes_backend):
+    def test_runtime_patch_with_volume_and_container(
+        self, mock_kubernetes_backend: KubernetesBackend
+    ) -> None:
         """Test RuntimePatch with volumes and container patches."""
         patch = RuntimePatch(
             training_runtime_spec=TrainingRuntimeSpecPatch(
@@ -394,7 +414,9 @@ class TestRuntimePatchApplication:
             }
         ]
 
-    def test_runtime_patch_with_jobset_metadata(self, mock_kubernetes_backend):
+    def test_runtime_patch_with_jobset_metadata(
+        self, mock_kubernetes_backend: KubernetesBackend
+    ) -> None:
         """Test RuntimePatch with JobSet-level metadata."""
         patch = RuntimePatch(
             training_runtime_spec=TrainingRuntimeSpecPatch(

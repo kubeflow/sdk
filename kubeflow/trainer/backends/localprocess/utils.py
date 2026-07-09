@@ -1,3 +1,5 @@
+"""Helpers for building local training commands and virtual environments."""
+
 from collections.abc import Callable
 import inspect
 import os
@@ -15,8 +17,7 @@ from kubeflow.trainer.types import types
 
 
 def _extract_name(requirement: str) -> str:
-    """
-    Extract the base distribution name from a requirement string without external deps.
+    """Extract the base distribution name from a requirement string without external deps.
 
     Supports common PEP 508 patterns:
       - 'package'
@@ -25,8 +26,14 @@ def _extract_name(requirement: str) -> str:
       - 'package @ https://...'
       - markers after ';' are irrelevant for name extraction.
 
-    Returns the *raw* (un-normalized) name as it appears.
-    Raises ValueError if a name cannot be parsed.
+    Args:
+        requirement: The requirement string to parse.
+
+    Returns:
+        The raw (un-normalized) name as it appears.
+
+    Raises:
+        ValueError: If a name cannot be parsed.
     """
     if requirement is None:
         raise ValueError("Requirement string cannot be None")
@@ -41,9 +48,7 @@ def _extract_name(requirement: str) -> str:
 
 
 def _canonicalize_name(name: str) -> str:
-    """
-    PEP 503-style normalization: case-insensitive, and collapse runs of -, _, . into '-'.
-    """
+    """Normalize a name PEP 503-style: lowercase and collapse runs of -, _, . into '-'."""
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
@@ -51,8 +56,7 @@ def get_install_packages(
     runtime_packages: list[str],
     trainer_packages: list[str] | None = None,
 ) -> list[str]:
-    """
-    Merge two requirement lists into a single list of strings.
+    """Merge two requirement lists into a single list of strings.
 
     Rules implemented:
     1) If a package appears in trainer_packages, it overwrites the one in runtime_packages.
@@ -66,6 +70,16 @@ def get_install_packages(
         have any duplicates.
     6) Ordering: keep runtime-only packages in their original order (emitting only their
        last occurrence), then append all trainer packages in their original order.
+
+    Args:
+        runtime_packages: Packages provided by the runtime.
+        trainer_packages: Packages provided by the trainer, which take precedence.
+
+    Returns:
+        The merged list of requirement strings.
+
+    Raises:
+        ValueError: If trainer_packages contains a duplicate dependency.
     """
     if not trainer_packages:
         return runtime_packages
@@ -119,8 +133,18 @@ def get_local_runtime_trainer(
     venv_dir: str,
     framework: str,
 ) -> LocalRuntimeTrainer:
-    """
-    Get the LocalRuntimeTrainer object.
+    """Build the LocalRuntimeTrainer for a runtime, wiring up its venv entrypoint.
+
+    Args:
+        runtime_name: Name of the runtime to build the trainer for.
+        venv_dir: Path to the virtual environment directory.
+        framework: Training framework (e.g. "torch").
+
+    Returns:
+        The configured LocalRuntimeTrainer.
+
+    Raises:
+        ValueError: If no runtime with the given name exists.
     """
     local_runtime = next(
         (rt for rt in local_exec_constants.local_runtimes if rt.name == runtime_name),
@@ -128,6 +152,9 @@ def get_local_runtime_trainer(
     )
     if not local_runtime:
         raise ValueError(f"Runtime {runtime_name} not found")
+
+    if not isinstance(local_runtime.trainer, LocalRuntimeTrainer):
+        raise ValueError(f"Runtime {runtime_name} is not backed by a LocalRuntimeTrainer")
 
     trainer = LocalRuntimeTrainer(
         trainer_type=types.TrainerType.CUSTOM_TRAINER,
@@ -155,6 +182,17 @@ def get_dependencies_command(
     trainer_packages: list[str],
     quiet: bool = True,
 ) -> str:
+    """Build the shell command that installs runtime and trainer dependencies.
+
+    Args:
+        runtime_packages: Packages provided by the runtime.
+        pip_index_urls: Index URLs; the first is the primary index, the rest are extras.
+        trainer_packages: Packages provided by the trainer.
+        quiet: If True, pass ``--quiet`` to pip.
+
+    Returns:
+        The rendered pip install command.
+    """
     # resolve runtime dependencies and trainer dependencies.
     packages = get_install_packages(
         runtime_packages=runtime_packages,
@@ -164,10 +202,9 @@ def get_dependencies_command(
     options = [f"--index-url {pip_index_urls[0]}"]
     options.extend(f"--extra-index-url {extra_index_url}" for extra_index_url in pip_index_urls[1:])
 
-    """
-           PIP_DISABLE_PIP_VERSION_CHECK=1 pip install $QUIET $AS_USER \
-       --no-warn-script-location $PIP_INDEX $PACKAGE_STR
-       """
+    # Renders to, roughly:
+    #   PIP_DISABLE_PIP_VERSION_CHECK=1 pip install $QUIET \
+    #       --no-warn-script-location $PIP_INDEX $PACKAGE_STR
     mapping = {
         "QUIET": "--quiet" if quiet else "",
         "PIP_INDEX": " ".join(options),
@@ -185,8 +222,20 @@ def get_command_using_train_func(
     venv_dir: str,
     train_job_name: str,
 ) -> str:
-    """
-    Get the Trainer container command from the given training function and parameters.
+    """Get the Trainer container command from the given training function and parameters.
+
+    Args:
+        runtime: Runtime whose trainer entrypoint is used.
+        train_func: The user training function to execute.
+        train_func_parameters: Parameters passed to the training function, if any.
+        venv_dir: Path to the virtual environment directory.
+        train_job_name: Name of the TrainJob, used to name the generated script.
+
+    Returns:
+        The rendered entrypoint command.
+
+    Raises:
+        ValueError: If the runtime has no trainer or train_func is not callable.
     """
     # Check if the runtime has a Trainer.
     if not runtime.trainer:
@@ -213,14 +262,14 @@ def get_command_using_train_func(
     # def train(parameters):
     #     print('Start Training...')
     # train({'lr': 0.01})
+    func_name = getattr(train_func, "__name__", "train")
     if train_func_parameters is None:
-        func_code = f"{func_code}\n{train_func.__name__}()\n"
+        func_code = f"{func_code}\n{func_name}()\n"
     else:
-        func_code = f"{func_code}\n{train_func.__name__}({train_func_parameters})\n"
+        func_code = f"{func_code}\n{func_name}({train_func_parameters})\n"
 
     with open(func_file, "w") as f:
         f.write(func_code)
-    f.close()
 
     t = Template(local_exec_constants.LOCAL_EXEC_ENTRYPOINT)
     mapping = {
@@ -235,6 +284,15 @@ def get_command_using_train_func(
 
 
 def get_cleanup_venv_script(venv_dir: str, cleanup_venv: bool = True) -> str:
+    """Build the script that removes the venv after training, if requested.
+
+    Args:
+        venv_dir: Path to the virtual environment directory.
+        cleanup_venv: If False, returns an empty script and leaves the venv in place.
+
+    Returns:
+        The rendered cleanup script (possibly empty).
+    """
     script = "\n"
     if not cleanup_venv:
         return script
@@ -253,6 +311,21 @@ def get_local_train_job_script(
     runtime: types.Runtime,
     cleanup_venv: bool = True,
 ) -> tuple:
+    """Build the full bash command that creates a venv and runs the training job.
+
+    Args:
+        train_job_name: Name of the TrainJob.
+        venv_dir: Path to the virtual environment directory to create.
+        trainer: The CustomTrainer describing the workload.
+        runtime: Runtime providing the base packages and entrypoint.
+        cleanup_venv: If True, remove the venv once training completes.
+
+    Returns:
+        A ``("bash", "-c", command)`` tuple ready to be executed.
+
+    Raises:
+        ValueError: If no python executable is found or the runtime trainer type is invalid.
+    """
     # use local-exec train job template
     t = Template(local_exec_constants.LOCAL_EXEC_JOB_TEMPLATE)
     # find os python binary to create venv
@@ -266,7 +339,7 @@ def get_local_train_job_script(
     if isinstance(runtime.trainer, LocalRuntimeTrainer):
         runtime_trainer: LocalRuntimeTrainer = runtime.trainer
     else:
-        raise ValueError("Invalid Runtime Trainer type: {type(runtime.trainer)}")
+        raise ValueError(f"Invalid Runtime Trainer type: {type(runtime.trainer)}")
     dependency_script = "\n"
     if trainer.packages_to_install:
         dependency_script = get_dependencies_command(

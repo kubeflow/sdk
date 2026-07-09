@@ -12,4 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Kubeflow SDK: Python clients for Kubeflow components."""
+
 __version__ = "0.4.1"
