@@ -38,8 +38,6 @@ from kubeflow.spark.test.common import (
     SUCCESS,
     TIMEOUT,
     TestCase,
-    get_spark_application,
-    get_spark_application_list,
 )
 from kubeflow.spark.types.options import Labels, Name
 from kubeflow.spark.types.types import (
@@ -80,22 +78,62 @@ def kubernetes_backend():
 
 
 # --------------------------
-# Mock Handlers
+# Mock Helpers
 # --------------------------
 
 
-def create_mock_thread(response=None):
-    """Create mock thread that returns response on .get()."""
-    mock_thread = Mock()
-    mock_thread.get.return_value = response
-    return mock_thread
+def get_spark_application(
+    name: str,
+    namespace: str = DEFAULT_NAMESPACE,
+    state: str | None = "SUBMITTED",
+) -> models.SparkV1beta2SparkApplication:
+    """Create a mock SparkApplication model for testing."""
+    return models.SparkV1beta2SparkApplication(
+        api_version=f"{constants.SPARK_APPLICATION_GROUP}/{constants.SPARK_APPLICATION_VERSION}",
+        kind=constants.SPARK_APPLICATION_KIND,
+        metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+            name=name,
+            namespace=namespace,
+        ),
+        spec=models.SparkV1beta2SparkApplicationSpec(
+            type="Python",
+            mode="cluster",
+            spark_version="4.0.1",
+            image="spark:latest",
+            main_application_file="s3://job.py",
+            driver=models.SparkV1beta2DriverSpec(
+                cores=1,
+                memory="1g",
+            ),
+            executor=models.SparkV1beta2ExecutorSpec(
+                cores=1,
+                memory="1g",
+                instances=1,
+            ),
+        ),
+        status=(
+            models.SparkV1beta2SparkApplicationStatus(
+                application_state=models.SparkV1beta2ApplicationState(
+                    state=state,
+                ),
+                driver_info=models.SparkV1beta2DriverInfo(
+                    pod_name=f"{name}-driver",
+                ),
+            )
+            if state is not None
+            else None
+        ),
+    )
 
 
-def create_error_thread(exc: Exception):
-    """Create mock thread whose .get() raises the given exception."""
-    mock_thread = Mock()
-    mock_thread.get.side_effect = exc
-    return mock_thread
+def get_spark_application_list(
+    items: list[models.SparkV1beta2SparkApplication],
+) -> models.SparkV1beta2SparkApplicationList:
+    """Create a SparkApplicationList for testing."""
+
+    return models.SparkV1beta2SparkApplicationList(
+        items=items,
+    )
 
 
 def get_spark_connect(
@@ -132,6 +170,25 @@ def get_spark_connect(
         if state
         else None,
     )
+
+
+def create_mock_thread(response=None):
+    """Create mock thread that returns response on .get()."""
+    mock_thread = Mock()
+    mock_thread.get.return_value = response
+    return mock_thread
+
+
+def create_error_thread(exc: Exception):
+    """Create mock thread whose .get() raises the given exception."""
+    mock_thread = Mock()
+    mock_thread.get.side_effect = exc
+    return mock_thread
+
+
+# --------------------------
+# Mock Handlers
+# --------------------------
 
 
 def mock_get_response(name: str) -> dict:
