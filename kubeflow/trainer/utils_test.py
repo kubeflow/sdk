@@ -15,7 +15,6 @@
 """Unit tests for update_trainjob_status function."""
 
 from dataclasses import dataclass
-from datetime import timedelta
 import os
 import tempfile
 import time
@@ -33,7 +32,7 @@ class StatusTestCase:
 
     name: str
     progress_percent: int | None = None
-    estimated_time_remaining: int | timedelta | None = None
+    estimated_remaining_seconds: int | None = None
     metrics: dict | None = None
     force: bool = True
     expected_result: bool = True
@@ -60,23 +59,23 @@ PAYLOAD_TEST_CASES = [
         expected_progress=0,
     ),
     StatusTestCase(
-        name="timedelta_eta",
+        name="eta_in_seconds",
         progress_percent=50,
-        estimated_time_remaining=timedelta(hours=1),
+        estimated_remaining_seconds=3600,
         expected_progress=50,
         expected_eta=3600,
     ),
     StatusTestCase(
-        name="int_seconds_eta",
+        name="eta_shorter_duration",
         progress_percent=50,
-        estimated_time_remaining=1800,
+        estimated_remaining_seconds=1800,
         expected_progress=50,
         expected_eta=1800,
     ),
     StatusTestCase(
         name="negative_eta_clamped_to_0",
         progress_percent=50,
-        estimated_time_remaining=-30,
+        estimated_remaining_seconds=-30,
         expected_progress=50,
         expected_eta=0,
     ),
@@ -192,7 +191,7 @@ class TestPayload:
         with patch.dict(os.environ, mock_env, clear=True):
             result = update_trainjob_status(
                 progress_percent=case.progress_percent,
-                estimated_time_remaining=case.estimated_time_remaining,
+                estimated_remaining_seconds=case.estimated_remaining_seconds,
                 metrics=case.metrics,
                 force=case.force,
             )

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import fields
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import inspect
 import logging
 import os
@@ -738,7 +738,7 @@ def _update_last_time() -> None:
 
 def update_trainjob_status(
     progress_percent: int | None = None,
-    estimated_time_remaining: int | timedelta | None = None,
+    estimated_remaining_seconds: int | None = None,
     metrics: dict[str, float | int | str] | None = None,
     force: bool = False,
 ) -> bool:
@@ -758,7 +758,7 @@ def update_trainjob_status(
 
     Args:
         progress_percent: Training completion percentage (0-100).
-        estimated_time_remaining: ETA in seconds or as a timedelta.
+        estimated_remaining_seconds: ETA in seconds.
         metrics: Dict of metric name -> value. Values are converted to strings.
             Truncated to 256 entries by the SDK to avoid oversized payloads.
         force: If True, bypass throttling. Use for start/end events.
@@ -790,10 +790,8 @@ def update_trainjob_status(
         if progress_percent is not None:
             trainer_status["progressPercentage"] = max(0, min(100, progress_percent))
 
-        if estimated_time_remaining is not None:
-            if isinstance(estimated_time_remaining, timedelta):
-                estimated_time_remaining = int(estimated_time_remaining.total_seconds())
-            trainer_status["estimatedRemainingSeconds"] = max(0, estimated_time_remaining)
+        if estimated_remaining_seconds is not None:
+            trainer_status["estimatedRemainingSeconds"] = max(0, estimated_remaining_seconds)
 
         if metrics:
             if len(metrics) > _MAX_METRICS_COUNT:

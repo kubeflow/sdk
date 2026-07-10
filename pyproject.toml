@@ -28,6 +28,7 @@ classifiers = [
 dependencies = [
   "kubernetes>=27.2.0,<36.0.0",  # 36.0.0 has multiple regressions; see kubernetes-client/python#2592, #2596
   "pydantic>=2.10.0",
+  "requests>=2.25.0",
   "kubeflow-trainer-api>=2.2.0",
   "kubeflow-katib-api>=0.19.0",
 ]

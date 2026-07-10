@@ -140,7 +140,7 @@ variables into your training pods and you can report real-time progress:
            eta = int((elapsed / (step + 1)) * (total_steps - step - 1)) if step > 0 else None
            update_trainjob_status(
                progress_percent=progress,
-               estimated_time_remaining=eta,
+               estimated_remaining_seconds=eta,
                metrics={"loss": loss, "step": step},
            )  # SDK throttles to max 1 update per 5 seconds
 
