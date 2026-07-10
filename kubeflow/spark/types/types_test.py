@@ -29,9 +29,9 @@ class TestSparkConnectState:
 
     def test_enum_values(self):
         """T01: Verify SparkConnectState enum has expected values."""
+        assert SparkConnectState.NEW == ""
         assert SparkConnectState.PROVISIONING == "Provisioning"
         assert SparkConnectState.READY == "Ready"
-        assert SparkConnectState.RUNNING == "Running"
         assert SparkConnectState.NOT_READY == "NotReady"
         assert SparkConnectState.FAILED == "Failed"
 
