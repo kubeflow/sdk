@@ -740,7 +740,6 @@ def update_trainjob_status(
     progress_percent: int | None = None,
     estimated_remaining_seconds: int | None = None,
     metrics: dict[str, float | int | str] | None = None,
-    force: bool = False,
 ) -> bool:
     """Report training progress to Kubeflow Trainer controller.
 
@@ -748,8 +747,7 @@ def update_trainjob_status(
     inside a Kubeflow TrainJob. Never raises exceptions.
 
     Includes automatic throttling (max 1 update per 5 seconds) to avoid
-    overwhelming the controller. Use force=True to bypass throttling for
-    critical updates like training start (0%) and end (100%).
+    overwhelming the controller.
 
     Environment variables (injected by controller when TrainJobStatus feature gate is enabled):
         - KUBEFLOW_TRAINER_SERVER_URL: HTTPS endpoint URL for status updates
@@ -761,7 +759,6 @@ def update_trainjob_status(
         estimated_remaining_seconds: ETA in seconds.
         metrics: Dict of metric name -> value. Values are converted to strings.
             Truncated to 256 entries by the SDK to avoid oversized payloads.
-        force: If True, bypass throttling. Use for start/end events.
 
     Returns:
         True if update was sent successfully, False otherwise.
@@ -772,7 +769,7 @@ def update_trainjob_status(
             return False
 
         with _throttle_lock:
-            if not force and _should_throttle():
+            if _should_throttle():
                 return False
 
         ca_file = os.environ.get(_ENV_CA_CERT)

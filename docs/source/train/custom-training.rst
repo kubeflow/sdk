@@ -131,7 +131,6 @@ variables into your training pods and you can report real-time progress:
    def train():
        total_steps = 1000
        start_time = time.time()
-       update_trainjob_status(progress_percent=0, force=True)  # Training start
 
        for step in range(total_steps):
            loss = train_step(batch)
@@ -143,8 +142,6 @@ variables into your training pods and you can report real-time progress:
                estimated_remaining_seconds=eta,
                metrics={"loss": loss, "step": step},
            )  # SDK throttles to max 1 update per 5 seconds
-
-       update_trainjob_status(progress_percent=100, force=True)  # Training end
 
 This is safe to call in any environment — it returns ``False`` silently if not running
 inside a Kubeflow TrainJob with the feature gate enabled.
