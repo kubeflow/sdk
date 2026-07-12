@@ -38,7 +38,7 @@ class SparkConnectInfo:
         namespace: Kubernetes namespace. Included in SparkConnectInfo for standalone usage
             and passing info between components without requiring SparkClient context.
         state: Current state of the session.
-        pod_name: Name of the server pod.
+        driver_pod_name: Name of the driver pod.
         pod_ip: IP address of the server pod.
         service_name: Name of the Kubernetes service.
         creation_timestamp: Timestamp when the session was created.
@@ -47,7 +47,7 @@ class SparkConnectInfo:
     name: str
     namespace: str
     state: SparkConnectState
-    pod_name: str | None = None
+    driver_pod_name: str | None = None
     pod_ip: str | None = None
     service_name: str | None = None
     creation_timestamp: datetime | None = None

@@ -464,7 +464,7 @@ def get_trainer_cr_from_builtin_trainer(
     trainer_cr.command = list(runtime.trainer.command)
     # Parse args in the TorchTuneConfig to the Trainer, preparing for the mutation of
     # the torchtune config in the runtime plugin.
-    # Ref:https://github.com/kubeflow/trainer/tree/master/docs/proposals/2401-llm-trainer-v2
+    # Ref:https://github.com/kubeflow/trainer/tree/master/proposals/2401-llm-trainer-v2
     trainer_cr.args = get_args_using_torchtune_config(trainer.config, initializer)
 
     return trainer_cr
@@ -484,7 +484,7 @@ def get_args_using_torchtune_config(
         if not isinstance(fine_tuning_config.dtype, types.DataType):
             raise ValueError(f"Invalid dtype: {fine_tuning_config.dtype}.")
 
-        args.append(f"dtype={fine_tuning_config.dtype}")
+        args.append(f"dtype={fine_tuning_config.dtype.value}")
 
     # Override the batch size if it is provided.
     if fine_tuning_config.batch_size:
@@ -496,7 +496,7 @@ def get_args_using_torchtune_config(
 
     # Override the loss if it is provided.
     if fine_tuning_config.loss:
-        args.append(f"loss={fine_tuning_config.loss}")
+        args.append(f"loss={fine_tuning_config.loss.value}")
 
     # Override the data dir or data files if it is provided.
     if isinstance(initializer, types.Initializer) and isinstance(

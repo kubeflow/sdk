@@ -857,3 +857,295 @@ def test_get_args_from_dataset_preprocess_config(test_case: TestCase):
         assert test_case.expected_status == FAILED
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+def _build_builtin_runtime() -> types.Runtime:
+    runtime_trainer = types.RuntimeTrainer(
+        trainer_type=types.TrainerType.BUILTIN_TRAINER,
+        framework="torchtune",
+        device="gpu",
+        device_count="1",
+        image="ghcr.io/kubeflow/trainer/torchtune",
+    )
+    runtime_trainer.set_command(constants.TORCH_TUNE_COMMAND)
+    return types.Runtime(name="torchtune-llama3.2-1b", trainer=runtime_trainer)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="empty config produces empty args",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(),
+            },
+            expected_output=[],
+        ),
+        TestCase(
+            name="dtype only produces dtype arg",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(
+                    dtype=types.DataType.BF16,
+                ),
+            },
+            expected_output=["dtype=bf16"],
+        ),
+        TestCase(
+            name="all scalar fields produce correct args",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(
+                    dtype=types.DataType.FP32,
+                    batch_size=8,
+                    epochs=3,
+                    loss=types.Loss.CEWithChunkedOutputLoss,
+                ),
+            },
+            expected_output=[
+                "dtype=fp32",
+                "batch_size=8",
+                "epochs=3",
+                "loss=torchtune.modules.loss.CEWithChunkedOutputLoss",
+            ],
+        ),
+        TestCase(
+            name="config with peft appends lora args",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(
+                    peft_config=types.LoraConfig(
+                        lora_rank=32,
+                        lora_alpha=16,
+                    ),
+                ),
+            },
+            expected_output=[
+                "model.lora_rank=32",
+                "model.lora_alpha=16",
+                "model.lora_attn_modules=[q_proj,v_proj,output_proj]",
+            ],
+        ),
+        TestCase(
+            name="config with dataset preprocess appends dataset args",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(
+                    dataset_preprocess_config=types.TorchTuneInstructDataset(
+                        split="train",
+                    ),
+                ),
+            },
+            expected_output=[
+                f"dataset={constants.TORCH_TUNE_INSTRUCT_DATASET}",
+                "dataset.split=train",
+            ],
+        ),
+        TestCase(
+            name="initializer with directory dataset produces data_dir arg",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(
+                    dtype=types.DataType.BF16,
+                ),
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(
+                        storage_uri="hf://tatsu-lab/alpaca",
+                    ),
+                ),
+            },
+            expected_output=[
+                "dtype=bf16",
+                f"dataset.data_dir={constants.DATASET_PATH}/.",
+            ],
+        ),
+        TestCase(
+            name="initializer with file dataset produces data_files arg",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(),
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(
+                        storage_uri="hf://tatsu-lab/alpaca/data.json",
+                    ),
+                ),
+            },
+            expected_output=[
+                f"dataset.data_files={constants.DATASET_PATH}/data.json",
+            ],
+        ),
+        TestCase(
+            name="nested directory dataset uri produces data_dir arg",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(),
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(
+                        storage_uri="hf://tatsu-lab/alpaca/train",
+                    ),
+                ),
+            },
+            expected_output=[
+                f"dataset.data_dir={constants.DATASET_PATH}/train",
+            ],
+        ),
+        TestCase(
+            name="invalid dtype raises ValueError",
+            expected_status=FAILED,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(
+                    dtype="invalid",
+                ),
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_get_args_using_torchtune_config(test_case: TestCase):
+    print("Executing test:", test_case.name)
+    try:
+        args = utils.get_args_using_torchtune_config(
+            test_case.config["fine_tuning_config"],
+            test_case.config.get("initializer"),
+        )
+
+        assert test_case.expected_status == SUCCESS
+        assert args == test_case.expected_output
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid config with num_nodes and batch_size",
+            expected_status=SUCCESS,
+            config={
+                "runtime": _build_builtin_runtime(),
+                "trainer": types.BuiltinTrainer(
+                    config=types.TorchTuneConfig(
+                        num_nodes=2,
+                        batch_size=8,
+                    ),
+                ),
+            },
+            expected_output=models.TrainerV1alpha1Trainer(
+                command=["tune", "run"],
+                args=["batch_size=8"],
+                numNodes=2,
+            ),
+        ),
+        TestCase(
+            name="valid config with resources_per_node",
+            expected_status=SUCCESS,
+            config={
+                "runtime": _build_builtin_runtime(),
+                "trainer": types.BuiltinTrainer(
+                    config=types.TorchTuneConfig(
+                        resources_per_node={"gpu": 2},
+                    ),
+                ),
+            },
+            expected_output=models.TrainerV1alpha1Trainer(
+                command=["tune", "run"],
+                args=[],
+                resourcesPerNode=models.IoK8sApiCoreV1ResourceRequirements(
+                    limits={
+                        "nvidia.com/gpu": models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                    },
+                    requests={
+                        "nvidia.com/gpu": models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                    },
+                ),
+            ),
+        ),
+        TestCase(
+            name="empty config produces trainer with empty args",
+            expected_status=SUCCESS,
+            config={
+                "runtime": _build_builtin_runtime(),
+                "trainer": types.BuiltinTrainer(
+                    config=types.TorchTuneConfig(),
+                ),
+            },
+            expected_output=models.TrainerV1alpha1Trainer(
+                command=["tune", "run"],
+                args=[],
+            ),
+        ),
+        TestCase(
+            name="num_nodes=0 is treated as unset",
+            expected_status=SUCCESS,
+            config={
+                "runtime": _build_builtin_runtime(),
+                "trainer": types.BuiltinTrainer(
+                    config=types.TorchTuneConfig(
+                        num_nodes=0,
+                        batch_size=8,
+                    ),
+                ),
+            },
+            # numNodes is intentionally left unset: `if config.num_nodes:` is falsy for 0.
+            expected_output=models.TrainerV1alpha1Trainer(
+                command=["tune", "run"],
+                args=["batch_size=8"],
+            ),
+        ),
+        TestCase(
+            name="initializer threads dataset arg into trainer args",
+            expected_status=SUCCESS,
+            config={
+                "runtime": _build_builtin_runtime(),
+                "trainer": types.BuiltinTrainer(
+                    config=types.TorchTuneConfig(
+                        batch_size=8,
+                    ),
+                ),
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(
+                        storage_uri="hf://tatsu-lab/alpaca/data.json",
+                    ),
+                ),
+            },
+            expected_output=models.TrainerV1alpha1Trainer(
+                command=["tune", "run"],
+                args=[
+                    "batch_size=8",
+                    f"dataset.data_files={constants.DATASET_PATH}/data.json",
+                ],
+            ),
+        ),
+        TestCase(
+            name="invalid config type raises ValueError",
+            expected_status=FAILED,
+            config={
+                "runtime": _build_builtin_runtime(),
+                "trainer": types.BuiltinTrainer(
+                    config="invalid_config",
+                ),
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_get_trainer_cr_from_builtin_trainer(test_case: TestCase):
+    print("Executing test:", test_case.name)
+    try:
+        trainer_cr = utils.get_trainer_cr_from_builtin_trainer(
+            test_case.config["runtime"],
+            test_case.config["trainer"],
+            test_case.config.get("initializer"),
+        )
+
+        assert test_case.expected_status == SUCCESS
+        assert trainer_cr == test_case.expected_output
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert type(e) is test_case.expected_error
+    print("test execution complete")

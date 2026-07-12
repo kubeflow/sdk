@@ -333,8 +333,8 @@ class KubernetesBackend(RuntimeBackend):
             port = int(port_str) if port_str else random.randint(15002, 16002)
         # Prefer pod when available (bypasses Service/EndpointSlice); then try svc names
         candidates: list[tuple[str, str]] = []
-        if info.pod_name:
-            candidates.append(("pod", info.pod_name))
+        if info.driver_pod_name:
+            candidates.append(("pod", info.driver_pod_name))
         for svc in [f"{info.name}-svc", info.service_name, f"{info.name}-server"]:
             if svc and not any(c[0] == "svc" and c[1] == svc for c in candidates):
                 candidates.append(("svc", svc))
@@ -590,15 +590,15 @@ class KubernetesBackend(RuntimeBackend):
         """Get logs from a SparkConnect session."""
         info = self.get_session(name)
 
-        if not info.pod_name:
+        if not info.driver_pod_name:
             raise RuntimeError(
-                f"No server pod for {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
+                f"No driver pod for {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
             )
 
         try:
             if follow:
                 thread = self.core_api.read_namespaced_pod_log(
-                    name=info.pod_name,
+                    name=info.driver_pod_name,
                     namespace=self.namespace,
                     follow=True,
                     _preload_content=False,
@@ -609,7 +609,7 @@ class KubernetesBackend(RuntimeBackend):
                     yield line.decode("utf-8").rstrip("\n")
             else:
                 thread = self.core_api.read_namespaced_pod_log(
-                    name=info.pod_name,
+                    name=info.driver_pod_name,
                     namespace=self.namespace,
                     async_req=True,
                 )

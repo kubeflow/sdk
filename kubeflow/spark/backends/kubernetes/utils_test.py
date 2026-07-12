@@ -326,7 +326,7 @@ class TestGetSparkConnectInfoFromCr:
         assert info.name == "my-session"
         assert info.namespace == "default"
         assert info.state == SparkConnectState.READY
-        assert info.pod_name == "my-session-server-0"
+        assert info.driver_pod_name == "my-session-server-0"
         assert info.pod_ip == "10.0.0.5"
         assert info.service_name == "my-session-svc"
         assert info.creation_timestamp is not None
@@ -393,7 +393,7 @@ class TestGetSparkConnectInfoFromCr:
         info = get_spark_connect_info_from_cr(spark_connect_cr)
 
         assert info.state == SparkConnectState.PROVISIONING
-        assert info.pod_name is None
+        assert info.driver_pod_name is None
 
     def test_invalid_cr_missing_name_raises_error(self, minimal_spec):
         """Test that CR without name in metadata raises ValueError."""

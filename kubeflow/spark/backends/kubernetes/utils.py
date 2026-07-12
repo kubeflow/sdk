@@ -196,7 +196,7 @@ def build_spark_connect_cr(
     Args:
         name: Session name.
         namespace: Kubernetes namespace.
-        spark_version: Spark version (default: 3.4.1).
+        spark_version: Spark version (default: 4.0.1).
         num_executors: Number of executor instances (simple mode).
         resources_per_executor: Resource requirements per executor (simple mode).
         spark_conf: Spark configuration properties.
@@ -298,7 +298,7 @@ def get_spark_connect_info_from_cr(
         name=spark_connect_cr.metadata.name,
         namespace=spark_connect_cr.metadata.namespace,
         state=state,
-        pod_name=server_status.pod_name if server_status else None,
+        driver_pod_name=server_status.pod_name if server_status else None,
         pod_ip=server_status.pod_ip if server_status else None,
         service_name=server_status.service_name if server_status else None,
         creation_timestamp=spark_connect_cr.metadata.creation_timestamp,

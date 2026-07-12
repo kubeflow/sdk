@@ -13,6 +13,13 @@
 # limitations under the License.
 
 from kubeflow.hub.api.model_registry_client import ModelRegistryClient
-from kubeflow.hub.types.types import StorageConfig
+from kubeflow.hub.storage import upload_artifact
+from kubeflow.hub.types.types import OCIUploadParams, S3UploadParams, StorageConfig
 
-__all__ = ["ModelRegistryClient", "StorageConfig"]
+__all__ = [
+    "ModelRegistryClient",
+    "StorageConfig",
+    "S3UploadParams",
+    "OCIUploadParams",
+    "upload_artifact",
+]

@@ -803,6 +803,7 @@ def _run_verify_backend_with_core_api(core_api: Mock) -> tuple[list[str], int]:
                     "Trainer control-plane version info is not available",
                     "kubeflow-trainer-public",
                     "ConfigMap not found",
+                    "KUBEFLOW_SYSTEM_NAMESPACE",
                 ],
             },
         ),
@@ -1078,7 +1079,11 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                 runtime_name=TORCH_TUNE_RUNTIME,
                 train_job_name=TRAIN_JOB_WITH_BUILT_IN_TRAINER,
                 train_job_trainer=get_builtin_trainer(
-                    args=["batch_size=2", "epochs=2", "loss=Loss.CEWithChunkedOutputLoss"],
+                    args=[
+                        "batch_size=2",
+                        "epochs=2",
+                        "loss=torchtune.modules.loss.CEWithChunkedOutputLoss",
+                    ],
                 ),
             ),
         ),
