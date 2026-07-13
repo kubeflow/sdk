@@ -260,18 +260,21 @@ class KubernetesBackend(RuntimeBackend):
 
         # Create the TrainJob and wait until it completes.
         # If Runtime trainer has GPU resources use them, otherwise run TrainJob with 1 CPU.
-        job_name = self.train(
-            runtime=runtime_copy,
-            trainer=types.CustomTrainer(
-                func=print_packages,
-                num_nodes=1,
-                resources_per_node=({"cpu": 1} if runtime_copy.trainer.device != "gpu" else None),
-            ),
-        )
-
-        self.wait_for_job_status(job_name)
-        print("\n".join(self.get_job_logs(name=job_name)))
-        self.delete_job(job_name)
+        job_name = None
+        try:
+            job_name = self.train(
+                runtime=runtime_copy,
+                trainer=types.CustomTrainer(
+                    func=print_packages,
+                    num_nodes=1,
+                    resources_per_node=({"cpu": 1} if runtime_copy.trainer.device != "gpu" else None),
+                ),
+            )
+            self.wait_for_job_status(job_name)
+            print("\n".join(self.get_job_logs(name=job_name)))
+        finally:
+            if job_name is not None:
+                self.delete_job(job_name)
 
     def train(
         self,
