@@ -1361,7 +1361,7 @@ components:
         state:
           type: string
           enum: [Provisioning, Ready, Running, NotReady, Failed]
-        pod_name:
+        driver_pod_name:
           type: string
           nullable: true
         pod_ip:

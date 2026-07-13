@@ -10,9 +10,8 @@
 
 **Validation before proposing changes**:
 
-- Lint/format: `make verify`
+- Lint/format/type-check (CI parity): `make verify`
 - Tests: `make test-python` or targeted `pytest` invocations
-- Type checking: `uv run ty check kubeflow`
 
 **Commit/PR hygiene**:
 

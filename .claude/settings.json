@@ -6,7 +6,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "FILE=$(jq -r '.tool_input.file_path // empty' < /dev/stdin); [[ \"$FILE\" == *.py ]] || exit 0; cd \"$CLAUDE_PROJECT_DIR\" && uv run ruff check --fix \"$FILE\" 2>/dev/null || true; uv run ruff format \"$FILE\" 2>/dev/null || true"
+                        "command": "FILE=$(jq -r '.tool_input.file_path // empty' < /dev/stdin); [[ \"$FILE\" == *.py ]] || exit 0; cd \"$CLAUDE_PROJECT_DIR\" && { uv run ruff check --fix \"$FILE\" 2>/dev/null || true; uv run ruff format \"$FILE\" 2>/dev/null || true; }"
                     }
                 ]
             }

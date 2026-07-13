@@ -39,11 +39,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Verify
+      - name: Verify (lint, format, type-check)
         run: make verify
-
-      - name: Run type-check
-        run: uv run ty check kubeflow/hub kubeflow/common
 
       - name: Lint import boundaries
         run: make lint-imports

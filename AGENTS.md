@@ -61,7 +61,7 @@ make install-dev              # Install uv, create .venv, sync deps
 **Verify (CI parity)**:
 
 ```bash
-make verify                   # Runs ruff check --show-fixes and ruff format --check
+make verify                   # lock check, ruff check/format, ty on kubeflow/hub + kubeflow/common
 make lint-imports             # SDK component import boundaries (import-linter)
 make verify-openapi           # Validate openapi.yaml (OpenAPI 3.x schema)
 ```
@@ -76,7 +76,7 @@ mypy path/to/file.py
 uv run pytest -q path/to/file_test.py
 ```
 
-Prefix with `uv run` when using the project virtualenv. Primary type checker in this repo is `ty`; `mypy` is supported for single-file type-check workflows.
+Prefix with `uv run` when using the project virtualenv. Primary type checker is `ty` (via `make verify` for CI parity). `mypy` is an optional single-file alternative only.
 
 Prefer these over full-repo commands while iterating on a single module.
 
@@ -95,12 +95,6 @@ uv run coverage run -m pytest <path> && uv run coverage report          # Ad-hoc
 ```bash
 uv run ruff check --fix .                    # Fix lint issues (all files)
 uv run ruff format kubeflow                  # Format kubeflow package
-```
-
-**Type checking**:
-
-```bash
-uv run ty check kubeflow                     # Run type checker (project default)
 ```
 
 **Pre-commit**:
