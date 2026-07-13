@@ -45,6 +45,7 @@ spark = [
   "kubeflow-spark-api>=2.4.0",
 ]
 hub = ["model-registry>=0.3.6"]
+telemetry = ["opentelemetry-api>=1.40.0"]
 
 [dependency-groups]
 docs = [
