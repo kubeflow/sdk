@@ -419,7 +419,53 @@ class Toleration:
         else:
             raise TypeError(f"Unsupported Spark resource type: {type(resource).__name__}")
 
+@dataclass
+class AddConnectJar:
+    """Add the Spark Connect Maven JAR to spark.jars.
 
+    Supported backends:
+        - Kubernetes
+
+    Args:
+        enabled: Whether to add the Spark Connect JAR.
+    """
+
+    enabled: bool = True
+
+    def __call__(
+        self,
+        spark_connect: models.SparkV1alpha1SparkConnect,
+        backend: RuntimeBackend,
+    ) -> None:
+        """Apply the Spark Connect JAR configuration."""
+        from kubeflow.spark.backends.kubernetes import constants
+        from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
+
+        if not isinstance(backend, KubernetesBackend):
+            raise ValueError(
+                f"AddConnectJar option is not compatible with {type(backend).__name__}. "
+                f"Supported backends: KubernetesBackend"
+            )
+        if not self.enabled:
+            return
+        spark_version = (spark_connect.spec.spark_version or constants.DEFAULT_SPARK_VERSION)
+        connect_jar_url = (
+            f"https://repo1.maven.org/maven2/org/apache/spark/"
+            f"spark-connect_{constants.SPARK_CONNECT_PACKAGE_SCALA_VERSION}/"
+            f"{spark_version}/"
+            f"spark-connect_{constants.SPARK_CONNECT_PACKAGE_SCALA_VERSION}-"
+            f"{spark_version}.jar"
+        )
+        if spark_connect.spec.spark_conf is None:
+            spark_connect.spec.spark_conf = {}
+
+        existing_jars = spark_connect.spec.spark_conf.get("spark.jars", "").strip()
+
+        spark_connect.spec.spark_conf["spark.jars"] = (
+            f"{connect_jar_url},{existing_jars}"
+            if existing_jars
+            else connect_jar_url
+        )
 @dataclass
 class Name:
     """Set a custom name for the Spark resource.

@@ -15,8 +15,9 @@
 """Public API for the Kubeflow Spark client and types. Import from kubeflow.spark."""
 
 from kubeflow.common.types import KubernetesBackendConfig
-from kubeflow.spark.api.spark_client import SparkClient
-from kubeflow.spark.options import (
+from kubeflow.spark.api.spark_client import SparkClient 
+from kubeflow.spark.types.options import (
+    AddConnectJar,
     Annotations,
     Labels,
     Name,
@@ -48,6 +49,7 @@ __all__ = [
     "SparkJob",
     "SparkJobStatus",
     # Options (KEP-107 extensibility pattern - callable pattern like trainer SDK)
+    "AddConnectJar",
     "Annotations",
     "Labels",
     "Name",
