@@ -12,19 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from dataclasses import fields
+from datetime import datetime, timezone
 import inspect
+import logging
 import os
 import shlex
 import textwrap
-from typing import Any
+import threading
+import time
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from kubeflow_trainer_api import models
+import requests
 
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
+
+if TYPE_CHECKING:
+    from requests import Session
 
 
 def get_container_devices(
@@ -662,3 +672,166 @@ def get_model_initializer(
         )
 
     raise ValueError(f"Model initializer type is invalid: {type(model)}")
+
+
+# ---------------------------------------------------------------------------
+# TrainJob status reporting utilities
+# ---------------------------------------------------------------------------
+
+_logger = logging.getLogger(__name__)
+
+_ENV_SERVER_URL = "KUBEFLOW_TRAINER_SERVER_URL"
+_ENV_CA_CERT = "KUBEFLOW_TRAINER_SERVER_CA_CERT"
+_ENV_TOKEN_PATH = "KUBEFLOW_TRAINER_SERVER_TOKEN"
+
+_throttle_lock = threading.Lock()
+_token_lock = threading.Lock()
+_session_lock = threading.Lock()
+_last_update_time: float = 0.0
+_cached_token: str | None = None
+_token_read_time: float = 0.0
+_http_session: Session | None = None
+
+_MIN_UPDATE_INTERVAL_SECONDS = 5.0
+_TOKEN_CACHE_TTL_SECONDS = 300.0
+_MAX_METRICS_COUNT = 256
+
+
+def _get_status_session() -> Session:
+    global _http_session
+    with _session_lock:
+        if _http_session is None:
+            _http_session = requests.Session()
+        return _http_session
+
+
+def _get_cached_token(token_path: str | None) -> str | None:
+    global _cached_token, _token_read_time
+
+    now = time.monotonic()
+    with _token_lock:
+        if _cached_token and (now - _token_read_time) < _TOKEN_CACHE_TTL_SECONDS:
+            return _cached_token
+
+        if not token_path or not os.path.exists(token_path):
+            return None
+
+        try:
+            with open(token_path) as f:
+                _cached_token = f.read().strip()
+                _token_read_time = now
+                return _cached_token
+        except OSError as e:
+            _logger.warning("Unable to read token from %s: %s", token_path, e)
+            return None
+
+
+def _should_throttle() -> bool:
+    now = time.monotonic()
+    return (now - _last_update_time) < _MIN_UPDATE_INTERVAL_SECONDS
+
+
+def _update_last_time() -> None:
+    global _last_update_time
+    _last_update_time = time.monotonic()
+
+
+def update_trainjob_status(
+    progress_percent: int | None = None,
+    estimated_remaining_seconds: int | None = None,
+    metrics: dict[str, float | int | str] | None = None,
+) -> bool:
+    """Report training progress to Kubeflow Trainer controller.
+
+    Safe to call in any environment. Returns False silently if not running
+    inside a Kubeflow TrainJob. Never raises exceptions.
+
+    Includes automatic throttling (max 1 update per 5 seconds) to avoid
+    overwhelming the controller.
+
+    Environment variables (injected by controller when TrainJobStatus feature gate is enabled):
+        - KUBEFLOW_TRAINER_SERVER_URL: HTTPS endpoint URL for status updates
+        - KUBEFLOW_TRAINER_SERVER_CA_CERT: Path to CA certificate for TLS verification
+        - KUBEFLOW_TRAINER_SERVER_TOKEN: Path to projected service account token
+
+    Args:
+        progress_percent: Training completion percentage (0-100).
+        estimated_remaining_seconds: ETA in seconds.
+        metrics: Dict of metric name -> value. Values are converted to strings.
+            Truncated to 256 entries by the SDK to avoid oversized payloads.
+
+    Returns:
+        True if update was sent successfully, False otherwise.
+    """
+    try:
+        url = os.environ.get(_ENV_SERVER_URL)
+        if not url:
+            return False
+
+        with _throttle_lock:
+            if _should_throttle():
+                return False
+
+        ca_file = os.environ.get(_ENV_CA_CERT)
+        token_path = os.environ.get(_ENV_TOKEN_PATH)
+
+        token = _get_cached_token(token_path)
+        if not token:
+            _logger.debug("No authentication token available")
+            return False
+
+        trainer_status: dict = {
+            "lastUpdatedTime": datetime.now(timezone.utc).isoformat(),
+        }
+
+        if progress_percent is not None:
+            trainer_status["progressPercentage"] = max(0, min(100, progress_percent))
+
+        if estimated_remaining_seconds is not None:
+            trainer_status["estimatedRemainingSeconds"] = max(0, estimated_remaining_seconds)
+
+        if metrics:
+            if len(metrics) > _MAX_METRICS_COUNT:
+                _logger.warning(
+                    "metrics dict has %d entries, truncating to %d (SDK limit)",
+                    len(metrics),
+                    _MAX_METRICS_COUNT,
+                )
+                metrics = dict(list(metrics.items())[:_MAX_METRICS_COUNT])
+            trainer_status["metrics"] = [
+                {"name": str(k), "value": str(v)} for k, v in metrics.items()
+            ]
+
+        session = _get_status_session()
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+
+        verify: bool | str = True
+        if ca_file and os.path.exists(ca_file):
+            verify = ca_file
+
+        response = session.post(
+            url,
+            json={"trainerStatus": trainer_status},
+            headers=headers,
+            verify=verify,
+            timeout=5,
+        )
+
+        if response.status_code == 200:
+            _update_last_time()
+            _logger.debug("Status update sent: %s%%", progress_percent)
+            return True
+        else:
+            _logger.warning("Status update failed: HTTP %s", response.status_code)
+            _logger.debug("Response body: %.500s", response.text)
+            return False
+
+    except requests.RequestException as e:
+        _logger.warning("Failed to send status update: %s", e)
+        return False
+    except Exception as e:
+        _logger.warning("Unexpected error in update_trainjob_status: %s", e)
+        return False

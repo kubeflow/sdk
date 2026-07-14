@@ -1006,6 +1006,7 @@ dependencies = [
     { name = "kubeflow-trainer-api" },
     { name = "kubernetes" },
     { name = "pydantic" },
+    { name = "requests" },
 ]
 
 [package.optional-dependencies]
@@ -1064,6 +1065,7 @@ requires-dist = [
     { name = "podman", marker = "extra == 'podman'", specifier = ">=5.6.0" },
     { name = "pydantic", specifier = ">=2.10.0" },
     { name = "pyspark-connect", marker = "extra == 'spark'", specifier = "==4.0.1" },
+    { name = "requests", specifier = ">=2.25.0" },
 ]
 provides-extras = ["docker", "hub", "podman", "spark"]
 
