@@ -83,6 +83,7 @@ jobs:
             -v \
             -s \
             --tb=long
+        env:
           SPARK_TEST_CLUSTER: spark-test
           SPARK_TEST_NAMESPACE: spark-test
           SPARK_E2E_DEBUG: "1"
