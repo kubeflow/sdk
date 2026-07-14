@@ -14,7 +14,6 @@
 
 from collections.abc import Callable, Iterator
 import copy
-import logging
 import multiprocessing
 import os
 import random
@@ -28,6 +27,7 @@ from kubeflow_trainer_api import models
 from kubernetes import client, config, watch
 
 import kubeflow.common.constants as common_constants
+from kubeflow.common.logging import get_logger
 from kubeflow.common.types import KubernetesBackendConfig
 import kubeflow.common.utils as common_utils
 from kubeflow.trainer.backends.base import RuntimeBackend
@@ -35,7 +35,7 @@ import kubeflow.trainer.backends.kubernetes.utils as utils
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class KubernetesBackend(RuntimeBackend):
@@ -270,7 +270,7 @@ class KubernetesBackend(RuntimeBackend):
         )
 
         self.wait_for_job_status(job_name)
-        print("\n".join(self.get_job_logs(name=job_name)))
+        logger.info("\n".join(self.get_job_logs(name=job_name)))
         self.delete_job(job_name)
 
     def train(
