@@ -19,10 +19,7 @@ import os
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark import FileJob, SparkClient, SparkJobStatus
 
-REMOTE_PI = (
-    "https://raw.githubusercontent.com/"
-    "apache/spark/master/examples/src/main/python/pi.py"
-)
+REMOTE_PI = "https://raw.githubusercontent.com/apache/spark/master/examples/src/main/python/pi.py"
 
 JOB_NAME: str | None = None
 

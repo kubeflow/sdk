@@ -19,10 +19,7 @@ import os
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark import FileJob, SparkClient, SparkJobStatus
 
-REMOTE_PI = (
-    "https://raw.githubusercontent.com/"
-    "apache/spark/master/examples/src/main/python/pi.py"
-)
+REMOTE_PI = "https://raw.githubusercontent.com/apache/spark/master/examples/src/main/python/pi.py"
 
 JOB_NAME: str | None = None
 
@@ -37,6 +34,7 @@ def _backend_config(namespace_default: str = "default"):
 def _client() -> SparkClient:
     """Create SparkClient."""
     return SparkClient(backend_config=_backend_config())
+
 
 def example_submit_and_wait():
     """Submit a Spark batch job and wait for completion."""
@@ -78,6 +76,7 @@ def example_submit_and_wait():
     print(f"Namespace: {job.namespace}")
     print("\nSubmit and wait example complete.\n")
 
+
 def example_get_job():
     """Get information about a Spark batch job."""
     print("=" * 70)
@@ -94,9 +93,7 @@ def example_get_job():
     job = client.get_job(JOB_NAME)
 
     if job.status != SparkJobStatus.COMPLETED:
-        raise RuntimeError(
-            f"Expected COMPLETED status, got {job.status}."
-        )
+        raise RuntimeError(f"Expected COMPLETED status, got {job.status}.")
 
     if not job.driver_pod_name:
         raise RuntimeError("Expected driver pod name to be populated.")
@@ -109,6 +106,7 @@ def example_get_job():
     print(f"Executors: {job.num_executors}")
 
     print("\nGet job example complete.\n")
+
 
 def example_list_jobs():
     """List Spark batch jobs."""
@@ -130,19 +128,13 @@ def example_list_jobs():
     job_found = False
 
     for job in jobs:
-        print(
-            f"- {job.name} | "
-            f"Status: {job.status} | "
-            f"Namespace: {job.namespace}"
-        )
+        print(f"- {job.name} | Status: {job.status} | Namespace: {job.namespace}")
 
         if job.name == JOB_NAME:
             job_found = True
 
     if not job_found:
-        raise RuntimeError(
-            f"Submitted job '{JOB_NAME}' not found in job list."
-        )
+        raise RuntimeError(f"Submitted job '{JOB_NAME}' not found in job list.")
 
     print("\nSubmitted job found in job list.")
 
@@ -158,26 +150,19 @@ def example_list_jobs():
 
     for job in completed_jobs:
         if job.status != SparkJobStatus.COMPLETED:
-            raise RuntimeError(
-                f"Expected COMPLETED status, got {job.status}."
-            )
+            raise RuntimeError(f"Expected COMPLETED status, got {job.status}.")
 
-        print(
-            f"- {job.name} | "
-            f"Status: {job.status} | "
-            f"Namespace: {job.namespace}"
-        )
+        print(f"- {job.name} | Status: {job.status} | Namespace: {job.namespace}")
 
         if job.name == JOB_NAME:
             completed_job_found = True
 
     if not completed_job_found:
-        raise RuntimeError(
-            f"Submitted completed job '{JOB_NAME}' not found in filtered job list."
-        )
+        raise RuntimeError(f"Submitted completed job '{JOB_NAME}' not found in filtered job list.")
 
     print("\nCompleted job filter verified.")
     print("\nList jobs example complete.\n")
+
 
 def example_get_job_logs():
     """Get logs from a Spark batch job."""
@@ -209,6 +194,7 @@ def example_get_job_logs():
 
     print("\nGet job logs example complete.\n")
 
+
 def example_delete_job():
     """Delete a Spark batch job."""
     print("=" * 70)
@@ -237,6 +223,7 @@ def example_delete_job():
     JOB_NAME = None
 
     print("\nDelete job example complete.\n")
+
 
 def main():
     """Run all batch job lifecycle examples."""
