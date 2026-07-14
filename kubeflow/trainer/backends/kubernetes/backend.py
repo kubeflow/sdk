@@ -267,7 +267,9 @@ class KubernetesBackend(RuntimeBackend):
                 trainer=types.CustomTrainer(
                     func=print_packages,
                     num_nodes=1,
-                    resources_per_node=({"cpu": 1} if runtime_copy.trainer.device != "gpu" else None),
+                    resources_per_node=(
+                        {"cpu": 1} if runtime_copy.trainer.device != "gpu" else None
+                    ),
                 ),
             )
             self.wait_for_job_status(job_name)
