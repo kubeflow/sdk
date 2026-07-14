@@ -217,3 +217,96 @@ def test_hugging_face_dataset_initializer(test_case: TestCase):
         assert test_case.expected_status == FAILED
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid lora config with positive values",
+            expected_status=SUCCESS,
+            config={
+                "lora_rank": 8,
+                "lora_alpha": 16,
+                "lora_dropout": 0.5,
+            },
+        ),
+        TestCase(
+            name="valid lora config with boundary dropout=0.0",
+            expected_status=SUCCESS,
+            config={
+                "lora_dropout": 0.0,
+            },
+        ),
+        TestCase(
+            name="valid lora config with boundary dropout=1.0",
+            expected_status=SUCCESS,
+            config={
+                "lora_dropout": 1.0,
+            },
+        ),
+        TestCase(
+            name="invalid lora_rank negative raises ValueError",
+            expected_status=FAILED,
+            config={
+                "lora_rank": -8,
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="invalid lora_rank zero raises ValueError",
+            expected_status=FAILED,
+            config={
+                "lora_rank": 0,
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="invalid lora_alpha negative raises ValueError",
+            expected_status=FAILED,
+            config={
+                "lora_alpha": -1,
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="invalid lora_alpha zero raises ValueError",
+            expected_status=FAILED,
+            config={
+                "lora_alpha": 0,
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="invalid lora_dropout above 1.0 raises ValueError",
+            expected_status=FAILED,
+            config={
+                "lora_dropout": 1.5,
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="invalid lora_dropout negative raises ValueError",
+            expected_status=FAILED,
+            config={
+                "lora_dropout": -0.1,
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_lora_config_validation(test_case: TestCase):
+    """Test LoraConfig creation and validation."""
+    print("Executing test:", test_case.name)
+
+    try:
+        config = types.LoraConfig(**test_case.config)
+
+        assert test_case.expected_status == SUCCESS
+        for key in test_case.config:
+            assert getattr(config, key) == test_case.config[key]
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
