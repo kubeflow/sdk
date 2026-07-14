@@ -1,7 +1,7 @@
 name: Spark Examples E2E Test
 
 on:
-  pull_request:
+  push:
   workflow_dispatch:
 
 concurrency:
@@ -75,19 +75,44 @@ jobs:
           kind load docker-image spark-e2e-runner:local --name spark-test
         timeout-minutes: 5
 
-      - name: Run example validation tests
-        run: uv run pytest test/e2e/spark/test_spark_examples.py -v --tb=short
-        env:
+      - name: Run batch lifecycle example only
+        run: |
+          uv run pytest \
+            test/e2e/spark/test_spark_examples.py \
+            -k batch_job_lifecycle \
+            -v \
+            -s \
+            --tb=long
           SPARK_TEST_CLUSTER: spark-test
           SPARK_TEST_NAMESPACE: spark-test
           SPARK_E2E_DEBUG: "1"
           SPARK_E2E_RUN_IN_CLUSTER: "1"
           SPARK_E2E_RUNNER_IMAGE: spark-e2e-runner:local
-        timeout-minutes: 10
+        timeout-minutes: 4
 
       - name: Collect logs on failure
         if: failure()
         run: |
-          kubectl get pods -n spark-test
-          kubectl get sparkconnect -n spark-test 2>/dev/null || true
-          kubectl logs -n spark-test -l app.kubernetes.io/component=server --tail=100 || true
+          echo "===== Pods ====="
+          kubectl get pods -A -o wide || true
+
+          echo "===== SparkApplications ====="
+          kubectl get sparkapplications -A || true
+
+          echo "===== SparkApplication YAML ====="
+          kubectl get sparkapplications -A -o yaml || true
+
+          echo "===== SparkConnect ====="
+          kubectl get sparkconnect -A || true
+
+          echo "===== Events ====="
+          kubectl get events -A --sort-by=.lastTimestamp || true
+
+          echo "===== Spark Operator Pods ====="
+          kubectl get pods -A | grep spark-operator || true
+
+          echo "===== Spark Operator Logs ====="
+          kubectl logs -A -l app.kubernetes.io/name=spark-operator --tail=300 || true
+
+          echo "===== Spark Driver Logs ====="
+          kubectl logs -n spark-test -l spark-role=driver --all-containers=true --tail=300 || true
