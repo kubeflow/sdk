@@ -60,8 +60,10 @@ class TestMemoryKubernetesToSpark:
             ("1Ti", "1t"),
             ("4g", "4g"),
             ("512m", "512m"),
-            ("2G", "2g"),
             ("1.5Gi", "1536m"),
+            ("2G", "2000000000"),
+            ("512M", "512000000"),
+            ("1T", "1000000000000"),
         ],
     )
     def test_conversion(self, k8s_memory: str, expected_spark: str) -> None:
