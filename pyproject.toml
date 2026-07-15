@@ -45,9 +45,7 @@ spark = [
   "kubeflow-spark-api>=2.4.0",
 ]
 hub = ["model-registry>=0.3.6"]
-# TODO: Replace with a released kfp version (e.g. kfp[kubernetes]>=2.17.0) once
-# a kfp release including kfp.kubeflow_client is published to PyPI.
-pipelines = ["kfp[kubernetes]@git+https://github.com/kubeflow/pipelines.git@master#subdirectory=sdk/python"]
+pipelines = ["kfp[kubernetes]>=2.17.0"]
 
 [dependency-groups]
 docs = [
@@ -66,7 +64,7 @@ dev = [
   "kubeflow_trainer_api@git+https://github.com/kubeflow/trainer.git@master#subdirectory=api/python_api",
   "kubeflow_katib_api@git+https://github.com/kubeflow/katib.git@master#subdirectory=api/python_api",
   "kubeflow_spark_api@git+https://github.com/kubeflow/spark-operator.git@master#subdirectory=api/python_api",
-  "kfp[kubernetes]@git+https://github.com/kubeflow/pipelines.git@master#subdirectory=sdk/python",
+  "kfp[kubernetes]>=2.17.0",
   "ruff>=0.12.2",
   "pre-commit>=4.2.0",
   "PyGithub>=2.7.0",

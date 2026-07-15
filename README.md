@@ -275,7 +275,7 @@ job_id = client.train(trainer=CustomTrainer(func=train_fn))
 | **Kubeflow Katib**          | ✅ **Available** | v0.19.0+        | Hyperparameter optimization                                           |
 | **Kubeflow Model Registry** | ✅ **Available** | v0.3.0+         | Manage model artifacts, versions and ML artifacts metadata            |
 | **Kubeflow Spark Operator** | ✅ **Available** | v2.5.0+         | Manage Spark applications for data processing and feature engineering |
-| **Kubeflow Pipelines**      | ✅ **Available** | pre-release     | Build, run, and track AI workflows                                    |
+| **Kubeflow Pipelines**      | ✅ **Available** | v2.17.0+        | Build, run, and track AI workflows                                    |
 | **Feast**                   | 🚧 Planned       | TBD             | Feature store for machine learning                                    |
 
 ## Community

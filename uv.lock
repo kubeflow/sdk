@@ -1136,8 +1136,8 @@ wheels = [
 
 [[package]]
 name = "kfp"
-version = "2.15.2"
-source = { git = "https://github.com/kubeflow/pipelines.git?subdirectory=sdk%2Fpython&rev=master#83a24352b571c1a803e71cf129d410cbdcb32d46" }
+version = "2.17.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "click-option-group" },
@@ -1150,9 +1150,14 @@ dependencies = [
     { name = "kubernetes" },
     { name = "protobuf" },
     { name = "pyyaml" },
+    { name = "requests" },
     { name = "requests-toolbelt" },
     { name = "tabulate" },
     { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e9/e8/a14556188eb695055db4bfa7714ed84eb555637c97e4da77b67df573499b/kfp-2.17.0.tar.gz", hash = "sha256:92dd2fc0cca5b073f14860253e936cc9e6901f871dfae355be6a9f8ea9d580c5", size = 362373, upload-time = "2026-07-09T13:46:40.295Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e9/c6/eab3e5ed59497c09e0aca3f1cf0fc7c9c7ceaa05be0db620787355ffb351/kfp-2.17.0-py3-none-any.whl", hash = "sha256:dff321b76b2be8a09748a1be805a88699b4919e13bb6a1bf67ebf3074ea8ce3f", size = 477920, upload-time = "2026-07-09T13:46:38.614Z" },
 ]
 
 [package.optional-dependencies]
@@ -1162,32 +1167,34 @@ kubernetes = [
 
 [[package]]
 name = "kfp-kubernetes"
-version = "2.15.2"
+version = "2.17.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "kfp" },
     { name = "protobuf" },
+    { name = "requests" },
+    { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c5/ea/03ff08b86a50ba456c383c5440d060343bbf454d2bb00ff44a3ed4b833ca/kfp_kubernetes-2.15.2.tar.gz", hash = "sha256:c11c9f7b00db492bbc0daf0d3ff91e4349ce905eb88a9c1403bd9002c2c1113c", size = 18274, upload-time = "2025-12-03T21:35:45.109Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bc/5e/ab074201c7e4657b4d3818050f31975fa04d82c8a74ccf2c42b550ae2007/kfp_kubernetes-2.17.0.tar.gz", hash = "sha256:28db5290d4b5aef1bfb89267574eda3ed26fc226bf9f4ddf851baf0a33a31161", size = 20384, upload-time = "2026-07-09T13:50:14.752Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/04/f6/d2d94c1709ed336d696e0f1609ebe99a81cc98974843d64571fca4ce06ce/kfp_kubernetes-2.15.2-py3-none-any.whl", hash = "sha256:0cdb4ff9789233d47119ff5981b9f4c983ac682318df65650d813f8e4ba96e8f", size = 25201, upload-time = "2025-12-03T21:35:43.553Z" },
+    { url = "https://files.pythonhosted.org/packages/f0/7b/e0db02a56682a37d4fc96a9c257dc81fc8f847e0575d0d4f9301c3976e56/kfp_kubernetes-2.17.0-py3-none-any.whl", hash = "sha256:822e3c59aa09a678f4f5fff392065f93495e18ffcd6cbd43ac62d8bffc0d82b8", size = 27715, upload-time = "2026-07-09T13:50:13.623Z" },
 ]
 
 [[package]]
 name = "kfp-pipeline-spec"
-version = "2.16.1"
+version = "2.17.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "protobuf" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4f/8e/1844e0a11fefe77c86f6fc0d0ea463b338111d914515b930ff86be65a281/kfp_pipeline_spec-2.16.1.tar.gz", hash = "sha256:0b0719a828a48c2ff081e6cf6517531907231afadcfbbee0e6b2ea419bcbe634", size = 10573, upload-time = "2026-05-05T13:46:36.558Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/83/ba/61c1986a0724e146b745cac3006e4123dad6077084c5eeca43f5351d77ec/kfp_pipeline_spec-2.17.0.tar.gz", hash = "sha256:9ffe0a9a881d52ae867fd274d6b458a92d980bb368c15793d9f5e536c7f24521", size = 10621, upload-time = "2026-07-09T13:46:39.095Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3f/ca/7aab754c26e3cdb6dedc718bbb0d9d76600229bbc1cd008143db6fd62ec1/kfp_pipeline_spec-2.16.1-py3-none-any.whl", hash = "sha256:c6873c4362e8d227cd900e7e186ac9d2cdd2d492e9baa905d52d78452b7c2b65", size = 9866, upload-time = "2026-05-05T13:46:35.055Z" },
+    { url = "https://files.pythonhosted.org/packages/b1/b3/15c2bf2a0063b1fe595cba12ce88e858a90861a166e966fc3d656a3ebbac/kfp_pipeline_spec-2.17.0-py3-none-any.whl", hash = "sha256:a2ae9f287ce69d72f2fc10a5dca30a5e32ab3b6975ad6ce9d4b54e0e02c54371", size = 9920, upload-time = "2026-07-09T13:46:38.132Z" },
 ]
 
 [[package]]
 name = "kfp-server-api"
-version = "2.16.1"
+version = "2.17.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -1195,7 +1202,7 @@ dependencies = [
     { name = "six" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0c/c8/f96575c59dbbd5524f08b474f346b25390b18e56f94d3fee8ead90cbe817/kfp_server_api-2.16.1.tar.gz", hash = "sha256:19a80adcfe2d3666522ed164baeafe86a48ce25ee7fce9d93bb6457339120abd", size = 63847, upload-time = "2026-05-05T13:46:06.739Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4c/66/96e957346130828d5b8eaf9d3bea89fea5008680289c54f03be70cb745a3/kfp_server_api-2.17.0.tar.gz", hash = "sha256:12adfe269ca4758f01c687898f4471e786183e720fe5fa5aa4ad4fb0f3737d4f", size = 69867, upload-time = "2026-07-09T13:46:09.233Z" }
 
 [[package]]
 name = "kubeflow"
@@ -1260,7 +1267,7 @@ docs = [
 [package.metadata]
 requires-dist = [
     { name = "docker", marker = "extra == 'docker'", specifier = ">=6.1.3" },
-    { name = "kfp", extras = ["kubernetes"], marker = "extra == 'pipelines'", git = "https://github.com/kubeflow/pipelines.git?subdirectory=sdk%2Fpython&rev=master" },
+    { name = "kfp", extras = ["kubernetes"], marker = "extra == 'pipelines'", specifier = ">=2.17.0" },
     { name = "kubeflow-katib-api", specifier = ">=0.19.0" },
     { name = "kubeflow-spark-api", marker = "extra == 'spark'", specifier = ">=2.4.0" },
     { name = "kubeflow-trainer-api", specifier = ">=2.2.0" },
@@ -1276,7 +1283,7 @@ provides-extras = ["docker", "hub", "pipelines", "podman", "spark"]
 [package.metadata.requires-dev]
 dev = [
     { name = "coverage", specifier = ">=7.0" },
-    { name = "kfp", extras = ["kubernetes"], git = "https://github.com/kubeflow/pipelines.git?subdirectory=sdk%2Fpython&rev=master" },
+    { name = "kfp", extras = ["kubernetes"], specifier = ">=2.17.0" },
     { name = "kubeflow", extras = ["hub", "pipelines", "spark"] },
     { name = "kubeflow-katib-api", git = "https://github.com/kubeflow/katib.git?subdirectory=api%2Fpython_api&rev=master" },
     { name = "kubeflow-spark-api", git = "https://github.com/kubeflow/spark-operator.git?subdirectory=api%2Fpython_api&rev=master" },
@@ -2703,7 +2710,7 @@ wheels = [
 
 [[package]]
 name = "requests"
-version = "2.34.2"
+version = "2.33.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -2711,9 +2718,9 @@ dependencies = [
     { name = "idna" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ac/c3/e2a2b89f2d3e2179abd6d00ebd70bff6273f37fb3e0cc209f48b39d00cbf/requests-2.34.2.tar.gz", hash = "sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed", size = 142856, upload-time = "2026-05-14T19:25:27.735Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/34/64/8860370b167a9721e8956ae116825caff829224fbca0ca6e7bf8ddef8430/requests-2.33.0.tar.gz", hash = "sha256:c7ebc5e8b0f21837386ad0e1c8fe8b829fa5f544d8df3b2253bff14ef29d7652", size = 134232, upload-time = "2026-03-25T15:10:41.586Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl", hash = "sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0", size = 73075, upload-time = "2026-05-14T19:25:26.443Z" },
+    { url = "https://files.pythonhosted.org/packages/56/5d/c814546c2333ceea4ba42262d8c4d55763003e767fa169adc693bd524478/requests-2.33.0-py3-none-any.whl", hash = "sha256:3324635456fa185245e24865e810cecec7b4caf933d7eb133dcde67d48cee69b", size = 65017, upload-time = "2026-03-25T15:10:40.382Z" },
 ]
 
 [[package]]
