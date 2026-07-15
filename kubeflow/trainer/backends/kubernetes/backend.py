@@ -276,7 +276,14 @@ class KubernetesBackend(RuntimeBackend):
             print("\n".join(self.get_job_logs(name=job_name)))
         finally:
             if job_name is not None:
-                self.delete_job(job_name)
+                try:
+                    self.delete_job(job_name)
+                except Exception:
+                    logger.exception(
+                        "Failed to delete temporary TrainJob %s/%s created by get_runtime_packages",
+                        self.namespace,
+                        job_name,
+                    )
 
     def train(
         self,

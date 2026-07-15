@@ -1037,11 +1037,9 @@ def test_list_runtimes(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_get_runtime_packages(kubernetes_backend, mocker, test_case):
+def test_get_runtime_packages(kubernetes_backend, test_case):
     """Test KubernetesBackend.get_runtime_packages with basic success path."""
     print("Executing test:", test_case.name)
-    spy_train = mocker.spy(kubernetes_backend, "train")
-    spy_delete_job = mocker.spy(kubernetes_backend, "delete_job")
 
     try:
         kubernetes_backend.get_runtime_packages(**test_case.config)
@@ -1049,10 +1047,9 @@ def test_get_runtime_packages(kubernetes_backend, mocker, test_case):
         assert type(e) is test_case.expected_error
 
     if test_case.expected_status == SUCCESS:
-        job_name = spy_train.spy_return
-        spy_delete_job.assert_called_with(job_name)
+        kubernetes_backend.custom_api.delete_namespaced_custom_object.assert_called_once()
     else:
-        spy_delete_job.assert_not_called()
+        kubernetes_backend.custom_api.delete_namespaced_custom_object.assert_not_called()
 
     print("test execution complete")
 
