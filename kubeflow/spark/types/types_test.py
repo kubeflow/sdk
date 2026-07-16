@@ -24,6 +24,9 @@ from kubeflow.spark.types.types import (
     Executor,
     FileJob,
     FuncJob,
+    SparkApplicationDeployMode,
+    SparkApplicationState,
+    SparkApplicationType,
     SparkConnectInfo,
     SparkConnectState,
     SparkJob,
@@ -281,43 +284,6 @@ def test_spark_job_status_is_string(status):
 
 
 @pytest.mark.parametrize(
-    "operator_state, expected_status",
-    [
-        (None, SparkJobStatus.CREATED),
-        ("", SparkJobStatus.CREATED),
-        ("SUBMITTED", SparkJobStatus.CREATED),
-        ("RUNNING", SparkJobStatus.RUNNING),
-        ("SUCCEEDING", SparkJobStatus.RUNNING),
-        ("SUSPENDING", SparkJobStatus.RUNNING),
-        ("SUSPENDED", SparkJobStatus.RUNNING),
-        ("RESUMING", SparkJobStatus.RUNNING),
-        ("COMPLETED", SparkJobStatus.COMPLETED),
-        ("FAILED", SparkJobStatus.FAILED),
-        ("SUBMISSION_FAILED", SparkJobStatus.FAILED),
-        ("FAILING", SparkJobStatus.FAILED),
-        ("PENDING_RERUN", SparkJobStatus.FAILED),
-        ("INVALIDATING", SparkJobStatus.FAILED),
-        ("UNKNOWN", SparkJobStatus.FAILED),
-    ],
-)
-def test_from_operator_state(operator_state, expected_status):
-    """Verify SparkApplication states map to SparkJobStatus."""
-    assert SparkJobStatus.from_operator_state(operator_state) == expected_status
-
-
-def test_unknown_operator_state():
-    """Verify unknown SparkApplication states default to FAILED."""
-    with patch("kubeflow.spark.types.types.logger") as mock_logger:
-        status = SparkJobStatus.from_operator_state("SOME_NEW_STATE")
-
-    assert status == SparkJobStatus.FAILED
-    mock_logger.warning.assert_called_once_with(
-        "Unknown SparkApplication state '%s'. Defaulting to FAILED.",
-        "SOME_NEW_STATE",
-    )
-
-
-@pytest.mark.parametrize(
     "test_case",
     [
         TestCase(
@@ -440,3 +406,92 @@ def test_func_job(test_case: TestCase):
         assert job.func_args is None
 
     print("test execution complete")
+
+
+class TestSparkApplicationEnums:
+    """Tests for Spark Operator-aligned typed enums."""
+
+    def test_application_type_values(self):
+        assert set(SparkApplicationType) == {
+            SparkApplicationType.JAVA,
+            SparkApplicationType.SCALA,
+            SparkApplicationType.PYTHON,
+            SparkApplicationType.R,
+        }
+        assert SparkApplicationType.PYTHON == "Python"
+
+    def test_deploy_mode_values(self):
+        assert SparkApplicationDeployMode.CLUSTER == "cluster"
+        assert SparkApplicationDeployMode.CLIENT == "client"
+        assert SparkApplicationDeployMode.IN_CLUSTER_CLIENT == "in-cluster-client"
+
+    def test_application_state_matches_operator_constants(self):
+        """Keep SDK enum values aligned with spark-operator ApplicationStateType."""
+        assert SparkApplicationState.NEW == ""
+        assert {state.value for state in SparkApplicationState} == {
+            "",
+            "SUBMITTED",
+            "RUNNING",
+            "COMPLETED",
+            "FAILED",
+            "SUBMISSION_FAILED",
+            "PENDING_RERUN",
+            "INVALIDATING",
+            "SUCCEEDING",
+            "FAILING",
+            "SUSPENDING",
+            "SUSPENDED",
+            "RESUMING",
+            "UNKNOWN",
+        }
+
+
+class TestSparkJobStatus:
+    """Tests for SparkJobStatus enum."""
+
+    def test_enum_values(self):
+        assert SparkJobStatus.CREATED == "Created"
+        assert SparkJobStatus.RUNNING == "Running"
+        assert SparkJobStatus.COMPLETED == "Completed"
+        assert SparkJobStatus.FAILED == "Failed"
+
+    @pytest.mark.parametrize(
+        "operator_state,expected_status",
+        [
+            (None, SparkJobStatus.CREATED),
+            ("", SparkJobStatus.CREATED),
+            ("SUBMITTED", SparkJobStatus.CREATED),
+            ("RUNNING", SparkJobStatus.RUNNING),
+            ("SUCCEEDING", SparkJobStatus.RUNNING),
+            ("SUSPENDING", SparkJobStatus.RUNNING),
+            ("SUSPENDED", SparkJobStatus.RUNNING),
+            ("RESUMING", SparkJobStatus.RUNNING),
+            ("COMPLETED", SparkJobStatus.COMPLETED),
+            ("FAILED", SparkJobStatus.FAILED),
+            ("SUBMISSION_FAILED", SparkJobStatus.FAILED),
+            ("FAILING", SparkJobStatus.FAILED),
+            ("PENDING_RERUN", SparkJobStatus.FAILED),
+            ("INVALIDATING", SparkJobStatus.FAILED),
+            ("UNKNOWN", SparkJobStatus.FAILED),
+            (SparkApplicationState.SUBMITTED, SparkJobStatus.CREATED),
+            (SparkApplicationState.RUNNING, SparkJobStatus.RUNNING),
+            (SparkApplicationState.COMPLETED, SparkJobStatus.COMPLETED),
+            (SparkApplicationState.FAILED, SparkJobStatus.FAILED),
+        ],
+    )
+    def test_from_operator_state(self, operator_state, expected_status):
+        assert SparkJobStatus.from_operator_state(operator_state) == expected_status
+
+    def test_all_operator_states_are_mapped(self):
+        for state in SparkApplicationState:
+            assert isinstance(SparkJobStatus.from_operator_state(state), SparkJobStatus)
+
+    def test_unknown_operator_state(self):
+        with patch("kubeflow.spark.types.types.logger") as mock_logger:
+            status = SparkJobStatus.from_operator_state("SOME_NEW_STATE")
+
+        assert status == SparkJobStatus.FAILED
+        mock_logger.warning.assert_called_once_with(
+            "Unknown SparkApplication state '%s'. Defaulting to FAILED.",
+            "SOME_NEW_STATE",
+        )
