@@ -40,6 +40,7 @@ from kubeflow.spark.backends.kubernetes.utils import (
     get_spark_job_driver_spec,
     get_spark_job_executor_spec,
     read_pod_logs,
+    validate_jar_main_class,
     validate_spark_connect_url,
 )
 from kubeflow.spark.test.common import FAILED, SUCCESS, TestCase
@@ -237,6 +238,106 @@ def test_validate_spark_connect_url(test_case: TestCase) -> None:
             match=test_case.expected_output,
         ):
             validate_spark_connect_url(test_case.config["url"])
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="jar with main class is valid",
+            expected_status=SUCCESS,
+            config={
+                "file_source": "s3a://bucket/app.jar",
+                "main_class": "org.apache.spark.examples.SparkPi",
+            },
+        ),
+        TestCase(
+            name="jar without main class raises",
+            expected_status=FAILED,
+            config={
+                "file_source": "s3a://bucket/app.jar",
+                "main_class": None,
+            },
+            expected_error=ValueError,
+            expected_output="main_class.*required",
+        ),
+        TestCase(
+            name="python without main class is valid",
+            expected_status=SUCCESS,
+            config={
+                "file_source": "s3a://bucket/job.py",
+                "main_class": None,
+            },
+        ),
+        TestCase(
+            name="python with main class raises",
+            expected_status=FAILED,
+            config={
+                "file_source": "s3a://bucket/job.py",
+                "main_class": "org.apache.spark.examples.SparkPi",
+            },
+            expected_error=ValueError,
+            expected_output="main_class.*not supported",
+        ),
+        TestCase(
+            name="empty main class raises",
+            expected_status=FAILED,
+            config={
+                "file_source": "s3a://bucket/app.jar",
+                "main_class": "   ",
+            },
+            expected_error=ValueError,
+            expected_output="non-empty string",
+        ),
+        TestCase(
+            name="non-string main class raises",
+            expected_status=FAILED,
+            config={
+                "file_source": "s3a://bucket/app.jar",
+                "main_class": 123,
+            },
+            expected_error=ValueError,
+            expected_output="non-empty string",
+        ),
+        TestCase(
+            name="jar uri with query string",
+            expected_status=SUCCESS,
+            config={
+                "file_source": "s3a://bucket/app.jar?versionId=abc",
+                "main_class": "org.apache.spark.examples.SparkPi",
+            },
+        ),
+        TestCase(
+            name="other file types do not require main class",
+            expected_status=SUCCESS,
+            config={
+                "file_source": "s3a://bucket/job.R",
+                "main_class": None,
+            },
+        ),
+    ],
+)
+def test_validate_jar_main_class(test_case: TestCase) -> None:
+    """Tests validate_jar_main_class."""
+
+    print("Executing test:", test_case.name)
+
+    if test_case.expected_status == SUCCESS:
+        validate_jar_main_class(
+            test_case.config["file_source"],
+            test_case.config["main_class"],
+        )
+    else:
+        with pytest.raises(
+            test_case.expected_error,
+            match=test_case.expected_output,
+        ):
+            validate_jar_main_class(
+                test_case.config["file_source"],
+                test_case.config["main_class"],
+            )
 
     print("test execution complete")
 

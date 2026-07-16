@@ -49,6 +49,7 @@ from kubeflow.spark.backends.kubernetes.utils import (
     get_spark_application_info_from_cr,
     get_spark_connect_info_from_cr,
     read_pod_logs,
+    validate_jar_main_class,
 )
 from kubeflow.spark.types.options import Name
 from kubeflow.spark.types.types import (
@@ -801,7 +802,8 @@ class KubernetesBackend(RuntimeBackend):
             job: File-based Spark job definition to validate.
 
         Raises:
-            ValueError: If file_source is empty, args is not a list of strings.
+            ValueError: If file_source is empty, args is not a list of strings,
+                or main_class is invalid for the file source.
         """
 
         if not isinstance(job.file_source, str) or not job.file_source.strip():
@@ -813,6 +815,8 @@ class KubernetesBackend(RuntimeBackend):
 
             if not all(isinstance(arg, str) for arg in job.args):
                 raise ValueError("All `job.args` must be strings.")
+
+        validate_jar_main_class(job.file_source, job.main_class)
 
     def _is_supported_func_arg(
         self,
@@ -958,6 +962,7 @@ class KubernetesBackend(RuntimeBackend):
                 namespace=self.namespace,
                 main_file=job.file_source,
                 arguments=job.args,
+                main_class=job.main_class,
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
             )
