@@ -868,6 +868,15 @@ def test_verify_backend(test_case):
             ),
         ),
         TestCase(
+            name="prefer namespaced TrainingRuntime when both TrainingRuntime and ClusterTrainingRuntime exist",
+            expected_status=SUCCESS,
+            config={"name": "runtime-1"},
+            expected_output=create_runtime_type(
+                name="runtime-1",
+                kind=types.RuntimeKind.TRAINING_RUNTIME,
+            ),
+        ),
+        TestCase(
             name="timeout error when getting runtime",
             expected_status=FAILED,
             config={"name": TIMEOUT},
