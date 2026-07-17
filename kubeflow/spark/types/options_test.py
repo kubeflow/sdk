@@ -29,6 +29,7 @@ from kubeflow.spark.types.options import (
     PodTemplateOverride,
     Toleration,
 )
+from kubeflow.spark.types.types import Driver, Executor
 
 
 @pytest.fixture
@@ -122,6 +123,84 @@ class TestAnnotations:
 
         with pytest.raises(ValueError, match="not compatible"):
             option(spark_connect_model, mock_non_k8s_backend)
+
+
+class TestDriverCallableComposability:
+    """Tests for Driver applied as an option, composed with other options."""
+
+    def test_driver_preserves_earlier_node_selector(self, mock_k8s_backend, spark_connect_model):
+        """Driver must not wipe out template changes made by earlier options."""
+        NodeSelector({"node-type": "spark"})(spark_connect_model, mock_k8s_backend)
+
+        Driver(resources={"cpu": "4", "memory": "8Gi"})(spark_connect_model, mock_k8s_backend)
+
+        assert spark_connect_model.spec.server.cores == 4
+        assert spark_connect_model.spec.server.template.spec.node_selector == {"node-type": "spark"}
+
+    def test_driver_merges_service_account_into_existing_template(
+        self, mock_k8s_backend, spark_connect_model
+    ):
+        """Driver's service_account must merge into an existing template, not replace it."""
+        Toleration(key="spark-workload")(spark_connect_model, mock_k8s_backend)
+
+        Driver(service_account="spark-driver-sa")(spark_connect_model, mock_k8s_backend)
+
+        server_template = spark_connect_model.spec.server.template
+        assert server_template.spec.service_account_name == "spark-driver-sa"
+        assert len(server_template.spec.tolerations) == 1
+
+    def test_driver_without_resources_keeps_existing_cores_memory(
+        self, mock_k8s_backend, spark_connect_model
+    ):
+        """Driver with no resources set must not reset previously configured cores/memory."""
+        spark_connect_model.spec.server.cores = 4
+        spark_connect_model.spec.server.memory = "8g"
+
+        Driver(service_account="spark-driver-sa")(spark_connect_model, mock_k8s_backend)
+
+        assert spark_connect_model.spec.server.cores == 4
+        assert spark_connect_model.spec.server.memory == "8g"
+
+
+class TestExecutorCallableComposability:
+    """Tests for Executor applied as an option, composed with other options."""
+
+    def test_executor_preserves_earlier_node_selector(self, mock_k8s_backend, spark_connect_model):
+        """Executor must not wipe out template changes made by earlier options."""
+        NodeSelector({"node-type": "spark"})(spark_connect_model, mock_k8s_backend)
+
+        Executor(resources_per_executor={"cpu": "4", "memory": "8Gi"})(
+            spark_connect_model, mock_k8s_backend
+        )
+
+        assert spark_connect_model.spec.executor.cores == 4
+        assert spark_connect_model.spec.executor.template.spec.node_selector == {
+            "node-type": "spark"
+        }
+
+    def test_executor_without_num_instances_keeps_existing_instance_count(
+        self, mock_k8s_backend, spark_connect_model
+    ):
+        """Executor(resources_per_executor=...) alone must not reset the instance count."""
+        # Simulate NewSession(num_executors=5) having already set the instance count.
+        spark_connect_model.spec.executor.instances = 5
+
+        Executor(resources_per_executor={"cpu": "4", "memory": "8Gi"})(
+            spark_connect_model, mock_k8s_backend
+        )
+
+        assert spark_connect_model.spec.executor.instances == 5
+        assert spark_connect_model.spec.executor.cores == 4
+
+    def test_executor_with_num_instances_overrides_existing_count(
+        self, mock_k8s_backend, spark_connect_model
+    ):
+        """Executor(num_instances=...) explicitly overrides a previously set instance count."""
+        spark_connect_model.spec.executor.instances = 5
+
+        Executor(num_instances=10)(spark_connect_model, mock_k8s_backend)
+
+        assert spark_connect_model.spec.executor.instances == 10
 
 
 class TestNodeSelector:
@@ -276,3 +355,30 @@ class TestNameOption:
 
         with pytest.raises(ValueError, match="not compatible"):
             option(spark_connect_model, mock_non_k8s_backend)
+
+
+class TestDriverExecutorOptions:
+    """Tests for Driver and Executor as connect options."""
+
+    def test_driver_option_applies_server_spec(self, mock_k8s_backend, spark_connect_model):
+        option = Driver(resources={"cpu": "2", "memory": "2Gi"}, image="custom-spark:v1")
+        option(spark_connect_model, mock_k8s_backend)
+
+        assert spark_connect_model.spec.server.cores == 2
+        assert spark_connect_model.spec.server.memory == "2g"
+        assert spark_connect_model.spec.image == "custom-spark:v1"
+
+    def test_executor_option_applies_executor_spec(self, mock_k8s_backend, spark_connect_model):
+        option = Executor(
+            num_instances=5,
+            resources_per_executor={"cpu": "4", "memory": "8Gi"},
+        )
+        option(spark_connect_model, mock_k8s_backend)
+
+        assert spark_connect_model.spec.executor.instances == 5
+        assert spark_connect_model.spec.executor.cores == 4
+        assert spark_connect_model.spec.executor.memory == "8g"
+
+    def test_driver_option_incompatible_backend(self, mock_non_k8s_backend, spark_connect_model):
+        with pytest.raises(ValueError, match="not compatible"):
+            Driver()(spark_connect_model, mock_non_k8s_backend)

@@ -27,8 +27,10 @@ from kubeflow.spark.types.options import (
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
+    ExistingSession,
     FileJob,
     FuncJob,
+    NewSession,
     SparkConnectInfo,
     SparkConnectState,
     SparkJob,
@@ -40,9 +42,11 @@ __all__ = [
     "SparkClient",
     # Types
     "Driver",
+    "ExistingSession",
     "Executor",
     "FileJob",
     "FuncJob",
+    "NewSession",
     "SparkConnectInfo",
     "SparkConnectState",
     "SparkJob",

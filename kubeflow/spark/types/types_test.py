@@ -22,8 +22,10 @@ import pytest
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
+    ExistingSession,
     FileJob,
     FuncJob,
+    NewSession,
     SparkConnectInfo,
     SparkConnectState,
     SparkJob,
@@ -45,6 +47,21 @@ from kubeflow.trainer.test.common import SUCCESS, TestCase
 def test_spark_connect_state_values(state, expected):
     """Test SparkConnectState enum values."""
     assert state == expected
+
+
+def test_existing_session():
+    """Test ExistingSession dataclass."""
+    session = ExistingSession(base_url="sc://server:15002", token="secret")
+    assert session.base_url == "sc://server:15002"
+    assert session.token == "secret"
+
+
+def test_new_session_defaults():
+    """Test NewSession defaults."""
+    session = NewSession()
+    assert session.num_executors is None
+    assert session.resources_per_executor is None
+    assert session.spark_conf is None
 
 
 @pytest.mark.parametrize(

@@ -32,7 +32,7 @@ import sys
 import uuid
 
 from kubeflow.common.types import KubernetesBackendConfig
-from kubeflow.spark import Name, SparkClient
+from kubeflow.spark import ExistingSession, Name, NewSession, SparkClient
 from kubeflow.spark.backends.kubernetes.utils import build_service_url
 
 
@@ -65,7 +65,11 @@ def test_connect_to_existing_session():
         # Phase 1: Setup client creates SparkConnect server
         print("\n[Phase 1] Creating SparkConnect server...")
         setup_client = SparkClient(backend_config=_backend_config())
-        setup_spark = setup_client.connect(options=[Name(session_name)], timeout=180)
+        setup_spark = setup_client.connect(
+            session=NewSession(),
+            options=[Name(session_name)],
+            timeout=180,
+        )
 
         info = setup_client.get_session(session_name)
         service_url = build_service_url(info)
@@ -75,10 +79,10 @@ def test_connect_to_existing_session():
         setup_spark.stop()
         print("   Setup SparkSession stopped (server still running)")
 
-        # Phase 2: Test client connects via base_url
-        print("\n[Phase 2] Connecting via base_url...")
+        # Phase 2: Test client connects via ExistingSession
+        print("\n[Phase 2] Connecting via ExistingSession...")
         test_client = SparkClient(backend_config=_backend_config())
-        test_spark = test_client.connect(base_url=service_url)
+        test_spark = test_client.connect(session=ExistingSession(base_url=service_url))
         print("   Connected successfully!")
 
         # Phase 3: Validate with Spark operations
@@ -87,7 +91,7 @@ def test_connect_to_existing_session():
         print(f"   spark.range(100).count() = {count}")
         assert count == 100, f"Expected 100, got {count}"
 
-        print("\n[SUCCESS] connect(base_url=...) works correctly!")
+        print("\n[SUCCESS] ExistingSession connect works correctly!")
 
     finally:
         # Phase 4: Cleanup

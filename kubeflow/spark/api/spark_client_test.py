@@ -14,7 +14,7 @@
 
 """Unit tests for SparkClient API."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -22,8 +22,12 @@ from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.api.spark_client import SparkClient
 from kubeflow.spark.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.spark.types.types import (
+    Driver,
+    Executor,
+    ExistingSession,
     FileJob,
     FuncJob,
+    NewSession,
     SparkJob,
 )
 
@@ -76,7 +80,8 @@ def test_create_and_connect(test_case: TestCase):
         # Validate the exception type if specified
         if test_case.expected_error:
             assert isinstance(e, test_case.expected_error), (
-                f"Expected exception type '{test_case.expected_error.__name__}' but got '{type(e).__name__}: {str(e)}'"
+                f"Expected exception type '{test_case.expected_error.__name__}' but got "
+                f"'{type(e).__name__}: {str(e)}'"
             )
 
 
@@ -171,3 +176,120 @@ def test_submit_job_success(job):
             num_executors=None,
             resources_per_executor=None,
         )
+
+
+def test_connect_existing_session_mode():
+    """ExistingSession connects via remote SparkSession builder."""
+    with (
+        patch("kubeflow.spark.api.spark_client.KubernetesBackend"),
+        patch("kubeflow.spark.api.spark_client.validate_spark_connect_url") as validate,
+        patch("kubeflow.spark.api.spark_client.SparkSession") as spark_session,
+    ):
+        remote_builder = MagicMock()
+        configured_builder = MagicMock()
+        spark_session.builder.remote.return_value = remote_builder
+        remote_builder.config.return_value = configured_builder
+        configured_builder.getOrCreate.return_value = "spark"
+
+        client = SparkClient()
+        result = client.connect(session=ExistingSession(base_url="sc://server:15002", token="t"))
+
+        validate.assert_called_once_with("sc://server:15002")
+        spark_session.builder.remote.assert_called_once_with("sc://server:15002")
+        remote_builder.config.assert_called_once_with("spark.connect.authenticate.token", "t")
+        assert result == "spark"
+
+
+def test_connect_new_session_mode():
+    """NewSession delegates create-mode to the backend."""
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as backend_cls:
+        backend = backend_cls.return_value
+        backend.create_and_connect.return_value = "spark"
+        client = SparkClient()
+
+        result = client.connect(
+            session=NewSession(
+                num_executors=2,
+                resources_per_executor={"cpu": "1", "memory": "1Gi"},
+                spark_conf={"spark.app.name": "demo"},
+            ),
+            options=[Driver(resources={"cpu": "1", "memory": "1Gi"})],
+        )
+
+        backend.create_and_connect.assert_called_once_with(
+            num_executors=2,
+            resources_per_executor={"cpu": "1", "memory": "1Gi"},
+            spark_conf={"spark.app.name": "demo"},
+            driver=None,
+            executor=None,
+            options=[Driver(resources={"cpu": "1", "memory": "1Gi"})],
+            timeout=300,
+            connect_timeout=120,
+        )
+        assert result == "spark"
+
+
+def test_connect_rejects_empty_existing_session_base_url():
+    """ExistingSession with an empty base_url must be rejected, not silently create a session."""
+    with (
+        patch("kubeflow.spark.api.spark_client.KubernetesBackend") as backend_cls,
+    ):
+        backend = backend_cls.return_value
+        client = SparkClient()
+
+        with pytest.raises(ValueError, match="ExistingSession.base_url"):
+            client.connect(session=ExistingSession(base_url=""))
+
+        backend.create_and_connect.assert_not_called()
+
+
+def test_connect_rejects_legacy_token_without_base_url():
+    """Legacy token-only calls (no base_url) must be rejected, not silently create a session."""
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as backend_cls:
+        backend = backend_cls.return_value
+        client = SparkClient()
+
+        with pytest.raises(ValueError, match="base_url"):
+            client.connect(token="secret")
+
+        backend.create_and_connect.assert_not_called()
+
+
+def test_connect_rejects_legacy_empty_base_url():
+    """Legacy base_url="" must be rejected, not silently create a session."""
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as backend_cls:
+        backend = backend_cls.return_value
+        client = SparkClient()
+
+        with pytest.raises(ValueError, match="base_url"):
+            client.connect(base_url="", token="secret")
+
+        backend.create_and_connect.assert_not_called()
+
+
+def test_connect_rejects_mixed_session_and_legacy_kwargs():
+    """Typed session mode cannot be mixed with legacy kwargs."""
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend"):
+        client = SparkClient()
+        with pytest.raises(ValueError, match="legacy connect keyword arguments"):
+            client.connect(session=NewSession(), num_executors=2)
+
+
+def test_connect_legacy_kwargs_move_driver_executor_into_options():
+    """Legacy driver/executor kwargs are moved into options with a warning."""
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as backend_cls:
+        backend = backend_cls.return_value
+        backend.create_and_connect.return_value = "spark"
+        client = SparkClient()
+
+        with pytest.warns(DeprecationWarning, match="deprecated"):
+            client.connect(
+                driver=Driver(resources={"cpu": "2", "memory": "4Gi"}),
+                executor=Executor(num_instances=3),
+            )
+
+        kwargs = backend.create_and_connect.call_args.kwargs
+        assert kwargs["driver"] is None
+        assert kwargs["executor"] is None
+        assert kwargs["options"][0] == Executor(num_instances=3)
+        assert kwargs["options"][1] == Driver(resources={"cpu": "2", "memory": "4Gi"})

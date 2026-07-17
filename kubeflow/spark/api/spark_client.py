@@ -15,6 +15,7 @@
 """SparkClient for Kubeflow SDK."""
 
 from collections.abc import Iterator
+import warnings
 
 from pyspark.sql import SparkSession
 
@@ -25,8 +26,10 @@ from kubeflow.spark.backends.kubernetes.utils import validate_spark_connect_url
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
+    ExistingSession,
     FileJob,
     FuncJob,
+    NewSession,
     SparkConnectInfo,
     SparkJob,
     SparkJobStatus,
@@ -71,27 +74,44 @@ class SparkClient:
         options: list | None = None,
         timeout: int = 300,
         connect_timeout: int = 120,
+        *,
+        session: ExistingSession | NewSession | None = None,
     ) -> SparkSession:
         """Connect to or create a SparkConnect session.
 
-        This method supports two modes based on parameters:
-        - **Connect mode**: When `base_url` is provided, connects to an existing Spark Connect server
-        - **Create mode**: When `base_url` is not provided, creates a new Spark Connect session
+        Preferred usage uses typed session modes, symmetric with batch job modes:
+
+        - ``session=ExistingSession(...)``: connect to an existing Spark Connect server
+        - ``session=NewSession(...)``: create a new Spark Connect session
+
+        ``Driver`` and ``Executor`` should be passed through ``options``.
+
+        Legacy keyword arguments remain supported for compatibility and emit
+        deprecation warnings when used without ``session=``.
 
         Args:
-            base_url: Optional URL to existing Spark Connect server (e.g., "sc://server:15002").
-                 If provided, connects to existing server. If None, creates new session.
-            token: Optional authentication token for existing server.
+            base_url: Optional URL to existing Spark Connect server
+                (e.g., "sc://server:15002"). Deprecated in favor of
+                ``session=ExistingSession(base_url=...)``.
+            token: Optional authentication token for existing server. Deprecated in
+                favor of ``session=ExistingSession(..., token=...)``.
             num_executors: Number of executor instances (create mode only).
+                Deprecated in favor of ``session=NewSession(num_executors=...)``.
             resources_per_executor: Resource requirements per executor as dict.
                 Format: `{"cpu": "5", "memory": "10Gi"}` (create mode only).
+                Deprecated in favor of ``session=NewSession(...)``.
             spark_conf: Spark configuration dictionary (create mode only).
-            driver: Driver configuration object (create mode only).
-            executor: Executor configuration object (create mode only).
+                Deprecated in favor of ``session=NewSession(spark_conf=...)``.
+            driver: Driver configuration object (create mode only). Deprecated in
+                favor of ``options=[Driver(...)]``.
+            executor: Executor configuration object (create mode only). Deprecated in
+                favor of ``options=[Executor(...)]``.
             options: List of configuration options (create mode only).
-                Use Name option for custom session name.
+                Use Name, Driver, Executor, and other options here.
             timeout: Timeout in seconds to wait for session ready.
-            connect_timeout: Timeout in seconds for SparkSession.getOrCreate() (create mode only).
+            connect_timeout: Timeout in seconds for SparkSession.getOrCreate()
+                (create mode only).
+            session: Typed connection mode. Use ``ExistingSession`` or ``NewSession``.
 
         Returns:
             SparkSession connected to Spark (self-managing).
@@ -104,23 +124,160 @@ class SparkClient:
         Note:
             Server port defaults to 15002 (Spark Connect gRPC). PySpark and server Spark
             major.minor should match; see constants and pyproject.toml [spark].
-        """
-        if base_url:
-            validate_spark_connect_url(base_url)
-            builder = SparkSession.builder.remote(base_url)
-            if token:
-                builder = builder.config("spark.connect.authenticate.token", token)
-            return builder.getOrCreate()
 
-        return self.backend.create_and_connect(
+        Examples:
+            # Connect to existing server
+            spark = client.connect(session=ExistingSession(base_url="sc://server:15002"))
+
+            # Create with simple parameters
+            spark = client.connect(
+                session=NewSession(
+                    num_executors=5,
+                    resources_per_executor={"cpu": "5", "memory": "10Gi"},
+                    spark_conf={"spark.sql.adaptive.enabled": "true"},
+                )
+            )
+
+            # Create with Driver/Executor options
+            spark = client.connect(
+                session=NewSession(),
+                options=[
+                    Driver(resources={"cpu": "2", "memory": "4Gi"}),
+                    Executor(
+                        num_instances=5,
+                        resources_per_executor={"cpu": "4", "memory": "8Gi"},
+                    ),
+                ],
+            )
+
+            # Minimal - use all defaults (auto-generated name)
+            spark = client.connect()
+        """
+        (
+            resolved_base_url,
+            resolved_token,
+            resolved_num_executors,
+            resolved_resources_per_executor,
+            resolved_spark_conf,
+            resolved_options,
+        ) = self._resolve_connect_args(
+            session=session,
+            options=options,
+            base_url=base_url,
+            token=token,
             num_executors=num_executors,
             resources_per_executor=resources_per_executor,
             spark_conf=spark_conf,
             driver=driver,
             executor=executor,
-            options=options,
+        )
+
+        if resolved_base_url:
+            validate_spark_connect_url(resolved_base_url)
+            builder = SparkSession.builder.remote(resolved_base_url)
+            if resolved_token:
+                builder = builder.config("spark.connect.authenticate.token", resolved_token)
+            return builder.getOrCreate()
+
+        return self.backend.create_and_connect(
+            num_executors=resolved_num_executors,
+            resources_per_executor=resolved_resources_per_executor,
+            spark_conf=resolved_spark_conf,
+            driver=None,
+            executor=None,
+            options=resolved_options,
             timeout=timeout,
             connect_timeout=connect_timeout,
+        )
+
+    def _resolve_connect_args(
+        self,
+        *,
+        session: ExistingSession | NewSession | None,
+        options: list | None,
+        base_url: str | None,
+        token: str | None,
+        num_executors: int | None,
+        resources_per_executor: dict[str, str] | None,
+        spark_conf: dict[str, str] | None,
+        driver: Driver | None,
+        executor: Executor | None,
+    ) -> tuple[
+        str | None,
+        str | None,
+        int | None,
+        dict[str, str] | None,
+        dict[str, str] | None,
+        list | None,
+    ]:
+        """Normalize typed session modes and legacy connect kwargs."""
+        legacy_connect = base_url is not None or token is not None
+        legacy_create = any(
+            value is not None
+            for value in (
+                num_executors,
+                resources_per_executor,
+                spark_conf,
+                driver,
+                executor,
+            )
+        )
+
+        if session is not None and (legacy_connect or legacy_create):
+            raise ValueError(
+                "Pass either `session=` or legacy connect keyword arguments, not both."
+            )
+
+        if legacy_connect and not base_url:
+            raise ValueError(
+                "`base_url` must be a non-empty string to connect to an existing Spark "
+                "Connect server. `token` alone is not sufficient."
+            )
+
+        resolved_options: list = list(options) if options is not None else []
+
+        if isinstance(session, ExistingSession):
+            if not session.base_url:
+                raise ValueError("`ExistingSession.base_url` must be a non-empty string.")
+            return session.base_url, session.token, None, None, None, None
+
+        if isinstance(session, NewSession):
+            return (
+                None,
+                None,
+                session.num_executors,
+                session.resources_per_executor,
+                session.spark_conf,
+                resolved_options or None,
+            )
+
+        if session is not None:
+            raise TypeError(
+                "`session` must be an instance of ExistingSession or NewSession, "
+                f"got {type(session).__name__}."
+            )
+
+        if legacy_connect or legacy_create:
+            warnings.warn(
+                "Passing connect configuration as keyword arguments is deprecated. "
+                "Use session=ExistingSession(...) or session=NewSession(...), and pass "
+                "Driver/Executor through options.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+
+        if driver is not None:
+            resolved_options.insert(0, driver)
+        if executor is not None:
+            resolved_options.insert(0, executor)
+
+        return (
+            base_url,
+            token,
+            num_executors,
+            resources_per_executor,
+            spark_conf,
+            resolved_options or None,
         )
 
     def list_sessions(self) -> list[SparkConnectInfo]:

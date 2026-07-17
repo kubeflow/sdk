@@ -23,6 +23,7 @@ from kubeflow.spark import (
     # Options for advanced Kubernetes configuration
     Labels,
     Name,
+    NewSession,
     NodeSelector,
     PodTemplateOverride,
     SparkClient,
@@ -55,9 +56,11 @@ def example_labels_and_annotations():
     client = SparkClient(backend_config=_backend_config())
 
     spark = client.connect(
-        num_executors=3,
-        resources_per_executor={"cpu": "2", "memory": "4Gi"},
-        spark_conf={"spark.serializer": "org.apache.spark.serializer.KryoSerializer"},
+        session=NewSession(
+            num_executors=3,
+            resources_per_executor={"cpu": "2", "memory": "4Gi"},
+            spark_conf={"spark.serializer": "org.apache.spark.serializer.KryoSerializer"},
+        ),
         options=[
             Labels(
                 {
@@ -102,13 +105,15 @@ def example_node_selection():
     client = SparkClient(backend_config=_backend_config())
 
     spark = client.connect(
-        num_executors=5,
-        resources_per_executor={
-            "cpu": "4",
-            "memory": "16Gi",
-            "nvidia.com/gpu": "1",  # Request GPU
-        },
-        spark_conf={"spark.serializer": "org.apache.spark.serializer.KryoSerializer"},
+        session=NewSession(
+            num_executors=5,
+            resources_per_executor={
+                "cpu": "4",
+                "memory": "16Gi",
+                "nvidia.com/gpu": "1",  # Request GPU
+            },
+            spark_conf={"spark.serializer": "org.apache.spark.serializer.KryoSerializer"},
+        ),
         options=[
             NodeSelector(
                 {
@@ -142,9 +147,11 @@ def example_tolerations():
     client = SparkClient(backend_config=_backend_config())
 
     spark = client.connect(
-        num_executors=10,
-        resources_per_executor={"cpu": "8", "memory": "32Gi"},
-        spark_conf={"spark.serializer": "org.apache.spark.serializer.KryoSerializer"},
+        session=NewSession(
+            num_executors=10,
+            resources_per_executor={"cpu": "8", "memory": "32Gi"},
+            spark_conf={"spark.serializer": "org.apache.spark.serializer.KryoSerializer"},
+        ),
         options=[
             # Tolerate nodes tainted for Spark workloads
             Toleration(
@@ -187,13 +194,15 @@ def example_pod_template_override():
     client = SparkClient(backend_config=_backend_config())
 
     spark = client.connect(
-        driver=Driver(resources={"cpu": "2", "memory": "4Gi"}),
-        executor=Executor(
-            num_instances=5,
-            resources_per_executor={"cpu": "4", "memory": "8Gi"},
+        session=NewSession(
+            spark_conf={"spark.serializer": "org.apache.spark.serializer.KryoSerializer"},
         ),
-        spark_conf={"spark.serializer": "org.apache.spark.serializer.KryoSerializer"},
         options=[
+            Driver(resources={"cpu": "2", "memory": "4Gi"}),
+            Executor(
+                num_instances=5,
+                resources_per_executor={"cpu": "4", "memory": "8Gi"},
+            ),
             # Add security context to executors
             PodTemplateOverride(
                 role="executor",
@@ -244,9 +253,11 @@ def example_name_option():
     client = SparkClient(backend_config=_backend_config())
 
     spark = client.connect(
-        num_executors=3,
-        resources_per_executor={"cpu": "2", "memory": "4Gi"},
-        spark_conf={"spark.serializer": "org.apache.spark.serializer.KryoSerializer"},
+        session=NewSession(
+            num_executors=3,
+            resources_per_executor={"cpu": "2", "memory": "4Gi"},
+            spark_conf={"spark.serializer": "org.apache.spark.serializer.KryoSerializer"},
+        ),
         options=[
             Name(_e2e_session_name("custom-session-name")),
             Labels({"app": "spark", "team": "data-eng"}),
@@ -276,22 +287,24 @@ def example_combined_options():
     client = SparkClient(backend_config=_backend_config("spark-production"))
 
     spark = client.connect(
-        driver=Driver(
-            resources={"cpu": "4", "memory": "8Gi"},
-            service_account="spark-driver-prod",
+        session=NewSession(
+            spark_conf={
+                "spark.app.name": "prod-etl-pipeline",
+                "spark.sql.adaptive.enabled": "true",
+                "spark.sql.adaptive.coalescePartitions.enabled": "true",
+                "spark.dynamicAllocation.enabled": "false",
+                "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
+            },
         ),
-        executor=Executor(
-            num_instances=20,
-            resources_per_executor={"cpu": "8", "memory": "32Gi"},
-        ),
-        spark_conf={
-            "spark.app.name": "prod-etl-pipeline",
-            "spark.sql.adaptive.enabled": "true",
-            "spark.sql.adaptive.coalescePartitions.enabled": "true",
-            "spark.dynamicAllocation.enabled": "false",
-            "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
-        },
         options=[
+            Driver(
+                resources={"cpu": "4", "memory": "8Gi"},
+                service_account="spark-driver-prod",
+            ),
+            Executor(
+                num_instances=20,
+                resources_per_executor={"cpu": "8", "memory": "32Gi"},
+            ),
             # Custom session name
             Name(_e2e_session_name("prod-etl-session")),
             # Organization and cost tracking

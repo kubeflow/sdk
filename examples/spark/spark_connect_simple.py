@@ -24,7 +24,7 @@ import os
 import uuid
 
 from kubeflow.common.types import KubernetesBackendConfig
-from kubeflow.spark import Driver, Executor, Name, SparkClient
+from kubeflow.spark import Driver, Executor, Name, NewSession, SparkClient
 
 
 def _e2e_session_name(base: str) -> str:
@@ -59,7 +59,9 @@ def example_level1_minimal():
     # Use Name option to track session for cleanup
     session_name = _e2e_session_name("spark-connect-minimal")
     spark = client.connect(
-        spark_conf={"spark.serializer": "org.apache.spark.serializer.KryoSerializer"},
+        session=NewSession(
+            spark_conf={"spark.serializer": "org.apache.spark.serializer.KryoSerializer"},
+        ),
         options=[Name(session_name)],
     )
 
@@ -92,12 +94,14 @@ def example_level2_simple():
     client = SparkClient(backend_config=_backend_config())
     session_name = _e2e_session_name("my-simple-session")
     spark = client.connect(
-        num_executors=5,
-        resources_per_executor={"cpu": "2", "memory": "4Gi"},
-        spark_conf={
-            "spark.sql.adaptive.enabled": "true",
-            "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
-        },
+        session=NewSession(
+            num_executors=5,
+            resources_per_executor={"cpu": "2", "memory": "4Gi"},
+            spark_conf={
+                "spark.sql.adaptive.enabled": "true",
+                "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
+            },
+        ),
         options=[Name(session_name)],
     )
 
@@ -131,25 +135,29 @@ def example_level3_advanced():
     session_name = _e2e_session_name("advanced-session-name")
 
     spark = client.connect(
-        driver=Driver(
-            resources={"cpu": "1", "memory": "2Gi"},
-            # service_account="spark-driver",  # Optional: custom service account
-        ),
-        executor=Executor(
-            num_instances=2,  # Reduced for Kind cluster compatibility
-            resources_per_executor={
-                "cpu": "1",
-                "memory": "2Gi",
-                # Add GPU if needed: "nvidia.com/gpu": "1"
+        session=NewSession(
+            spark_conf={
+                "spark.app.name": "advanced-spark-app",
+                "spark.sql.adaptive.enabled": "true",
+                "spark.sql.adaptive.coalescePartitions.enabled": "true",
+                "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
             },
         ),
-        spark_conf={
-            "spark.app.name": "advanced-spark-app",
-            "spark.sql.adaptive.enabled": "true",
-            "spark.sql.adaptive.coalescePartitions.enabled": "true",
-            "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
-        },
-        options=[Name(session_name)],
+        options=[
+            Name(session_name),
+            Driver(
+                resources={"cpu": "1", "memory": "2Gi"},
+                # service_account="spark-driver",  # Optional: custom service account
+            ),
+            Executor(
+                num_instances=2,  # Reduced for Kind cluster compatibility
+                resources_per_executor={
+                    "cpu": "1",
+                    "memory": "2Gi",
+                    # Add GPU if needed: "nvidia.com/gpu": "1"
+                },
+            ),
+        ],
     )
 
     # Use Spark - complex data operations
@@ -177,10 +185,10 @@ def example_connect_existing():
     SparkClient(backend_config=_backend_config())
 
     # Example URL - replace with your actual server URL
-    # spark = client.connect(base_url="sc://spark-server:15002")
+    # spark = client.connect(session=ExistingSession(base_url="sc://spark-server:15002"))
 
     print("\nTo connect to existing server, use:")
-    print('spark = client.connect(base_url="sc://spark-server:15002")')
+    print('spark = client.connect(session=ExistingSession(base_url="sc://spark-server:15002"))')
     print("\nExample shown.\n")
 
 
@@ -197,9 +205,11 @@ def example_with_namespace():
     client = SparkClient(backend_config=_backend_config("spark-jobs"))
 
     spark = client.connect(
-        num_executors=5,
-        resources_per_executor={"cpu": "4", "memory": "8Gi"},
-        spark_conf={"spark.serializer": "org.apache.spark.serializer.KryoSerializer"},
+        session=NewSession(
+            num_executors=5,
+            resources_per_executor={"cpu": "4", "memory": "8Gi"},
+            spark_conf={"spark.serializer": "org.apache.spark.serializer.KryoSerializer"},
+        ),
     )
 
     df = spark.range(50)
