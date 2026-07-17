@@ -325,28 +325,44 @@ def validate_spark_connect_url(url: str) -> bool:
     return True
 
 def _memory_kubernetes_to_spark(memory: str) -> str:
-    """Convert Kubernetes-style memory (e.g. 4Gi, 512Mi) to Spark/JVM style (4g, 512m).
+    """Convert Kubernetes memory units to Spark memory format.
 
     SparkSubmit expects JVM memory suffixes (k, m, g, t); Kubernetes uses Ki, Mi, Gi, Ti.
     """
     if not memory or not memory[-1].isalpha():
         return memory
-    m = re.match(r"^(\d+(?:\.\d+)?)\s*([KMGTPE]i?|k|m|g|t|kb|mb|gb|tb)?$", memory, re.IGNORECASE)
+
+    m = re.match(
+        r"^(\d+(?:\.\d+)?)\s*([KMGTPE]i?|k|m|g|t|kb|mb|gb|tb)?$",
+        memory,
+        re.IGNORECASE,
+    )
     if not m:
         return memory
+
     num = m.group(1)
     suffix = m.group(2) or ""
 
-    # Already Spark/JVM format
-    if suffix in {"k", "m", "g", "t", "p", "e"}:
-        return num + suffix
+    # Kubernetes binary units -> Spark binary units
+    k8s_to_spark = {
+        "ki": "k",
+        "mi": "m",
+        "gi": "g",
+        "ti": "t",
+        "pi": "p",
+        "ei": "e",
+    }
     suffix_lower = suffix.lower()
-
-    k8s_to_spark = {"ki": "k", "mi": "m", "gi": "g", "ti": "t", "pi": "p", "ei": "e"}
     if suffix_lower in k8s_to_spark:
         return num + k8s_to_spark[suffix_lower]
 
+    # Already Spark binary units (k is excluded intentionally)
+    if suffix in {"m", "g", "t", "p", "e"}:
+        return num + suffix
+
+    # Kubernetes decimal SI units -> exact bytes
     decimal_units = {
+        "k": 1000,
         "K": 1000,
         "M": 1000**2,
         "G": 1000**3,
@@ -354,6 +370,7 @@ def _memory_kubernetes_to_spark(memory: str) -> str:
         "P": 1000**5,
         "E": 1000**6,
     }
+
     if suffix in decimal_units:
         bytes_value = int(float(num) * decimal_units[suffix])
         return str(bytes_value)
