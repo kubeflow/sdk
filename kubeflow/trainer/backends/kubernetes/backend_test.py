@@ -868,6 +868,16 @@ def test_verify_backend(test_case):
             ),
         ),
         TestCase(
+            name="prefer namespaced TrainingRuntime when only namespaced TrainingRuntime exists",
+            expected_status=SUCCESS,
+            config={"runtime": "runtime-1"},
+            expected_output=get_train_job(
+                runtime_name="runtime-1",
+                train_job_name=BASIC_TRAIN_JOB_NAME,
+                runtime_kind=types.RuntimeKind.TRAINING_RUNTIME,
+            ),
+        ),
+        TestCase(
             name="prefer namespaced TrainingRuntime when both TrainingRuntime and ClusterTrainingRuntime exist",
             expected_status=SUCCESS,
             config={"name": "runtime-1"},
