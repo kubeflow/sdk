@@ -385,7 +385,22 @@ def get_command_using_train_func(
         func_file = os.path.join(constants.DEFAULT_MPI_USER_HOME, func_file)
         install_log_file = os.path.join(constants.DEFAULT_MPI_USER_HOME, "pip_install.log")
     else:
-        install_log_file = "pip_install.log"
+        func_file = os.path.join("/tmp", func_file)
+        install_log_file = os.path.join("/tmp", "pip_install.log")
+        # Preserve the working directory as Python's first import root instead of /tmp.
+        python_import_path_prelude = (
+            "import os\n"
+            "import sys\n\n"
+            "_kubeflow_generated_script_directory = "
+            "os.path.realpath(os.path.dirname(__file__))\n"
+            "_kubeflow_working_directory = os.getcwd()\n"
+            "if sys.path and os.path.realpath(sys.path[0]) == "
+            "_kubeflow_generated_script_directory:\n"
+            "    sys.path[0] = _kubeflow_working_directory\n"
+            "else:\n"
+            "    sys.path.insert(0, _kubeflow_working_directory)\n\n"
+        )
+        func_code = python_import_path_prelude + func_code
 
     # Install Python packages if that is required.
     install_packages = ""
