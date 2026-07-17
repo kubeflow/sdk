@@ -194,14 +194,12 @@ class KubernetesBackend(RuntimeBackend):
                 f"Timeout to get {constants.TRAINING_RUNTIME_KIND}: {self.namespace}/{name}"
             ) from e
         except client.ApiException as e:
-            if e.status != 404:
+            if e.status == 404:
+                pass  # allow fallback to cluster-scoped runtime
+            else:
                 raise RuntimeError(
                     f"Failed to get {constants.TRAINING_RUNTIME_KIND}: {self.namespace}/{name}"
                 ) from e
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to get {constants.TRAINING_RUNTIME_KIND}: {self.namespace}/{name}"
-            ) from e
 
         try:
             cluster_thread = self.custom_api.get_cluster_custom_object(
@@ -289,10 +287,9 @@ class KubernetesBackend(RuntimeBackend):
         self,
         runtime: str | types.Runtime | None = None,
         initializer: types.Initializer | None = None,
-        trainer: types.CustomTrainer
-        | types.CustomTrainerContainer
-        | types.BuiltinTrainer
-        | None = None,
+        trainer: (
+            types.CustomTrainer | types.CustomTrainerContainer | types.BuiltinTrainer | None
+        ) = None,
         options: list | None = None,
     ) -> str:
         # Process options to extract configuration
@@ -581,8 +578,9 @@ class KubernetesBackend(RuntimeBackend):
 
     def __get_runtime_from_cr(
         self,
-        runtime_cr: models.TrainerV1alpha1ClusterTrainingRuntime
-        | models.TrainerV1alpha1TrainingRuntime,
+        runtime_cr: (
+            models.TrainerV1alpha1ClusterTrainingRuntime | models.TrainerV1alpha1TrainingRuntime
+        ),
     ) -> types.Runtime:
         if not (
             runtime_cr.metadata
@@ -764,10 +762,9 @@ class KubernetesBackend(RuntimeBackend):
         self,
         runtime: str | types.Runtime | None = None,
         initializer: types.Initializer | None = None,
-        trainer: types.CustomTrainer
-        | types.CustomTrainerContainer
-        | types.BuiltinTrainer
-        | None = None,
+        trainer: (
+            types.CustomTrainer | types.CustomTrainerContainer | types.BuiltinTrainer | None
+        ) = None,
         trainer_overrides: dict[str, Any] | None = None,
         runtime_patches: list[dict[str, Any]] | None = None,
     ) -> models.TrainerV1alpha1TrainJobSpec:
@@ -818,17 +815,21 @@ class KubernetesBackend(RuntimeBackend):
 
         trainjob_spec = models.TrainerV1alpha1TrainJobSpec(
             runtimeRef=models.TrainerV1alpha1RuntimeRef(name=runtime.name),
-            trainer=trainer_cr if trainer_cr != models.TrainerV1alpha1Trainer() else None,
+            trainer=(trainer_cr if trainer_cr != models.TrainerV1alpha1Trainer() else None),
             runtimePatches=runtime_patch_models,
         )
 
         # Add initializer if users define it.
         if initializer and (initializer.dataset or initializer.model):
             trainjob_spec.initializer = models.TrainerV1alpha1Initializer(
-                dataset=utils.get_dataset_initializer(initializer.dataset)
-                if initializer.dataset
-                else None,
-                model=utils.get_model_initializer(initializer.model) if initializer.model else None,
+                dataset=(
+                    utils.get_dataset_initializer(initializer.dataset)
+                    if initializer.dataset
+                    else None
+                ),
+                model=(
+                    utils.get_model_initializer(initializer.model) if initializer.model else None
+                ),
             )
 
         return trainjob_spec
