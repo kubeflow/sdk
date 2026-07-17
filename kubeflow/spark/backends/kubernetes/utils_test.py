@@ -100,6 +100,11 @@ class TestValidateSparkConnectUrl:
         """U14: Missing port raises ValueError."""
         with pytest.raises(ValueError, match="Port is required"):
             validate_spark_connect_url("sc://localhost")
+    
+    def test_missing_hostname(self):
+        """U16: Missing hostname raises ValueError."""
+        with pytest.raises(ValueError, match="Host is required"):
+            validate_spark_connect_url("sc://:15002")
 
 
 class TestBuildServiceUrl:
