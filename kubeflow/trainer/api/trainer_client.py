@@ -239,6 +239,11 @@ class TrainerClient:
         polling_interval: int = 2,
         callbacks: list[Callable[[types.TrainJob], None]] | None = None,
     ) -> types.TrainJob:
+        
+         if status is None:
+            status={constants.TRAINJOB_COMPLETE}
+        
+         ## in every call creat a new set 
         """Wait for a TrainJob to reach a desired status.
 
         Args:
