@@ -1,0 +1,23 @@
+title: Config-Driven LLM Trainers for the Kubeflow SDK
+kep-number: 626
+authors:
+  - "@YassinNouh21"
+  - "@szaher"
+status: draft
+creation-date: 2026-07-15
+reviewers:
+  - "@andreyvelich"
+  - "@tariq-hasan"
+  - "@szaher"
+approvers:
+  - "@andreyvelich"
+
+see-also:
+  - "https://github.com/kubeflow/sdk/issues/626"
+  - "https://github.com/kubeflow/sdk/pull/308"
+  - "https://github.com/kubeflow/trainer/issues/2839"
+replaces:
+  - "NA"
+
+# The target maturity stage in the current dev cycle for this KEP.
+stage: alpha
