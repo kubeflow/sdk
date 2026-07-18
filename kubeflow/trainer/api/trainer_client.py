@@ -234,7 +234,7 @@ class TrainerClient:
     def wait_for_job_status(
         self,
         name: str,
-        status: set[str] = {constants.TRAINJOB_COMPLETE},
+        status: set[str] | None = None,
         timeout: int = 600,
         polling_interval: int = 2,
         callbacks: list[Callable[[types.TrainJob], None]] | None = None,
@@ -244,7 +244,7 @@ class TrainerClient:
         Args:
             name: Name of the TrainJob.
             status: Expected statuses. Must be a subset of Created, Running, Complete, and
-                Failed statuses.
+                Failed statuses. 
             timeout: Maximum number of seconds to wait for the TrainJob to reach one of the
                 expected statuses.
             polling_interval: The polling interval in seconds to check TrainJob status.
