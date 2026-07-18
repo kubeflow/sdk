@@ -22,9 +22,9 @@ from enum import Enum
 class SparkConnectState(str, Enum):
     """State of a SparkConnect session."""
 
+    NEW = ""  # Operator "New" state is the empty string; avoid truthiness checks.
     PROVISIONING = "Provisioning"
     READY = "Ready"
-    RUNNING = "Running"  # Operator may set this when server is up; treated as ready
     NOT_READY = "NotReady"
     FAILED = "Failed"
 
