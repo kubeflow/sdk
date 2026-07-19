@@ -17,6 +17,7 @@
 from datetime import datetime
 from functools import wraps
 import multiprocessing
+import threading
 from unittest.mock import Mock, patch
 
 from kubeflow_spark_api import models
@@ -879,6 +880,173 @@ def test_create_and_connect(kubernetes_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+# --------------------------
+# Tests for connect()
+# --------------------------
+
+
+def _make_connect_info():
+    return SparkConnectInfo(
+        name="test-session",
+        namespace=DEFAULT_NAMESPACE,
+        state=SparkConnectState.READY,
+        driver_pod_name="test-session-0",
+        service_name="test-session-svc",
+    )
+
+
+def test_connect_in_cluster_success(kubernetes_backend):
+    """Test connect() when in-cluster (no port-forward process) returns the session."""
+    info = _make_connect_info()
+    mock_session = Mock()
+
+    with (
+        patch.object(
+            kubernetes_backend,
+            "get_connect_url",
+            return_value=("sc://test-session-svc:15002", None),
+        ),
+        patch("kubeflow.spark.backends.kubernetes.backend.SparkSession") as mock_spark_session,
+    ):
+        mock_spark_session.builder.remote.return_value.getOrCreate.return_value = mock_session
+
+        result = kubernetes_backend.connect(info, connect_timeout=5, grpc_ready_delay=0)
+
+        assert result is mock_session
+        mock_spark_session.builder.remote.assert_called_once_with("sc://test-session-svc:15002")
+
+
+def test_connect_with_live_port_forward_success(kubernetes_backend):
+    """Test connect() when a live port-forward process is present returns the session."""
+    info = _make_connect_info()
+    mock_session = Mock()
+    mock_popen = Mock()
+    mock_popen.poll.return_value = None  # still running
+
+    with (
+        patch.object(
+            kubernetes_backend, "get_connect_url", return_value=("sc://127.0.0.1:15002", mock_popen)
+        ),
+        patch("kubeflow.spark.backends.kubernetes.backend.SparkSession") as mock_spark_session,
+    ):
+        mock_spark_session.builder.remote.return_value.getOrCreate.return_value = mock_session
+
+        result = kubernetes_backend.connect(info, connect_timeout=5, grpc_ready_delay=0)
+
+        assert result is mock_session
+
+
+def test_connect_dead_port_forward_before_start_raises(kubernetes_backend):
+    """Test connect() raises RuntimeError immediately if port-forward already died."""
+    info = _make_connect_info()
+    mock_popen = Mock()
+    mock_popen.poll.return_value = 1  # already exited
+    mock_popen.returncode = 1
+    mock_popen.stderr.read.return_value = b"connection refused"
+
+    with (
+        patch.object(
+            kubernetes_backend, "get_connect_url", return_value=("sc://127.0.0.1:15002", mock_popen)
+        ),
+        pytest.raises(RuntimeError, match="Port-forward process exited"),
+    ):
+        kubernetes_backend.connect(info, connect_timeout=5, grpc_ready_delay=0)
+
+
+def test_connect_timeout_raises(kubernetes_backend):
+    """Test connect() raises TimeoutError when SparkSession creation doesn't finish in time."""
+    info = _make_connect_info()
+    block_forever = threading.Event()
+
+    def slow_get_or_create():
+        block_forever.wait(timeout=2)
+        return Mock()
+
+    with (
+        patch.object(
+            kubernetes_backend,
+            "get_connect_url",
+            return_value=("sc://test-session-svc:15002", None),
+        ),
+        patch("kubeflow.spark.backends.kubernetes.backend.SparkSession") as mock_spark_session,
+    ):
+        mock_spark_session.builder.remote.return_value.getOrCreate.side_effect = slow_get_or_create
+
+        with pytest.raises(TimeoutError, match="did not complete"):
+            kubernetes_backend.connect(info, connect_timeout=0.05, grpc_ready_delay=0)
+
+    block_forever.set()
+
+
+def test_connect_exception_propagates(kubernetes_backend):
+    """Test connect() re-raises an exception encountered while creating the SparkSession."""
+    info = _make_connect_info()
+
+    with (
+        patch.object(
+            kubernetes_backend,
+            "get_connect_url",
+            return_value=("sc://test-session-svc:15002", None),
+        ),
+        patch("kubeflow.spark.backends.kubernetes.backend.SparkSession") as mock_spark_session,
+    ):
+        mock_spark_session.builder.remote.return_value.getOrCreate.side_effect = ValueError("boom")
+
+        with pytest.raises(ValueError, match="boom"):
+            kubernetes_backend.connect(info, connect_timeout=5, grpc_ready_delay=0)
+
+
+def test_connect_grpc_ready_delay_from_env_var(kubernetes_backend):
+    """Test connect() honors SPARK_CONNECT_READY_DELAY_SEC when grpc_ready_delay is not passed."""
+    info = _make_connect_info()
+    mock_session = Mock()
+
+    with (
+        patch.object(
+            kubernetes_backend,
+            "get_connect_url",
+            return_value=("sc://test-session-svc:15002", None),
+        ),
+        patch("kubeflow.spark.backends.kubernetes.backend.SparkSession") as mock_spark_session,
+        patch.dict("os.environ", {"SPARK_CONNECT_READY_DELAY_SEC": "0"}, clear=False),
+    ):
+        mock_spark_session.builder.remote.return_value.getOrCreate.return_value = mock_session
+
+        result = kubernetes_backend.connect(info, connect_timeout=5)
+
+        assert result is mock_session
+
+
+def test_connect_restarts_dead_port_forward_before_final_attempt(kubernetes_backend):
+    """Test connect() restarts the port-forward if it dies right before the final connect attempt."""
+    info = _make_connect_info()
+    mock_session = Mock()
+
+    # Alive for the initial status check, dead by the final pre-connect check.
+    flaky_popen = Mock()
+    flaky_popen.poll.side_effect = [None, 1]
+    live_popen = Mock()
+    live_popen.poll.return_value = None
+
+    with (
+        patch.object(
+            kubernetes_backend,
+            "get_connect_url",
+            side_effect=[
+                ("sc://127.0.0.1:15002", flaky_popen),
+                ("sc://127.0.0.1:15003", live_popen),
+            ],
+        ) as mock_get_connect_url,
+        patch("kubeflow.spark.backends.kubernetes.backend.SparkSession") as mock_spark_session,
+    ):
+        mock_spark_session.builder.remote.return_value.getOrCreate.return_value = mock_session
+
+        result = kubernetes_backend.connect(info, connect_timeout=5, grpc_ready_delay=0)
+
+        assert result is mock_session
+        assert mock_get_connect_url.call_count == 2
 
 
 @pytest.mark.parametrize(
