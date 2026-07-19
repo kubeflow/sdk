@@ -23,6 +23,8 @@ from kubeflow.spark.backends.kubernetes.utils import (
     build_service_url,
     build_spark_connect_cr,
     generate_session_name,
+    get_executor_spec_from_executor,
+    get_server_spec_from_driver,
     get_spark_connect_info_from_cr,
     validate_spark_connect_url,
 )
@@ -405,3 +407,125 @@ class TestGetSparkConnectInfoFromCr:
         )
         with pytest.raises(ValueError, match="SparkConnect CR is invalid"):
             get_spark_connect_info_from_cr(spark_connect_cr)
+
+
+class TestGetServerSpecFromDriver:
+    """Direct unit tests for get_server_spec_from_driver."""
+
+    def test_defaults_when_no_driver(self):
+        """Default CPU, memory, and no template when driver is None."""
+        spec = get_server_spec_from_driver(None)
+        assert spec.cores == constants.DEFAULT_DRIVER_CPU
+        assert spec.memory == _memory_kubernetes_to_spark(constants.DEFAULT_DRIVER_MEMORY)
+        assert spec.template is None
+
+    def test_defaults_when_driver_has_no_resources(self):
+        """Defaults hold when a Driver object is provided but resources are empty."""
+        spec = get_server_spec_from_driver(Driver())
+        assert spec.cores == constants.DEFAULT_DRIVER_CPU
+        assert spec.memory == _memory_kubernetes_to_spark(constants.DEFAULT_DRIVER_MEMORY)
+        assert spec.template is None
+
+    @pytest.mark.parametrize(
+        "cpu,memory,expected_cores,expected_memory",
+        [
+            ("2", "4Gi", 2, "4g"),
+            ("4", "8Gi", 4, "8g"),
+            ("1", "512Mi", 1, "512m"),
+        ],
+    )
+    def test_custom_resources(
+        self, cpu: str, memory: str, expected_cores: int, expected_memory: str
+    ) -> None:
+        """Custom CPU and memory resources are converted correctly."""
+        driver = Driver(resources={"cpu": cpu, "memory": memory})
+        spec = get_server_spec_from_driver(driver)
+        assert spec.cores == expected_cores
+        assert spec.memory == expected_memory
+        assert spec.template is None
+
+    def test_service_account_sets_pod_template(self):
+        """Service account creates a PodTemplateSpec with the correct SA name."""
+        driver = Driver(service_account="spark-sa")
+        spec = get_server_spec_from_driver(driver)
+        assert spec.template is not None
+        assert spec.template.spec.service_account_name == "spark-sa"
+
+    def test_service_account_with_resources(self):
+        """Service account and custom resources are applied together."""
+        driver = Driver(resources={"cpu": "3", "memory": "6Gi"}, service_account="my-sa")
+        spec = get_server_spec_from_driver(driver)
+        assert spec.cores == 3
+        assert spec.memory == "6g"
+        assert spec.template.spec.service_account_name == "my-sa"
+
+    def test_cpu_only_resource_leaves_memory_at_default(self):
+        """Only CPU is overridden; memory stays at default."""
+        driver = Driver(resources={"cpu": "8"})
+        spec = get_server_spec_from_driver(driver)
+        assert spec.cores == 8
+        assert spec.memory == _memory_kubernetes_to_spark(constants.DEFAULT_DRIVER_MEMORY)
+
+
+class TestGetExecutorSpecFromExecutor:
+    """Direct unit tests for get_executor_spec_from_executor."""
+
+    def test_all_defaults_when_no_args(self):
+        """Default instances, cores, and memory when all arguments are None."""
+        spec = get_executor_spec_from_executor(None, None, None)
+        assert spec.instances == constants.DEFAULT_NUM_EXECUTORS
+        assert spec.cores == constants.DEFAULT_EXECUTOR_CPU
+        assert spec.memory == _memory_kubernetes_to_spark(constants.DEFAULT_EXECUTOR_MEMORY)
+
+    def test_num_executors_simple_mode(self):
+        """num_executors simple-mode parameter sets instance count."""
+        spec = get_executor_spec_from_executor(None, 5, None)
+        assert spec.instances == 5
+
+    def test_resources_per_executor_simple_mode(self):
+        """resources_per_executor simple-mode parameter sets cores and memory."""
+        spec = get_executor_spec_from_executor(None, None, {"cpu": "4", "memory": "8Gi"})
+        assert spec.cores == 4
+        assert spec.memory == "8g"
+
+    @pytest.mark.parametrize(
+        "num_instances,resources,expected_instances,expected_cores,expected_memory",
+        [
+            (3, {"cpu": "2", "memory": "4Gi"}, 3, 2, "4g"),
+            (10, {"cpu": "8", "memory": "16Gi"}, 10, 8, "16g"),
+            (1, {"cpu": "1", "memory": "512Mi"}, 1, 1, "512m"),
+        ],
+    )
+    def test_executor_advanced_mode(
+        self,
+        num_instances: int,
+        resources: dict,
+        expected_instances: int,
+        expected_cores: int,
+        expected_memory: str,
+    ) -> None:
+        """Executor advanced-mode object overrides simple params for all fields."""
+        executor = Executor(num_instances=num_instances, resources_per_executor=resources)
+        spec = get_executor_spec_from_executor(executor, 1, {"cpu": "1", "memory": "1Gi"})
+        assert spec.instances == expected_instances
+        assert spec.cores == expected_cores
+        assert spec.memory == expected_memory
+
+    def test_executor_instances_precedence_over_num_executors(self):
+        """executor.num_instances overrides num_executors simple parameter."""
+        executor = Executor(num_instances=7)
+        spec = get_executor_spec_from_executor(executor, 3, None)
+        assert spec.instances == 7
+
+    def test_executor_resources_precedence_over_simple_resources(self):
+        """executor.resources_per_executor overrides resources_per_executor simple param."""
+        executor = Executor(resources_per_executor={"cpu": "6", "memory": "12Gi"})
+        spec = get_executor_spec_from_executor(executor, None, {"cpu": "2", "memory": "4Gi"})
+        assert spec.cores == 6
+        assert spec.memory == "12g"
+
+    def test_memory_only_resource_leaves_cores_at_default(self):
+        """Only memory is overridden via simple params; cores stay at default."""
+        spec = get_executor_spec_from_executor(None, None, {"memory": "16Gi"})
+        assert spec.cores == constants.DEFAULT_EXECUTOR_CPU
+        assert spec.memory == "16g"
