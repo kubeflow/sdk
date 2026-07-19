@@ -32,7 +32,6 @@ To use Spark with the Kubeflow SDK, install the Spark dependencies:
    pip install "kubeflow[spark]"
 
 For full setup instructions, see `the Spark installation guide <https://www.kubeflow.org/docs/components/spark-operator/getting-started/>`_.
-
 Quick Example
 -------------
 
@@ -78,121 +77,23 @@ Key Concepts
 
 **Spark Operator**: A Kubernetes controller that manages the lifecycle of Spark applications.
 
-Common Patterns
----------------
+Guides
+------
 
-**Configure executor resources:**
+.. grid:: 2
+   :gutter: 3
 
-.. code-block:: python
+   .. grid-item-card:: Spark Examples
+      :link: examples
+      :link-type: doc
 
-   spark = client.connect(
-       num_executors=3,
-       resources_per_executor={
-           "cpu": "4",
-           "memory": "4Gi",
-       },
-   )
+      Create sessions, run distributed operations, and manage Spark workloads.
 
-**Create a DataFrame from a range:**
+   .. grid-item-card:: API Reference
+      :link: api
+      :link-type: doc
 
-.. code-block:: python
-
-   df = spark.range(100)
-   df.show()
-
-**Perform transformations:**
-
-.. code-block:: python
-
-   df = spark.range(10)
-   result = df.withColumn("value_squared", df.id * df.id)
-   result.show()
-
-**Run SQL queries:**
-
-.. code-block:: python
-
-   df = spark.range(10)
-   df.createOrReplaceTempView("numbers")
-
-   result = spark.sql("SELECT id, id * id AS square FROM numbers")
-   result.show()
-
-**Aggregate data:**
-
-.. code-block:: python
-
-   df = spark.range(100)
-
-   result = df.groupBy().count()
-   result.show()
-
-Connecting to Existing Spark Connect Servers
---------------------------------------------
-
-You can connect to an existing Spark Connect server instead of creating a new Spark session.
-
-.. code-block:: python
-
-   from kubeflow.spark import SparkClient
-
-   client = SparkClient()
-
-   spark = client.connect(
-       base_url="sc://localhost:15002"
-   )
-
-   spark.range(10).show()
-
-This pattern is useful when Spark Connect is already running and managed independently of your application.
-
-Session Management
-------------------
-
-Use the Spark SDK to inspect and manage Spark Connect sessions in the configured Kubernetes namespace (defaults to ``default``).
-
-**List active sessions:**
-
-.. code-block:: python
-
-   from kubeflow.spark import SparkClient
-
-   client = SparkClient()
-
-   sessions = client.list_sessions()
-
-   for session in sessions:
-       print(session.name)
-       print(session.state.value)
-
-**Get session information:**
-
-.. code-block:: python
-
-   session = client.get_session(
-       "spark-connect-example"
-   )
-
-   print(f"Name: {session.name}")
-   print(f"State: {session.state.value}")
-   print(f"Namespace: {session.namespace}")
-
-**View session logs:**
-
-.. code-block:: python
-
-   for line in client.get_session_logs(
-       "spark-connect-example"
-   ):
-       print(line)
-
-**Delete a session:**
-
-.. code-block:: python
-
-   client.delete_session(
-       "spark-connect-example"
-   )
+      Explore the Spark client, configuration types, and public methods.
 
 When Things Go Wrong
 --------------------
