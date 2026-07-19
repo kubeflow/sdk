@@ -111,13 +111,6 @@ def test_create_and_connect(test_case: TestCase):
             None,
             NotImplementedError,
         ),
-        (
-            FileJob(file_source="s3://bucket/job.py"),
-            None,
-            [object()],
-            None,
-            NotImplementedError,
-        ),
     ],
 )
 def test_submit_job_validation(
@@ -172,4 +165,39 @@ def test_submit_job_success():
             ),
             num_executors=None,
             resources_per_executor=None,
+            options=None,
+        )
+
+
+def test_submit_job_with_driver_resources_option():
+    """Test submit_job forwards DriverResources options to the backend."""
+    from kubeflow.spark.types.options import DriverResources
+
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
+        backend = mock_backend.return_value
+
+        backend.submit_job.return_value = SparkJob(
+            name="spark-job-456",
+            namespace="default",
+        )
+
+        client = SparkClient()
+        options = [DriverResources({"cpu": "2", "memory": "4Gi"})]
+
+        name = client.submit_job(
+            job=FileJob(
+                file_source="s3://bucket/job.py",
+            ),
+            options=options,
+        )
+
+        assert name == "spark-job-456"
+
+        backend.submit_job.assert_called_once_with(
+            job=FileJob(
+                file_source="s3://bucket/job.py",
+            ),
+            num_executors=None,
+            resources_per_executor=None,
+            options=options,
         )

@@ -23,6 +23,7 @@ from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.spark.types.options import (
     Annotations,
+    DriverResources,
     Labels,
     Name,
     NodeSelector,
@@ -276,3 +277,87 @@ class TestNameOption:
 
         with pytest.raises(ValueError, match="not compatible"):
             option(spark_connect_model, mock_non_k8s_backend)
+
+
+@pytest.fixture
+def spark_application_model():
+    """Create a minimal SparkApplication model for testing."""
+    return models.SparkV1beta2SparkApplication(
+        api_version=f"{constants.SPARK_APPLICATION_GROUP}/{constants.SPARK_APPLICATION_VERSION}",
+        kind=constants.SPARK_APPLICATION_KIND,
+        metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+            name="test-job",
+            namespace="default",
+        ),
+        spec=models.SparkV1beta2SparkApplicationSpec(
+            spark_version=constants.DEFAULT_SPARK_VERSION,
+            type="Python",
+            mode="cluster",
+            image=constants.DEFAULT_SPARK_IMAGE,
+            main_application_file="s3://bucket/job.py",
+            driver=models.SparkV1beta2DriverSpec(
+                cores=constants.DEFAULT_DRIVER_CPU,
+                memory=constants.DEFAULT_DRIVER_MEMORY,
+            ),
+            executor=models.SparkV1beta2ExecutorSpec(
+                instances=1,
+                cores=constants.DEFAULT_EXECUTOR_CPU,
+                memory=constants.DEFAULT_EXECUTOR_MEMORY,
+            ),
+        ),
+    )
+
+
+class TestDriverResources:
+    """Tests for DriverResources option."""
+
+    def test_driver_resources_apply_to_crd(self, mock_k8s_backend, spark_application_model):
+        """DriverResources option overrides driver cores and memory."""
+        option = DriverResources({"cpu": "2", "memory": "4Gi"})
+
+        option(spark_application_model, mock_k8s_backend)
+
+        assert spark_application_model.spec.driver.cores == 2
+        assert spark_application_model.spec.driver.memory == "4g"
+
+    def test_driver_resources_cpu_only(self, mock_k8s_backend, spark_application_model):
+        """DriverResources with only CPU leaves memory at the existing value after resolve."""
+        option = DriverResources({"cpu": "4"})
+
+        option(spark_application_model, mock_k8s_backend)
+
+        assert spark_application_model.spec.driver.cores == 4
+        # Memory falls back to DEFAULT_DRIVER_MEMORY when not provided
+        assert spark_application_model.spec.driver.memory == "512m"
+
+    def test_driver_resources_incompatible_backend(
+        self, mock_non_k8s_backend, spark_application_model
+    ):
+        """DriverResources option raises error for incompatible backend."""
+        option = DriverResources({"cpu": "2", "memory": "4Gi"})
+
+        with pytest.raises(ValueError, match="not compatible"):
+            option(spark_application_model, mock_non_k8s_backend)
+
+    def test_driver_resources_missing_driver_spec(self, mock_k8s_backend):
+        """DriverResources raises when SparkApplication has no driver spec."""
+        spark_application = models.SparkV1beta2SparkApplication.model_construct(
+            api_version=f"{constants.SPARK_APPLICATION_GROUP}/{constants.SPARK_APPLICATION_VERSION}",
+            kind=constants.SPARK_APPLICATION_KIND,
+            metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                name="test-job",
+                namespace="default",
+            ),
+            spec=None,
+        )
+        option = DriverResources({"cpu": "2", "memory": "4Gi"})
+
+        with pytest.raises(ValueError, match="must have a driver spec"):
+            option(spark_application, mock_k8s_backend)
+
+    def test_driver_resources_invalid_cpu(self, mock_k8s_backend, spark_application_model):
+        """DriverResources raises for invalid CPU values."""
+        option = DriverResources({"cpu": "invalid", "memory": "4Gi"})
+
+        with pytest.raises(ValueError):
+            option(spark_application_model, mock_k8s_backend)

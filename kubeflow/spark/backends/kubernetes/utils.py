@@ -621,6 +621,8 @@ def build_spark_application_cr(
     arguments: list[str] | None = None,
     num_executors: int | None = None,
     resources_per_executor: dict[str, str] | None = None,
+    options: list | None = None,
+    backend: Any | None = None,
 ) -> models.SparkV1beta2SparkApplication:
     """Build a SparkApplication custom resource.
 
@@ -631,6 +633,8 @@ def build_spark_application_cr(
         arguments: Command-line arguments.
         num_executors: Number of executor instances.
         resources_per_executor: Resource requirements for each executor.
+        options: List of configuration options (e.g. DriverResources).
+        backend: Backend instance for option validation.
 
     Returns:
         SparkApplication custom resource model.
@@ -639,7 +643,7 @@ def build_spark_application_cr(
         ValueError:
             If the executor resource configuration is invalid.
     """
-    return models.SparkV1beta2SparkApplication(
+    spark_application = models.SparkV1beta2SparkApplication(
         api_version=f"{constants.SPARK_APPLICATION_GROUP}/{constants.SPARK_APPLICATION_VERSION}",
         kind=constants.SPARK_APPLICATION_KIND,
         metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
@@ -660,6 +664,14 @@ def build_spark_application_cr(
             ),
         ),
     )
+
+    # Apply options - extensibility without API changes (callable pattern)
+    if options and backend is not None:
+        for option in options:
+            if callable(option):
+                option(spark_application, backend)
+
+    return spark_application
 
 
 def get_spark_application_info_from_cr(

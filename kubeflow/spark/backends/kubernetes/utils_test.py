@@ -16,12 +16,13 @@
 
 from datetime import datetime
 import multiprocessing
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from kubeflow_spark_api import models
 import pytest
 
 from kubeflow.spark.backends.kubernetes import constants
+from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.spark.backends.kubernetes.utils import (
     _memory_kubernetes_to_spark,
     _resolve_driver_resources,
@@ -39,6 +40,7 @@ from kubeflow.spark.backends.kubernetes.utils import (
     read_pod_logs,
     validate_spark_connect_url,
 )
+from kubeflow.spark.types.options import DriverResources
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
@@ -766,6 +768,23 @@ class TestBuildSparkApplicationCr:
         assert app.spec.executor.instances == 3
         assert app.spec.executor.cores == 2
         assert app.spec.executor.memory == _memory_kubernetes_to_spark("4Gi")
+
+    def test_with_driver_resources_option(self):
+        """DriverResources option overrides default driver cores and memory."""
+        backend = MagicMock(spec=KubernetesBackend)
+        backend.__class__ = KubernetesBackend
+
+        app = build_spark_application_cr(
+            name="test-job",
+            namespace="default",
+            main_file="s3://bucket/job.py",
+            options=[DriverResources({"cpu": "2", "memory": "4Gi"})],
+            backend=backend,
+        )
+
+        assert app.spec.driver.cores == 2
+        assert app.spec.driver.memory == _memory_kubernetes_to_spark("4Gi")
+        assert app.spec.driver.service_account == constants.DEFAULT_SERVICE_ACCOUNT
 
 
 class TestGetSparkApplicationInfoFromCr:

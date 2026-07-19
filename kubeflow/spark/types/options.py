@@ -409,3 +409,67 @@ class Name:
             )
 
         spark_connect.metadata.name = self.name
+
+
+@dataclass
+class DriverResources:
+    """Override SparkApplication driver CPU and memory resources.
+
+    By default, SparkJob driver resources use ``DEFAULT_DRIVER_CPU`` and
+    ``DEFAULT_DRIVER_MEMORY`` from the Spark Kubernetes constants module.
+    This option overrides those defaults when submitting a batch job.
+
+    Supported backends:
+        - Kubernetes
+
+    Args:
+        resources: Resource requirements as a dict
+            (e.g., ``{"cpu": "2", "memory": "4Gi"}``).
+
+    Example:
+        ```python
+        from kubeflow.spark import SparkClient, FileJob, DriverResources
+
+        client = SparkClient()
+        job_name = client.submit_job(
+            job=FileJob(file_source="s3a://bucket/job.py"),
+            options=[DriverResources({"cpu": "2", "memory": "4Gi"})],
+        )
+        ```
+    """
+
+    resources: dict[str, str]
+
+    def __call__(
+        self,
+        spark_application: models.SparkV1beta2SparkApplication,
+        backend: RuntimeBackend,
+    ) -> None:
+        """Apply driver resource overrides to a SparkApplication model.
+
+        Args:
+            spark_application: SparkApplication model to modify.
+            backend: Backend instance for validation.
+
+        Raises:
+            ValueError: If backend does not support driver resources, the
+                SparkApplication has no driver spec, or resource values are invalid.
+        """
+        from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
+        from kubeflow.spark.backends.kubernetes.utils import _resolve_driver_resources
+        from kubeflow.spark.types.types import Driver
+
+        if not isinstance(backend, KubernetesBackend):
+            raise ValueError(
+                f"DriverResources option is not compatible with {type(backend).__name__}. "
+                f"Supported backends: KubernetesBackend"
+            )
+
+        if spark_application.spec is None or spark_application.spec.driver is None:
+            raise ValueError(
+                "SparkApplication must have a driver spec before applying DriverResources."
+            )
+
+        cores, memory = _resolve_driver_resources(Driver(resources=self.resources))
+        spark_application.spec.driver.cores = cores
+        spark_application.spec.driver.memory = memory

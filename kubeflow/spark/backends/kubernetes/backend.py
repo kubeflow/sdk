@@ -814,6 +814,7 @@ class KubernetesBackend(RuntimeBackend):
         job: FileJob | FuncJob,
         num_executors: int | None = None,
         resources_per_executor: dict[str, str] | None = None,
+        options: list | None = None,
     ) -> SparkJob:
         """Submit a SparkApplication for batch execution.
 
@@ -826,6 +827,9 @@ class KubernetesBackend(RuntimeBackend):
 
             resources_per_executor:
                 Resource requirements per executor.
+
+            options:
+                List of configuration options (e.g. DriverResources).
 
         Returns:
             SparkJob information object.
@@ -856,6 +860,8 @@ class KubernetesBackend(RuntimeBackend):
             arguments=job.args,
             num_executors=num_executors,
             resources_per_executor=resources_per_executor,
+            options=options,
+            backend=self,
         )
 
         try:
