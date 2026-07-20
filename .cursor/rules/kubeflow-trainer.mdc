@@ -32,8 +32,8 @@ Backend is selected at construction via `KubernetesBackendConfig`, `ContainerBac
 
 ## Common changes
 
-- New K8s option → `options/kubernetes.py` + `kubernetes_test.py` (see `references/common-changes.md`)
-- Extend backend → `backends/<name>/backend.py` + co-located `*_test.py`
+- New K8s option → `options/kubernetes.py` + `kubernetes_test.py` (skill: `.cursor/skills/add-k8s-option/`)
+- Extend backend → `backends/<name>/backend.py` + co-located `*_test.py` (skill: `.cursor/skills/add-backend/`)
 - New trainer type → `types/types.py` + exports in `types/__init__.py`
 
 ## Pitfalls

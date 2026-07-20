@@ -65,7 +65,6 @@ make verify                   # lock check, ruff check/format, ty on kubeflow/hu
 make lint-imports             # SDK component import boundaries (import-linter)
 make verify-openapi           # Validate openapi.yaml (OpenAPI 3.x schema)
 ```
-
 **Single-file verification** (fast feedback during edits; no full build; target under 5 seconds per file):
 
 ```bash
@@ -103,7 +102,6 @@ uv run ruff format kubeflow                  # Format kubeflow package
 uv run pre-commit install                    # Install pre-commit and commit-msg hooks
 uv run pre-commit run --all-files           # Run all hooks
 ```
-
 <!-- END: AGENT_COMMANDS -->
 
 ## Key Conventions
@@ -119,11 +117,34 @@ Copy-modify from canonical files — details in [references/common-changes.md](r
 - Execution backend → follow the pattern in `kubeflow/trainer/backends/kubernetes/backend.py`
 - New SDK client → see `kubeflow/spark/api/spark_client.py` for reference
 
+## Skills
+
+On-demand procedural guides in `.cursor/skills/` for multi-step changes. `.agents/skills` symlinks here.
+
+| Skill | Use when |
+|-------|----------|
+| `add-k8s-option` | Adding a Kubernetes training option |
+| `add-backend` | Adding or extending an execution backend |
+| `add-sdk-client` | Scaffolding a new SDK client module |
+| `update-api-dep` | Updating an upstream API dependency version |
+| `add-kep-proposal` | Creating a Kubeflow Enhancement Proposal (KEP) |
+| `debug-test-failure` | Diagnosing and fixing a failing test |
+| `pr-review-checklist` | Preparing a commit or PR for submission |
+
+## Workflows
+
+Multi-agent workflow guides in `.agents/workflows/` for large or cross-component changes.
+
+| Workflow | Use when |
+|----------|----------|
+| `cross-component-refactor` | Refactoring across trainer/spark/optimizer |
+| `release-checklist` | Preparing a Kubeflow SDK release |
+| `review-and-fix` | Processing PR review feedback |
+
 ## Pull Requests
 
 - Use Conventional Commits for PR titles; see [CONTRIBUTING.md](CONTRIBUTING.md#pull-request-title-conventions)
 - Before proposing: run `make verify`, `make lint-imports` when changing imports, and targeted tests
 - Keep diffs minimal and scoped to the task; include rationale ("why") in the PR description
 - Do not commit secrets or modify git config
-
 Details: [references/development-workflow.md](references/development-workflow.md)

@@ -21,3 +21,15 @@ Before writing code, agents should:
 - Read docstrings and existing test cases for pattern alignment
 - Match import patterns from neighboring files
 - Preserve existing logging and error-handling conventions
+
+### Multi-Agent Decomposition
+
+When a task spans multiple SDK components, agents can work in parallel:
+
+- Component boundaries are enforcement points — `.importlinter` contracts
+  prevent forbidden cross-component imports.
+- Each component (`trainer`, `spark`, `optimizer`, `hub`) can be edited
+  independently as long as `kubeflow/common/` interfaces remain stable.
+- After parallel edits, run `make verify` + `make lint-imports` + `make test-python`
+  to validate the combined result.
+- See `.agents/workflows/cross-component-refactor.md` for the full workflow.

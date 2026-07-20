@@ -34,7 +34,7 @@ Kubernetes-only today via `KubernetesBackendConfig`.
 ## Common changes
 
 - New option → `types/options.py` + `options_test.py`
-- Backend CR changes → `backends/kubernetes/backend.py` + `backend_test.py`
+- Backend CR changes → `backends/kubernetes/backend.py` + `backend_test.py` (skill: `.cursor/skills/add-backend/`)
 - Reference: KEP-107 in `proposals/107-spark-client/`
 
 ## Verify
