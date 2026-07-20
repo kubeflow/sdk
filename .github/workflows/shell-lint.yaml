@@ -1,0 +1,65 @@
+# Copyright 2025 The Kubeflow Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Static formatting and lint checks for shell scripts (no cluster required).
+name: Shell Lint
+
+on:
+  pull_request:
+    branches:
+      - main
+      - release-*
+    paths:
+      - '**.sh'
+      - 'Makefile'
+      - '.github/workflows/shell-lint.yaml'
+      - '.shellcheckrc'
+
+  push:
+    branches:
+      - main
+      - release-*
+    paths:
+      - '**.sh'
+      - 'Makefile'
+      - '.github/workflows/shell-lint.yaml'
+      - '.shellcheckrc'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shell-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Check shell script formatting
+        run: |
+          make shell-fmt
+          if ! git diff --quiet; then
+            echo "Shell scripts are not formatted. Run 'make shell-fmt' and commit the changes."
+            git diff
+            false
+          fi
+
+      - name: Run shellcheck
+        run: make shell-lint
