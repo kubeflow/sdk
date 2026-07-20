@@ -1,0 +1,2 @@
+# Disable SC1091: Not following sourced files that are not available at lint time.
+disable=SC1091
