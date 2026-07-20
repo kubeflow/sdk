@@ -21,6 +21,9 @@ forbidden_modules =
     kubeflow.trainer
     kubeflow.spark
     kubeflow.optimizer
+ignore_imports =
+    kubeflow.hub.** -> kubeflow.trainer.test.**
+unmatched_ignore_imports_alerting = warn
 
 [importlinter:contract:trainer-isolated]
 name = Trainer does not import other Kubeflow components
@@ -43,7 +46,6 @@ forbidden_modules =
     kubeflow.trainer.backends.container
     kubeflow.trainer.backends.localprocess
     kubeflow.trainer.backends.base
-    kubeflow.trainer.test
     kubeflow.spark
     kubeflow.hub
 allow_indirect_imports = True

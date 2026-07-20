@@ -40,7 +40,7 @@ Pods are started by the Trainer controller — not by the SDK.
 
 - `utils.py` is the highest-churn file — keep changes minimal and test-covered.
 - Options merge into `job_spec` keys: `metadata`, `spec.labels`, `spec.annotations`, `spec.trainer`,
-  `spec.podTemplateOverrides`.
+  `spec.runtimePatches`.
 - Do not add Container/LocalProcess logic here.
 
 ## Verify

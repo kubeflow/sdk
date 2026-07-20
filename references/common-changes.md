@@ -5,7 +5,7 @@ Copy structure from these references. See [core-principles.md](core-principles.m
 ### Adding a Kubernetes training option
 
 - **Skill:** `.cursor/skills/add-k8s-option/` (full procedural walkthrough)
-- **Reference:** `kubeflow/trainer/options/kubernetes.py` (e.g. `Labels`, `PodTemplateOverrides`)
+- **Reference:** `kubeflow/trainer/options/kubernetes.py` (e.g. `Labels`, `RuntimePatch`)
 - **Also see:** `kubeflow/trainer/options/common.py`, `kubeflow/trainer/options/kubernetes_test.py`
 - **Files:** option module under `kubeflow/trainer/options/`, `kubeflow/trainer/options/__init__.py` exports, co-located `*_test.py`; options must validate backend type in `__call__`
 

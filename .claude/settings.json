@@ -17,7 +17,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "echo \"$CLAUDE_TOOL_INPUT\" | grep -qE 'rm -rf|DROP TABLE|git push.*(-f|--force)' && echo 'BLOCK: destructive command' >&2 && exit 2 || true"
+                        "command": "[[ -z \"$CLAUDE_TOOL_INPUT\" ]] && exit 0; echo \"$CLAUDE_TOOL_INPUT\" | grep -qP 'rm\\s+-(r|f|rf|fr|Rf|rF)\\b|DROP\\s+TABLE|git\\s+push\\s+.*--force(?!-with-lease)\\b|git\\s+reset\\s+--hard|git\\s+clean\\s+-[a-z]*f|git\\s+branch\\s+-D' && echo 'BLOCK: destructive command (best-effort guard)' >&2 && exit 2 || true"
                     }
                 ]
             }

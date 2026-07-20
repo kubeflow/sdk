@@ -24,7 +24,7 @@ experiments from `TrainJobTemplate` trials. Kubernetes-only via `KubernetesBacke
 
 ## Invariants
 
-- `optimize(trial_template, objective, algorithm, ...)` builds Katib Experiment CRs.
+- `optimize(trial_template, *, search_space, trial_config, objectives, algorithm)` builds Katib Experiment CRs.
 - Unit tests mock K8s API; `backend_test.py` is large — add focused cases, don't duplicate.
 - Uses `kubeflow-katib-api` (see `pyproject.toml`).
 
