@@ -16,7 +16,11 @@
 
 from unittest.mock import patch
 
-from test.e2e.spark.cluster_watcher import _driver_pod_from_sparkapplication, _snapshot
+from test.e2e.spark.cluster_watcher import (
+    _driver_pod_from_sparkapplication,
+    _driver_pods,
+    _snapshot,
+)
 
 
 def test_snapshot_includes_sparkapplication_section() -> None:
@@ -44,3 +48,17 @@ def test_driver_pod_from_sparkapplication_reads_status_field() -> None:
         pod = _driver_pod_from_sparkapplication("spark-test")
 
     assert pod == "spark-app-driver-abc123"
+
+
+def test_driver_pods_collects_from_both_resources() -> None:
+    """The watcher should collect driver pods from both SparkConnect and SparkApplication."""
+    with patch(
+        "test.e2e.spark.cluster_watcher._driver_pod_from_sparkconnect",
+        return_value="spark-connect-driver",
+    ), patch(
+        "test.e2e.spark.cluster_watcher._driver_pod_from_sparkapplication",
+        return_value="spark-application-driver",
+    ):
+        pods = _driver_pods("spark-test")
+
+    assert pods == ["spark-connect-driver", "spark-application-driver"]

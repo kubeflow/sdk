@@ -18,7 +18,7 @@ set -euo pipefail
 CLUSTER_NAME="${SPARK_TEST_CLUSTER:-spark-test}"
 NAMESPACE="${SPARK_TEST_NAMESPACE:-spark-test}"
 SPARK_OPERATOR_VERSION="${SPARK_OPERATOR_VERSION:-2.1.0}"
-SPARK_OPERATOR_IMAGE_TAG="${SPARK_OPERATOR_IMAGE_TAG:-latest}"
+SPARK_OPERATOR_IMAGE_TAG="${SPARK_OPERATOR_IMAGE_TAG:-v${SPARK_OPERATOR_VERSION}}"
 K8S_VERSION="${K8S_VERSION:-1.32.0}"
 KIND_BIN="${KIND:-kind}"
 
@@ -343,29 +343,19 @@ apply_upstream_crds() {
     log_info "Applying SparkOperator CRDs from upstream chart v${SPARK_OPERATOR_VERSION}"
     helm repo add spark-operator https://kubeflow.github.io/spark-operator 2>/dev/null || true
     helm repo update 2>/dev/null || true
-    if ! helm show crds "spark-operator/spark-operator" --version "$SPARK_OPERATOR_VERSION" | kubectl apply -f -; then
-        log_warn "Failed to apply upstream SparkOperator CRDs; install may need network access"
-    fi
-    phase_end "apply_upstream_crds"
-}
 
-apply_crd_only() {
-    phase_start "apply_crd_only"
-    kubectl config use-context "kind-${CLUSTER_NAME}" 2>/dev/null || true
-    local script_dir repo_root crds_dir
-    script_dir="$(cd "$(dirname "$0")" && pwd)"
-    repo_root="$(cd "$script_dir/.." && pwd)"
-    crds_dir="$repo_root/hack/crds"
-    if [[ ! -d "$crds_dir" ]]; then
-        log_error "CRDs dir not found: $crds_dir"
-        exit 1
+    local crd_manifest
+    if ! crd_manifest="$(helm show crds "spark-operator/spark-operator" --version "$SPARK_OPERATOR_VERSION" 2>/dev/null)"; then
+        log_error "Failed to fetch upstream SparkOperator CRDs for chart version $SPARK_OPERATOR_VERSION"
+        return 1
     fi
-    for f in "$crds_dir"/*.yaml; do
-        [[ -f "$f" ]] || continue
-        log_info "Applying CRD: $(basename "$f")"
-        kubectl apply -f "$f"
-    done
-    phase_end "apply_crd_only"
+
+    if ! printf '%s\n' "$crd_manifest" | kubectl apply -f -; then
+        log_error "Failed to apply upstream SparkOperator CRDs"
+        return 1
+    fi
+
+    phase_end "apply_upstream_crds"
 }
 
 print_status() {

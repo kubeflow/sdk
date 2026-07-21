@@ -356,12 +356,18 @@ def get_spark_connect_driver_spec(
     cores, memory = _resolve_driver_resources(driver)
 
     template = None
+    service_account = None
 
     if driver and driver.service_account:
+        service_account = driver.service_account
+    else:
+        service_account = os.environ.get("SPARK_E2E_SERVICE_ACCOUNT")
+
+    if service_account:
         template = models.IoK8sApiCoreV1PodTemplateSpec(
             spec=models.IoK8sApiCoreV1PodSpec(
                 containers=[],
-                service_account_name=driver.service_account,
+                service_account_name=service_account,
             )
         )
 
