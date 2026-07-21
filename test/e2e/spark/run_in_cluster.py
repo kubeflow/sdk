@@ -68,6 +68,9 @@ spec:
               value: "{namespace}"
             - name: SPARK_E2E_RUN_IN_CLUSTER
               value: "1"
+            - name: SPARK_E2E_SERVICE_ACCOUNT
+              value: "spark-e2e-driver"
+      serviceAccountName: spark-e2e-runner
 """
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         f.write(manifest)

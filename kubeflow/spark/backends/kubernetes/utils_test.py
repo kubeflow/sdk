@@ -722,6 +722,14 @@ class TestGetSparkJobDriverSpec:
         assert spec.memory == _memory_kubernetes_to_spark(constants.DEFAULT_DRIVER_MEMORY)
         assert spec.service_account == constants.DEFAULT_SERVICE_ACCOUNT
 
+    def test_e2e_service_account_override(self, monkeypatch):
+        """Environment override should be used for e2e clusters."""
+        monkeypatch.setenv("SPARK_E2E_SERVICE_ACCOUNT", "spark-e2e-driver")
+
+        spec = get_spark_job_driver_spec()
+
+        assert spec.service_account == "spark-e2e-driver"
+
 
 class TestGetSparkJobExecutorSpec:
     """Tests for get_spark_job_executor_spec."""

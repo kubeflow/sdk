@@ -74,7 +74,14 @@ def _run_example_with_watcher(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        env={**os.environ, "SPARK_TEST_NAMESPACE": namespace},
+        env={
+            **os.environ,
+            "SPARK_TEST_NAMESPACE": namespace,
+            "SPARK_E2E_SERVICE_ACCOUNT": os.environ.get(
+                "SPARK_E2E_SERVICE_ACCOUNT",
+                "spark-e2e-driver",
+            ),
+        },
     )
     t_out = threading.Thread(target=read_stdout, args=(proc.stdout,), daemon=True)
     t_err = threading.Thread(target=read_stderr, args=(proc.stderr,), daemon=True)

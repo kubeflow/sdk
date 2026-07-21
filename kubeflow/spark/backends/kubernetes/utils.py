@@ -577,11 +577,14 @@ def get_spark_job_driver_spec(
             If the default driver resource configuration is invalid.
     """
     cores, memory = _resolve_driver_resources(driver)
+    service_account = (
+        os.environ.get("SPARK_E2E_SERVICE_ACCOUNT") or constants.DEFAULT_SERVICE_ACCOUNT
+    )
 
     return models.SparkV1beta2DriverSpec(
         cores=cores,
         memory=memory,
-        service_account=constants.DEFAULT_SERVICE_ACCOUNT,
+        service_account=service_account,
     )
 
 
