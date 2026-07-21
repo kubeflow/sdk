@@ -68,13 +68,11 @@ Coupling #3 is load-bearing: a runtime labelled `trainer.kubeflow.org/framework:
 resolves to `CUSTOM_TRAINER` today, so no config-driven framework other than TorchTune can
 run, however the types are arranged.
 
-Two external facts sharpen the urgency. TorchTune's upstream development stopped on 15 July
-2025 ([meta-pytorch/torchtune#2883](https://github.com/meta-pytorch/torchtune/issues/2883)),
-and the Trainer project plans to remove its TorchTune runtimes. Meanwhile GRPO-style
-post-training via TRL is already in flight in the Trainer
-([kubeflow/trainer#3508](https://github.com/kubeflow/trainer/issues/3508),
-[kubeflow/trainer#3718](https://github.com/kubeflow/trainer/pull/3718)) with no SDK surface
-to drive it.
+This is timely on two fronts: TorchTune's upstream development stopped on 15 July 2025
+([meta-pytorch/torchtune#2883](https://github.com/meta-pytorch/torchtune/issues/2883)) and
+the Trainer plans to remove its TorchTune runtimes, while GRPO-via-TRL is already in flight
+in the Trainer ([#3508](https://github.com/kubeflow/trainer/issues/3508),
+[#3718](https://github.com/kubeflow/trainer/pull/3718)) with no SDK surface to drive it.
 
 ### Goals
 
@@ -134,10 +132,8 @@ class BaseTrainer(ABC):
             )
 ```
 
-The hierarchy is `@dataclass(kw_only=True)`: `BaseTrainer`'s fields have defaults, so
-without `kw_only` a subclass could not declare a required field. Existing types
-(`CustomTrainer`, `BuiltinTrainer`) keep their bare declarations; their construction
-signatures are public API.
+The hierarchy is `kw_only` so subclasses can add required fields after `BaseTrainer`'s
+defaulted ones. Existing types keep their bare declarations — their signatures are public API.
 
 ### ConfigTrainer
 
@@ -203,16 +199,11 @@ class FrameworkConfig(abc.ABC):
         ...
 ```
 
-`to_args()` is abstract because rendering is the one behavior that genuinely differs per
-framework — TorchTune emits nested `model.lora_rank=8` overrides, TRL emits
-`--flag value` pairs. Each framework's rendering lives in its own class and is added without
-touching any other; a shared renderer with a style switch would just relocate the
-`isinstance` ladder this KEP deletes.
-
-The name follows the SDK's existing vocabulary: `backends/` means *execution* backend
-(`KubernetesBackend`, `ContainerBackend`), while this object is the `config=` argument.
-KEP-2839 called the same interface `LLMBackend`; this proposal supersedes that SDK portion
-and renames it.
+`to_args()` is abstract because rendering differs per framework — TorchTune emits nested
+`model.lora_rank=8` overrides, TRL emits `--flag value` pairs — so each config renders itself
+rather than the backend branching on type. (The name follows the SDK's vocabulary: `backends/`
+already means *execution* backend, and this object is the `config=` argument. KEP-2839 called
+it `LLMBackend`.)
 
 ### Dynamic Registration
 
@@ -238,17 +229,12 @@ def get_framework(framework: str) -> Optional[type["FrameworkConfig"]]:
     return _FRAMEWORK_CONFIGS.get(framework)
 ```
 
-Registration is an explicit decorator, keyed off the `ClassVar` so there is no string to
-drift, matching how the ecosystem already registers plugins: the Trainer control plane's
-`pkg/runtime/framework/plugins/registry.go`, KEP-2839's `@register_backend` sketch, and the
-[sdk#310](https://github.com/kubeflow/sdk/pull/310) PoC. There is no entry-point discovery:
-an out-of-tree config must be imported before it can be constructed, and importing it
-registers it, so the decorator is sufficient. Registration is import-time and
-last-writer-wins; in-tree configs are exported from `kubeflow/trainer/__init__.py` so they
-are always registered.
-
-An out-of-tree framework is one decorated `FrameworkConfig` subclass in any pip package —
-no SDK change, no backend change.
+Registration is an explicit decorator keyed off the `ClassVar`, matching how the ecosystem
+registers plugins (the control plane's `plugins/registry.go`, KEP-2839's `@register_backend`).
+It runs at import time and is last-writer-wins; in-tree configs are exported from
+`kubeflow/trainer/__init__.py` so they always register. An out-of-tree framework is one
+decorated subclass in any pip package — no SDK or backend change. Entry-point discovery is
+deliberately omitted ([Alternative 3](#3-entry-point-discovery-for-out-of-tree-frameworks)).
 
 ### TRLConfig
 
@@ -340,10 +326,6 @@ class TRLConfig(FrameworkConfig):
         return args
 ```
 
-The typed fields cover the common surface; `extra_args` is the deliberate escape hatch so
-the dataclass does not have to chase every flag of every TRL release — argument semantics
-follow the TRL version in the runtime image.
-
 `LoraConfig` is not reused for TRL: it is TorchTune-shaped (`apply_lora_to_output`,
 `quantize_base` have no TRL analogue), and TRL's PEFT surface is `--use_peft` / `--lora_r` /
 `--lora_alpha` / `--lora_target_modules`. Unsloth is not a config either — it has no CLI or
@@ -411,20 +393,14 @@ Deleted: the reflection-derived `types.TORCH_TUNE` constant, `constants.TORCH_TU
 and the `isinstance(trainer.config, TorchTuneConfig)` guard.
 
 **Classification is capability, not exclusion.** `BUILTIN_TRAINER` marks a runtime as
-config-driven *capable*; it must not forbid `CustomTrainer`. Today the backend hard-rejects
-`CustomTrainer` against non-CUSTOM runtimes (`backend.py:795`); that check relaxes so
-`CustomTrainer` may target any runtime. This matters concretely: the in-flight GRPO runtime
-([#3718](https://github.com/kubeflow/trainer/pull/3718)) is driven through a custom
-entrypoint script — the `CustomTrainer` pattern — and must keep working unchanged after
-`TRLConfig` registers and reclassifies `trl`-labelled runtimes. For out-of-tree frameworks,
-classification depends on which configs the process has imported; with the relaxation this
-is benign — an unimported framework's runtime lists as `CUSTOM_TRAINER` and remains fully
-usable. One behavior stays in the
-backend: TorchTune's `dataset.data_files=` / `dataset.data_dir=` override is computed from
-the Hugging Face dataset initializer (`utils.py:512-527`) — staging knowledge the backend
-owns — and is appended to whatever `to_args()` renders. `TRLConfig` needs nothing from the
-initializer: `model_name_or_path` and `dataset_name` are passed through for the `trl` CLI to
-resolve.
+config-driven *capable*, so the backend's current hard-reject of `CustomTrainer` against
+non-CUSTOM runtimes (`backend.py:795`) relaxes to allow it. This keeps the in-flight GRPO
+runtime ([#3718](https://github.com/kubeflow/trainer/pull/3718)) — driven today via a custom
+entrypoint — working after `TRLConfig` reclassifies `trl` runtimes.
+
+One backend-owned behavior stays: TorchTune's `dataset.data_files=` override, computed from
+the Hugging Face dataset initializer (`utils.py:512-527`), is appended to whatever
+`to_args()` renders. `TRLConfig` needs nothing from it.
 
 ### Control Plane
 
@@ -450,20 +426,11 @@ command mutation — both match `constants.TorchTuneEntrypoint` and call into `t
 TRL follows the same pattern with a `trl.go` and a `TRLEntrypoint` constant — extending the
 plugin, not creating a new one.
 
-**Command ownership** generalizes today's TorchTune flow, in precedence order: the runtime
-manifest carries a default `command`; the SDK overrides it with `config.command` +
-`to_args()` (exactly as it sets `TORCH_TUNE_COMMAND` today, `utils.py:151-158`); and the
-plugin may mutate the final command for distributed wiring, as `torchtune.go` injects the
-rendezvous endpoint. Whether TRL needs equivalent mutation for multi-node — or the injected
-torchrun env alone suffices for its accelerate launcher — is settled by the Phase-1 PoC;
-`trl.go` is the extension point either way.
-
-All three artifacts are Trainer-repository work, coordinated with the in-flight GRPO effort
-([#3508](https://github.com/kubeflow/trainer/issues/3508),
-[#3718](https://github.com/kubeflow/trainer/pull/3718)), for which this KEP provides the SDK
-surface. Note that #3718 currently drives TRL's `GRPOTrainer` through a custom entrypoint
-script rather than the `trl` CLI; converging on one runtime shape is part of that
-consolidation.
+**Command precedence** follows today's TorchTune flow: the manifest carries a default
+`command`, the SDK overrides it with `config.command` + `to_args()` (as it sets
+`TORCH_TUNE_COMMAND` today), and the plugin may mutate it for distributed wiring. Whether TRL
+needs such mutation for multi-node, or the injected torchrun env suffices for `accelerate`,
+is settled by the Phase-1 PoC — `trl.go` is the extension point either way.
 
 ### Why TRL First
 
@@ -480,11 +447,8 @@ TRL is selected on three grounds:
    volume — see [Framework Analysis](#framework-analysis).
 
 Choosing TRL first forecloses nothing: every alternative reaches the SDK out of tree as a
-`FrameworkConfig` subclass (LlamaFactory is the reference out-of-tree plugin). And it aligns
-with in-flight work — GRPO via TRL is already underway in the Trainer
-([#3508](https://github.com/kubeflow/trainer/issues/3508),
-[#3718](https://github.com/kubeflow/trainer/pull/3718)); this KEP provides its SDK surface
-rather than a parallel track.
+`FrameworkConfig` subclass (LlamaFactory is the reference out-of-tree plugin), and it aligns
+with the Trainer's own in-flight GRPO/TRL work rather than forking it.
 
 **Risk — TRL's surface is not frozen.** PPO moved to `trl.experimental` in 0.29
 ([huggingface/trl#4466](https://github.com/huggingface/trl/issues/4466)), and a typed
@@ -506,13 +470,9 @@ each needs from the control plane.
 | litgpt | `litgpt finetune --flags` | Fabric/torchrun | torch `mlPolicy` | Yes |
 | Axolotl | `axolotl train <config.yaml>` | accelerate | torch `mlPolicy`; config **file** must be staged (ConfigMap/volume) | With staging support — file-first CLI |
 | Unsloth | no independent CLI | n/a (runs inside TRL) | none of its own | No — acceleration layer, modeled as a `trl`-labelled runtime image |
-| TorchForge | early-stage | torchrun | needs investigation | To be analyzed |
 
-Takeaways: the majority of the landscape is flag-based CLIs that fit the config model
-directly; file-first CLIs fit once config staging exists (the same class of staging the
-backend already does for TorchTune datasets); the one tool that does not fit is not a
-framework. Frameworks whose needs exceed "command + args" would require control-plane
-extension points — see Open Questions.
+Most of the landscape is flag CLIs that fit directly; file-first CLIs (Axolotl) fit once
+config staging exists; the one tool that does not fit (Unsloth) is not a framework.
 
 ## Migration and Backward Compatibility
 
@@ -555,13 +515,11 @@ extension points — see Open Questions.
 ## Open Questions
 
 1. **Does dynamic registration extend to the control plane?** The registry here is
-   SDK-side; the cluster must already hold a labelled runtime and the torch plugin
-   dispatches on hardcoded per-framework entrypoint constants. Whether the control plane
-   should gain generic extension points — platform engineers registering framework plugins
-   the way data scientists register configs — is deferred to Phase 2 and grounded in the
-   framework analysis above.
-2. **TorchTune removal timeline.** `TorchTuneConfig`'s lifetime follows the Trainer's
-   removal of TorchTune runtimes; the SDK should not outlive the runtimes it targets.
+   SDK-side; the torch plugin still dispatches on hardcoded per-framework entrypoint
+   constants. Whether the control plane should gain matching extension points is deferred to
+   Phase 2.
+2. **TorchTune removal timeline.** `TorchTuneConfig`'s lifetime tracks the Trainer's removal
+   of TorchTune runtimes.
 
 ## Alternatives Considered
 
