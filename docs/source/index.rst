@@ -168,6 +168,8 @@ Getting Involved
    :caption: Spark
 
    spark/index
+   spark/connecting
+   spark/sessions
    spark/api
 
 .. toctree::

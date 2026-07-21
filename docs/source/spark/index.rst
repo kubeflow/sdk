@@ -127,72 +127,30 @@ Common Patterns
    result = df.groupBy().count()
    result.show()
 
-Connecting to Existing Spark Connect Servers
---------------------------------------------
+Guides
+------
 
-You can connect to an existing Spark Connect server instead of creating a new Spark session.
+.. grid:: 2
+   :gutter: 3
 
-.. code-block:: python
+   .. grid-item-card:: Connecting to Existing Spark Connect Servers
+      :link: connecting
+      :link-type: doc
 
-   from kubeflow.spark import SparkClient
+      Connect to an existing Spark Connect server instead of creating a new
+      session.
 
-   client = SparkClient()
+   .. grid-item-card:: Session Management
+      :link: sessions
+      :link-type: doc
 
-   spark = client.connect(
-       base_url="sc://localhost:15002"
-   )
+      Inspect and manage Spark Connect sessions.
 
-   spark.range(10).show()
+   .. grid-item-card:: API Reference
+      :link: api
+      :link-type: doc
 
-This pattern is useful when Spark Connect is already running and managed independently of your application.
-
-Session Management
-------------------
-
-Use the Spark SDK to inspect and manage Spark Connect sessions in the configured Kubernetes namespace (defaults to ``default``).
-
-**List active sessions:**
-
-.. code-block:: python
-
-   from kubeflow.spark import SparkClient
-
-   client = SparkClient()
-
-   sessions = client.list_sessions()
-
-   for session in sessions:
-       print(session.name)
-       print(session.state.value)
-
-**Get session information:**
-
-.. code-block:: python
-
-   session = client.get_session(
-       "spark-connect-example"
-   )
-
-   print(f"Name: {session.name}")
-   print(f"State: {session.state.value}")
-   print(f"Namespace: {session.namespace}")
-
-**View session logs:**
-
-.. code-block:: python
-
-   for line in client.get_session_logs(
-       "spark-connect-example"
-   ):
-       print(line)
-
-**Delete a session:**
-
-.. code-block:: python
-
-   client.delete_session(
-       "spark-connect-example"
-   )
+      Reference documentation for the Spark client and related APIs.
 
 When Things Go Wrong
 --------------------
