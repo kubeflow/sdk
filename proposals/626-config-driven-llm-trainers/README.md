@@ -24,6 +24,7 @@ broader specialized-trainers effort; this KEP is limited to config-driven LLM/RL
   - [User-Facing API](#user-facing-api)
   - [Backend Changes](#backend-changes)
   - [Control Plane](#control-plane)
+  - [Why TRL First](#why-trl-first)
   - [Framework Analysis](#framework-analysis)
 - [Migration and Backward Compatibility](#migration-and-backward-compatibility)
 - [Implementation Phases](#implementation-phases)
@@ -463,6 +464,33 @@ All three artifacts are Trainer-repository work, coordinated with the in-flight 
 surface. Note that #3718 currently drives TRL's `GRPOTrainer` through a custom entrypoint
 script rather than the `trl` CLI; converging on one runtime shape is part of that
 consolidation.
+
+### Why TRL First
+
+TRL is selected on three grounds:
+
+1. **Coverage.** Its stable CLI exposes exactly the methods the SDK cannot express today —
+   `sft`, `dpo`, `grpo` (plus `kto`, `reward`) — as subcommands. TorchTune, the only
+   framework supported today, offers SFT only in the Kubeflow integration.
+2. **Substrate, not wrapper.** LlamaFactory and Axolotl are both built on the Hugging Face
+   `Trainer` and PEFT — Axolotl's GRPO *is* TRL's `GRPOTrainer`. An in-tree TRL trainer adds
+   capability, where an in-tree wrapper would add a second surface over the same engine.
+3. **No adapter.** TRL's CLI takes flags, so it renders into `TrainJob` `command` and `args`
+   directly. A file-first CLI (`axolotl train <config.yaml>`) would need a ConfigMap or
+   volume — see [Framework Analysis](#framework-analysis).
+
+Choosing TRL first forecloses nothing: every alternative reaches the SDK out of tree as a
+`FrameworkConfig` subclass (LlamaFactory is the reference out-of-tree plugin). And it aligns
+with in-flight work — GRPO via TRL is already underway in the Trainer
+([#3508](https://github.com/kubeflow/trainer/issues/3508),
+[#3718](https://github.com/kubeflow/trainer/pull/3718)); this KEP provides its SDK surface
+rather than a parallel track.
+
+**Risk — TRL's surface is not frozen.** PPO moved to `trl.experimental` in 0.29
+([huggingface/trl#4466](https://github.com/huggingface/trl/issues/4466)), and a typed
+dataclass mirroring TRL flags will drift. `TRLConfig` targets the CLI, not the Python API, so
+a TRL upgrade changes the runtime image rather than the SDK type; drift is confined to the one
+config class, and `extra_args` absorbs flags added between releases.
 
 ### Framework Analysis
 
