@@ -18,13 +18,16 @@ import multiprocessing
 from unittest.mock import Mock, patch
 
 from kubeflow_spark_api import models
+from kubernetes import client
 from kubernetes.client import ApiException
 import pytest
 
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
-from kubeflow.spark.backends.kubernetes.utils import validate_spark_connect_url
+from kubeflow.spark.backends.kubernetes.utils import (
+    validate_spark_connect_url,
+)
 from kubeflow.spark.test.common import (
     DEFAULT_NAMESPACE,
     FAILED,
@@ -37,7 +40,13 @@ from kubeflow.spark.test.common import (
     TestCase,
 )
 from kubeflow.spark.types.options import Labels, Name
-from kubeflow.spark.types.types import SparkConnectInfo, SparkConnectState
+from kubeflow.spark.types.types import (
+    FileJob,
+    FuncJob,
+    SparkConnectInfo,
+    SparkConnectState,
+    SparkJobStatus,
+)
 
 # --------------------------
 # Fixtures
@@ -69,22 +78,62 @@ def kubernetes_backend():
 
 
 # --------------------------
-# Mock Handlers
+# Mock Helpers
 # --------------------------
 
 
-def create_mock_thread(response=None):
-    """Create mock thread that returns response on .get()."""
-    mock_thread = Mock()
-    mock_thread.get.return_value = response
-    return mock_thread
+def get_spark_application(
+    name: str,
+    namespace: str = DEFAULT_NAMESPACE,
+    state: str | None = "SUBMITTED",
+) -> models.SparkV1beta2SparkApplication:
+    """Create a mock SparkApplication model for testing."""
+    return models.SparkV1beta2SparkApplication(
+        api_version=f"{constants.SPARK_APPLICATION_GROUP}/{constants.SPARK_APPLICATION_VERSION}",
+        kind=constants.SPARK_APPLICATION_KIND,
+        metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+            name=name,
+            namespace=namespace,
+        ),
+        spec=models.SparkV1beta2SparkApplicationSpec(
+            type="Python",
+            mode="cluster",
+            spark_version="4.0.1",
+            image="spark:latest",
+            main_application_file="s3://job.py",
+            driver=models.SparkV1beta2DriverSpec(
+                cores=1,
+                memory="1g",
+            ),
+            executor=models.SparkV1beta2ExecutorSpec(
+                cores=1,
+                memory="1g",
+                instances=1,
+            ),
+        ),
+        status=(
+            models.SparkV1beta2SparkApplicationStatus(
+                application_state=models.SparkV1beta2ApplicationState(
+                    state=state,
+                ),
+                driver_info=models.SparkV1beta2DriverInfo(
+                    pod_name=f"{name}-driver",
+                ),
+            )
+            if state is not None
+            else None
+        ),
+    )
 
 
-def create_error_thread(exc: Exception):
-    """Create mock thread whose .get() raises the given exception."""
-    mock_thread = Mock()
-    mock_thread.get.side_effect = exc
-    return mock_thread
+def get_spark_application_list(
+    items: list[models.SparkV1beta2SparkApplication],
+) -> models.SparkV1beta2SparkApplicationList:
+    """Create a SparkApplicationList for testing."""
+
+    return models.SparkV1beta2SparkApplicationList(
+        items=items,
+    )
 
 
 def get_spark_connect(
@@ -123,6 +172,25 @@ def get_spark_connect(
     )
 
 
+def create_mock_thread(response=None):
+    """Create mock thread that returns response on .get()."""
+    mock_thread = Mock()
+    mock_thread.get.return_value = response
+    return mock_thread
+
+
+def create_error_thread(exc: Exception):
+    """Create mock thread whose .get() raises the given exception."""
+    mock_thread = Mock()
+    mock_thread.get.side_effect = exc
+    return mock_thread
+
+
+# --------------------------
+# Mock Handlers
+# --------------------------
+
+
 def mock_get_response(name: str) -> dict:
     """Return mock CR response based on session name."""
     if name == SPARK_CONNECT_READY:
@@ -138,11 +206,25 @@ def mock_get_response(name: str) -> dict:
         return get_spark_connect(name=name, state="Provisioning").to_dict()
     elif name == SPARK_CONNECT_FAILED:
         return get_spark_connect(name=name, state="Failed").to_dict()
+    elif name.startswith("spark-job-"):
+        return get_spark_application(name=name).to_dict()
     raise ApiException(status=404, reason="Not Found")
 
 
 def mock_list_response(*args, **kwargs) -> dict:
     """Return mock list response."""
+    plural = kwargs.get("plural")
+
+    if plural == constants.SPARK_APPLICATION_PLURAL:
+        return get_spark_application_list(
+            [
+                get_spark_application("job-submitted", state="SUBMITTED"),
+                get_spark_application("job-running", state="RUNNING"),
+                get_spark_application("job-completed", state="COMPLETED"),
+                get_spark_application("job-failed", state="FAILED"),
+            ]
+        ).to_dict()
+
     spark_connect_list = models.SparkV1alpha1SparkConnectList(
         api_version=f"{constants.SPARK_CONNECT_GROUP}/{constants.SPARK_CONNECT_VERSION}",
         kind="SparkConnectList",
@@ -163,6 +245,24 @@ def mock_create_response(*args, **kwargs) -> dict:
     return spark_connect.to_dict()
 
 
+def mock_create_spark_application_response(*args, **kwargs) -> dict:
+    """Return mock SparkApplication create response."""
+    body = kwargs.get("body", {})
+
+    spark_application = models.SparkV1beta2SparkApplication.from_dict(body)
+
+    spark_application.status = models.SparkV1beta2SparkApplicationStatus(
+        application_state=models.SparkV1beta2ApplicationState(
+            state="SUBMITTED",
+        ),
+        driver_info=models.SparkV1beta2DriverInfo(
+            pod_name=f"{spark_application.metadata.name}-driver"
+        ),
+    )
+
+    return spark_application.to_dict()
+
+
 def mock_delete_response(name: str) -> None:
     """Mock delete - raise 404 for unknown sessions."""
     if name.startswith("unknown"):
@@ -177,7 +277,10 @@ def _mock_create(*args, **kw):
         return create_error_thread(multiprocessing.TimeoutError())
     elif namespace == RUNTIME:
         return create_error_thread(RuntimeError())
-    return create_mock_thread(response=mock_create_response(**kw))
+    body = kw.get("body", {})
+    if body.get("kind") == constants.SPARK_APPLICATION_KIND:
+        return create_mock_thread(response=mock_create_spark_application_response(*args, **kw))
+    return create_mock_thread(response=mock_create_response(*args, **kw))
 
 
 def _mock_get(*args, **kw):
@@ -222,7 +325,7 @@ def _mock_list(*args, **kw):
         return create_error_thread(multiprocessing.TimeoutError())
     elif namespace == RUNTIME:
         return create_error_thread(RuntimeError())
-    return create_mock_thread(response=mock_list_response())
+    return create_mock_thread(response=mock_list_response(*args, **kw))
 
 
 def _mock_read_logs(*args, **kw):
@@ -486,14 +589,44 @@ def test_get_session_logs(kubernetes_backend, test_case):
         pod_name = test_case.config.get("pod_name", f"{test_case.config['name']}-0")
         kubernetes_backend.get_session = Mock(return_value=Mock(driver_pod_name=pod_name))
 
-        logs = list(kubernetes_backend.get_session_logs(test_case.config["name"], follow=False))
+        with patch(
+            "kubeflow.spark.backends.kubernetes.backend.read_pod_logs",
+        ) as mock_read_pod_logs:
+            if test_case.expected_status == SUCCESS:
+                mock_read_pod_logs.return_value = iter(
+                    [
+                        "log line 1",
+                        "log line 2",
+                    ]
+                )
 
-        if test_case.expected_status == SUCCESS:
-            assert len(logs) == 2
-            assert logs[0] == "log line 1"
-        else:
-            # Should not reach here for failed test cases
-            raise AssertionError(f"Expected {test_case.expected_error.__name__} but test succeeded")
+                logs = list(
+                    kubernetes_backend.get_session_logs(
+                        test_case.config["name"],
+                        follow=False,
+                    )
+                )
+
+                assert len(logs) == 2
+                assert logs[0] == "log line 1"
+
+                mock_read_pod_logs.assert_called_once_with(
+                    core_api=kubernetes_backend.core_api,
+                    namespace=DEFAULT_NAMESPACE,
+                    pod_name=pod_name,
+                    follow=False,
+                )
+
+            else:
+                mock_read_pod_logs.side_effect = test_case.expected_error()
+
+                with pytest.raises(test_case.expected_error):
+                    list(
+                        kubernetes_backend.get_session_logs(
+                            test_case.config["name"],
+                            follow=False,
+                        )
+                    )
 
     except Exception as e:
         if test_case.expected_status == FAILED:
@@ -736,4 +869,805 @@ def test_extract_name_option(kubernetes_backend, test_case):
 
     except Exception as e:
         assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid remote file job",
+            expected_status=SUCCESS,
+            config={
+                "job": FileJob(
+                    file_source="s3://bucket/job.py",
+                    args=["--date", "2026-06-30"],
+                ),
+            },
+        ),
+        TestCase(
+            name="valid local file job",
+            expected_status=SUCCESS,
+            config={
+                "job": FileJob(
+                    file_source="local:///opt/spark/job.py",
+                ),
+            },
+        ),
+        TestCase(
+            name="empty file source",
+            expected_status=FAILED,
+            config={
+                "job": FileJob(file_source=""),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="arguments not list",
+            expected_status=FAILED,
+            config={
+                "job": FileJob(
+                    file_source="s3://bucket/job.py",
+                    args="invalid",
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="arguments contain non string",
+            expected_status=FAILED,
+            config={
+                "job": FileJob(
+                    file_source="s3://bucket/job.py",
+                    args=["ok", 1],
+                ),
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_validate_file_job(kubernetes_backend, test_case):
+    """Test KubernetesBackend._validate_file_job()."""
+    print("Executing test:", test_case.name)
+
+    try:
+        kubernetes_backend._validate_file_job(
+            test_case.config["job"],
+        )
+
+        assert test_case.expected_status == SUCCESS
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid file job",
+            expected_status=SUCCESS,
+            config={
+                "job": FileJob(
+                    file_source="s3://bucket/job.py",
+                ),
+            },
+        ),
+        TestCase(
+            name="function job not implemented",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=lambda: None,
+                ),
+            },
+            expected_error=NotImplementedError,
+        ),
+        TestCase(
+            name="invalid job type",
+            expected_status=FAILED,
+            config={
+                "job": "invalid-job",
+            },
+            expected_error=TypeError,
+        ),
+    ],
+)
+def test_validate_job(kubernetes_backend, test_case):
+    """Test KubernetesBackend._validate_job()."""
+    print("Executing test:", test_case.name)
+
+    try:
+        kubernetes_backend._validate_job(
+            test_case.config["job"],
+        )
+
+        assert test_case.expected_status == SUCCESS
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid remote file submission",
+            expected_status=SUCCESS,
+            config={
+                "job": FileJob(
+                    file_source="s3://bucket/job.py",
+                    args=["--date", "2026-06-30"],
+                ),
+            },
+        ),
+        TestCase(
+            name="timeout creating SparkApplication",
+            expected_status=FAILED,
+            config={
+                "namespace": TIMEOUT,
+                "job": FileJob(
+                    file_source="s3://bucket/job.py",
+                ),
+            },
+            expected_error=TimeoutError,
+        ),
+        TestCase(
+            name="runtime error creating SparkApplication",
+            expected_status=FAILED,
+            config={
+                "namespace": RUNTIME,
+                "job": FileJob(
+                    file_source="s3://bucket/job.py",
+                ),
+            },
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="invalid file job submission",
+            expected_status=FAILED,
+            config={
+                "job": FileJob(file_source=""),
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_submit_job(kubernetes_backend, test_case):
+    """Test KubernetesBackend.submit_job()."""
+    print("Executing test:", test_case.name)
+
+    try:
+        kubernetes_backend.namespace = test_case.config.get(
+            "namespace",
+            DEFAULT_NAMESPACE,
+        )
+
+        job = kubernetes_backend.submit_job(
+            job=test_case.config["job"],
+        )
+
+        assert test_case.expected_status == SUCCESS
+        assert job.name.startswith("spark-job-")
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="submitted job",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-submitted",
+                "state": "SUBMITTED",
+            },
+            expected_output=SparkJobStatus.CREATED,
+        ),
+        TestCase(
+            name="running job",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-running",
+                "state": "RUNNING",
+            },
+            expected_output=SparkJobStatus.RUNNING,
+        ),
+        TestCase(
+            name="succeeding job",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-succeeding",
+                "state": "SUCCEEDING",
+            },
+            expected_output=SparkJobStatus.RUNNING,
+        ),
+        TestCase(
+            name="suspending job",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-suspending",
+                "state": "SUSPENDING",
+            },
+            expected_output=SparkJobStatus.RUNNING,
+        ),
+        TestCase(
+            name="suspended job",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-suspended",
+                "state": "SUSPENDED",
+            },
+            expected_output=SparkJobStatus.RUNNING,
+        ),
+        TestCase(
+            name="resuming job",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-resuming",
+                "state": "RESUMING",
+            },
+            expected_output=SparkJobStatus.RUNNING,
+        ),
+        TestCase(
+            name="completed job",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-completed",
+                "state": "COMPLETED",
+            },
+            expected_output=SparkJobStatus.COMPLETED,
+        ),
+        TestCase(
+            name="failed job",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-failed",
+                "state": "FAILED",
+            },
+            expected_output=SparkJobStatus.FAILED,
+        ),
+        TestCase(
+            name="submission failed job",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-submission-failed",
+                "state": "SUBMISSION_FAILED",
+            },
+            expected_output=SparkJobStatus.FAILED,
+        ),
+        TestCase(
+            name="failing job",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-failing",
+                "state": "FAILING",
+            },
+            expected_output=SparkJobStatus.FAILED,
+        ),
+        TestCase(
+            name="pending rerun job",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-pending-rerun",
+                "state": "PENDING_RERUN",
+            },
+            expected_output=SparkJobStatus.FAILED,
+        ),
+        TestCase(
+            name="invalidating job",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-invalidating",
+                "state": "INVALIDATING",
+            },
+            expected_output=SparkJobStatus.FAILED,
+        ),
+        TestCase(
+            name="unknown state job",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-unknown",
+                "state": "UNKNOWN",
+            },
+            expected_output=SparkJobStatus.FAILED,
+        ),
+        TestCase(
+            name="job not found",
+            expected_status=FAILED,
+            config={
+                "job_name": "unknown-job",
+                "api_status": 404,
+            },
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="api error getting job",
+            expected_status=FAILED,
+            config={
+                "job_name": "spark-job-api-error",
+                "api_status": 500,
+            },
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="runtime error getting job",
+            expected_status=FAILED,
+            config={
+                "namespace": RUNTIME,
+                "job_name": "spark-job-runtime",
+            },
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="new job without status",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-new",
+                "no_status": True,
+            },
+            expected_output=SparkJobStatus.CREATED,
+        ),
+    ],
+)
+def test_get_job(kubernetes_backend, test_case):
+    """Test get_job."""
+    print("Executing test:", test_case.name)
+
+    try:
+        kubernetes_backend.namespace = test_case.config.get(
+            "namespace",
+            DEFAULT_NAMESPACE,
+        )
+
+        if test_case.expected_status == SUCCESS:
+            with patch(
+                "kubeflow.spark.backends.kubernetes.backend.models.SparkV1beta2SparkApplication.from_dict"
+            ) as mock_from_dict:
+                if test_case.config.get("no_status"):
+                    mock_from_dict.return_value = get_spark_application(
+                        name=test_case.config["job_name"],
+                        state=None,
+                    )
+                else:
+                    mock_from_dict.return_value = get_spark_application(
+                        name=test_case.config["job_name"],
+                        state=test_case.config["state"],
+                    )
+
+                job = kubernetes_backend.get_job(
+                    test_case.config["job_name"],
+                )
+
+                assert job.name == test_case.config["job_name"]
+                assert job.status == test_case.expected_output
+
+        else:
+            api_status = test_case.config.get("api_status")
+
+            if api_status is not None:
+                with patch.object(
+                    kubernetes_backend.custom_api,
+                    "get_namespaced_custom_object",
+                    side_effect=client.ApiException(status=api_status),
+                ):
+                    with pytest.raises(RuntimeError) as exc_info:
+                        kubernetes_backend.get_job(
+                            test_case.config["job_name"],
+                        )
+
+                    if api_status == 404:
+                        assert "Spark job not found" in str(exc_info.value)
+                    else:
+                        assert "Failed to get Spark job" in str(exc_info.value)
+
+            else:
+                kubernetes_backend.get_job(
+                    test_case.config["job_name"],
+                )
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="list all jobs",
+            expected_status=SUCCESS,
+            config={},
+            expected_output=4,
+        ),
+        TestCase(
+            name="filter created jobs",
+            expected_status=SUCCESS,
+            config={
+                "status": {SparkJobStatus.CREATED},
+            },
+            expected_output=1,
+        ),
+        TestCase(
+            name="filter running jobs",
+            expected_status=SUCCESS,
+            config={
+                "status": {SparkJobStatus.RUNNING},
+            },
+            expected_output=1,
+        ),
+        TestCase(
+            name="filter completed jobs",
+            expected_status=SUCCESS,
+            config={
+                "status": {SparkJobStatus.COMPLETED},
+            },
+            expected_output=1,
+        ),
+        TestCase(
+            name="filter failed jobs",
+            expected_status=SUCCESS,
+            config={
+                "status": {SparkJobStatus.FAILED},
+            },
+            expected_output=1,
+        ),
+        TestCase(
+            name="timeout listing jobs",
+            expected_status=FAILED,
+            config={
+                "namespace": TIMEOUT,
+            },
+            expected_error=TimeoutError,
+        ),
+        TestCase(
+            name="runtime error listing jobs",
+            expected_status=FAILED,
+            config={
+                "namespace": RUNTIME,
+            },
+            expected_error=RuntimeError,
+        ),
+    ],
+)
+def test_list_jobs(kubernetes_backend, test_case):
+    """Test list_jobs."""
+    print("Executing test:", test_case.name)
+
+    try:
+        kubernetes_backend.namespace = test_case.config.get(
+            "namespace",
+            DEFAULT_NAMESPACE,
+        )
+
+        jobs = kubernetes_backend.list_jobs(
+            status=test_case.config.get("status"),
+        )
+
+        if test_case.expected_status == SUCCESS:
+            assert len(jobs) == test_case.expected_output
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid delete job",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-delete",
+            },
+        ),
+        TestCase(
+            name="job not found",
+            expected_status=FAILED,
+            config={
+                "job_name": "unknown-job",
+            },
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="timeout deleting job",
+            expected_status=FAILED,
+            config={
+                "namespace": TIMEOUT,
+                "job_name": "spark-job-timeout",
+            },
+            expected_error=TimeoutError,
+        ),
+        TestCase(
+            name="runtime error deleting job",
+            expected_status=FAILED,
+            config={
+                "namespace": RUNTIME,
+                "job_name": "spark-job-runtime",
+            },
+            expected_error=RuntimeError,
+        ),
+    ],
+)
+def test_delete_job(kubernetes_backend, test_case):
+    """Test delete_job."""
+    print("Executing test:", test_case.name)
+
+    try:
+        kubernetes_backend.namespace = test_case.config.get(
+            "namespace",
+            DEFAULT_NAMESPACE,
+        )
+
+        kubernetes_backend.delete_job(
+            test_case.config["job_name"],
+        )
+
+        assert test_case.expected_status == SUCCESS
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="job reaches target state",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-completed",
+                "job_status": SparkJobStatus.COMPLETED,
+                "target_status": {SparkJobStatus.COMPLETED},
+            },
+        ),
+        TestCase(
+            name="job reaches default completed state",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-completed",
+                "job_status": SparkJobStatus.COMPLETED,
+                "target_status": None,
+            },
+        ),
+        TestCase(
+            name="job fails before reaching target state",
+            expected_status=FAILED,
+            config={
+                "job_name": "spark-job-failed",
+                "job_status": SparkJobStatus.FAILED,
+                "target_status": {SparkJobStatus.COMPLETED},
+            },
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="job wait timeout",
+            expected_status=FAILED,
+            config={
+                "job_name": "spark-job-running",
+                "job_status": SparkJobStatus.RUNNING,
+                "target_status": {SparkJobStatus.COMPLETED},
+            },
+            expected_error=TimeoutError,
+        ),
+        TestCase(
+            name="job reaches failed target state",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-failed",
+                "job_status": SparkJobStatus.FAILED,
+                "target_status": {SparkJobStatus.FAILED},
+            },
+        ),
+        TestCase(
+            name="runtime error while polling",
+            expected_status=FAILED,
+            config={
+                "raise_error": RuntimeError(),
+            },
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="timeout error while polling",
+            expected_status=FAILED,
+            config={
+                "raise_error": TimeoutError(),
+            },
+            expected_error=TimeoutError,
+        ),
+    ],
+)
+def test_wait_for_job_status(kubernetes_backend, test_case):
+    """Test wait_for_job_status."""
+    print("Executing test:", test_case.name)
+
+    if "raise_error" in test_case.config:
+        with patch.object(
+            kubernetes_backend,
+            "get_job",
+            side_effect=test_case.config["raise_error"],
+        ):
+            if test_case.expected_status == SUCCESS:
+                kubernetes_backend.wait_for_job_status(
+                    name="test-job",
+                    status={SparkJobStatus.COMPLETED},
+                    timeout=1,
+                )
+            else:
+                with pytest.raises(test_case.expected_error):
+                    kubernetes_backend.wait_for_job_status(
+                        name="test-job",
+                        status={SparkJobStatus.COMPLETED},
+                        timeout=1,
+                    )
+
+    else:
+        mock_job = Mock()
+        mock_job.name = test_case.config["job_name"]
+        mock_job.status = test_case.config["job_status"]
+
+        with patch.object(
+            kubernetes_backend,
+            "get_job",
+            return_value=mock_job,
+        ):
+            kwargs = {
+                "name": test_case.config["job_name"],
+                "timeout": 1,
+                "polling_interval": 1,
+            }
+
+            if test_case.config["target_status"] is not None:
+                kwargs["status"] = test_case.config["target_status"]
+
+            if test_case.expected_status == SUCCESS:
+                job = kubernetes_backend.wait_for_job_status(**kwargs)
+                assert job.status == test_case.config["job_status"]
+            else:
+                with pytest.raises(test_case.expected_error):
+                    kubernetes_backend.wait_for_job_status(**kwargs)
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="get logs",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+            },
+            expected_output=[
+                "log line 1",
+                "log line 2",
+            ],
+        ),
+        TestCase(
+            name="follow logs",
+            expected_status=SUCCESS,
+            config={
+                "follow": True,
+            },
+            expected_output=[
+                "log line 1",
+                "log line 2",
+            ],
+        ),
+        TestCase(
+            name="driver pod missing",
+            expected_status=FAILED,
+            config={
+                "driver_pod_name": None,
+            },
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="timeout reading logs",
+            expected_status=FAILED,
+            config={
+                "read_logs_error": TimeoutError(),
+            },
+            expected_error=TimeoutError,
+        ),
+        TestCase(
+            name="runtime error reading logs",
+            expected_status=FAILED,
+            config={
+                "read_logs_error": RuntimeError(),
+            },
+            expected_error=RuntimeError,
+        ),
+    ],
+)
+def test_get_job_logs(kubernetes_backend, test_case):
+    """Test get_job_logs."""
+    print("Executing test:", test_case.name)
+
+    try:
+        mock_job = Mock()
+
+        if "driver_pod_name" in test_case.config:
+            mock_job.driver_pod_name = test_case.config["driver_pod_name"]
+        else:
+            mock_job.driver_pod_name = "spark-job-driver"
+
+        with (
+            patch.object(
+                kubernetes_backend,
+                "get_job",
+                return_value=mock_job,
+            ),
+            patch(
+                "kubeflow.spark.backends.kubernetes.backend.read_pod_logs",
+            ) as mock_read_pod_logs,
+        ):
+            if test_case.expected_status == SUCCESS:
+                mock_read_pod_logs.return_value = iter(
+                    [
+                        "log line 1",
+                        "log line 2",
+                    ]
+                )
+
+                logs = list(
+                    kubernetes_backend.get_job_logs(
+                        "spark-job",
+                        follow=test_case.config.get("follow", False),
+                    )
+                )
+
+                assert logs == test_case.expected_output
+
+                mock_read_pod_logs.assert_called_once_with(
+                    core_api=kubernetes_backend.core_api,
+                    namespace=kubernetes_backend.namespace,
+                    pod_name="spark-job-driver",
+                    follow=test_case.config.get("follow", False),
+                )
+
+            elif "driver_pod_name" in test_case.config:
+                with pytest.raises(test_case.expected_error):
+                    list(
+                        kubernetes_backend.get_job_logs(
+                            "spark-job",
+                            follow=test_case.config.get("follow", False),
+                        )
+                    )
+
+                mock_read_pod_logs.assert_not_called()
+
+            else:
+                mock_read_pod_logs.side_effect = test_case.config["read_logs_error"]
+
+                with pytest.raises(test_case.expected_error):
+                    list(
+                        kubernetes_backend.get_job_logs(
+                            "spark-job",
+                            follow=test_case.config.get("follow", False),
+                        )
+                    )
+
+                mock_read_pod_logs.assert_called_once()
+
+    except Exception as e:
+        if test_case.expected_status == FAILED:
+            assert type(e) is test_case.expected_error
+        else:
+            raise
+
     print("test execution complete")

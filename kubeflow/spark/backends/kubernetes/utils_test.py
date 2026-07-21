@@ -14,19 +14,38 @@
 
 """Unit tests for Kubernetes Spark backend utilities."""
 
+from datetime import datetime
+import multiprocessing
+from unittest.mock import Mock, patch
+
 from kubeflow_spark_api import models
 import pytest
 
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.utils import (
     _memory_kubernetes_to_spark,
+    _resolve_driver_resources,
+    _resolve_executor_resources,
+    _validate_cpu_value,
     build_service_url,
+    build_spark_application_cr,
     build_spark_connect_cr,
+    generate_job_name,
     generate_session_name,
+    get_spark_application_info_from_cr,
     get_spark_connect_info_from_cr,
+    get_spark_job_driver_spec,
+    get_spark_job_executor_spec,
+    read_pod_logs,
     validate_spark_connect_url,
 )
-from kubeflow.spark.types.types import Driver, Executor, SparkConnectInfo, SparkConnectState
+from kubeflow.spark.types.types import (
+    Driver,
+    Executor,
+    SparkConnectInfo,
+    SparkConnectState,
+    SparkJobStatus,
+)
 
 
 class TestMemoryKubernetesToSpark:
@@ -42,6 +61,7 @@ class TestMemoryKubernetesToSpark:
             ("4g", "4g"),
             ("512m", "512m"),
             ("2G", "2g"),
+            ("1.5Gi", "1536m"),
         ],
     )
     def test_conversion(self, k8s_memory: str, expected_spark: str) -> None:
@@ -405,3 +425,496 @@ class TestGetSparkConnectInfoFromCr:
         )
         with pytest.raises(ValueError, match="SparkConnect CR is invalid"):
             get_spark_connect_info_from_cr(spark_connect_cr)
+
+
+class TestGenerateJobName:
+    """Tests for generate_job_name function."""
+
+    def test_generates_unique_name(self):
+        name = generate_job_name()
+
+        assert name.startswith("spark-job-")
+        assert len(name) > len("spark-job-")
+
+    def test_generates_different_names(self):
+        names = {generate_job_name() for _ in range(10)}
+
+        assert len(names) == 10
+
+
+class TestValidateCpuValue:
+    """Tests for _validate_cpu_value."""
+
+    @pytest.mark.parametrize(
+        "cpu,expected",
+        [
+            ("1", 1),
+            ("4", 4),
+            ("1.5", 2),
+            ("500m", 1),
+            ("1500m", 2),
+            ("2500m", 3),
+            (" 1500m ", 2),
+            (2, 2),
+            (16, 16),
+        ],
+    )
+    def test_valid_cpu_values(self, cpu, expected):
+        """Valid CPU values are converted to Spark cores."""
+        assert _validate_cpu_value(cpu) == expected
+
+    @pytest.mark.parametrize(
+        "cpu",
+        [
+            None,
+            "",
+            " ",
+            "abc",
+            "50O0m",
+            "0",
+            "-1",
+            "-500m",
+            "1.5m",
+            "nan",
+            "inf",
+            0,
+            -1,
+            2048,
+        ],
+    )
+    def test_invalid_cpu_values(self, cpu):
+        """Invalid CPU values raise ValueError."""
+        with pytest.raises(ValueError):
+            _validate_cpu_value(cpu)
+
+
+class TestResolveDriverResources:
+    """Tests for _resolve_driver_resources."""
+
+    def test_defaults(self):
+        """Default driver resources are returned when no Driver is provided."""
+
+        cores, memory = _resolve_driver_resources()
+
+        assert cores == constants.DEFAULT_DRIVER_CPU
+        assert memory == _memory_kubernetes_to_spark(
+            constants.DEFAULT_DRIVER_MEMORY,
+        )
+
+    def test_driver_resources(self):
+        """Driver resources override defaults."""
+
+        driver = Driver(
+            resources={
+                "cpu": "2",
+                "memory": "4Gi",
+            },
+        )
+
+        cores, memory = _resolve_driver_resources(driver)
+
+        assert cores == 2
+        assert memory == "4g"
+
+    def test_driver_fractional_memory(self):
+        """Fractional Kubernetes memory is converted to MiB."""
+
+        driver = Driver(
+            resources={
+                "cpu": "2",
+                "memory": "1.5Gi",
+            },
+        )
+
+        cores, memory = _resolve_driver_resources(driver)
+
+        assert cores == 2
+        assert memory == "1536m"
+
+
+class TestResolveExecutorResources:
+    """Tests for _resolve_executor_resources."""
+
+    def test_defaults(self):
+        """Default executor resources are returned."""
+
+        instances, cores, memory = _resolve_executor_resources()
+
+        assert instances == constants.DEFAULT_NUM_EXECUTORS
+        assert cores == constants.DEFAULT_EXECUTOR_CPU
+        assert memory == _memory_kubernetes_to_spark(
+            constants.DEFAULT_EXECUTOR_MEMORY,
+        )
+
+    def test_simple_parameters(self):
+        """Simple executor parameters override defaults."""
+
+        instances, cores, memory = _resolve_executor_resources(
+            num_executors=3,
+            resources_per_executor={
+                "cpu": "2",
+                "memory": "4Gi",
+            },
+        )
+
+        assert instances == 3
+        assert cores == 2
+        assert memory == "4g"
+
+    def test_executor_precedence(self):
+        """Executor configuration takes precedence over simple parameters."""
+
+        executor = Executor(
+            num_instances=5,
+            resources_per_executor={
+                "cpu": "8",
+                "memory": "16Gi",
+            },
+        )
+
+        instances, cores, memory = _resolve_executor_resources(
+            executor=executor,
+            num_executors=2,
+            resources_per_executor={
+                "cpu": "4",
+                "memory": "8Gi",
+            },
+        )
+
+        assert instances == 5
+        assert cores == 8
+        assert memory == "16g"
+
+    def test_executor_fractional_memory(self):
+        """Fractional executor memory is converted to MiB."""
+
+        instances, cores, memory = _resolve_executor_resources(
+            resources_per_executor={
+                "cpu": "2",
+                "memory": "1.5Gi",
+            },
+        )
+
+        assert instances == constants.DEFAULT_NUM_EXECUTORS
+        assert cores == 2
+        assert memory == "1536m"
+
+
+class TestReadPodLogs:
+    """Tests for read_pod_logs."""
+
+    def test_read_logs(self):
+        """Read pod logs without following."""
+
+        core_api = Mock()
+
+        thread = Mock()
+        thread.get.return_value = "log line 1\nlog line 2"
+
+        core_api.read_namespaced_pod_log.return_value = thread
+
+        logs = list(
+            read_pod_logs(
+                core_api=core_api,
+                namespace="default",
+                pod_name="driver-pod",
+            )
+        )
+
+        assert logs == [
+            "log line 1",
+            "log line 2",
+        ]
+
+        core_api.read_namespaced_pod_log.assert_called_once_with(
+            name="driver-pod",
+            namespace="default",
+            async_req=True,
+        )
+
+    def test_follow_logs(self):
+        """Stream pod logs."""
+
+        core_api = Mock()
+
+        stream = Mock()
+        stream.stream.return_value = iter(
+            [
+                b"log line 1\n",
+                b"log line 2\n",
+            ]
+        )
+
+        thread = Mock()
+        thread.get.return_value = stream
+
+        core_api.read_namespaced_pod_log.return_value = thread
+
+        logs = list(
+            read_pod_logs(
+                core_api=core_api,
+                namespace="default",
+                pod_name="driver-pod",
+                follow=True,
+            )
+        )
+
+        assert logs == [
+            "log line 1",
+            "log line 2",
+        ]
+
+        core_api.read_namespaced_pod_log.assert_called_once_with(
+            name="driver-pod",
+            namespace="default",
+            follow=True,
+            _preload_content=False,
+            async_req=True,
+        )
+
+    def test_timeout(self):
+        """Timeout while reading pod logs."""
+
+        core_api = Mock()
+
+        thread = Mock()
+        thread.get.side_effect = multiprocessing.TimeoutError()
+
+        core_api.read_namespaced_pod_log.return_value = thread
+
+        with pytest.raises(TimeoutError):
+            list(
+                read_pod_logs(
+                    core_api=core_api,
+                    namespace="default",
+                    pod_name="driver-pod",
+                )
+            )
+
+    def test_runtime_error(self):
+        """Runtime error while reading pod logs."""
+
+        core_api = Mock()
+
+        thread = Mock()
+        thread.get.side_effect = RuntimeError()
+
+        core_api.read_namespaced_pod_log.return_value = thread
+
+        with pytest.raises(RuntimeError):
+            list(
+                read_pod_logs(
+                    core_api=core_api,
+                    namespace="default",
+                    pod_name="driver-pod",
+                )
+            )
+
+
+class TestGetSparkJobDriverSpec:
+    """Tests for get_spark_job_driver_spec."""
+
+    def test_defaults(self):
+        """Default SparkApplication driver spec."""
+        spec = get_spark_job_driver_spec()
+
+        assert spec.cores == constants.DEFAULT_DRIVER_CPU
+        assert spec.memory == _memory_kubernetes_to_spark(constants.DEFAULT_DRIVER_MEMORY)
+        assert spec.service_account == constants.DEFAULT_SERVICE_ACCOUNT
+
+
+class TestGetSparkJobExecutorSpec:
+    """Tests for get_spark_job_executor_spec."""
+
+    def test_defaults(self):
+        """Default SparkApplication executor spec."""
+        spec = get_spark_job_executor_spec()
+
+        assert spec.cores == constants.DEFAULT_EXECUTOR_CPU
+        assert spec.memory == _memory_kubernetes_to_spark(constants.DEFAULT_EXECUTOR_MEMORY)
+        assert spec.instances == constants.DEFAULT_NUM_EXECUTORS
+
+
+class TestBuildSparkApplicationCr:
+    """Tests for build_spark_application_cr."""
+
+    def test_remote_uri_job(self):
+        app = build_spark_application_cr(
+            name="test-job",
+            namespace="default",
+            main_file="s3://bucket/job.py",
+            arguments=["--date", "2026-06-30"],
+            num_executors=3,
+            resources_per_executor={
+                "cpu": "2",
+                "memory": "4Gi",
+            },
+        )
+
+        assert app.metadata.name == "test-job"
+        assert app.metadata.namespace == "default"
+
+        assert app.spec.main_application_file == "s3://bucket/job.py"
+        assert app.spec.arguments == ["--date", "2026-06-30"]
+
+        assert app.spec.driver.cores == 1
+        assert app.spec.driver.memory == _memory_kubernetes_to_spark(
+            constants.DEFAULT_DRIVER_MEMORY
+        )
+        assert app.spec.driver.service_account == constants.DEFAULT_SERVICE_ACCOUNT
+
+        assert app.spec.executor.instances == 3
+        assert app.spec.executor.cores == 2
+        assert app.spec.executor.memory == _memory_kubernetes_to_spark("4Gi")
+
+
+class TestGetSparkApplicationInfoFromCr:
+    """Tests for get_spark_application_info_from_cr."""
+
+    @pytest.fixture
+    def minimal_spec(self):
+        """Create minimal SparkApplication spec."""
+        return models.SparkV1beta2SparkApplicationSpec(
+            spark_version=constants.DEFAULT_SPARK_VERSION,
+            type="Python",
+            mode="cluster",
+            image=constants.DEFAULT_SPARK_IMAGE,
+            main_application_file="s3://bucket/job.py",
+            driver=models.SparkV1beta2DriverSpec(
+                cores=1,
+                memory="1g",
+            ),
+            executor=models.SparkV1beta2ExecutorSpec(
+                cores=2,
+                memory="2g",
+                instances=5,
+            ),
+        )
+
+    @pytest.mark.parametrize(
+        "spark_state,expected_status",
+        [
+            ("SUBMITTED", SparkJobStatus.CREATED),
+            ("RUNNING", SparkJobStatus.RUNNING),
+            ("SUCCEEDING", SparkJobStatus.RUNNING),
+            ("SUSPENDING", SparkJobStatus.RUNNING),
+            ("SUSPENDED", SparkJobStatus.RUNNING),
+            ("RESUMING", SparkJobStatus.RUNNING),
+            ("COMPLETED", SparkJobStatus.COMPLETED),
+            ("FAILED", SparkJobStatus.FAILED),
+            ("SUBMISSION_FAILED", SparkJobStatus.FAILED),
+            ("FAILING", SparkJobStatus.FAILED),
+            ("PENDING_RERUN", SparkJobStatus.FAILED),
+            ("INVALIDATING", SparkJobStatus.FAILED),
+        ],
+    )
+    def test_status_mapping(
+        self,
+        minimal_spec,
+        spark_state,
+        expected_status,
+    ):
+        creation_timestamp = datetime.now()
+
+        spark_app = models.SparkV1beta2SparkApplication(
+            metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                name="test-job",
+                namespace="default",
+                creation_timestamp=creation_timestamp,
+            ),
+            spec=minimal_spec,
+            status=models.SparkV1beta2SparkApplicationStatus(
+                application_state=models.SparkV1beta2ApplicationState(
+                    state=spark_state,
+                ),
+                driver_info=models.SparkV1beta2DriverInfo(
+                    pod_name="test-driver",
+                ),
+            ),
+        )
+
+        job = get_spark_application_info_from_cr(
+            spark_app,
+        )
+
+        assert job.name == "test-job"
+        assert job.namespace == "default"
+        assert job.status == expected_status
+        assert job.driver_pod_name == "test-driver"
+        assert job.creation_timestamp == creation_timestamp
+        assert job.num_executors == 5
+
+    def test_without_status(self, minimal_spec):
+        creation_timestamp = datetime.now()
+
+        spark_app = models.SparkV1beta2SparkApplication(
+            metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                name="new-job",
+                namespace="default",
+                creation_timestamp=creation_timestamp,
+            ),
+            spec=minimal_spec,
+        )
+
+        job = get_spark_application_info_from_cr(
+            spark_app,
+        )
+
+        assert job.name == "new-job"
+        assert job.namespace == "default"
+        assert job.status == SparkJobStatus.CREATED
+        assert job.driver_pod_name is None
+        assert job.creation_timestamp == creation_timestamp
+        assert job.num_executors == 5
+
+    def test_uses_from_operator_state(self, minimal_spec):
+        """Verify SparkApplication status is mapped to SparkJobStatus."""
+
+        creation_timestamp = datetime.now()
+
+        spark_app = models.SparkV1beta2SparkApplication(
+            metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                name="test-job",
+                namespace="default",
+                creation_timestamp=creation_timestamp,
+            ),
+            spec=minimal_spec,
+            status=models.SparkV1beta2SparkApplicationStatus(
+                application_state=models.SparkV1beta2ApplicationState(
+                    state="RUNNING",
+                ),
+                driver_info=models.SparkV1beta2DriverInfo(
+                    pod_name="test-driver",
+                ),
+            ),
+        )
+
+        with patch.object(
+            SparkJobStatus,
+            "from_operator_state",
+            return_value=SparkJobStatus.RUNNING,
+        ) as mock_from_operator_state:
+            job = get_spark_application_info_from_cr(spark_app)
+
+        mock_from_operator_state.assert_called_once_with("RUNNING")
+
+        assert job.name == "test-job"
+        assert job.namespace == "default"
+        assert job.status == SparkJobStatus.RUNNING
+        assert job.driver_pod_name == "test-driver"
+        assert job.creation_timestamp == creation_timestamp
+        assert job.num_executors == 5
+
+    def test_invalid_metadata(self, minimal_spec):
+        """Test invalid SparkApplication CR raises ValueError."""
+
+        spark_app = models.SparkV1beta2SparkApplication.model_construct(
+            metadata=None,
+            spec=minimal_spec,
+        )
+
+        with pytest.raises(
+            ValueError,
+            match="SparkApplication CR is invalid",
+        ):
+            get_spark_application_info_from_cr(spark_app)
