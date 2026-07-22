@@ -339,6 +339,21 @@ def _mock_read_logs(*args, **kw):
 
 
 # --------------------------
+# Test Helpers
+# --------------------------
+
+
+def sample_func() -> None:
+    """Sample function used for FuncJob tests."""
+    pass
+
+
+async def async_func() -> None:
+    """Sample async function used for FuncJob tests."""
+    pass
+
+
+# --------------------------
 # Tests
 # --------------------------
 
@@ -951,7 +966,7 @@ def test_validate_file_job(kubernetes_backend, test_case):
             expected_status=SUCCESS,
             config={
                 "job": FuncJob(
-                    func=lambda: None,
+                    func=sample_func,
                 ),
             },
         ),
@@ -966,12 +981,43 @@ def test_validate_file_job(kubernetes_backend, test_case):
             expected_error=ValueError,
         ),
         TestCase(
-            name="func_args not dict",
+            name="lambda function",
             expected_status=FAILED,
             config={
                 "job": FuncJob(
                     func=lambda: None,
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="async function",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=async_func,
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="func_args not dict",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=sample_func,
                     func_args="invalid",
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="func_args keys not strings",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=sample_func,
+                    func_args={1: "value"},
                 ),
             },
             expected_error=ValueError,
@@ -993,7 +1039,7 @@ def test_validate_func_job(kubernetes_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
 
-    print("test execution complete")
+    print("Test execution complete.")
 
 
 @pytest.mark.parametrize(
@@ -1013,7 +1059,7 @@ def test_validate_func_job(kubernetes_backend, test_case):
             expected_status=SUCCESS,
             config={
                 "job": FuncJob(
-                    func=lambda: None,
+                    func=sample_func,
                 ),
             },
         ),
@@ -1092,7 +1138,7 @@ def test_validate_job(kubernetes_backend, test_case):
             expected_status=SUCCESS,
             config={
                 "job": FuncJob(
-                    func=lambda: None,
+                    func=sample_func,
                 ),
             },
         ),
@@ -1125,7 +1171,7 @@ def test_submit_func_job_uses_generated_script(kubernetes_backend):
     """Test submit_job builds a function-based SparkApplication."""
 
     job = FuncJob(
-        func=lambda: None,
+        func=sample_func,
     )
 
     with (

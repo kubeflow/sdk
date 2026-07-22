@@ -24,6 +24,7 @@ def estimate_pi(samples: int) -> None:
     """Simple function executed as a Spark FuncJob."""
     print(f"Estimating Pi with {samples} samples.")
 
+
 JOB_NAME: str | None = None
 
 

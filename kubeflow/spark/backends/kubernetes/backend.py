@@ -16,6 +16,7 @@
 
 from collections.abc import Iterator
 import contextlib
+import inspect
 import logging
 import multiprocessing
 import os
@@ -823,8 +824,19 @@ class KubernetesBackend(RuntimeBackend):
                 If the function or function arguments are invalid.
         """
 
-        if not callable(job.func):
-            raise ValueError("`job.func` must be callable.")
+        if not inspect.isfunction(job.func):
+            raise ValueError("`job.func` must be a Python function.")
+
+        if inspect.iscoroutinefunction(job.func):
+            raise ValueError("Async functions are not supported.")
+
+        if job.func.__name__ == "<lambda>":
+            raise ValueError("Lambda functions are not supported.")
+
+        try:
+            inspect.getsource(job.func)
+        except (OSError, TypeError) as e:
+            raise ValueError("`job.func` source code could not be retrieved.") from e
 
         if job.func_args is not None:
             if not isinstance(job.func_args, dict):

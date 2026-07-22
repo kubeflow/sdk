@@ -757,26 +757,26 @@ class TestGetFuncJobInitContainer:
     def test_build_init_container(self):
         """Test function job initContainer."""
 
-    script = "print('hello')"
+        script = "print('hello')"
 
-    container = get_func_job_init_container(script)
+        container = get_func_job_init_container(script)
 
-    assert container.name == constants.FUNC_JOB_INIT_CONTAINER_NAME
-    assert container.image == constants.DEFAULT_SPARK_IMAGE
+        assert container.name == constants.FUNC_JOB_INIT_CONTAINER_NAME
+        assert container.image == constants.DEFAULT_SPARK_IMAGE
 
-    assert container.command[0] == "bash"
-    assert container.command[1] == "-c"
+        assert container.command[0] == "bash"
+        assert container.command[1] == "-c"
 
-    command = container.command[2]
+        command = container.command[2]
 
-    assert script in command
-    assert "printf" in command
-    assert constants.FUNC_JOB_SCRIPT_NAME in command
-    assert constants.FUNC_JOB_SCRIPT_DIR in command
+        assert script in command
+        assert "printf" in command
+        assert constants.FUNC_JOB_SCRIPT_NAME in command
+        assert constants.FUNC_JOB_SCRIPT_DIR in command
 
-    assert container.volume_mounts is not None
-    assert len(container.volume_mounts) == 1
-    assert container.volume_mounts[0].mount_path == constants.FUNC_JOB_SCRIPT_DIR
+        assert container.volume_mounts is not None
+        assert len(container.volume_mounts) == 1
+        assert container.volume_mounts[0].mount_path == constants.FUNC_JOB_SCRIPT_DIR
 
 
 class TestBuildFuncJobScript:
