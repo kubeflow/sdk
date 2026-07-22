@@ -91,6 +91,9 @@ Supported Projects
    * - :doc:`Pipelines <pipelines/index>`
      - ✅ Available
      - Build, run, and track AI workflows
+   * - :doc:`MCP Server <mcp-server/index>`
+     - ✅ Available
+     - AI-agent access to Kubeflow Training via Model Context Protocol
    * - Feast
      - 🚧 Planned
      - Feature store for machine learning
@@ -185,6 +188,13 @@ Getting Involved
 
    hub/index
    hub/api
+
+.. toctree::
+   :maxdepth: 2
+   :hidden:
+   :caption: MCP Server
+
+   mcp-server/index
 
 .. toctree::
    :maxdepth: 2
