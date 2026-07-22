@@ -685,6 +685,11 @@ def build_func_job_script(
     invocation. This script is written by the SparkApplication initContainer
     and executed by the Spark driver.
 
+    The provided function must be self-contained because only its source code
+    is extracted. Any required imports should be placed inside the function
+    body. Module-level imports, globals, closures, and decorated functions
+    are not supported.
+
     Args:
         func:
             Python function to execute.
@@ -697,7 +702,8 @@ def build_func_job_script(
 
     Raises:
         ValueError:
-            If ``func`` is not callable.
+            If ``func`` is not callable or is not supported for
+            function-based submission.
     """
     if not callable(func):
         raise ValueError(f"Expected a callable function, got {type(func)}.")

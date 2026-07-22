@@ -14,6 +14,8 @@
 
 """Unit tests for KubernetesBackend."""
 
+from datetime import datetime
+from functools import wraps
 import multiprocessing
 from unittest.mock import Mock, patch
 
@@ -350,6 +352,20 @@ def sample_func() -> None:
 
 async def async_func() -> None:
     """Sample async function used for FuncJob tests."""
+    pass
+
+
+def _decorator(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+@_decorator
+def decorated_func() -> None:
+    """Sample decorated function for testing."""
     pass
 
 
@@ -959,6 +975,31 @@ def test_validate_file_job(kubernetes_backend, test_case):
 
 
 @pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("hello", True),
+        (123, True),
+        (3.14, True),
+        (True, True),
+        (None, True),
+        ([1, "a", False, None], True),
+        ((1, 2, "a"), True),
+        ({"a": 1, "b": [1, 2, None]}, True),
+        ({1: "value"}, False),
+        (object(), False),
+    ],
+)
+def test_is_supported_func_arg(
+    kubernetes_backend,
+    value,
+    expected,
+):
+    """Test KubernetesBackend._is_supported_func_arg()."""
+
+    assert kubernetes_backend._is_supported_func_arg(value) is expected
+
+
+@pytest.mark.parametrize(
     "test_case",
     [
         TestCase(
@@ -996,6 +1037,29 @@ def test_validate_file_job(kubernetes_backend, test_case):
             config={
                 "job": FuncJob(
                     func=async_func,
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="decorated function",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=decorated_func,
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="func_args unsupported value",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=sample_func,
+                    func_args={
+                        "date": datetime.now(),
+                    },
                 ),
             },
             expected_error=ValueError,

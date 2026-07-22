@@ -223,6 +223,10 @@ class FileJob:
 class FuncJob:
     """Function-based Spark application.
 
+    The provided function must be self-contained. Any required imports
+    should be placed inside the function body. Module-level globals,
+    closures, and decorated functions are not supported.
+
     Args:
         func: Python function executed as a Spark batch job.
         func_args: Optional keyword arguments passed to the function.

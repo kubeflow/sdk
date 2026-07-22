@@ -22,7 +22,12 @@ from kubeflow.spark import FuncJob, SparkClient, SparkJobStatus
 
 def estimate_pi(samples: int) -> None:
     """Simple function executed as a Spark FuncJob."""
-    print(f"Estimating Pi with {samples} samples.")
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.appName("estimate-pi").getOrCreate()
+    count = spark.range(samples).count()
+    print(f"Estimated Pi over {count} samples.")
+    spark.stop()
 
 
 JOB_NAME: str | None = None
@@ -237,7 +242,7 @@ def example_delete_job():
 
 def main():
     """Run all batch job lifecycle examples."""
-    print("E2E: Starting batch_job_lifecycle.py", flush=True)
+    print("E2E: Starting batch_func_job_lifecycle.py", flush=True)
     print()
     print("=" * 70)
     print("KUBEFLOW SPARKCLIENT - FUNCJOB LIFECYCLE")

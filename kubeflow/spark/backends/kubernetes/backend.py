@@ -26,6 +26,7 @@ import subprocess
 import sys
 import threading
 import time
+from typing import Any
 
 from kubeflow_spark_api import models
 from kubernetes import client, config
@@ -810,6 +811,28 @@ class KubernetesBackend(RuntimeBackend):
             if not all(isinstance(arg, str) for arg in job.args):
                 raise ValueError("All `job.args` must be strings.")
 
+    def _is_supported_func_arg(
+        self,
+        value: Any,
+    ) -> bool:
+        """Return whether a FuncJob argument value is supported."""
+
+        if value is None:
+            return True
+
+        if isinstance(value, (str, int, float, bool)):
+            return True
+
+        if isinstance(value, (list, tuple)):
+            return all(self._is_supported_func_arg(v) for v in value)
+
+        if isinstance(value, dict):
+            return all(
+                isinstance(k, str) and self._is_supported_func_arg(v) for k, v in value.items()
+            )
+
+        return False
+
     def _validate_func_job(
         self,
         job: FuncJob,
@@ -833,10 +856,22 @@ class KubernetesBackend(RuntimeBackend):
         if job.func.__name__ == "<lambda>":
             raise ValueError("Lambda functions are not supported.")
 
+        if getattr(job.func, "__wrapped__", None) is not None:
+            raise ValueError("Decorated functions are not supported.")
+
         try:
             inspect.getsource(job.func)
-        except (OSError, TypeError) as e:
-            raise ValueError("`job.func` source code could not be retrieved.") from e
+        except TypeError as e:
+            raise ValueError(
+                "`job.func` must be a pure-Python function; built-in or "
+                "C-implemented callables are not supported."
+            ) from e
+        except OSError as e:
+            raise ValueError(
+                "`job.func` source could not be read. Functions defined "
+                "interactively (REPL/Jupyter) or generated dynamically are "
+                "not supported; define it in a Python module."
+            ) from e
 
         if job.func_args is not None:
             if not isinstance(job.func_args, dict):
@@ -844,6 +879,11 @@ class KubernetesBackend(RuntimeBackend):
 
             if not all(isinstance(key, str) for key in job.func_args):
                 raise ValueError("All `job.func_args` keys must be strings.")
+
+            if not all(self._is_supported_func_arg(value) for value in job.func_args.values()):
+                raise ValueError(
+                    "`job.func_args` values must contain only JSON-like primitive types."
+                )
 
     def submit_job(
         self,

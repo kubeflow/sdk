@@ -14,6 +14,7 @@
 
 """Unit tests for Kubernetes Spark backend utilities."""
 
+import ast
 from datetime import datetime
 import multiprocessing
 from unittest.mock import Mock, patch
@@ -799,6 +800,8 @@ class TestBuildFuncJobScript:
             None,
         )
 
+        ast.parse(script)
+
         assert "def sample_function" in script
         assert 'print("hello")' in script
         assert "sample_function()" in script
@@ -812,6 +815,8 @@ class TestBuildFuncJobScript:
                 "age": 20,
             },
         )
+
+        ast.parse(script)
 
         assert "def sample_function_with_args" in script
         assert "sample_function_with_args(**" in script
