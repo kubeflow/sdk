@@ -35,6 +35,7 @@ from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.backends.base import RuntimeBackend
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.utils import (
+    build_func_job_script,
     build_service_url,
     build_spark_application_cr,
     build_spark_connect_cr,
@@ -772,8 +773,6 @@ class KubernetesBackend(RuntimeBackend):
             job: Spark job definition to validate.
 
         Raises:
-            NotImplementedError: If a function-based job is provided, as function-based jobs are
-                not supported in Phase 1.
             TypeError: If job is not an instance of FileJob or FuncJob.
         """
 
@@ -782,7 +781,8 @@ class KubernetesBackend(RuntimeBackend):
             return
 
         if isinstance(job, FuncJob):
-            raise NotImplementedError("Function-based jobs are not supported in Phase 1.")
+            self._validate_func_job(job)
+            return
 
         raise TypeError("job must be an instance of FileJob or FuncJob.")
 
@@ -809,6 +809,30 @@ class KubernetesBackend(RuntimeBackend):
             if not all(isinstance(arg, str) for arg in job.args):
                 raise ValueError("All `job.args` must be strings.")
 
+    def _validate_func_job(
+        self,
+        job: FuncJob,
+    ) -> None:
+        """Validate a function-based Spark job.
+
+        Args:
+            job: Function-based Spark job definition.
+
+        Raises:
+            ValueError:
+                If the function or function arguments are invalid.
+        """
+
+        if not callable(job.func):
+            raise ValueError("`job.func` must be callable.")
+
+        if job.func_args is not None:
+            if not isinstance(job.func_args, dict):
+                raise ValueError("`job.func_args` must be a dictionary.")
+
+            if not all(isinstance(key, str) for key in job.func_args):
+                raise ValueError("All `job.func_args` keys must be strings.")
+
     def submit_job(
         self,
         job: FileJob | FuncJob,
@@ -819,7 +843,7 @@ class KubernetesBackend(RuntimeBackend):
 
         Args:
             job:
-                File-based Spark workload definition.
+                File-based or function-based Spark workload definition.
 
             num_executors:
                 Number of executor instances.
@@ -849,14 +873,30 @@ class KubernetesBackend(RuntimeBackend):
             job_name,
         )
 
-        spark_application = build_spark_application_cr(
-            name=job_name,
-            namespace=self.namespace,
-            main_file=job.file_source,
-            arguments=job.args,
-            num_executors=num_executors,
-            resources_per_executor=resources_per_executor,
-        )
+        if isinstance(job, FileJob):
+            spark_application = build_spark_application_cr(
+                name=job_name,
+                namespace=self.namespace,
+                main_file=job.file_source,
+                arguments=job.args,
+                num_executors=num_executors,
+                resources_per_executor=resources_per_executor,
+            )
+
+        else:
+            script = build_func_job_script(
+                func=job.func,
+                func_args=job.func_args,
+            )
+
+            spark_application = build_spark_application_cr(
+                name=job_name,
+                namespace=self.namespace,
+                main_file=constants.FUNC_JOB_MAIN_FILE,
+                num_executors=num_executors,
+                resources_per_executor=resources_per_executor,
+                func_script=script,
+            )
 
         try:
             thread = self.custom_api.create_namespaced_custom_object(

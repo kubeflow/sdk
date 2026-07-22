@@ -187,8 +187,6 @@ class SparkClient:
         or remote file source.
         - **FuncJob**: Submit a Python function as a Spark batch job.
 
-        Function-based jobs will be supported in Phase 2.
-
         Args:
             job:
                 Job definition describing the workload to execute.

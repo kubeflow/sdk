@@ -17,9 +17,12 @@
 import os
 
 from kubeflow.common.types import KubernetesBackendConfig
-from kubeflow.spark import FileJob, SparkClient, SparkJobStatus
+from kubeflow.spark import FuncJob, SparkClient, SparkJobStatus
 
-REMOTE_JOB = "https://raw.githubusercontent.com/kubeflow/sdk/main/examples/spark/spark_job.py"
+
+def estimate_pi(samples: int) -> None:
+    """Simple function executed as a Spark FuncJob."""
+    print(f"Estimating Pi with {samples} samples.")
 
 JOB_NAME: str | None = None
 
@@ -49,9 +52,11 @@ def example_submit_and_wait():
     print("\nSubmitting Spark job...")
 
     JOB_NAME = client.submit_job(
-        job=FileJob(
-            file_source=REMOTE_JOB,
-            args=["10"],
+        job=FuncJob(
+            func=estimate_pi,
+            func_args={
+                "samples": 10,
+            },
         ),
         num_executors=1,
         resources_per_executor={
@@ -234,7 +239,7 @@ def main():
     print("E2E: Starting batch_job_lifecycle.py", flush=True)
     print()
     print("=" * 70)
-    print("KUBEFLOW SPARKCLIENT - BATCH JOB LIFECYCLE")
+    print("KUBEFLOW SPARKCLIENT - FUNCJOB LIFECYCLE")
     print("=" * 70)
 
     try:
@@ -245,7 +250,7 @@ def main():
         example_delete_job()
 
         print("=" * 70)
-        print("BATCH JOB LIFECYCLE COMPLETE!")
+        print("FUNCJOB LIFECYCLE COMPLETE!")
         print("=" * 70)
 
     except Exception as e:

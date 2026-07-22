@@ -14,12 +14,14 @@
 
 """Utility functions for Kubernetes Spark backend."""
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+import inspect
 import logging
 import math
 import multiprocessing
 import os
 import re
+import textwrap
 from typing import Any
 from urllib.parse import urlparse
 import uuid
@@ -614,6 +616,104 @@ def get_spark_job_executor_spec(
     )
 
 
+def get_func_job_volume() -> models.IoK8sApiCoreV1Volume:
+    """Build shared volume for function-based Spark jobs.
+
+    Returns:
+        Kubernetes emptyDir volume shared between the initContainer and
+        Spark driver.
+    """
+    return models.IoK8sApiCoreV1Volume(
+        name=constants.FUNC_JOB_VOLUME_NAME,
+        empty_dir=models.IoK8sApiCoreV1EmptyDirVolumeSource(),
+    )
+
+
+def get_func_job_volume_mount() -> models.IoK8sApiCoreV1VolumeMount:
+    """Build volume mount for function-based Spark jobs.
+
+    Returns:
+        Kubernetes volume mount for the generated Spark application.
+    """
+    return models.IoK8sApiCoreV1VolumeMount(
+        name=constants.FUNC_JOB_VOLUME_NAME,
+        mount_path=constants.FUNC_JOB_SCRIPT_DIR,
+    )
+
+
+def get_func_job_init_container(
+    script: str,
+) -> models.IoK8sApiCoreV1Container:
+    """Build initContainer for a function-based Spark job.
+
+    The initContainer reconstructs the generated Spark application and writes
+    it into the shared volume before the Spark driver starts.
+
+    Args:
+        script:
+            Generated Python application.
+
+    Returns:
+        Kubernetes initContainer specification.
+    """
+    init_script = constants.FUNC_JOB_SCRIPT_TEMPLATE.format(
+        func_code=script,
+        func_file=(f"{constants.FUNC_JOB_SCRIPT_DIR}/{constants.FUNC_JOB_SCRIPT_NAME}"),
+    )
+
+    return models.IoK8sApiCoreV1Container(
+        name=constants.FUNC_JOB_INIT_CONTAINER_NAME,
+        image=constants.DEFAULT_SPARK_IMAGE,
+        command=[
+            "bash",
+            "-c",
+            init_script,
+        ],
+        volume_mounts=[
+            get_func_job_volume_mount(),
+        ],
+    )
+
+
+def build_func_job_script(
+    func: Callable,
+    func_args: dict[str, Any] | None,
+) -> str:
+    """Generate a standalone Python script for a function-based Spark job.
+
+    The generated script contains the user-defined function followed by its
+    invocation. This script is written by the SparkApplication initContainer
+    and executed by the Spark driver.
+
+    Args:
+        func:
+            Python function to execute.
+
+        func_args:
+            Keyword arguments passed to the function.
+
+    Returns:
+        Complete Python source code for the generated Spark application.
+
+    Raises:
+        ValueError:
+            If ``func`` is not callable.
+    """
+    if not callable(func):
+        raise ValueError(f"Expected a callable function, got {type(func)}.")
+
+    func_source = textwrap.dedent(
+        inspect.getsource(func),
+    )
+
+    if func_args is None:
+        invocation = f"    {func.__name__}()"
+    else:
+        invocation = f"    {func.__name__}(**{repr(func_args)})"
+
+    return f'{func_source}\n\nif __name__ == "__main__":\n{invocation}\n'
+
+
 def build_spark_application_cr(
     name: str,
     namespace: str,
@@ -621,6 +721,7 @@ def build_spark_application_cr(
     arguments: list[str] | None = None,
     num_executors: int | None = None,
     resources_per_executor: dict[str, str] | None = None,
+    func_script: str | None = None,
 ) -> models.SparkV1beta2SparkApplication:
     """Build a SparkApplication custom resource.
 
@@ -631,6 +732,7 @@ def build_spark_application_cr(
         arguments: Command-line arguments.
         num_executors: Number of executor instances.
         resources_per_executor: Resource requirements for each executor.
+        func_script: Generated Python application for function-based Spark jobs.
 
     Returns:
         SparkApplication custom resource model.
@@ -639,7 +741,7 @@ def build_spark_application_cr(
         ValueError:
             If the executor resource configuration is invalid.
     """
-    return models.SparkV1beta2SparkApplication(
+    spark_application = models.SparkV1beta2SparkApplication(
         api_version=f"{constants.SPARK_APPLICATION_GROUP}/{constants.SPARK_APPLICATION_VERSION}",
         kind=constants.SPARK_APPLICATION_KIND,
         metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
@@ -660,6 +762,28 @@ def build_spark_application_cr(
             ),
         ),
     )
+
+    if func_script is not None:
+        volume = get_func_job_volume()
+        volume_mount = get_func_job_volume_mount()
+
+        spark_application.spec.volumes = [
+            volume,
+        ]
+
+        spark_application.spec.driver.init_containers = [
+            get_func_job_init_container(func_script),
+        ]
+
+        spark_application.spec.driver.volume_mounts = [
+            volume_mount,
+        ]
+
+        spark_application.spec.executor.volume_mounts = [
+            volume_mount,
+        ]
+
+    return spark_application
 
 
 def get_spark_application_info_from_cr(

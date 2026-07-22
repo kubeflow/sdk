@@ -27,11 +27,15 @@ from kubeflow.spark.backends.kubernetes.utils import (
     _resolve_driver_resources,
     _resolve_executor_resources,
     _validate_cpu_value,
+    build_func_job_script,
     build_service_url,
     build_spark_application_cr,
     build_spark_connect_cr,
     generate_job_name,
     generate_session_name,
+    get_func_job_init_container,
+    get_func_job_volume,
+    get_func_job_volume_mount,
     get_spark_application_info_from_cr,
     get_spark_connect_info_from_cr,
     get_spark_job_driver_spec,
@@ -721,6 +725,106 @@ class TestGetSparkJobDriverSpec:
         assert spec.cores == constants.DEFAULT_DRIVER_CPU
         assert spec.memory == _memory_kubernetes_to_spark(constants.DEFAULT_DRIVER_MEMORY)
         assert spec.service_account == constants.DEFAULT_SERVICE_ACCOUNT
+
+
+class TestGetFuncJobVolume:
+    """Tests for get_func_job_volume."""
+
+    def test_build_volume(self):
+        """Test function job shared volume."""
+
+        volume = get_func_job_volume()
+
+        assert volume.name == constants.FUNC_JOB_VOLUME_NAME
+        assert volume.empty_dir is not None
+
+
+class TestGetFuncJobVolumeMount:
+    """Tests for get_func_job_volume_mount."""
+
+    def test_build_volume_mount(self):
+        """Test function job volume mount."""
+
+        volume_mount = get_func_job_volume_mount()
+
+        assert volume_mount.name == constants.FUNC_JOB_VOLUME_NAME
+        assert volume_mount.mount_path == constants.FUNC_JOB_SCRIPT_DIR
+
+
+class TestGetFuncJobInitContainer:
+    """Tests for get_func_job_init_container."""
+
+    def test_build_init_container(self):
+        """Test function job initContainer."""
+
+    script = "print('hello')"
+
+    container = get_func_job_init_container(script)
+
+    assert container.name == constants.FUNC_JOB_INIT_CONTAINER_NAME
+    assert container.image == constants.DEFAULT_SPARK_IMAGE
+
+    assert container.command[0] == "bash"
+    assert container.command[1] == "-c"
+
+    command = container.command[2]
+
+    assert script in command
+    assert "printf" in command
+    assert constants.FUNC_JOB_SCRIPT_NAME in command
+    assert constants.FUNC_JOB_SCRIPT_DIR in command
+
+    assert container.volume_mounts is not None
+    assert len(container.volume_mounts) == 1
+    assert container.volume_mounts[0].mount_path == constants.FUNC_JOB_SCRIPT_DIR
+
+
+class TestBuildFuncJobScript:
+    """Tests for build_func_job_script."""
+
+    @staticmethod
+    def sample_function():
+        """Simple function for testing."""
+        print("hello")
+
+    @staticmethod
+    def sample_function_with_args(name: str, age: int):
+        """Function with arguments for testing."""
+        print(name, age)
+
+    def test_build_script_without_args(self):
+        """Test script generation without function arguments."""
+        script = build_func_job_script(
+            self.sample_function,
+            None,
+        )
+
+        assert "def sample_function" in script
+        assert 'print("hello")' in script
+        assert "sample_function()" in script
+
+    def test_build_script_with_args(self):
+        """Test script generation with function arguments."""
+        script = build_func_job_script(
+            self.sample_function_with_args,
+            {
+                "name": "Alice",
+                "age": 20,
+            },
+        )
+
+        assert "def sample_function_with_args" in script
+        assert "sample_function_with_args(**" in script
+        assert "'name': 'Alice'" in script
+        assert "'age': 20" in script
+
+    def test_non_callable(self):
+        """Test non-callable input raises ValueError."""
+        with pytest.raises(ValueError, match="Expected a callable function"):
+            build_func_job_script(
+                "not_a_function",
+                None,
+            )
 
 
 class TestGetSparkJobExecutorSpec:

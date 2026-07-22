@@ -947,6 +947,59 @@ def test_validate_file_job(kubernetes_backend, test_case):
     "test_case",
     [
         TestCase(
+            name="valid function job",
+            expected_status=SUCCESS,
+            config={
+                "job": FuncJob(
+                    func=lambda: None,
+                ),
+            },
+        ),
+        TestCase(
+            name="non callable function",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func="not-callable",
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="func_args not dict",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=lambda: None,
+                    func_args="invalid",
+                ),
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_validate_func_job(kubernetes_backend, test_case):
+    """Test KubernetesBackend._validate_func_job()."""
+
+    print("Executing test:", test_case.name)
+
+    try:
+        kubernetes_backend._validate_func_job(
+            test_case.config["job"],
+        )
+
+        assert test_case.expected_status == SUCCESS
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
             name="valid file job",
             expected_status=SUCCESS,
             config={
@@ -956,14 +1009,13 @@ def test_validate_file_job(kubernetes_backend, test_case):
             },
         ),
         TestCase(
-            name="function job not implemented",
-            expected_status=FAILED,
+            name="valid function job",
+            expected_status=SUCCESS,
             config={
                 "job": FuncJob(
                     func=lambda: None,
                 ),
             },
-            expected_error=NotImplementedError,
         ),
         TestCase(
             name="invalid job type",
@@ -1035,6 +1087,15 @@ def test_validate_job(kubernetes_backend, test_case):
             },
             expected_error=ValueError,
         ),
+        TestCase(
+            name="valid function job submission",
+            expected_status=SUCCESS,
+            config={
+                "job": FuncJob(
+                    func=lambda: None,
+                ),
+            },
+        ),
     ],
 )
 def test_submit_job(kubernetes_backend, test_case):
@@ -1058,6 +1119,35 @@ def test_submit_job(kubernetes_backend, test_case):
         assert type(e) is test_case.expected_error
 
     print("test execution complete")
+
+
+def test_submit_func_job_uses_generated_script(kubernetes_backend):
+    """Test submit_job builds a function-based SparkApplication."""
+
+    job = FuncJob(
+        func=lambda: None,
+    )
+
+    with (
+        patch(
+            "kubeflow.spark.backends.kubernetes.backend.build_func_job_script",
+            return_value="print('hello')",
+        ) as mock_script,
+        patch(
+            "kubeflow.spark.backends.kubernetes.backend.build_spark_application_cr",
+        ) as mock_build,
+    ):
+        mock_build.return_value = get_spark_application(
+            "spark-job-test",
+        )
+
+        kubernetes_backend.submit_job(job)
+
+        mock_script.assert_called_once()
+
+        assert mock_build.call_args.kwargs["main_file"] == constants.FUNC_JOB_MAIN_FILE
+
+        assert mock_build.call_args.kwargs["func_script"] == "print('hello')"
 
 
 @pytest.mark.parametrize(
