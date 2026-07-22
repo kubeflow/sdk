@@ -222,7 +222,12 @@ def get_mock_pod_list_with_restarts() -> models.IoK8sApiCoreV1PodList:
     old_timestamp = datetime.datetime(2025, 6, 1, 10, 0, 0)
     new_timestamp = datetime.datetime(2025, 6, 1, 11, 0, 0)
     old_pods = get_mock_pod_list().items
-    node_1_pod = copy.deepcopy(old_pods[-1])
+    node_0_pod = next(
+        pod
+        for pod in old_pods
+        if pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL] == constants.NODE
+    )
+    node_1_pod = copy.deepcopy(node_0_pod)
     node_1_pod.metadata.name = "node-1-pod"
     node_1_pod.metadata.labels[constants.JOB_INDEX_LABEL] = "1"
     old_pods.append(node_1_pod)
@@ -232,6 +237,14 @@ def get_mock_pod_list_with_restarts() -> models.IoK8sApiCoreV1PodList:
         old_pod.metadata.creation_timestamp = old_timestamp
         old_pod.metadata.labels[constants.JOBSET_NAME_LABEL] = JOB_WITH_POD_RESTARTS
 
+    dataset_initializer_pod = next(
+        pod
+        for pod in old_pods
+        if pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL] == constants.DATASET_INITIALIZER
+    )
+    dataset_initializer_pod.metadata.creation_timestamp = None
+
+    for old_pod in old_pods:
         restarted_pod = copy.deepcopy(old_pod)
         restarted_pod.metadata.name = f"{old_pod.metadata.name}-restarted"
         restarted_pod.metadata.creation_timestamp = new_timestamp
@@ -806,7 +819,8 @@ def get_train_job_with_restarted_pods_data_type(
         step.pod_name = f"{step.pod_name}-restarted"
         step.status = constants.POD_PENDING
 
-    node_1_step = copy.deepcopy(train_job.steps[-1])
+    node_0_step = next(step for step in train_job.steps if step.name == "node-0")
+    node_1_step = copy.deepcopy(node_0_step)
     node_1_step.name = "node-1"
     node_1_step.pod_name = "node-1-pod-restarted"
     train_job.steps.append(node_1_step)
