@@ -698,14 +698,32 @@ class KubernetesBackend(RuntimeBackend):
             if not pod_list:
                 return trainjob
 
-            for pod in pod_list.items:
+            sorted_pods = sorted(
+                pod_list.items,
+                key=lambda pod: (
+                    pod.metadata is not None and pod.metadata.creation_timestamp is not None,
+                    pod.metadata.creation_timestamp if pod.metadata else None,
+                ),
+                reverse=True,
+            )
+            seen_step_keys: set[str] = set()
+            for pod in sorted_pods:
                 # Pod must have labels to detect the TrainJob step.
                 # Every Pod always has a single TrainJob step.
                 if not (pod.metadata and pod.metadata.name and pod.metadata.labels and pod.spec):
                     raise Exception(f"TrainJob Pod is invalid: {pod}")
 
+                role = pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL]
+                step_key = role
+                if role in {constants.LAUNCHER, constants.NODE}:
+                    step_key = f"{role}-{pod.metadata.labels[constants.JOB_INDEX_LABEL]}"
+
+                if step_key in seen_step_keys:
+                    continue
+                seen_step_keys.add(step_key)
+
                 # Get the Initializer step.
-                if pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL] in {
+                if role in {
                     constants.DATASET_INITIALIZER,
                     constants.MODEL_INITIALIZER,
                 }:
@@ -717,7 +735,7 @@ class KubernetesBackend(RuntimeBackend):
                         )
                     )
                 # Get the Node step.
-                elif pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL] in {
+                elif role in {
                     constants.LAUNCHER,
                     constants.NODE,
                 }:
@@ -727,7 +745,7 @@ class KubernetesBackend(RuntimeBackend):
                             pod.spec,
                             pod.status,
                             trainjob.runtime,
-                            pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL],
+                            role,
                             int(pod.metadata.labels[constants.JOB_INDEX_LABEL]),
                         )
                     )
