@@ -335,6 +335,7 @@ class ContainerBackend(RuntimeBackend):
 
             # Build base environment
             env = container_utils.build_environment(trainer)
+            env.update(self.cfg.env)
 
             # Construct pre-run command to install packages
             pre_install_cmd = container_utils.build_pip_install_cmd(trainer)
@@ -428,6 +429,7 @@ class ContainerBackend(RuntimeBackend):
                         "mode": "rw",
                     }
                 }
+                volumes.update(self.cfg.volumes)
 
                 logger.debug(f"Creating container {rank}/{num_nodes}: {container_name}")
 
@@ -600,6 +602,7 @@ class ContainerBackend(RuntimeBackend):
                 "mode": "rw",
             }
         }
+        volumes.update(self.cfg.volumes)
 
         logger.debug(f"Starting {container_init.name} container: {container_name}")
 

@@ -233,6 +233,61 @@ def container_backend():
 
 
 @pytest.fixture
+def container_backend_with_config():
+    """Create ContainerBackend with a custom config."""
+
+    def _create(cfg: ContainerBackendConfig):
+        with patch(
+            "kubeflow.trainer.backends.container.backend.DockerClientAdapter"
+        ) as mock_docker:
+            mock_docker.return_value = MockContainerAdapter()
+            backend = ContainerBackend(cfg)
+            return backend
+
+    return _create
+
+
+def test_train_backend_env(container_backend_with_config):
+    backend = container_backend_with_config(
+        ContainerBackendConfig(
+            env={"BACKEND_ENV": "backend-value"},
+        )
+    )
+
+    trainer = types.CustomTrainer(func=simple_train_func)
+    runtime = backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
+
+    backend.train(runtime=runtime, trainer=trainer)
+
+    container = backend._adapter.containers_created[0]
+
+    assert container["environment"]["BACKEND_ENV"] == "backend-value"
+
+
+def test_train_backend_volumes(container_backend_with_config):
+    backend = container_backend_with_config(
+        ContainerBackendConfig(
+            volumes={
+                "/host/data": {
+                    "bind": "/workspace/data",
+                    "mode": "rw",
+                }
+            }
+        )
+    )
+
+    trainer = types.CustomTrainer(func=simple_train_func)
+    runtime = backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
+
+    backend.train(runtime=runtime, trainer=trainer)
+
+    container = backend._adapter.containers_created[0]
+
+    assert "/host/data" in container["volumes"]
+    assert container["volumes"]["/host/data"]["bind"] == "/workspace/data"
+
+
+@pytest.fixture
 def temp_workdir():
     """Provide a temporary working directory."""
     tmpdir = tempfile.mkdtemp()

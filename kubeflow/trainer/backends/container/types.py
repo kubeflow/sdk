@@ -77,3 +77,11 @@ class ContainerBackendConfig(BaseModel):
         default=600,
         description="Timeout in seconds for initializer containers (default 10 minutes)",
     )
+    env: dict[str, str] = Field(
+        default_factory=dict,
+        description="Additional environment variables for local containers",
+    )
+    volumes: dict[str, dict[str, str]] = Field(
+        default_factory=dict,
+        description="Additional volume mounts for local containers",
+    )
