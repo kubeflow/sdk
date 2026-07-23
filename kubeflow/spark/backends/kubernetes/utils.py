@@ -756,16 +756,16 @@ def build_spark_application_cr(
             ),
         ]
 
-    spark_application.spec.driver.init_containers = [
-        get_func_job_init_container(func_script),
-    ]
+        spark_application.spec.driver.init_containers = [
+            get_func_job_init_container(func_script),
+        ]
 
-    spark_application.spec.driver.volume_mounts = [
-        models.IoK8sApiCoreV1VolumeMount(
-            name=constants.FUNC_JOB_VOLUME_NAME,
-            mount_path=constants.FUNC_JOB_SCRIPT_DIR,
-        ),
-    ]
+        spark_application.spec.driver.volume_mounts = [
+            models.IoK8sApiCoreV1VolumeMount(
+                name=constants.FUNC_JOB_VOLUME_NAME,
+                mount_path=constants.FUNC_JOB_SCRIPT_DIR,
+            ),
+        ]
 
     return spark_application
 
