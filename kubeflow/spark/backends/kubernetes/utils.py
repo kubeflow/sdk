@@ -616,31 +616,6 @@ def get_spark_job_executor_spec(
     )
 
 
-def get_func_job_volume() -> models.IoK8sApiCoreV1Volume:
-    """Build shared volume for function-based Spark jobs.
-
-    Returns:
-        Kubernetes emptyDir volume shared between the initContainer and
-        Spark driver.
-    """
-    return models.IoK8sApiCoreV1Volume(
-        name=constants.FUNC_JOB_VOLUME_NAME,
-        empty_dir=models.IoK8sApiCoreV1EmptyDirVolumeSource(),
-    )
-
-
-def get_func_job_volume_mount() -> models.IoK8sApiCoreV1VolumeMount:
-    """Build volume mount for function-based Spark jobs.
-
-    Returns:
-        Kubernetes volume mount for the generated Spark application.
-    """
-    return models.IoK8sApiCoreV1VolumeMount(
-        name=constants.FUNC_JOB_VOLUME_NAME,
-        mount_path=constants.FUNC_JOB_SCRIPT_DIR,
-    )
-
-
 def get_func_job_init_container(
     script: str,
 ) -> models.IoK8sApiCoreV1Container:
@@ -670,25 +645,29 @@ def get_func_job_init_container(
             init_script,
         ],
         volume_mounts=[
-            get_func_job_volume_mount(),
+            models.IoK8sApiCoreV1VolumeMount(
+                name=constants.FUNC_JOB_VOLUME_NAME,
+                mount_path=constants.FUNC_JOB_SCRIPT_DIR,
+            ),
         ],
     )
 
 
-def build_func_job_script(
+def get_command_using_spark_func(
     func: Callable,
     func_args: dict[str, Any] | None,
 ) -> str:
-    """Generate a standalone Python script for a function-based Spark job.
+    """Get the Spark command from the given function and parameters.
 
-    The generated script contains the user-defined function followed by its
-    invocation. This script is written by the SparkApplication initContainer
-    and executed by the Spark driver.
+    The generated command contains the user-defined function followed by its
+    invocation. The command is written by the SparkApplication initContainer
+    to a Python script and executed by the Spark driver.
 
     The provided function must be self-contained because only its source code
     is extracted. Any required imports should be placed inside the function
     body. Module-level imports, globals, closures, and decorated functions
     are not supported.
+
 
     Args:
         func:
@@ -698,26 +677,26 @@ def build_func_job_script(
             Keyword arguments passed to the function.
 
     Returns:
-        Complete Python source code for the generated Spark application.
+        Python source code containing the function definition and invocation.
 
     Raises:
         ValueError:
-            If ``func`` is not callable or is not supported for
-            function-based submission.
+            If ``func`` is not callable.
     """
     if not callable(func):
         raise ValueError(f"Expected a callable function, got {type(func)}.")
 
-    func_source = textwrap.dedent(
+    func_code = textwrap.dedent(
         inspect.getsource(func),
     )
 
     if func_args is None:
-        invocation = f"    {func.__name__}()"
+        func_call = f"{func.__name__}()"
     else:
-        invocation = f"    {func.__name__}(**{repr(func_args)})"
+        func_call = f"{func.__name__}(**{repr(func_args)})"
 
-    return f'{func_source}\n\nif __name__ == "__main__":\n{invocation}\n'
+    func_code = f"{func_code}\n{func_call}\n"
+    return func_code
 
 
 def build_spark_application_cr(
@@ -770,24 +749,23 @@ def build_spark_application_cr(
     )
 
     if func_script is not None:
-        volume = get_func_job_volume()
-        volume_mount = get_func_job_volume_mount()
-
         spark_application.spec.volumes = [
-            volume,
+            models.IoK8sApiCoreV1Volume(
+                name=constants.FUNC_JOB_VOLUME_NAME,
+                empty_dir=models.IoK8sApiCoreV1EmptyDirVolumeSource(),
+            ),
         ]
 
-        spark_application.spec.driver.init_containers = [
-            get_func_job_init_container(func_script),
-        ]
+    spark_application.spec.driver.init_containers = [
+        get_func_job_init_container(func_script),
+    ]
 
-        spark_application.spec.driver.volume_mounts = [
-            volume_mount,
-        ]
-
-        spark_application.spec.executor.volume_mounts = [
-            volume_mount,
-        ]
+    spark_application.spec.driver.volume_mounts = [
+        models.IoK8sApiCoreV1VolumeMount(
+            name=constants.FUNC_JOB_VOLUME_NAME,
+            mount_path=constants.FUNC_JOB_SCRIPT_DIR,
+        ),
+    ]
 
     return spark_application
 

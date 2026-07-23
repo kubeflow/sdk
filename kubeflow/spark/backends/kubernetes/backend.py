@@ -14,16 +14,19 @@
 
 """Kubernetes backend for Spark operations."""
 
+import ast
 from collections.abc import Iterator
 import contextlib
 import inspect
 import logging
+import math
 import multiprocessing
 import os
 import random
 import socket
 import subprocess
 import sys
+import textwrap
 import threading
 import time
 from typing import Any
@@ -37,12 +40,12 @@ from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.backends.base import RuntimeBackend
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.utils import (
-    build_func_job_script,
     build_service_url,
     build_spark_application_cr,
     build_spark_connect_cr,
     generate_job_name,
     generate_session_name,
+    get_command_using_spark_func,
     get_spark_application_info_from_cr,
     get_spark_connect_info_from_cr,
     read_pod_logs,
@@ -820,8 +823,11 @@ class KubernetesBackend(RuntimeBackend):
         if value is None:
             return True
 
-        if isinstance(value, (str, int, float, bool)):
+        if isinstance(value, (str, int, bool)):
             return True
+
+        if isinstance(value, float):
+            return math.isfinite(value)
 
         if isinstance(value, (list, tuple)):
             return all(self._is_supported_func_arg(v) for v in value)
@@ -856,11 +862,8 @@ class KubernetesBackend(RuntimeBackend):
         if job.func.__name__ == "<lambda>":
             raise ValueError("Lambda functions are not supported.")
 
-        if getattr(job.func, "__wrapped__", None) is not None:
-            raise ValueError("Decorated functions are not supported.")
-
         try:
-            inspect.getsource(job.func)
+            func_source = textwrap.dedent(inspect.getsource(job.func))
         except TypeError as e:
             raise ValueError(
                 "`job.func` must be a pure-Python function; built-in or "
@@ -872,6 +875,17 @@ class KubernetesBackend(RuntimeBackend):
                 "interactively (REPL/Jupyter) or generated dynamically are "
                 "not supported; define it in a Python module."
             ) from e
+
+        try:
+            func_tree = ast.parse(func_source)
+        except SyntaxError as e:
+            raise ValueError("`job.func` source could not be parsed.") from e
+
+        if any(
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.decorator_list
+            for node in func_tree.body
+        ):
+            raise ValueError("Decorated functions are not supported.")
 
         if job.func_args is not None:
             if not isinstance(job.func_args, dict):
@@ -936,7 +950,7 @@ class KubernetesBackend(RuntimeBackend):
             )
 
         else:
-            script = build_func_job_script(
+            command = get_command_using_spark_func(
                 func=job.func,
                 func_args=job.func_args,
             )
@@ -947,7 +961,7 @@ class KubernetesBackend(RuntimeBackend):
                 main_file=constants.FUNC_JOB_MAIN_FILE,
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
-                func_script=script,
+                func_script=command,
             )
 
         try:
@@ -1117,7 +1131,7 @@ class KubernetesBackend(RuntimeBackend):
     def wait_for_job_status(
         self,
         name: str,
-        status: set[SparkJobStatus] | None = None,
+        status: set[SparkJobStatus] = {SparkJobStatus.COMPLETED},
         timeout: int = 600,
         polling_interval: int = 2,
     ) -> SparkJob:
@@ -1138,10 +1152,6 @@ class KubernetesBackend(RuntimeBackend):
                 one of the target statuses.
             TimeoutError: If the target status is not reached within the timeout.
         """
-
-        if status is None:
-            status = {SparkJobStatus.COMPLETED}
-
         if timeout <= 0:
             raise ValueError("timeout must be positive.")
 

@@ -985,6 +985,9 @@ def test_validate_file_job(kubernetes_backend, test_case):
         ([1, "a", False, None], True),
         ((1, 2, "a"), True),
         ({"a": 1, "b": [1, 2, None]}, True),
+        (float("inf"), False),
+        (float("-inf"), False),
+        (float("nan"), False),
         ({1: "value"}, False),
         (object(), False),
     ],
@@ -1204,6 +1207,7 @@ def test_validate_job(kubernetes_backend, test_case):
                 "job": FuncJob(
                     func=sample_func,
                 ),
+                "use_mock_command": True,
             },
         ),
     ],
@@ -1218,9 +1222,33 @@ def test_submit_job(kubernetes_backend, test_case):
             DEFAULT_NAMESPACE,
         )
 
-        job = kubernetes_backend.submit_job(
-            job=test_case.config["job"],
-        )
+        if test_case.config.get("use_mock_command"):
+            with (
+                patch(
+                    "kubeflow.spark.backends.kubernetes.backend.get_command_using_spark_func",
+                    return_value="print('hello')",
+                ) as mock_command,
+                patch(
+                    "kubeflow.spark.backends.kubernetes.backend.build_spark_application_cr",
+                ) as mock_build,
+            ):
+                mock_build.return_value = get_spark_application(
+                    "spark-job-test",
+                )
+
+                job = kubernetes_backend.submit_job(
+                    job=test_case.config["job"],
+                )
+
+                mock_command.assert_called_once()
+
+                assert mock_build.call_args.kwargs["main_file"] == constants.FUNC_JOB_MAIN_FILE
+
+                assert mock_build.call_args.kwargs["func_script"] == "print('hello')"
+        else:
+            job = kubernetes_backend.submit_job(
+                job=test_case.config["job"],
+            )
 
         assert test_case.expected_status == SUCCESS
         assert job.name.startswith("spark-job-")
@@ -1229,35 +1257,6 @@ def test_submit_job(kubernetes_backend, test_case):
         assert type(e) is test_case.expected_error
 
     print("test execution complete")
-
-
-def test_submit_func_job_uses_generated_script(kubernetes_backend):
-    """Test submit_job builds a function-based SparkApplication."""
-
-    job = FuncJob(
-        func=sample_func,
-    )
-
-    with (
-        patch(
-            "kubeflow.spark.backends.kubernetes.backend.build_func_job_script",
-            return_value="print('hello')",
-        ) as mock_script,
-        patch(
-            "kubeflow.spark.backends.kubernetes.backend.build_spark_application_cr",
-        ) as mock_build,
-    ):
-        mock_build.return_value = get_spark_application(
-            "spark-job-test",
-        )
-
-        kubernetes_backend.submit_job(job)
-
-        mock_script.assert_called_once()
-
-        assert mock_build.call_args.kwargs["main_file"] == constants.FUNC_JOB_MAIN_FILE
-
-        assert mock_build.call_args.kwargs["func_script"] == "print('hello')"
 
 
 @pytest.mark.parametrize(
@@ -1703,14 +1702,12 @@ def test_wait_for_job_status(kubernetes_backend, test_case):
             if test_case.expected_status == SUCCESS:
                 kubernetes_backend.wait_for_job_status(
                     name="test-job",
-                    status={SparkJobStatus.COMPLETED},
                     timeout=1,
                 )
             else:
                 with pytest.raises(test_case.expected_error):
                     kubernetes_backend.wait_for_job_status(
                         name="test-job",
-                        status={SparkJobStatus.COMPLETED},
                         timeout=1,
                     )
 

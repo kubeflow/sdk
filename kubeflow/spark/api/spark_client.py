@@ -267,7 +267,7 @@ class SparkClient:
     def wait_for_job_status(
         self,
         name: str,
-        status: set[SparkJobStatus] | None = None,
+        status: set[SparkJobStatus] = {SparkJobStatus.COMPLETED},
         timeout: int = 600,
         polling_interval: int = 2,
     ) -> SparkJob:
