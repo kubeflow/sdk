@@ -6,7 +6,7 @@ import re
 import shutil
 from string import Template
 import textwrap
-from typing import Any
+from typing import Any, cast
 
 from kubeflow.trainer.backends.localprocess import constants as local_exec_constants
 from kubeflow.trainer.backends.localprocess.types import LocalRuntimeTrainer
@@ -132,7 +132,7 @@ def get_local_runtime_trainer(
     trainer = LocalRuntimeTrainer(
         trainer_type=types.TrainerType.CUSTOM_TRAINER,
         framework=framework,
-        packages=local_runtime.trainer.packages,
+        packages=cast("LocalRuntimeTrainer", local_runtime.trainer).packages,
         image=local_exec_constants.LOCAL_RUNTIME_IMAGE,
     )
 
@@ -213,10 +213,11 @@ def get_command_using_train_func(
     # def train(parameters):
     #     print('Start Training...')
     # train({'lr': 0.01})
+    train_func_name = getattr(train_func, "__name__", "train")
     if train_func_parameters is None:
-        func_code = f"{func_code}\n{train_func.__name__}()\n"
+        func_code = f"{func_code}\n{train_func_name}()\n"
     else:
-        func_code = f"{func_code}\n{train_func.__name__}({train_func_parameters})\n"
+        func_code = f"{func_code}\n{train_func_name}({train_func_parameters})\n"
 
     with open(func_file, "w") as f:
         f.write(func_code)
