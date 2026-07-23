@@ -14,7 +14,6 @@
 
 """Unit tests for Kubernetes Spark backend utilities."""
 
-import ast
 from datetime import datetime
 import multiprocessing
 from unittest.mock import Mock, patch
@@ -29,12 +28,13 @@ from kubeflow.spark.backends.kubernetes.utils import (
     _resolve_executor_resources,
     _validate_cpu_value,
     build_service_url,
-    build_spark_application_cr,
     build_spark_connect_cr,
     generate_job_name,
     generate_session_name,
     get_command_using_spark_func,
     get_func_job_init_container,
+    get_spark_application_cr_from_file_job,
+    get_spark_application_cr_from_func_job,
     get_spark_application_info_from_cr,
     get_spark_connect_info_from_cr,
     get_spark_job_driver_spec,
@@ -1059,7 +1059,11 @@ def test_get_spark_job_driver_spec(test_case: TestCase) -> None:
             name="build function job init container",
             expected_status=SUCCESS,
             config={
-                "script": "print('hello')",
+                "command": [
+                    "bash",
+                    "-c",
+                    "printf 'print(\"hello\")' > /opt/spark/app/main.py",
+                ],
             },
         ),
     ],
@@ -1070,7 +1074,7 @@ def test_get_func_job_init_container(test_case: TestCase) -> None:
     print("Executing test:", test_case.name)
 
     container = get_func_job_init_container(
-        test_case.config["script"],
+        test_case.config["command"],
     )
 
     assert test_case.expected_status == SUCCESS
@@ -1078,15 +1082,7 @@ def test_get_func_job_init_container(test_case: TestCase) -> None:
     assert container.name == constants.FUNC_JOB_INIT_CONTAINER_NAME
     assert container.image == constants.DEFAULT_SPARK_IMAGE
 
-    assert container.command[0] == "bash"
-    assert container.command[1] == "-c"
-
-    command = container.command[2]
-
-    assert test_case.config["script"] in command
-    assert "printf" in command
-    assert constants.FUNC_JOB_SCRIPT_NAME in command
-    assert constants.FUNC_JOB_SCRIPT_DIR in command
+    assert container.command == test_case.config["command"]
 
     assert container.volume_mounts is not None
     assert len(container.volume_mounts) == 1
@@ -1136,24 +1132,26 @@ def test_get_command_using_spark_func(test_case: TestCase) -> None:
     print("Executing test:", test_case.name)
 
     if test_case.expected_status == SUCCESS:
-        script = get_command_using_spark_func(
+        command = get_command_using_spark_func(
             test_case.config["func"],
             test_case.config["func_args"],
         )
 
-        ast.parse(script)
+        assert command[0] == "bash"
+        assert command[1] == "-c"
+
+        shell_script = command[2]
 
         if test_case.name == "build script without args":
-            assert "def sample_function" in script
-            assert 'print("hello")' in script
-            assert "sample_function()" in script
+            assert "def sample_function" in shell_script
+            assert 'print("hello")' in shell_script
+            assert "sample_function()" in shell_script
 
         elif test_case.name == "build script with args":
-            assert "def sample_function_with_args" in script
-            assert "sample_function_with_args(**" in script
-            assert "'name': 'Alice'" in script
-            assert "'age': 20" in script
-
+            assert "def sample_function_with_args" in shell_script
+            assert "sample_function_with_args(**" in shell_script
+            assert "'name': 'Alice'" in shell_script
+            assert "'age': 20" in shell_script
     else:
         with pytest.raises(
             test_case.expected_error,
@@ -1215,12 +1213,12 @@ def test_get_spark_job_executor_spec(test_case: TestCase) -> None:
         ),
     ],
 )
-def test_build_spark_application_cr(test_case: TestCase) -> None:
+def test_get_spark_application_cr_from_file_job(test_case: TestCase) -> None:
     """Tests build_spark_application_cr."""
 
     print("Executing test:", test_case.name)
 
-    app = build_spark_application_cr(
+    app = get_spark_application_cr_from_file_job(
         name=test_case.config["name"],
         namespace=test_case.config["namespace"],
         main_file=test_case.config["main_file"],
@@ -1248,6 +1246,68 @@ def test_build_spark_application_cr(test_case: TestCase) -> None:
     assert app.spec.executor.memory == _memory_kubernetes_to_spark(
         "4Gi",
     )
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="build spark application for function job",
+            expected_status=SUCCESS,
+            config={
+                "name": "test-job",
+                "namespace": "default",
+                "func": sample_function,
+                "func_args": None,
+                "num_executors": 3,
+                "resources_per_executor": {
+                    "cpu": "2",
+                    "memory": "4Gi",
+                },
+            },
+        ),
+    ],
+)
+def test_get_spark_application_cr_from_func_job(
+    test_case: TestCase,
+) -> None:
+    """Tests get_spark_application_cr_from_func_job."""
+
+    print("Executing test:", test_case.name)
+
+    app = get_spark_application_cr_from_func_job(
+        name=test_case.config["name"],
+        namespace=test_case.config["namespace"],
+        func=test_case.config["func"],
+        func_args=test_case.config["func_args"],
+        num_executors=test_case.config["num_executors"],
+        resources_per_executor=test_case.config["resources_per_executor"],
+    )
+
+    assert test_case.expected_status == SUCCESS
+
+    assert app.metadata.name == test_case.config["name"]
+    assert app.metadata.namespace == test_case.config["namespace"]
+
+    assert app.spec.main_application_file == constants.FUNC_JOB_MAIN_FILE
+
+    assert app.spec.driver.init_containers is not None
+    assert len(app.spec.driver.init_containers) == 1
+    assert app.spec.driver.init_containers[0].name == constants.FUNC_JOB_INIT_CONTAINER_NAME
+
+    assert app.spec.driver.volume_mounts is not None
+    assert len(app.spec.driver.volume_mounts) == 1
+    assert app.spec.driver.volume_mounts[0].name == constants.FUNC_JOB_VOLUME_NAME
+
+    assert app.spec.volumes is not None
+    assert len(app.spec.volumes) == 1
+    assert app.spec.volumes[0].name == constants.FUNC_JOB_VOLUME_NAME
+
+    assert app.spec.executor.instances == 3
+    assert app.spec.executor.cores == 2
+    assert app.spec.executor.memory == "4g"
 
     print("test execution complete")
 

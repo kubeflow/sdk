@@ -41,11 +41,11 @@ from kubeflow.spark.backends.base import RuntimeBackend
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.utils import (
     build_service_url,
-    build_spark_application_cr,
     build_spark_connect_cr,
     generate_job_name,
     generate_session_name,
-    get_command_using_spark_func,
+    get_spark_application_cr_from_file_job,
+    get_spark_application_cr_from_func_job,
     get_spark_application_info_from_cr,
     get_spark_connect_info_from_cr,
     read_pod_logs,
@@ -940,7 +940,7 @@ class KubernetesBackend(RuntimeBackend):
         )
 
         if isinstance(job, FileJob):
-            spark_application = build_spark_application_cr(
+            spark_application = get_spark_application_cr_from_file_job(
                 name=job_name,
                 namespace=self.namespace,
                 main_file=job.file_source,
@@ -950,18 +950,13 @@ class KubernetesBackend(RuntimeBackend):
             )
 
         else:
-            command = get_command_using_spark_func(
-                func=job.func,
-                func_args=job.func_args,
-            )
-
-            spark_application = build_spark_application_cr(
+            spark_application = get_spark_application_cr_from_func_job(
                 name=job_name,
                 namespace=self.namespace,
-                main_file=constants.FUNC_JOB_MAIN_FILE,
+                func=job.func,
+                func_args=job.func_args,
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
-                func_script=command,
             )
 
         try:

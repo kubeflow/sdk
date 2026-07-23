@@ -617,33 +617,25 @@ def get_spark_job_executor_spec(
 
 
 def get_func_job_init_container(
-    script: str,
+    command: list[str],
 ) -> models.IoK8sApiCoreV1Container:
-    """Build initContainer for a function-based Spark job.
+    """Build the initContainer for a function-based Spark job.
 
-    The initContainer reconstructs the generated Spark application and writes
-    it into the shared volume before the Spark driver starts.
+    The initContainer executes the provided command to reconstruct the
+    generated Spark application in the shared volume before the Spark
+    driver starts.
 
     Args:
-        script:
-            Generated Python application.
+        command:
+            Container command that generates the Spark application script.
 
     Returns:
         Kubernetes initContainer specification.
     """
-    init_script = constants.FUNC_JOB_SCRIPT_TEMPLATE.format(
-        func_code=script,
-        func_file=(f"{constants.FUNC_JOB_SCRIPT_DIR}/{constants.FUNC_JOB_SCRIPT_NAME}"),
-    )
-
     return models.IoK8sApiCoreV1Container(
         name=constants.FUNC_JOB_INIT_CONTAINER_NAME,
         image=constants.DEFAULT_SPARK_IMAGE,
-        command=[
-            "bash",
-            "-c",
-            init_script,
-        ],
+        command=command,
         volume_mounts=[
             models.IoK8sApiCoreV1VolumeMount(
                 name=constants.FUNC_JOB_VOLUME_NAME,
@@ -656,7 +648,7 @@ def get_func_job_init_container(
 def get_command_using_spark_func(
     func: Callable,
     func_args: dict[str, Any] | None,
-) -> str:
+) -> list[str]:
     """Get the Spark command from the given function and parameters.
 
     The generated command contains the user-defined function followed by its
@@ -677,7 +669,7 @@ def get_command_using_spark_func(
             Keyword arguments passed to the function.
 
     Returns:
-        Python source code containing the function definition and invocation.
+        Container command that generates the Spark application script.
 
     Raises:
         ValueError:
@@ -696,28 +688,33 @@ def get_command_using_spark_func(
         func_call = f"{func.__name__}(**{repr(func_args)})"
 
     func_code = f"{func_code}\n{func_call}\n"
-    return func_code
+    return [
+        "bash",
+        "-c",
+        constants.FUNC_JOB_SCRIPT_TEMPLATE.format(
+            func_code=func_code,
+            func_file=(f"{constants.FUNC_JOB_SCRIPT_DIR}/{constants.FUNC_JOB_SCRIPT_NAME}"),
+        ),
+    ]
 
 
-def build_spark_application_cr(
+def get_spark_application_cr_from_file_job(
     name: str,
     namespace: str,
     main_file: str,
     arguments: list[str] | None = None,
     num_executors: int | None = None,
     resources_per_executor: dict[str, str] | None = None,
-    func_script: str | None = None,
 ) -> models.SparkV1beta2SparkApplication:
-    """Build a SparkApplication custom resource.
+    """Build a SparkApplication custom resource for a file-based Spark job.
 
     Args:
         name: Job name.
         namespace: Kubernetes namespace.
-        main_file: Application file path or URI.
-        arguments: Command-line arguments.
+        main_file: Path or URI to the Spark application file.
+        arguments: Command-line arguments passed to the Spark application.
         num_executors: Number of executor instances.
         resources_per_executor: Resource requirements for each executor.
-        func_script: Generated Python application for function-based Spark jobs.
 
     Returns:
         SparkApplication custom resource model.
@@ -726,7 +723,7 @@ def build_spark_application_cr(
         ValueError:
             If the executor resource configuration is invalid.
     """
-    spark_application = models.SparkV1beta2SparkApplication(
+    return models.SparkV1beta2SparkApplication(
         api_version=f"{constants.SPARK_APPLICATION_GROUP}/{constants.SPARK_APPLICATION_VERSION}",
         kind=constants.SPARK_APPLICATION_KIND,
         metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
@@ -748,24 +745,77 @@ def build_spark_application_cr(
         ),
     )
 
-    if func_script is not None:
-        spark_application.spec.volumes = [
-            models.IoK8sApiCoreV1Volume(
-                name=constants.FUNC_JOB_VOLUME_NAME,
-                empty_dir=models.IoK8sApiCoreV1EmptyDirVolumeSource(),
-            ),
-        ]
 
-        spark_application.spec.driver.init_containers = [
-            get_func_job_init_container(func_script),
-        ]
+def get_spark_application_cr_from_func_job(
+    name: str,
+    namespace: str,
+    func: Callable,
+    func_args: dict[str, Any] | None = None,
+    num_executors: int | None = None,
+    resources_per_executor: dict[str, str] | None = None,
+) -> models.SparkV1beta2SparkApplication:
+    """Build a SparkApplication custom resource for a function-based Spark job.
 
-        spark_application.spec.driver.volume_mounts = [
-            models.IoK8sApiCoreV1VolumeMount(
-                name=constants.FUNC_JOB_VOLUME_NAME,
-                mount_path=constants.FUNC_JOB_SCRIPT_DIR,
+    Args:
+        name: Job name.
+        namespace: Kubernetes namespace.
+        func: Python function to execute as the Spark application.
+        func_args: Keyword arguments passed to the function.
+        num_executors: Number of executor instances.
+        resources_per_executor: Resource requirements for each executor.
+
+    Returns:
+        SparkApplication custom resource model.
+
+    Raises:
+        ValueError:
+            If the provided function is invalid or the executor resource
+            configuration is invalid.
+    """
+
+    command = get_command_using_spark_func(
+        func=func,
+        func_args=func_args,
+    )
+
+    spark_application = models.SparkV1beta2SparkApplication(
+        api_version=f"{constants.SPARK_APPLICATION_GROUP}/{constants.SPARK_APPLICATION_VERSION}",
+        kind=constants.SPARK_APPLICATION_KIND,
+        metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+            name=name,
+            namespace=namespace,
+        ),
+        spec=models.SparkV1beta2SparkApplicationSpec(
+            spark_version=constants.DEFAULT_SPARK_VERSION,
+            type="Python",
+            mode="cluster",
+            image=constants.DEFAULT_SPARK_IMAGE,
+            main_application_file=constants.FUNC_JOB_MAIN_FILE,
+            driver=get_spark_job_driver_spec(),
+            executor=get_spark_job_executor_spec(
+                num_executors=num_executors,
+                resources_per_executor=resources_per_executor,
             ),
-        ]
+        ),
+    )
+
+    spark_application.spec.volumes = [
+        models.IoK8sApiCoreV1Volume(
+            name=constants.FUNC_JOB_VOLUME_NAME,
+            empty_dir=models.IoK8sApiCoreV1EmptyDirVolumeSource(),
+        ),
+    ]
+
+    spark_application.spec.driver.init_containers = [
+        get_func_job_init_container(command),
+    ]
+
+    spark_application.spec.driver.volume_mounts = [
+        models.IoK8sApiCoreV1VolumeMount(
+            name=constants.FUNC_JOB_VOLUME_NAME,
+            mount_path=constants.FUNC_JOB_SCRIPT_DIR,
+        ),
+    ]
 
     return spark_application
 

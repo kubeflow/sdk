@@ -1223,15 +1223,9 @@ def test_submit_job(kubernetes_backend, test_case):
         )
 
         if test_case.config.get("use_mock_command"):
-            with (
-                patch(
-                    "kubeflow.spark.backends.kubernetes.backend.get_command_using_spark_func",
-                    return_value="print('hello')",
-                ) as mock_command,
-                patch(
-                    "kubeflow.spark.backends.kubernetes.backend.build_spark_application_cr",
-                ) as mock_build,
-            ):
+            with patch(
+                "kubeflow.spark.backends.kubernetes.backend.get_spark_application_cr_from_func_job",
+            ) as mock_build:
                 mock_build.return_value = get_spark_application(
                     "spark-job-test",
                 )
@@ -1240,11 +1234,11 @@ def test_submit_job(kubernetes_backend, test_case):
                     job=test_case.config["job"],
                 )
 
-                mock_command.assert_called_once()
+                mock_build.assert_called_once()
 
-                assert mock_build.call_args.kwargs["main_file"] == constants.FUNC_JOB_MAIN_FILE
+                assert mock_build.call_args.kwargs["func"] == test_case.config["job"].func
+                assert mock_build.call_args.kwargs["func_args"] == test_case.config["job"].func_args
 
-                assert mock_build.call_args.kwargs["func_script"] == "print('hello')"
         else:
             job = kubernetes_backend.submit_job(
                 job=test_case.config["job"],
