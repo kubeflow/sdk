@@ -355,7 +355,23 @@ async def async_func() -> None:
     pass
 
 
-def _decorator(func):
+def func_with_reserved_delimiter() -> None:
+    print(
+        """
+__KUBEFLOW_FUNC_JOB_SCRIPT__
+"""
+    )
+
+
+def sample_func_with_args(
+    name: str,
+    count: int,
+) -> None:
+    """Sample function with parameters."""
+    pass
+
+
+def _decorator(func: callable) -> callable:
     @wraps(func)
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
@@ -1085,6 +1101,57 @@ def test_is_supported_func_arg(
                 "job": FuncJob(
                     func=sample_func,
                     func_args={1: "value"},
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="func source contains reserved heredoc delimiter",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=func_with_reserved_delimiter,
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="valid func_args",
+            expected_status=SUCCESS,
+            config={
+                "job": FuncJob(
+                    func=sample_func_with_args,
+                    func_args={
+                        "name": "spark",
+                        "count": 1,
+                    },
+                ),
+            },
+        ),
+        TestCase(
+            name="func_args missing required argument",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=sample_func_with_args,
+                    func_args={
+                        "name": "spark",
+                    },
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="func_args unexpected keyword",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=sample_func_with_args,
+                    func_args={
+                        "name": "spark",
+                        "count": 1,
+                        "extra": True,
+                    },
                 ),
             },
             expected_error=ValueError,

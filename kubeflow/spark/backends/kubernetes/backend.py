@@ -876,6 +876,14 @@ class KubernetesBackend(RuntimeBackend):
                 "not supported; define it in a Python module."
             ) from e
 
+        if any(
+            line.strip() == constants.FUNC_JOB_SCRIPT_DELIMITER for line in func_source.splitlines()
+        ):
+            raise ValueError(
+                "`job.func` source contains the reserved heredoc delimiter "
+                f"{constants.FUNC_JOB_SCRIPT_DELIMITER!r}, which is not supported."
+            )
+
         try:
             func_tree = ast.parse(func_source)
         except SyntaxError as e:
@@ -898,6 +906,11 @@ class KubernetesBackend(RuntimeBackend):
                 raise ValueError(
                     "`job.func_args` values must contain only JSON-like primitive types."
                 )
+
+            try:
+                inspect.signature(job.func).bind(**job.func_args)
+            except TypeError as e:
+                raise ValueError(f"Invalid `job.func_args`: {e}") from e
 
     def submit_job(
         self,
