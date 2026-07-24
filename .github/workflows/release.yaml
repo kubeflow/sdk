@@ -4,9 +4,9 @@ on:
   push:
     branches:
       - main
-      - 'release-*'
+      - "release-*"
     paths:
-      - 'kubeflow/__init__.py'
+      - "kubeflow/__init__.py"
   workflow_dispatch: {}
 
 permissions:
@@ -91,7 +91,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Setup build environment
         run: |
@@ -198,14 +198,23 @@ jobs:
             echo "$CHANGELOG"
             echo "EOF"
           } >> $GITHUB_OUTPUT
+
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           tag_name: ${{ needs.prepare.outputs.version }}
           name: ${{ needs.prepare.outputs.version }}
           body: ${{ steps.changelog.outputs.changelog }}
-          draft: false
+          # Create the release as a draft so assets are uploaded before publication.
+          # With immutable releases enabled, a published release locks its assets, so
+          # they must be attached while the release is still a draft.
+          draft: true
           prerelease: ${{ needs.prepare.outputs.is-prerelease == 'true' }}
           generate_release_notes: false
           files: |
             dist/*
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ needs.prepare.outputs.version }}" --draft=false
