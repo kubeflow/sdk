@@ -40,13 +40,13 @@ Key behaviors:
 from collections.abc import Callable, Iterator
 import concurrent.futures
 from datetime import datetime
-import logging
 import os
 import random
 import shutil
 import string
 import uuid
 
+from kubeflow.common.structured_logging import get_logger
 from kubeflow.trainer.backends.base import RuntimeBackend
 from kubeflow.trainer.backends.container import utils as container_utils
 from kubeflow.trainer.backends.container.adapters.base import (
@@ -62,7 +62,7 @@ from kubeflow.trainer.backends.container.types import ContainerBackendConfig
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ContainerBackend(RuntimeBackend):

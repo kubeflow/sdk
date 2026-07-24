@@ -18,6 +18,7 @@ from collections.abc import Iterator
 
 from pyspark.sql import SparkSession
 
+from kubeflow.common.structured_logging import get_logger
 from kubeflow.common.types import KubernetesBackendConfig
 import kubeflow.common.utils as common_utils
 from kubeflow.spark.backends.kubernetes import KubernetesBackend
@@ -31,6 +32,9 @@ from kubeflow.spark.types.types import (
     SparkJob,
     SparkJobStatus,
 )
+from kubeflow.spark.types.types import Driver, Executor, SparkConnectInfo
+
+logger = get_logger(__name__)
 
 
 class SparkClient:

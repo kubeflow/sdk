@@ -28,7 +28,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 import json
-import logging
 from pathlib import Path
 from typing import Any
 import urllib.error
@@ -36,10 +35,11 @@ import urllib.request
 
 import yaml
 
+from kubeflow.common.structured_logging import get_logger
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types as base_types
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 TRAINING_RUNTIMES_DIR = Path(__file__).parents[2] / "config" / "training_runtimes"
 CACHE_DIR = Path.home() / ".kubeflow" / "trainer" / "cache"
