@@ -25,6 +25,7 @@ def run_example_in_cluster(
     namespace: str,
     image: str,
     timeout_sec: int = 300,
+    extra_env: dict[str, str] | None = None,
 ) -> tuple[bool, str, str]:
     """Run an example script in-cluster via a Kubernetes Job.
 
@@ -44,6 +45,19 @@ def run_example_in_cluster(
     job_name = f"spark-e2e-{base}"[:63].rstrip("-")
     script_path = f"examples/spark/{example_script_name}"
     # Job manifest: one pod, run the example script, default SA (has e2e-sparkconnect-client Role).
+    env_lines = [
+        "            - name: SPARK_TEST_NAMESPACE",
+        f'              value: "{namespace}"',
+        "            - name: SPARK_E2E_RUN_IN_CLUSTER",
+        '              value: "1"',
+    ]
+    if extra_env:
+        for key, value in extra_env.items():
+            env_lines.append(f"            - name: {key}")
+            env_lines.append(f'              value: "{value}"')
+    env_yaml = "\n".join(env_lines)
+    env_block = f"          env:\n{env_yaml}"
+
     manifest = f"""
 apiVersion: batch/v1
 kind: Job
@@ -63,11 +77,7 @@ spec:
           command:
             - python
             - {script_path}
-          env:
-            - name: SPARK_TEST_NAMESPACE
-              value: "{namespace}"
-            - name: SPARK_E2E_RUN_IN_CLUSTER
-              value: "1"
+{env_block}
 """
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         f.write(manifest)

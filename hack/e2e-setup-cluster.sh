@@ -21,6 +21,9 @@ SPARK_OPERATOR_VERSION="${SPARK_OPERATOR_VERSION:-2.1.0}"
 SPARK_OPERATOR_IMAGE_TAG="${SPARK_OPERATOR_IMAGE_TAG:-latest}"
 K8S_VERSION="${K8S_VERSION:-1.32.0}"
 KIND_BIN="${KIND:-kind}"
+ENABLE_ICEBERG_MINIO="${SPARK_E2E_ENABLE_ICEBERG_MINIO:-0}"
+MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
+MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-minioadmin}"
 
 # Construct Kind node image from K8S version
 KIND_NODE_IMAGE="kindest/node:v${K8S_VERSION}"
@@ -203,6 +206,155 @@ setup_test_namespace() {
     kubectl create namespace "$NAMESPACE" 2>/dev/null || true
     log_info "Test namespace created"
     phase_end "setup_test_namespace"
+}
+
+setup_iceberg_minio() {
+    if [[ "$ENABLE_ICEBERG_MINIO" != "1" ]]; then
+        log_info "Skipping Iceberg/MinIO e2e setup"
+        return 0
+    fi
+
+    phase_start "setup_iceberg_minio"
+    log_info "Setting up Iceberg/MinIO services in namespace: $NAMESPACE"
+
+    kubectl delete job minio-init -n "$NAMESPACE" --ignore-not-found=true
+    kubectl delete deployment minio iceberg-rest -n "$NAMESPACE" --ignore-not-found=true
+    kubectl delete service minio iceberg-rest -n "$NAMESPACE" --ignore-not-found=true
+
+    kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: $NAMESPACE
+spec:
+  selector:
+    app: minio
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+    - name: console
+      port: 9001
+      targetPort: 9001
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: $NAMESPACE
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio
+          args:
+            - server
+            - /data
+            - --console-address
+            - :9001
+          env:
+            - name: MINIO_ROOT_USER
+              value: "$MINIO_ROOT_USER"
+            - name: MINIO_ROOT_PASSWORD
+              value: "$MINIO_ROOT_PASSWORD"
+          ports:
+            - containerPort: 9000
+            - containerPort: 9001
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-init
+  namespace: $NAMESPACE
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: mc
+          image: minio/mc
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              until mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
+                sleep 2
+              done
+              mc mb local/warehouse --ignore-existing
+              echo 'Bucket warehouse created successfully'
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: iceberg-rest
+  namespace: $NAMESPACE
+spec:
+  selector:
+    app: iceberg-rest
+  ports:
+    - name: http
+      port: 8181
+      targetPort: 8181
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iceberg-rest
+  namespace: $NAMESPACE
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iceberg-rest
+  template:
+    metadata:
+      labels:
+        app: iceberg-rest
+    spec:
+      containers:
+        - name: iceberg-rest
+          image: tabulario/iceberg-rest
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              value: "$MINIO_ROOT_USER"
+            - name: AWS_SECRET_ACCESS_KEY
+              value: "$MINIO_ROOT_PASSWORD"
+            - name: AWS_REGION
+              value: us-east-1
+            - name: CATALOG_WAREHOUSE
+              value: s3://warehouse/
+            - name: CATALOG_IO__IMPL
+              value: org.apache.iceberg.aws.s3.S3FileIO
+            - name: CATALOG_S3_ENDPOINT
+              value: http://minio:9000
+            - name: CATALOG_S3_PATH__STYLE__ACCESS
+              value: "true"
+          ports:
+            - containerPort: 8181
+EOF
+
+    kubectl rollout status deployment/minio -n "$NAMESPACE" --timeout=180s
+    kubectl wait --for=condition=complete "job/minio-init" -n "$NAMESPACE" --timeout=180s
+    kubectl rollout status deployment/iceberg-rest -n "$NAMESPACE" --timeout=180s
+
+    phase_end "setup_iceberg_minio"
 }
 
 # 1) Operator: grant Spark Operator controller permission to manage SparkConnect and pods in the test namespace.
@@ -406,6 +558,7 @@ main() {
     check_prerequisites
     create_cluster
     setup_test_namespace
+    setup_iceberg_minio
     if [[ "${E2E_CRD_ONLY:-0}" == "1" ]]; then
         apply_crd_only
     else

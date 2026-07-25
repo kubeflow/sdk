@@ -39,12 +39,14 @@ WATCHER_INTERVAL_SEC = 5.0
 # In-cluster: run example as K8s Job so client uses sc://...svc.cluster.local (no port-forward).
 USE_IN_CLUSTER = os.environ.get("SPARK_E2E_RUN_IN_CLUSTER") == "1"
 RUNNER_IMAGE = os.environ.get("SPARK_E2E_RUNNER_IMAGE", "")
+ENABLE_ICEBERG_MINIO = os.environ.get("SPARK_E2E_ENABLE_ICEBERG_MINIO") == "1"
 
 
 def _run_example_with_watcher(
     example_path: Path,
     namespace: str,
     timeout_sec: int = EXAMPLE_TIMEOUT_SEC,
+    extra_env: dict[str, str] | None = None,
 ) -> tuple[int | None, str, str, list[str]]:
     """Run example script with cluster watcher; return (returncode, stdout, stderr, watcher_log)."""
     stop_event, watcher_log, watcher_thread = run_watcher_in_thread(
@@ -74,7 +76,7 @@ def _run_example_with_watcher(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        env={**os.environ, "SPARK_TEST_NAMESPACE": namespace},
+        env={**os.environ, "SPARK_TEST_NAMESPACE": namespace, **(extra_env or {})},
     )
     t_out = threading.Thread(target=read_stdout, args=(proc.stdout,), daemon=True)
     t_err = threading.Thread(target=read_stderr, args=(proc.stderr,), daemon=True)
@@ -141,7 +143,12 @@ class TestSparkExamples:
         parts.append(stderr or "(empty)")
         return "\n".join(parts)
 
-    def _run_example(self, example_script_name: str, namespace: str):
+    def _run_example(
+        self,
+        example_script_name: str,
+        namespace: str,
+        extra_env: dict[str, str] | None = None,
+    ):
         """Run example: in-cluster Job if SPARK_E2E_RUN_IN_CLUSTER=1 and image set, else subprocess."""
         if USE_IN_CLUSTER and RUNNER_IMAGE:
             success, logs, job_desc = run_example_in_cluster(
@@ -149,6 +156,7 @@ class TestSparkExamples:
                 namespace,
                 image=RUNNER_IMAGE,
                 timeout_sec=EXAMPLE_TIMEOUT_SEC,
+                extra_env=extra_env,
             )
             if not success:
                 fail_msg = (
@@ -169,7 +177,10 @@ class TestSparkExamples:
         example_path = EXAMPLES_DIR / example_script_name
         assert example_path.exists(), f"Example not found: {example_path}"
         returncode, stdout, stderr, watcher_log = _run_example_with_watcher(
-            example_path, namespace, timeout_sec=EXAMPLE_TIMEOUT_SEC
+            example_path,
+            namespace,
+            timeout_sec=EXAMPLE_TIMEOUT_SEC,
+            extra_env=extra_env,
         )
         fail_msg = self._dump_on_failure(
             returncode,
@@ -245,3 +256,31 @@ class TestSparkExamples:
         stdout = self._run_example("batch_func_job_lifecycle.py", namespace)
 
         assert "FUNCJOB LIFECYCLE COMPLETE!" in stdout
+
+    def test_iceberg_minio_example(self):
+        """EX07: Validate iceberg_minio.py runs through the Spark SDK path."""
+        namespace = os.environ.get("SPARK_TEST_NAMESPACE", "spark-test")
+        if ENABLE_ICEBERG_MINIO and USE_IN_CLUSTER and RUNNER_IMAGE:
+            iceberg_env = {
+                "MINIO_ENDPOINT": "http://minio:9000",
+                "MINIO_ACCESS_KEY": os.environ.get("MINIO_ROOT_USER", "minioadmin"),
+                "MINIO_SECRET_KEY": os.environ.get("MINIO_ROOT_PASSWORD", "minioadmin"),
+                "ICEBERG_REST_URI": "http://iceberg-rest:8181",
+                "ICEBERG_WAREHOUSE": "s3://warehouse/",
+            }
+        else:
+            iceberg_env = {
+                "MINIO_ENDPOINT": os.environ.get("MINIO_ENDPOINT", ""),
+                "MINIO_ACCESS_KEY": os.environ.get("MINIO_ACCESS_KEY", ""),
+                "MINIO_SECRET_KEY": os.environ.get("MINIO_SECRET_KEY", ""),
+                "ICEBERG_REST_URI": os.environ.get("ICEBERG_REST_URI", ""),
+                "ICEBERG_WAREHOUSE": os.environ.get("ICEBERG_WAREHOUSE", ""),
+            }
+        if not all(iceberg_env.values()):
+            pytest.skip(
+                "Requires Iceberg/MinIO endpoints via MINIO_ENDPOINT, ICEBERG_REST_URI, "
+                "MINIO_ACCESS_KEY, MINIO_SECRET_KEY, and ICEBERG_WAREHOUSE"
+            )
+
+        stdout = self._run_example("iceberg_minio.py", namespace, extra_env=iceberg_env)
+        assert "Iceberg + MinIO example complete!" in stdout

@@ -67,6 +67,7 @@ jobs:
           SPARK_TEST_CLUSTER: spark-test
           SPARK_TEST_NAMESPACE: spark-test
           SPARK_OPERATOR_IMAGE_TAG: local
+          SPARK_E2E_ENABLE_ICEBERG_MINIO: "1"
         timeout-minutes: 15
 
       - name: Build and load Spark E2E runner image (in-cluster)
@@ -83,6 +84,7 @@ jobs:
           SPARK_E2E_DEBUG: "1"
           SPARK_E2E_RUN_IN_CLUSTER: "1"
           SPARK_E2E_RUNNER_IMAGE: spark-e2e-runner:local
+          SPARK_E2E_ENABLE_ICEBERG_MINIO: "1"
         timeout-minutes: 15
 
       - name: Collect logs on failure
