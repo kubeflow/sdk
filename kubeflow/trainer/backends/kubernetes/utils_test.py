@@ -42,6 +42,16 @@ def _build_runtime() -> types.Runtime:
     )
 
 
+def sample_train_func() -> None:
+    """Sample training function."""
+    print("Hello World")
+
+
+def sample_train_func_kwargs(a: int, b: str, c: float) -> str:
+    """Sample training function with kwargs."""
+    return "ok"
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -390,7 +400,7 @@ def test_get_script_for_python_packages(test_case):
             name="with args dict always unpacks kwargs",
             expected_status=SUCCESS,
             config={
-                "func": (lambda: print("Hello World")),
+                "func": sample_train_func,
                 "func_args": {"batch_size": 128, "learning_rate": 0.001, "epochs": 20},
                 "runtime": _build_runtime(),
             },
@@ -399,8 +409,10 @@ def test_get_script_for_python_packages(test_case):
                 "-c",
                 (
                     "\nread -r -d '' SCRIPT << EOM\n\n"
-                    '"func": (lambda: print("Hello World")),\n\n'
-                    "<lambda>(**{'batch_size': 128, 'learning_rate': 0.001, 'epochs': 20})\n\n"
+                    "def sample_train_func() -> None:\n"
+                    '    """Sample training function."""\n'
+                    '    print("Hello World")\n\n'
+                    "sample_train_func(**{'batch_size': 128, 'learning_rate': 0.001, 'epochs': 20})\n\n"
                     "EOM\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
@@ -411,7 +423,7 @@ def test_get_script_for_python_packages(test_case):
             name="without args calls function with no params",
             expected_status=SUCCESS,
             config={
-                "func": (lambda: print("Hello World")),
+                "func": sample_train_func,
                 "func_args": None,
                 "runtime": _build_runtime(),
             },
@@ -420,8 +432,10 @@ def test_get_script_for_python_packages(test_case):
                 "-c",
                 (
                     "\nread -r -d '' SCRIPT << EOM\n\n"
-                    '"func": (lambda: print("Hello World")),\n\n'
-                    "<lambda>()\n\n"
+                    "def sample_train_func() -> None:\n"
+                    '    """Sample training function."""\n'
+                    '    print("Hello World")\n\n'
+                    "sample_train_func()\n\n"
                     "EOM\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
@@ -432,7 +446,7 @@ def test_get_script_for_python_packages(test_case):
             name="raises when runtime has no trainer",
             expected_status=FAILED,
             config={
-                "func": (lambda: print("Hello World")),
+                "func": sample_train_func,
                 "func_args": None,
                 "runtime": types.Runtime(
                     name="no-trainer",
@@ -456,7 +470,7 @@ def test_get_script_for_python_packages(test_case):
             name="single dict param also unpacks kwargs",
             expected_status=SUCCESS,
             config={
-                "func": (lambda: print("Hello World")),
+                "func": sample_train_func,
                 "func_args": {"a": 1, "b": 2},
                 "runtime": _build_runtime(),
             },
@@ -465,8 +479,10 @@ def test_get_script_for_python_packages(test_case):
                 "-c",
                 (
                     "\nread -r -d '' SCRIPT << EOM\n\n"
-                    '"func": (lambda: print("Hello World")),\n\n'
-                    "<lambda>(**{'a': 1, 'b': 2})\n\n"
+                    "def sample_train_func() -> None:\n"
+                    '    """Sample training function."""\n'
+                    '    print("Hello World")\n\n'
+                    "sample_train_func(**{'a': 1, 'b': 2})\n\n"
                     "EOM\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
@@ -477,7 +493,7 @@ def test_get_script_for_python_packages(test_case):
             name="multi-param function uses kwargs-unpacking",
             expected_status=SUCCESS,
             config={
-                "func": (lambda **kwargs: "ok"),
+                "func": sample_train_func_kwargs,
                 "func_args": {"a": 3, "b": "hi", "c": 0.2},
                 "runtime": _build_runtime(),
             },
@@ -486,8 +502,10 @@ def test_get_script_for_python_packages(test_case):
                 "-c",
                 (
                     "\nread -r -d '' SCRIPT << EOM\n\n"
-                    '"func": (lambda **kwargs: "ok"),\n\n'
-                    "<lambda>(**{'a': 3, 'b': 'hi', 'c': 0.2})\n\n"
+                    "def sample_train_func_kwargs(a: int, b: str, c: float) -> str:\n"
+                    '    """Sample training function with kwargs."""\n'
+                    '    return "ok"\n\n'
+                    "sample_train_func_kwargs(**{'a': 3, 'b': 'hi', 'c': 0.2})\n\n"
                     "EOM\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
@@ -498,7 +516,7 @@ def test_get_script_for_python_packages(test_case):
             name="with packages to install",
             expected_status=SUCCESS,
             config={
-                "func": (lambda: print("Hello World")),
+                "func": sample_train_func,
                 "func_args": None,
                 "runtime": _build_runtime(),
                 "packages_to_install": ["requests"],
@@ -528,8 +546,10 @@ def test_get_script_for_python_packages(test_case):
                     "    exit 1\n"
                     "fi\n\n"
                     "\nread -r -d '' SCRIPT << EOM\n\n"
-                    '"func": (lambda: print("Hello World")),\n\n'
-                    "<lambda>()\n\n"
+                    "def sample_train_func() -> None:\n"
+                    '    """Sample training function."""\n'
+                    '    print("Hello World")\n\n'
+                    "sample_train_func()\n\n"
                     "EOM\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
