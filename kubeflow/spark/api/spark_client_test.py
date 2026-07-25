@@ -14,7 +14,8 @@
 
 """Unit tests for SparkClient API."""
 
-from unittest.mock import patch
+import time
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -173,3 +174,77 @@ def test_submit_job_success():
             num_executors=None,
             resources_per_executor=None,
         )
+
+
+def test_connect_base_url_success():
+    """Test successful connection to an existing Spark Connect server."""
+
+    mock_session = MagicMock()
+    mock_builder = MagicMock()
+    mock_builder.getOrCreate.return_value = mock_session
+    mock_builder.config.return_value = mock_builder
+
+    with (
+        patch("kubeflow.spark.api.spark_client.validate_spark_connect_url") as mock_validate,
+        patch("kubeflow.spark.api.spark_client.SparkSession.builder") as mock_builder_factory,
+    ):
+        mock_builder_factory.remote.return_value = mock_builder
+
+        client = SparkClient()
+
+        session = client.connect(
+            base_url="sc://localhost:15002",
+            token="test-token",
+        )
+
+        assert session == mock_session
+        mock_validate.assert_called_once_with("sc://localhost:15002")
+        mock_builder_factory.remote.assert_called_once_with("sc://localhost:15002")
+        mock_builder.config.assert_called_once_with(
+            "spark.connect.authenticate.token",
+            "test-token",
+        )
+        mock_builder.getOrCreate.assert_called_once()
+
+
+def test_connect_base_url_timeout():
+    """Test timeout when connecting to an existing Spark Connect server."""
+
+    mock_builder = MagicMock()
+
+    def slow_get_or_create():
+        time.sleep(1)
+
+    mock_builder.getOrCreate.side_effect = slow_get_or_create
+
+    with (
+        patch("kubeflow.spark.api.spark_client.validate_spark_connect_url"),
+        patch("kubeflow.spark.api.spark_client.SparkSession.builder") as mock_builder_factory,
+    ):
+        mock_builder_factory.remote.return_value = mock_builder
+
+        client = SparkClient()
+
+        with pytest.raises(TimeoutError):
+            client.connect(
+                base_url="sc://localhost:15002",
+                connect_timeout=0.1,
+            )
+
+
+def test_connect_base_url_exception():
+    """Test exception propagation when connecting to an existing Spark Connect server."""
+
+    mock_builder = MagicMock()
+    mock_builder.getOrCreate.side_effect = RuntimeError("boom")
+
+    with (
+        patch("kubeflow.spark.api.spark_client.validate_spark_connect_url"),
+        patch("kubeflow.spark.api.spark_client.SparkSession.builder") as mock_builder_factory,
+    ):
+        mock_builder_factory.remote.return_value = mock_builder
+
+        client = SparkClient()
+
+        with pytest.raises(RuntimeError, match="boom"):
+            client.connect(base_url="sc://localhost:15002")

@@ -15,6 +15,7 @@
 """SparkClient for Kubeflow SDK."""
 
 from collections.abc import Iterator
+import threading
 
 from pyspark.sql import SparkSession
 
@@ -91,7 +92,7 @@ class SparkClient:
             options: List of configuration options (create mode only).
                 Use Name option for custom session name.
             timeout: Timeout in seconds to wait for session ready.
-            connect_timeout: Timeout in seconds for SparkSession.getOrCreate() (create mode only).
+            connect_timeout: Timeout in seconds for SparkSession.getOrCreate().
 
         Returns:
             SparkSession connected to Spark (self-managing).
@@ -110,7 +111,30 @@ class SparkClient:
             builder = SparkSession.builder.remote(base_url)
             if token:
                 builder = builder.config("spark.connect.authenticate.token", token)
-            return builder.getOrCreate()
+            result: list = []
+            exc_holder: list = []
+
+            def _get_or_create() -> None:
+                try:
+                    session = builder.getOrCreate()
+                    result.append(session)
+                except Exception as e:
+                    exc_holder.append(e)
+
+            thread = threading.Thread(target=_get_or_create, daemon=True)
+            thread.start()
+            thread.join(timeout=connect_timeout)
+
+            if not thread.is_alive():
+                if exc_holder:
+                    raise exc_holder[0]
+                if result:
+                    return result[0]
+
+            raise TimeoutError(
+                f"Spark Connect connection to {base_url} did not complete "
+                f"within {connect_timeout}s."
+            )
 
         return self.backend.create_and_connect(
             num_executors=num_executors,
