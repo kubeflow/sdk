@@ -14,7 +14,9 @@
 
 import pytest
 
+from kubeflow.common.constants import UNKNOWN
 from kubeflow.trainer.backends.container import utils as container_utils
+from kubeflow.trainer.constants import constants
 from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.types import types
 
@@ -106,4 +108,59 @@ def test_build_pip_install_cmd(test_case: TestCase):
     except Exception as e:
         assert test_case.expected_status == FAILED
         assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="empty list is not complete",
+            expected_status=SUCCESS,
+            config={"statuses": []},
+            expected_output=UNKNOWN,
+        ),
+        TestCase(
+            name="all unknown is not complete",
+            expected_status=SUCCESS,
+            config={"statuses": [UNKNOWN, UNKNOWN]},
+            expected_output=UNKNOWN,
+        ),
+        TestCase(
+            name="all complete is complete",
+            expected_status=SUCCESS,
+            config={"statuses": [constants.TRAINJOB_COMPLETE, constants.TRAINJOB_COMPLETE]},
+            expected_output=constants.TRAINJOB_COMPLETE,
+        ),
+        TestCase(
+            name="complete with unknown is complete",
+            expected_status=SUCCESS,
+            config={"statuses": [constants.TRAINJOB_COMPLETE, UNKNOWN]},
+            expected_output=constants.TRAINJOB_COMPLETE,
+        ),
+        TestCase(
+            name="failed takes precedence",
+            expected_status=SUCCESS,
+            config={"statuses": [constants.TRAINJOB_COMPLETE, constants.TRAINJOB_FAILED]},
+            expected_output=constants.TRAINJOB_FAILED,
+        ),
+        TestCase(
+            name="running takes precedence over complete",
+            expected_status=SUCCESS,
+            config={"statuses": [constants.TRAINJOB_RUNNING, constants.TRAINJOB_COMPLETE]},
+            expected_output=constants.TRAINJOB_RUNNING,
+        ),
+        TestCase(
+            name="created with unknown is created",
+            expected_status=SUCCESS,
+            config={"statuses": [constants.TRAINJOB_CREATED, UNKNOWN]},
+            expected_output=constants.TRAINJOB_CREATED,
+        ),
+    ],
+)
+def test_aggregate_status_from_containers(test_case: TestCase):
+    """Test aggregation of container statuses into a TrainJob status."""
+    print("Executing test:", test_case.name)
+    result = container_utils.aggregate_status_from_containers(test_case.config["statuses"])
+    assert result == test_case.expected_output
     print("test execution complete")

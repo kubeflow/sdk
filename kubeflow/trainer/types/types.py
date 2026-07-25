@@ -90,6 +90,12 @@ class CustomTrainerContainer:
     env: dict[str, str] | None = None
 
 
+# The Kind name for the ClusterTrainingRuntime, TrainingRuntime.
+class RuntimeKind(Enum):
+    CLUSTER_TRAINING_RUNTIME = "ClusterTrainingRuntime"
+    TRAINING_RUNTIME = "TrainingRuntime"
+
+
 # TODO(Electronic-Waste): Add more loss functions.
 # Loss function for the TorchTune LLM Trainer.
 class Loss(Enum):
@@ -269,6 +275,7 @@ class RuntimeTrainer:
 class Runtime:
     name: str
     trainer: RuntimeTrainer
+    kind: RuntimeKind
     pretrained_model: str | None = None
 
 
@@ -322,6 +329,19 @@ class BaseInitializer(abc.ABC):
     storage_uri: str
 
 
+def _validate_hf_storage_uri(storage_uri: str, entity: str) -> None:
+    """Validate an 'hf://<user_name>/<repo_name>' storage URI."""
+    if not storage_uri.startswith("hf://"):
+        raise ValueError(f"storage_uri must start with 'hf://', got {storage_uri}")
+
+    parsed = urlparse(storage_uri)
+    if not parsed.netloc or not parsed.path.strip("/"):
+        raise ValueError(
+            f"storage_uri: must have absolute path with 'hf://<user_name>/<{entity}>', got "
+            f"{storage_uri}"
+        )
+
+
 @dataclass
 class HuggingFaceDatasetInitializer(BaseInitializer):
     """Configuration for downloading datasets from HuggingFace Hub.
@@ -338,14 +358,7 @@ class HuggingFaceDatasetInitializer(BaseInitializer):
     def __post_init__(self):
         """Validate HuggingFaceDatasetInitializer parameters."""
 
-        if not self.storage_uri.startswith("hf://"):
-            raise ValueError(f"storage_uri must start with 'hf://', got {self.storage_uri}")
-
-        if urlparse(self.storage_uri).path == "":
-            raise ValueError(
-                "storage_uri: must have absolute path with 'hf://<user_name>/<dataset_name>', got "
-                f"{self.storage_uri}"
-            )
+        _validate_hf_storage_uri(self.storage_uri, "dataset_name")
 
 
 @dataclass
@@ -440,8 +453,7 @@ class HuggingFaceModelInitializer(BaseInitializer):
     def __post_init__(self):
         """Validate HuggingFaceModelInitializer parameters."""
 
-        if not self.storage_uri.startswith("hf://"):
-            raise ValueError(f"storage_uri must start with 'hf://', got {self.storage_uri}")
+        _validate_hf_storage_uri(self.storage_uri, "model_name")
 
 
 @dataclass

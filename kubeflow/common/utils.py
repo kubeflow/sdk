@@ -37,3 +37,27 @@ def get_default_target_namespace(context: str | None = None) -> str:
             return constants.DEFAULT_NAMESPACE
     with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace") as f:
         return f.readline()
+
+
+def validate_wait_for_job_status(polling_interval: int, timeout: int) -> None:
+    """Validate polling_interval and timeout values used by wait_for_job_status methods.
+
+    Args:
+        polling_interval: The polling interval in seconds.
+        timeout: The timeout in seconds.
+
+    Raises:
+        ValueError: If polling_interval or timeout are not positive, or if polling_interval
+            is not strictly less than timeout.
+    """
+    if timeout <= 0:
+        raise ValueError(f"Timeout must be a positive number, got timeout={timeout}")
+    if polling_interval <= 0:
+        raise ValueError(
+            f"Polling interval must be a positive number, got polling_interval={polling_interval}"
+        )
+    if polling_interval >= timeout:
+        raise ValueError(
+            "Polling interval must be strictly less than timeout. "
+            f"Received polling_interval={polling_interval}, timeout={timeout}"
+        )

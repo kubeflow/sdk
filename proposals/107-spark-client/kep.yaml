@@ -1,0 +1,26 @@
+title: Spark Client SDK for Kubeflow
+kep-number: 107
+authors:
+  - "@shekharrajak"
+  - "@Goku2099"
+status: provisional
+creation-date: "2025-11-17"
+reviewers:
+  - "@andreyvelich"
+  - "@astefanutti"
+  - "@Electronic-Waste"
+  - "@kramaranya"
+  - "@shekharrajak"
+  - "@szaher"
+  - "@tariq-hasan"
+approvers:
+  - "@andreyvelich"
+  - "@astefanutti"
+  - "@Electronic-Waste"
+  - "@kramaranya"
+see-also:
+  - https://github.com/kubeflow/sdk/issues/107
+  - https://github.com/kubeflow/sdk/issues/520
+replaces: []
+
+latest-milestone: "0.6.0"

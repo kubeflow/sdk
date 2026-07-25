@@ -133,4 +133,4 @@ What's Next?
 ------------
 
 - :doc:`../train/index` - Learn about distributed training, GPUs, and more
-- :doc:`../tune/index` - Automatically tune hyperparameters
+- :doc:`../optimize/index` - Automatically tune hyperparameters

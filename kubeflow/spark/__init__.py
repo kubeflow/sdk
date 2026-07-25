@@ -27,8 +27,12 @@ from kubeflow.spark.types.options import (
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
+    FileJob,
+    FuncJob,
     SparkConnectInfo,
     SparkConnectState,
+    SparkJob,
+    SparkJobStatus,
 )
 
 __all__ = [
@@ -37,8 +41,12 @@ __all__ = [
     # Types
     "Driver",
     "Executor",
+    "FileJob",
+    "FuncJob",
     "SparkConnectInfo",
     "SparkConnectState",
+    "SparkJob",
+    "SparkJobStatus",
     # Options (KEP-107 extensibility pattern - callable pattern like trainer SDK)
     "Annotations",
     "Labels",

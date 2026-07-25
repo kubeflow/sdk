@@ -17,6 +17,7 @@ import logging
 from typing import Any
 
 from kubeflow.common.types import KubernetesBackendConfig
+import kubeflow.common.utils as common_utils
 from kubeflow.optimizer.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.optimizer.constants import constants
 from kubeflow.optimizer.types.algorithm_types import BaseAlgorithm
@@ -177,6 +178,7 @@ class OptimizerClient:
             TimeoutError: Timeout to get an OptimizationJob.
             RuntimeError: Failed to get an OptimizationJob.
         """
+
         return self.backend.get_best_results(name=name)
 
     def wait_for_job_status(
@@ -208,6 +210,8 @@ class OptimizerClient:
                 Failed status.
             TimeoutError: Timeout to wait for OptimizationJob status.
         """
+        common_utils.validate_wait_for_job_status(polling_interval, timeout)
+
         return self.backend.wait_for_job_status(
             name=name,
             status=status,

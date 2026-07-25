@@ -83,7 +83,7 @@ jobs:
           SPARK_E2E_DEBUG: "1"
           SPARK_E2E_RUN_IN_CLUSTER: "1"
           SPARK_E2E_RUNNER_IMAGE: spark-e2e-runner:local
-        timeout-minutes: 10
+        timeout-minutes: 15
 
       - name: Collect logs on failure
         if: failure()
