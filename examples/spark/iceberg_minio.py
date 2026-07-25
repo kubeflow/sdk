@@ -14,16 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Example: SparkSession with Apache Iceberg and MinIO (S3-compatible storage).
+"""Example: SparkClient with Apache Iceberg and MinIO (S3-compatible storage).
 
-This example demonstrates how to use a local PySpark ``SparkSession`` with:
+This example demonstrates how to use the Kubeflow Spark SDK with:
 - Apache Iceberg as the table format
 - MinIO as the S3-compatible object storage backend
 - Iceberg REST catalog for table metadata management
 
-This example does not use ``kubeflow.spark.SparkClient``. It connects directly to a
-local Spark runtime so you can validate Iceberg and MinIO integration without
-provisioning a Spark Connect session.
+The example creates a Spark Connect session through ``kubeflow.spark.SparkClient``
+so the Iceberg path is exercised end-to-end through the SDK.
 
 This is a local development example. For production use, replace the
 MinIO endpoint and credentials with your actual S3/GCS/ABS configuration.
@@ -51,13 +50,16 @@ Prerequisites:
         tabulario/iceberg-rest
 
 Usage:
-    pip install pyspark==3.5.0
-    python examples/spark/iceberg_minio.py
+    uv run python examples/spark/iceberg_minio.py
 """
 
 import os
+import uuid
 
 from pyspark.sql import SparkSession
+
+from kubeflow.common.types import KubernetesBackendConfig
+from kubeflow.spark import Name, SparkClient
 
 # MinIO / S3 credentials — replace with your own for production
 MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")
@@ -67,8 +69,22 @@ ICEBERG_REST_URI = os.environ.get("ICEBERG_REST_URI", "http://localhost:8181")
 WAREHOUSE = os.environ.get("ICEBERG_WAREHOUSE", "s3://warehouse/")
 
 
-def create_spark_session() -> SparkSession:
-    """Create a SparkSession configured for Iceberg + MinIO.
+def _backend_config(namespace_default: str = "default") -> KubernetesBackendConfig:
+    """Backend config; uses SPARK_TEST_NAMESPACE in CI."""
+    return KubernetesBackendConfig(
+        namespace=os.environ.get("SPARK_TEST_NAMESPACE", namespace_default)
+    )
+
+
+def _session_name(base: str) -> str:
+    """Use a unique session name in E2E in-cluster runs to avoid conflicts."""
+    if os.environ.get("SPARK_E2E_RUN_IN_CLUSTER") == "1":
+        return f"{base}-{uuid.uuid4().hex[:8]}"
+    return base
+
+
+def create_spark_session() -> tuple[SparkClient, SparkSession, str]:
+    """Create a Spark Connect session configured for Iceberg + MinIO.
 
     Key configurations:
     - spark.jars.packages: pulls Iceberg runtime and AWS SDK v2 from Maven
@@ -84,41 +100,41 @@ def create_spark_session() -> SparkSession:
     os.environ.setdefault("AWS_ACCESS_KEY_ID", MINIO_ACCESS_KEY)
     os.environ.setdefault("AWS_SECRET_ACCESS_KEY", MINIO_SECRET_KEY)
 
-    return (
-        SparkSession.builder.appName("kubeflow-iceberg-minio")
-        # --- Dependencies ---
-        # Iceberg runtime + AWS SDK v2 (required for S3FileIO in Iceberg 1.9.x)
-        .config(
-            "spark.jars.packages",
-            "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.9.1,"
-            "software.amazon.awssdk:bundle:2.26.24,"
-            "software.amazon.awssdk:url-connection-client:2.26.24",
-        )
-        # Pass AWS region to driver JVM
-        .config("spark.driver.extraJavaOptions", "-Daws.region=us-east-1")
-        # --- Iceberg SQL extensions ---
-        # Enables: CREATE TABLE ... USING iceberg, time travel, etc.
-        .config(
-            "spark.sql.extensions",
-            "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
-        )
-        # --- Iceberg REST catalog ---
-        .config("spark.sql.catalog.lakehouse", "org.apache.iceberg.spark.SparkCatalog")
-        .config("spark.sql.catalog.lakehouse.type", "rest")
-        .config("spark.sql.catalog.lakehouse.uri", ICEBERG_REST_URI)
-        .config("spark.sql.catalog.lakehouse.warehouse", WAREHOUSE)
-        # Use S3FileIO for reading/writing Iceberg data files to MinIO
-        .config(
-            "spark.sql.catalog.lakehouse.io-impl",
-            "org.apache.iceberg.aws.s3.S3FileIO",
-        )
-        .config("spark.sql.catalog.lakehouse.s3.endpoint", MINIO_ENDPOINT)
-        .config("spark.sql.catalog.lakehouse.s3.path-style-access", "true")
-        .config("spark.sql.catalog.lakehouse.s3.region", "us-east-1")
-        .config("spark.sql.catalog.lakehouse.s3.access-key-id", MINIO_ACCESS_KEY)
-        .config("spark.sql.catalog.lakehouse.s3.secret-access-key", MINIO_SECRET_KEY)
-        .getOrCreate()
+    client = SparkClient(backend_config=_backend_config())
+    session_name = _session_name("kubeflow-iceberg-minio")
+
+    spark = client.connect(
+        spark_conf={
+            # Iceberg runtime + AWS SDK v2 (required for S3FileIO in Iceberg 1.9.x)
+            "spark.jars.packages": (
+                "org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.9.1,"
+                "software.amazon.awssdk:bundle:2.26.24,"
+                "software.amazon.awssdk:url-connection-client:2.26.24"
+            ),
+            # Pass AWS region to driver JVM.
+            "spark.driver.extraJavaOptions": "-Daws.region=us-east-1",
+            # Enables: CREATE TABLE ... USING iceberg, time travel, etc.
+            "spark.sql.extensions": (
+                "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions"
+            ),
+            # Iceberg REST catalog.
+            "spark.sql.catalog.lakehouse": "org.apache.iceberg.spark.SparkCatalog",
+            "spark.sql.catalog.lakehouse.type": "rest",
+            "spark.sql.catalog.lakehouse.uri": ICEBERG_REST_URI,
+            "spark.sql.catalog.lakehouse.warehouse": WAREHOUSE,
+            # Use S3FileIO for reading/writing Iceberg data files to MinIO.
+            "spark.sql.catalog.lakehouse.io-impl": "org.apache.iceberg.aws.s3.S3FileIO",
+            "spark.sql.catalog.lakehouse.s3.endpoint": MINIO_ENDPOINT,
+            "spark.sql.catalog.lakehouse.s3.path-style-access": "true",
+            "spark.sql.catalog.lakehouse.s3.region": "us-east-1",
+            "spark.sql.catalog.lakehouse.s3.access-key-id": MINIO_ACCESS_KEY,
+            "spark.sql.catalog.lakehouse.s3.secret-access-key": MINIO_SECRET_KEY,
+        },
+        options=[Name(session_name)],
+        timeout=180 if os.environ.get("SPARK_E2E_RUN_IN_CLUSTER") == "1" else 300,
+        connect_timeout=60 if os.environ.get("SPARK_E2E_RUN_IN_CLUSTER") == "1" else 120,
     )
+    return client, spark, session_name
 
 
 def run_iceberg_example(spark: SparkSession) -> None:
@@ -153,10 +169,10 @@ def run_iceberg_example(spark: SparkSession) -> None:
 
 def main() -> None:
     print("=" * 60)
-    print("Local SparkSession — Iceberg + MinIO Example")
+    print("KUBEFLOW SPARKCLIENT — Iceberg + MinIO Example")
     print("=" * 60)
 
-    spark = create_spark_session()
+    client, spark, session_name = create_spark_session()
 
     try:
         run_iceberg_example(spark)
@@ -166,6 +182,7 @@ def main() -> None:
         raise
     finally:
         spark.stop()
+        client.delete_session(session_name)
 
 
 if __name__ == "__main__":
