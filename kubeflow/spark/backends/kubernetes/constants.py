@@ -20,6 +20,24 @@ SPARK_CONNECT_VERSION = "v1alpha1"
 SPARK_CONNECT_PLURAL = "sparkconnects"
 SPARK_CONNECT_KIND = "SparkConnect"
 
+# Spark Connect server port (must match Spark ConnectCommon.CONNECT_GRPC_BINDING_PORT)
+SPARK_CONNECT_PORT = 15002
+
+# Session name prefix
+SESSION_NAME_PREFIX = "spark-connect"
+
+# Spark Connect Maven package (required for Connect server main class on classpath)
+SPARK_CONNECT_PACKAGE_SCALA_VERSION = "2.13"
+
+# Spark job name prefix
+JOB_NAME_PREFIX = "spark-job"
+
+# SparkApplication CRD
+SPARK_APPLICATION_GROUP = "sparkoperator.k8s.io"
+SPARK_APPLICATION_VERSION = "v1beta2"
+SPARK_APPLICATION_PLURAL = "sparkapplications"
+SPARK_APPLICATION_KIND = "SparkApplication"
+
 # Default values; keep major.minor aligned with pyspark-connect in pyproject.toml
 DEFAULT_SPARK_VERSION = "4.0.1"
 DEFAULT_SPARK_IMAGE = "apache/spark:4.0.1"
@@ -31,12 +49,4 @@ DEFAULT_DRIVER_CPU = 1
 DEFAULT_DRIVER_MEMORY = "512Mi"
 DEFAULT_EXECUTOR_CPU = 1
 DEFAULT_EXECUTOR_MEMORY = "512Mi"
-
-# Spark Connect server port (must match Spark ConnectCommon.CONNECT_GRPC_BINDING_PORT)
-SPARK_CONNECT_PORT = 15002
-
-# Session name prefix
-SESSION_NAME_PREFIX = "spark-connect"
-
-# Spark Connect Maven package (required for Connect server main class on classpath)
-SPARK_CONNECT_PACKAGE_SCALA_VERSION = "2.13"
+DEFAULT_SERVICE_ACCOUNT = "spark-operator-spark"

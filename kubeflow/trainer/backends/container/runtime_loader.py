@@ -329,6 +329,7 @@ def _create_default_runtimes() -> list[base_types.Runtime]:
                 num_nodes=1,
                 image=image,
             ),
+            kind=base_types.RuntimeKind.TRAINING_RUNTIME,
         )
         default_runtimes.append(runtime)
         logger.debug(f"Created default runtime: {runtime.name} with image {image}")
@@ -415,6 +416,7 @@ def _parse_runtime_yaml(data: dict[str, Any], source: str = "unknown") -> base_t
             num_nodes=num_nodes,
             image=image,
         ),
+        kind=base_types.RuntimeKind.TRAINING_RUNTIME,
     )
 
 

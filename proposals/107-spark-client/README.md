@@ -149,7 +149,7 @@ spark.stop()
 
 ```python
 from kubeflow.spark import SparkClient
-from kubeflow.spark.types.jobs import FileJob
+from kubeflow.spark.types.types import FileJob
 from kubeflow.common.types import KubernetesBackendConfig
 
 client = SparkClient(backend_config=KubernetesBackendConfig(namespace="etl-jobs"))
@@ -590,9 +590,13 @@ class SparkClient:
 
     def list_jobs(
         self,
-        status: Optional[SparkJobStatus] = None,
+        status: Optional[Set[SparkJobStatus]] = None,
     ) -> List[SparkJob]:
-        """List batch Spark jobs."""
+        """List batch Spark jobs.
+
+        Args:
+            status: Optional set of job statuses used to filter returned jobs.
+        """
 
     def get_job(self, name: str) -> SparkJob:
         """Get a specific Spark job by name."""
@@ -615,6 +619,7 @@ class SparkClient:
         name: str,
         status: Set[SparkJobStatus] = {SparkJobStatus.COMPLETED},
         timeout: int = 600,
+        polling_interval: int = 2,
     ) -> SparkJob:
         """Wait for a job to reach desired status."""
 

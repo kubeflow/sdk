@@ -45,6 +45,7 @@ spark = [
   "kubeflow-spark-api>=2.4.0",
 ]
 hub = ["model-registry>=0.3.6"]
+pipelines = ["kfp[kubernetes]>=2.17.0"]
 
 [dependency-groups]
 docs = [
@@ -56,13 +57,14 @@ docs = [
   "sphinx-design>=0.6",
 ]
 dev = [
-  "kubeflow[hub,spark]",
+  "kubeflow[hub,pipelines,spark]",
   "pytest>=7.0",
   "pytest-mock>=3.10",
   "coverage>=7.0",
   "kubeflow_trainer_api@git+https://github.com/kubeflow/trainer.git@master#subdirectory=api/python_api",
   "kubeflow_katib_api@git+https://github.com/kubeflow/katib.git@master#subdirectory=api/python_api",
   "kubeflow_spark_api@git+https://github.com/kubeflow/spark-operator.git@master#subdirectory=api/python_api",
+  "kfp[kubernetes]>=2.17.0",
   "ruff>=0.12.2",
   "pre-commit>=4.2.0",
   "PyGithub>=2.7.0",

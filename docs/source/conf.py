@@ -85,6 +85,51 @@ typehints_fully_qualified = False
 always_document_param_types = False
 typehints_document_rtype = False
 
+# -- KFP type alias cleanup for Pipelines docs --------------------------------
+# PipelinesClient (from kfp.kubeflow_client) uses type aliases like `Pipeline`
+# and `Run` that map to auto-generated `kfp_server_api.V2beta1Pipeline` etc.
+# Sphinx resolves these aliases to the underlying V2beta1* names, which are
+# internal server API types that users should never see.
+#
+# Neither `autodoc_type_aliases` nor `typehints_formatter` can fix this reliably
+# because sphinx_autodoc_typehints evaluates type aliases to their underlying
+# runtime objects (where __name__ is V2beta1*), bypassing both mechanisms.
+#
+# The doctree-resolved hook below post-processes rendered text nodes to replace
+# V2beta1* names with their clean aliases. It only runs on pipelines/ pages to
+# avoid unintended side effects on other SDK docs.
+
+_KFP_TYPE_DISPLAY_NAMES = {
+    "V2beta1Pipeline": "Pipeline",
+    "V2beta1PipelineVersion": "PipelineVersion",
+    "V2beta1Run": "Run",
+    "V2beta1Experiment": "Experiment",
+    "V2beta1ListPipelinesResponse": "ListPipelinesResponse",
+    "V2beta1ListPipelineVersionsResponse": "ListPipelineVersionsResponse",
+    "V2beta1ListRunsResponse": "ListRunsResponse",
+    "V2beta1ListExperimentsResponse": "ListExperimentsResponse",
+}
+
+
+def _replace_v2beta1_in_doctree(_app, doctree, docname):
+    if not docname.startswith("pipelines/"):
+        return
+
+    from docutils import nodes
+
+    for node in doctree.findall(nodes.Text):
+        text = str(node)
+        new_text = text
+        for old, new in _KFP_TYPE_DISPLAY_NAMES.items():
+            new_text = new_text.replace(old, new)
+        if new_text != text:
+            node.parent.replace(node, nodes.Text(new_text))
+
+
+def setup(app):
+    app.connect("doctree-resolved", _replace_v2beta1_in_doctree)
+
+
 # -- Options for HTML output -------------------------------------------------
 html_theme = "furo"
 html_title = "Kubeflow SDK"

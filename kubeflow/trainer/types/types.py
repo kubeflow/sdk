@@ -90,6 +90,12 @@ class CustomTrainerContainer:
     env: dict[str, str] | None = None
 
 
+# The Kind name for the ClusterTrainingRuntime, TrainingRuntime.
+class RuntimeKind(Enum):
+    CLUSTER_TRAINING_RUNTIME = "ClusterTrainingRuntime"
+    TRAINING_RUNTIME = "TrainingRuntime"
+
+
 # TODO(Electronic-Waste): Add more loss functions.
 # Loss function for the TorchTune LLM Trainer.
 class Loss(Enum):
@@ -269,6 +275,7 @@ class RuntimeTrainer:
 class Runtime:
     name: str
     trainer: RuntimeTrainer
+    kind: RuntimeKind
     pretrained_model: str | None = None
 
 
