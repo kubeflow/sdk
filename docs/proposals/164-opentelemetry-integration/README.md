@@ -38,7 +38,7 @@ OpenTelemetry is the CNCF standard for observability. Adding it to the SDK enabl
 - Build a shared telemetry module (`kubeflow/common/telemetry/`) that all SDK clients can
   reuse.
 - Propagate trace context across pod boundaries via W3C `TRACEPARENT` env var injection.
-- Collect operational metrics: job counts, operation durations, active jobs, errors.
+- Collect operational metrics: job counts, operation durations, errors.
 - Emit spans and metrics through the standard OTel API so user applications can configure
   their own providers, exporters, resources, and sampling.
 - Provide an optional `configure_telemetry()` quickstart helper for examples and simple
@@ -435,7 +435,6 @@ If the training code does not use OTel, the `TRACEPARENT` env var is harmlessly 
 |---|---|---|---|
 | `kubeflow.trainer.job.created` | Counter | `{job}` | Total training jobs submitted |
 | `kubeflow.trainer.operation.duration` | Histogram | `s` | Duration of each SDK API call |
-| `kubeflow.trainer.job.active` | UpDownCounter | `{job}` | Currently running jobs |
 | `kubeflow.trainer.errors` | Counter | `{error}` | Total errors by type and operation |
 
 Attribute dimensions (low cardinality only):
@@ -444,7 +443,6 @@ Attribute dimensions (low cardinality only):
 |---|---|
 | `job.created` | `kubeflow.backend.type`, `kubeflow.trainer.type` |
 | `operation.duration` | `kubeflow.operation.name`, `kubeflow.backend.type`, `error.type` |
-| `job.active` | `kubeflow.backend.type` |
 | `errors` | `kubeflow.operation.name`, `error.type`, `kubeflow.backend.type` |
 
 To prevent cardinality explosion, per-job identifiers (`kubeflow.job.name`,
