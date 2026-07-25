@@ -94,3 +94,21 @@ Post the release announcement for the new Kubeflow SDK release in:
 
 - [#kubeflow-ml-experience](https://www.kubeflow.org/docs/about/community/#slack-channels) Slack channel
 - [kubeflow-discuss](https://www.kubeflow.org/docs/about/community/#kubeflow-mailing-list) mailing list
+
+## Bump the Milestone Applier
+
+When a new minor release branch (`release-X.Y`) is cut, update the
+[`milestone_applier`](https://github.com/GoogleCloudPlatform/oss-test-infra/blob/master/prow/oss/plugins.yaml)
+configuration in the `GoogleCloudPlatform/oss-test-infra` repository so Prow keeps
+auto-applying the correct milestone to PRs on each branch. See [this PR example](https://github.com/GoogleCloudPlatform/oss-test-infra/pull/2587).
+
+1. Bump the `main` milestone to the next upcoming minor (e.g. `v0.4` -> `v0.5`).
+1. Add an entry pinning the newly created release branch to its milestone
+   (e.g. `release-0.4: v0.4`).
+
+```yaml
+milestone_applier:
+  kubeflow/sdk:
+    main: v0.5
+    release-0.4: v0.4
+```

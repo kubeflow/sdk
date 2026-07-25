@@ -80,7 +80,9 @@ class KubernetesBackend(RuntimeBackend):
             logger.warning(
                 "Trainer control-plane version info is not available: "
                 f"unable to read 'kubeflow_trainer_version' from ConfigMap "
-                f"'{config_map_name}' in namespace '{system_namespace}': {e}"
+                f"'{config_map_name}' in namespace '{system_namespace}': {e}. "
+                "If your Trainer control-plane is installed in a different namespace, "
+                "set the KUBEFLOW_SYSTEM_NAMESPACE environment variable accordingly."
             )
             return
 
@@ -115,12 +117,12 @@ class KubernetesBackend(RuntimeBackend):
                 namespace_thread.get(common_constants.DEFAULT_TIMEOUT)
             )
         except multiprocessing.TimeoutError as e:
-            raise TimeoutError(f"Timeout to list {constants.TRAINING_RUNTIME_KIND}s") from e
+            raise TimeoutError(f"Timeout to list {types.RuntimeKind.TRAINING_RUNTIME}s") from e
         except client.ApiException as e:
             if e.status != 404:
-                raise RuntimeError(f"Failed to list {constants.TRAINING_RUNTIME_KIND}s") from e
+                raise RuntimeError(f"Failed to list {types.RuntimeKind.TRAINING_RUNTIME}s") from e
         except Exception as e:
-            raise RuntimeError(f"Failed to list {constants.TRAINING_RUNTIME_KIND}s") from e
+            raise RuntimeError(f"Failed to list {types.RuntimeKind.TRAINING_RUNTIME}s") from e
 
         # Fetch cluster-scoped ClusterTrainingRuntimes.
         cluster_runtimes = None
@@ -129,9 +131,13 @@ class KubernetesBackend(RuntimeBackend):
                 cluster_thread.get(common_constants.DEFAULT_TIMEOUT)
             )
         except multiprocessing.TimeoutError as e:
-            raise TimeoutError(f"Timeout to list {constants.CLUSTER_TRAINING_RUNTIME_KIND}s") from e
+            raise TimeoutError(
+                f"Timeout to list {types.RuntimeKind.CLUSTER_TRAINING_RUNTIME}s"
+            ) from e
         except Exception as e:
-            raise RuntimeError(f"Failed to list {constants.CLUSTER_TRAINING_RUNTIME_KIND}s") from e
+            raise RuntimeError(
+                f"Failed to list {types.RuntimeKind.CLUSTER_TRAINING_RUNTIME}s"
+            ) from e
 
         # Collect runtimes in a map, preferring namespaced over cluster-scoped
         runtimes_by_name = {}
@@ -146,7 +152,10 @@ class KubernetesBackend(RuntimeBackend):
         if cluster_runtimes:
             for runtime in cluster_runtimes.items:
                 if runtime.metadata and runtime.metadata.name:
-                    runtimes_by_name.setdefault(runtime.metadata.name, runtime)
+                    runtimes_by_name.setdefault(
+                        runtime.metadata.name,
+                        runtime,
+                    )
 
         try:
             for runtime in runtimes_by_name.values():
@@ -189,16 +198,16 @@ class KubernetesBackend(RuntimeBackend):
 
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(
-                f"Timeout to get {constants.TRAINING_RUNTIME_KIND}: {self.namespace}/{name}"
+                f"Timeout to get {types.RuntimeKind.TRAINING_RUNTIME}: {self.namespace}/{name}"
             ) from e
         except client.ApiException as e:
             if e.status != 404:
                 raise RuntimeError(
-                    f"Failed to get {constants.TRAINING_RUNTIME_KIND}: {self.namespace}/{name}"
+                    f"Failed to get {types.RuntimeKind.TRAINING_RUNTIME}: {self.namespace}/{name}"
                 ) from e
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get {constants.TRAINING_RUNTIME_KIND}: {self.namespace}/{name}"
+                f"Failed to get {types.RuntimeKind.TRAINING_RUNTIME}: {self.namespace}/{name}"
             ) from e
 
         try:
@@ -215,7 +224,7 @@ class KubernetesBackend(RuntimeBackend):
             return self.__get_runtime_from_cr(runtime)
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(
-                f"Timeout to get {constants.CLUSTER_TRAINING_RUNTIME_KIND}: {name}"
+                f"Timeout to get {types.RuntimeKind.CLUSTER_TRAINING_RUNTIME}: {name}"
             ) from e
         except Exception as e:
             raise RuntimeError(
@@ -258,18 +267,30 @@ class KubernetesBackend(RuntimeBackend):
 
         # Create the TrainJob and wait until it completes.
         # If Runtime trainer has GPU resources use them, otherwise run TrainJob with 1 CPU.
-        job_name = self.train(
-            runtime=runtime_copy,
-            trainer=types.CustomTrainer(
-                func=print_packages,
-                num_nodes=1,
-                resources_per_node=({"cpu": 1} if runtime_copy.trainer.device != "gpu" else None),
-            ),
-        )
-
-        self.wait_for_job_status(job_name)
-        print("\n".join(self.get_job_logs(name=job_name)))
-        self.delete_job(job_name)
+        job_name = None
+        try:
+            job_name = self.train(
+                runtime=runtime_copy,
+                trainer=types.CustomTrainer(
+                    func=print_packages,
+                    num_nodes=1,
+                    resources_per_node=(
+                        {"cpu": 1} if runtime_copy.trainer.device != "gpu" else None
+                    ),
+                ),
+            )
+            self.wait_for_job_status(job_name)
+            print("\n".join(self.get_job_logs(name=job_name)))
+        finally:
+            if job_name is not None:
+                try:
+                    self.delete_job(job_name)
+                except Exception:
+                    logger.exception(
+                        "Failed to delete temporary TrainJob %s/%s created by get_runtime_packages",
+                        self.namespace,
+                        job_name,
+                    )
 
     def train(
         self,
@@ -594,6 +615,7 @@ class KubernetesBackend(RuntimeBackend):
 
         return types.Runtime(
             name=runtime_cr.metadata.name,
+            kind=types.RuntimeKind(runtime_cr.kind),
             trainer=utils.get_runtime_trainer(
                 runtime_cr.metadata.labels[constants.RUNTIME_FRAMEWORK_LABEL],
                 runtime_cr.spec.template.spec.replicated_jobs,
@@ -676,14 +698,32 @@ class KubernetesBackend(RuntimeBackend):
             if not pod_list:
                 return trainjob
 
-            for pod in pod_list.items:
+            sorted_pods = sorted(
+                pod_list.items,
+                key=lambda pod: (
+                    pod.metadata is not None and pod.metadata.creation_timestamp is not None,
+                    pod.metadata.creation_timestamp if pod.metadata else None,
+                ),
+                reverse=True,
+            )
+            seen_step_keys: set[str] = set()
+            for pod in sorted_pods:
                 # Pod must have labels to detect the TrainJob step.
                 # Every Pod always has a single TrainJob step.
                 if not (pod.metadata and pod.metadata.name and pod.metadata.labels and pod.spec):
                     raise Exception(f"TrainJob Pod is invalid: {pod}")
 
+                role = pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL]
+                step_key = role
+                if role in {constants.LAUNCHER, constants.NODE}:
+                    step_key = f"{role}-{pod.metadata.labels[constants.JOB_INDEX_LABEL]}"
+
+                if step_key in seen_step_keys:
+                    continue
+                seen_step_keys.add(step_key)
+
                 # Get the Initializer step.
-                if pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL] in {
+                if role in {
                     constants.DATASET_INITIALIZER,
                     constants.MODEL_INITIALIZER,
                 }:
@@ -695,7 +735,7 @@ class KubernetesBackend(RuntimeBackend):
                         )
                     )
                 # Get the Node step.
-                elif pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL] in {
+                elif role in {
                     constants.LAUNCHER,
                     constants.NODE,
                 }:
@@ -705,7 +745,7 @@ class KubernetesBackend(RuntimeBackend):
                             pod.spec,
                             pod.status,
                             trainjob.runtime,
-                            pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL],
+                            role,
                             int(pod.metadata.labels[constants.JOB_INDEX_LABEL]),
                         )
                     )
@@ -803,7 +843,7 @@ class KubernetesBackend(RuntimeBackend):
             ]
 
         trainjob_spec = models.TrainerV1alpha1TrainJobSpec(
-            runtimeRef=models.TrainerV1alpha1RuntimeRef(name=runtime.name),
+            runtimeRef=models.TrainerV1alpha1RuntimeRef(name=runtime.name, kind=runtime.kind.value),
             trainer=trainer_cr if trainer_cr != models.TrainerV1alpha1Trainer() else None,
             runtimePatches=runtime_patch_models,
         )

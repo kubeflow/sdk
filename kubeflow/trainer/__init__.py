@@ -22,6 +22,7 @@ from kubeflow.trainer.backends.container.types import (
     ContainerBackendConfig,
     TrainingRuntimeSource,
 )
+from kubeflow.trainer.backends.kubernetes.utils import update_trainjob_status
 from kubeflow.trainer.backends.localprocess.types import LocalProcessBackendConfig
 
 # Import the Kubeflow Trainer constants.
@@ -42,6 +43,7 @@ from kubeflow.trainer.types.types import (
     LoraConfig,
     Loss,
     Runtime,
+    RuntimeKind,
     RuntimeTrainer,
     S3DatasetInitializer,
     S3ModelInitializer,
@@ -67,6 +69,7 @@ __all__ = [
     "Loss",
     "MODEL_PATH",
     "Runtime",
+    "RuntimeKind",
     "TorchTuneConfig",
     "TorchTuneInstructDataset",
     "RuntimeTrainer",
@@ -79,4 +82,5 @@ __all__ = [
     "ContainerBackendConfig",
     "KubernetesBackendConfig",
     "TrainingRuntimeSource",
+    "update_trainjob_status",
 ]

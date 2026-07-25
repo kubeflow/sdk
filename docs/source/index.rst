@@ -88,8 +88,8 @@ Supported Projects
      - ✅ Available
      - Data processing and feature engineering
 
-   * - Pipelines
-     - 🚧 Planned
+   * - :doc:`Pipelines <pipelines/index>`
+     - ✅ Available
      - Build, run, and track AI workflows
    * - Feast
      - 🚧 Planned
@@ -169,6 +169,14 @@ Getting Involved
 
    spark/index
    spark/api
+
+.. toctree::
+   :maxdepth: 2
+   :hidden:
+   :caption: Pipelines
+
+   pipelines/index
+   pipelines/api
 
 .. toctree::
    :maxdepth: 2

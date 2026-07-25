@@ -14,11 +14,31 @@
 
 """Constants for Kubernetes Spark backend."""
 
+import textwrap
+
 # SparkConnect CRD
 SPARK_CONNECT_GROUP = "sparkoperator.k8s.io"
 SPARK_CONNECT_VERSION = "v1alpha1"
 SPARK_CONNECT_PLURAL = "sparkconnects"
 SPARK_CONNECT_KIND = "SparkConnect"
+
+# Spark Connect server port (must match Spark ConnectCommon.CONNECT_GRPC_BINDING_PORT)
+SPARK_CONNECT_PORT = 15002
+
+# Session name prefix
+SESSION_NAME_PREFIX = "spark-connect"
+
+# Spark Connect Maven package (required for Connect server main class on classpath)
+SPARK_CONNECT_PACKAGE_SCALA_VERSION = "2.13"
+
+# Spark job name prefix
+JOB_NAME_PREFIX = "spark-job"
+
+# SparkApplication CRD
+SPARK_APPLICATION_GROUP = "sparkoperator.k8s.io"
+SPARK_APPLICATION_VERSION = "v1beta2"
+SPARK_APPLICATION_PLURAL = "sparkapplications"
+SPARK_APPLICATION_KIND = "SparkApplication"
 
 # Default values; keep major.minor aligned with pyspark-connect in pyproject.toml
 DEFAULT_SPARK_VERSION = "4.0.1"
@@ -31,12 +51,21 @@ DEFAULT_DRIVER_CPU = 1
 DEFAULT_DRIVER_MEMORY = "512Mi"
 DEFAULT_EXECUTOR_CPU = 1
 DEFAULT_EXECUTOR_MEMORY = "512Mi"
+DEFAULT_SERVICE_ACCOUNT = "spark-operator-spark"
 
-# Spark Connect server port (must match Spark ConnectCommon.CONNECT_GRPC_BINDING_PORT)
-SPARK_CONNECT_PORT = 15002
+# Function-based Spark job script
+FUNC_JOB_VOLUME_NAME = "spark-app-source"
+FUNC_JOB_INIT_CONTAINER_NAME = "prepare-spark-app"
+FUNC_JOB_SCRIPT_NAME = "spark_job.py"
+FUNC_JOB_SCRIPT_DIR = "/opt/spark/app"
+FUNC_JOB_MAIN_FILE = f"local://{FUNC_JOB_SCRIPT_DIR}/{FUNC_JOB_SCRIPT_NAME}"
+FUNC_JOB_SCRIPT_DELIMITER = "__KUBEFLOW_FUNC_JOB_SCRIPT__"
+FUNC_JOB_SCRIPT_TEMPLATE = textwrap.dedent(
+    f"""
+    read -r -d '' SCRIPT << '{FUNC_JOB_SCRIPT_DELIMITER}'
+    {{func_code}}
+    {FUNC_JOB_SCRIPT_DELIMITER}
 
-# Session name prefix
-SESSION_NAME_PREFIX = "spark-connect"
-
-# Spark Connect Maven package (required for Connect server main class on classpath)
-SPARK_CONNECT_PACKAGE_SCALA_VERSION = "2.13"
+    printf "%s" "$SCRIPT" > "{{func_file}}"
+    """
+)
