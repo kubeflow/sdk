@@ -28,12 +28,8 @@ async def sample_async_function() -> None:
 
 
 def sample_decorator(func):
-    """Sample decorator for testing."""
-
-    def wrapper(*args, **kwargs):
-        return func(*args, **kwargs)
-
-    return wrapper
+    """Pass-through decorator for testing."""
+    return func
 
 
 @sample_decorator
