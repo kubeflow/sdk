@@ -91,7 +91,7 @@ def read_pod_logs(
 
             logs = thread.get(common_constants.DEFAULT_TIMEOUT)
 
-            for line in logs.split("\n"):
+            for line in logs.splitlines():
                 yield line
 
     except multiprocessing.TimeoutError as e:

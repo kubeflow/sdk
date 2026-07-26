@@ -925,9 +925,56 @@ def test_resolve_executor_resources(test_case: TestCase) -> None:
             expected_status=SUCCESS,
             config={
                 "follow": False,
+                "logs": "log line 1\nlog line 2",
             },
             expected_output=[
                 "log line 1",
+                "log line 2",
+            ],
+        ),
+        TestCase(
+            name="read empty logs",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+                "logs": "",
+            },
+            expected_output=[],
+        ),
+        TestCase(
+            name="read newline terminated logs",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+                "logs": "log line 1\nlog line 2\n",
+            },
+            expected_output=[
+                "log line 1",
+                "log line 2",
+            ],
+        ),
+        TestCase(
+            name="read CRLF logs",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+                "logs": "log line 1\r\nlog line 2\r\n",
+            },
+            expected_output=[
+                "log line 1",
+                "log line 2",
+            ],
+        ),
+        TestCase(
+            name="read logs with interior blank line",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+                "logs": "log line 1\n\nlog line 2",
+            },
+            expected_output=[
+                "log line 1",
+                "",
                 "log line 2",
             ],
         ),
@@ -962,8 +1009,8 @@ def test_read_pod_logs(test_case: TestCase) -> None:
     core_api = Mock()
     thread = Mock()
 
-    if test_case.name == "read logs":
-        thread.get.return_value = "log line 1\nlog line 2"
+    if test_case.expected_status == SUCCESS and not test_case.config["follow"]:
+        thread.get.return_value = test_case.config["logs"]
 
     elif test_case.name == "follow logs":
         stream = Mock()
@@ -995,7 +1042,7 @@ def test_read_pod_logs(test_case: TestCase) -> None:
 
         assert logs == test_case.expected_output
 
-        if test_case.name == "read logs":
+        if not test_case.config["follow"]:
             core_api.read_namespaced_pod_log.assert_called_once_with(
                 name="driver-pod",
                 namespace="default",
