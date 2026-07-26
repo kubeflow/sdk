@@ -1500,7 +1500,7 @@ wheels = [
 
 [[package]]
 name = "model-registry"
-version = "0.3.7"
+version = "0.3.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -1510,9 +1510,9 @@ dependencies = [
     { name = "python-dateutil" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8d/6f/6985eb0e95d02ce7c2cb05c0bd6df33f7ff9046d3a66c578ed62e6ed9244/model_registry-0.3.7.tar.gz", hash = "sha256:ccf34aced744851266506b88d1281ab5824087f66262654a4587e8649e6e9b7c", size = 108192, upload-time = "2026-03-06T18:01:54.082Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/20/70/958e5e20ddf20602f9ba533a483df4f8c6c4f9f7a8d6b19cc93629d1ab23/model_registry-0.3.9.tar.gz", hash = "sha256:e3077dcb724b5be968b99c49f773edf633a16dde53a92fb9d95c0871df13e9db", size = 111489, upload-time = "2026-05-05T15:08:56.825Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f3/de/8a5ca2f505a029d5e3e9550f542e49c81476b6f30b12106c187fe7d0e03d/model_registry-0.3.7-py3-none-any.whl", hash = "sha256:f67083397834c4440cb82bd06a7bf6ed105246aca5c9205f3a6515cf9da82eb6", size = 222167, upload-time = "2026-03-06T18:01:52.054Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/5d/8ed1d6d2b940fb75994cf0bcc3bc2d110b6737944c763f27f969344d8040/model_registry-0.3.9-py3-none-any.whl", hash = "sha256:7ec9fc8d5b60600f81006e9870097e3cb20125bd06784472def8b3a379c49e7b", size = 226987, upload-time = "2026-05-05T15:08:54.837Z" },
 ]
 
 [[package]]
