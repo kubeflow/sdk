@@ -14,12 +14,10 @@
 from collections.abc import Callable, Iterator
 from datetime import datetime
 import logging
-import random
-import string
 import tempfile
 import time
-import uuid
 
+from kubeflow.common import utils as common_utils
 from kubeflow.trainer.backends.base import RuntimeBackend
 from kubeflow.trainer.backends.localprocess import utils as local_utils
 from kubeflow.trainer.backends.localprocess.constants import local_runtimes
@@ -94,9 +92,8 @@ class LocalProcessBackend(RuntimeBackend):
             name = metadata_section.get("name")
 
         # Generate train job name if not provided via options
-        trainjob_name = name or (
-            random.choice(string.ascii_lowercase)
-            + uuid.uuid4().hex[: constants.JOB_NAME_UUID_LENGTH]
+        trainjob_name = name or common_utils.generate_random_name(
+            length=constants.JOB_NAME_UUID_LENGTH
         )
 
         # localprocess backend only supports CustomTrainer

@@ -13,6 +13,9 @@
 # limitations under the License.
 
 
+from dataclasses import dataclass
+from datetime import datetime
+
 from kubernetes import client
 from pydantic import BaseModel
 
@@ -25,3 +28,24 @@ class KubernetesBackendConfig(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
+
+
+# Representation for Kubernetes events.
+@dataclass
+class Event:
+    """Event object that represents a Kubernetes event related to a resource.
+
+    Args:
+        involved_object_kind (`str`): The kind of object this event is about.
+        involved_object_name (`str`): The name of the object this event is about.
+        message (`str`): Human-readable description of the event.
+        reason (`str`): Short, machine understandable string describing why
+            this event was generated.
+        event_time (`datetime`): The time at which the event was first recorded.
+    """
+
+    involved_object_kind: str
+    involved_object_name: str
+    message: str
+    reason: str
+    event_time: datetime

@@ -15,8 +15,7 @@
 """Unit tests for Kubernetes Spark backend utilities."""
 
 from datetime import datetime
-import multiprocessing
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from kubeflow_spark_api import models
 import pytest
@@ -39,7 +38,6 @@ from kubeflow.spark.backends.kubernetes.utils import (
     get_spark_connect_info_from_cr,
     get_spark_job_driver_spec,
     get_spark_job_executor_spec,
-    read_pod_logs,
     validate_spark_connect_url,
 )
 from kubeflow.spark.test.common import FAILED, SUCCESS, TestCase
@@ -913,113 +911,6 @@ def test_resolve_executor_resources(test_case: TestCase) -> None:
         assert instances == constants.DEFAULT_NUM_EXECUTORS
         assert cores == 2
         assert memory == "1536m"
-
-    print("test execution complete")
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TestCase(
-            name="read logs",
-            expected_status=SUCCESS,
-            config={
-                "follow": False,
-            },
-            expected_output=[
-                "log line 1",
-                "log line 2",
-            ],
-        ),
-        TestCase(
-            name="follow logs",
-            expected_status=SUCCESS,
-            config={
-                "follow": True,
-            },
-            expected_output=[
-                "log line 1",
-                "log line 2",
-            ],
-        ),
-        TestCase(
-            name="timeout",
-            expected_status=FAILED,
-            expected_error=TimeoutError,
-        ),
-        TestCase(
-            name="runtime error",
-            expected_status=FAILED,
-            expected_error=RuntimeError,
-        ),
-    ],
-)
-def test_read_pod_logs(test_case: TestCase) -> None:
-    """Tests read_pod_logs."""
-
-    print("Executing test:", test_case.name)
-
-    core_api = Mock()
-    thread = Mock()
-
-    if test_case.name == "read logs":
-        thread.get.return_value = "log line 1\nlog line 2"
-
-    elif test_case.name == "follow logs":
-        stream = Mock()
-        stream.stream.return_value = iter(
-            [
-                b"log line 1\n",
-                b"log line 2\n",
-            ]
-        )
-        thread.get.return_value = stream
-
-    elif test_case.name == "timeout":
-        thread.get.side_effect = multiprocessing.TimeoutError()
-
-    elif test_case.name == "runtime error":
-        thread.get.side_effect = RuntimeError()
-
-    core_api.read_namespaced_pod_log.return_value = thread
-
-    if test_case.expected_status == SUCCESS:
-        logs = list(
-            read_pod_logs(
-                core_api=core_api,
-                namespace="default",
-                pod_name="driver-pod",
-                follow=test_case.config["follow"],
-            )
-        )
-
-        assert logs == test_case.expected_output
-
-        if test_case.name == "read logs":
-            core_api.read_namespaced_pod_log.assert_called_once_with(
-                name="driver-pod",
-                namespace="default",
-                async_req=True,
-            )
-
-        elif test_case.name == "follow logs":
-            core_api.read_namespaced_pod_log.assert_called_once_with(
-                name="driver-pod",
-                namespace="default",
-                follow=True,
-                _preload_content=False,
-                async_req=True,
-            )
-
-    else:
-        with pytest.raises(test_case.expected_error):
-            list(
-                read_pod_logs(
-                    core_api=core_api,
-                    namespace="default",
-                    pod_name="driver-pod",
-                )
-            )
 
     print("test execution complete")
 

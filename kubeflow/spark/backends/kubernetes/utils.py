@@ -14,22 +14,19 @@
 
 """Utility functions for Kubernetes Spark backend."""
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 import inspect
 import logging
 import math
-import multiprocessing
 import os
 import re
 import textwrap
 from typing import Any
 from urllib.parse import urlparse
-import uuid
 
 from kubeflow_spark_api import models
-from kubernetes import client
 
-from kubeflow.common import constants as common_constants
+from kubeflow.common import utils as common_utils
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.types.types import (
     Driver,
@@ -45,60 +42,6 @@ logger = logging.getLogger(__name__)
 # ----------------------------------------------------------------------
 # Shared utility functions
 # ----------------------------------------------------------------------
-
-
-def read_pod_logs(
-    core_api: client.CoreV1Api,
-    namespace: str,
-    pod_name: str,
-    follow: bool = False,
-) -> Iterator[str]:
-    """Read logs from a Kubernetes pod.
-
-    Args:
-        core_api: Kubernetes CoreV1Api client.
-        namespace: Kubernetes namespace.
-        pod_name: Name of the pod.
-        follow: Whether to stream logs continuously.
-
-    Yields:
-        Log lines from the pod.
-
-    Raises:
-        TimeoutError: If retrieving pod logs times out.
-        RuntimeError: If pod logs cannot be retrieved.
-    """
-    try:
-        if follow:
-            thread = core_api.read_namespaced_pod_log(
-                name=pod_name,
-                namespace=namespace,
-                follow=True,
-                _preload_content=False,
-                async_req=True,
-            )
-
-            resp = thread.get(common_constants.DEFAULT_TIMEOUT)
-
-            for line in resp.stream():
-                yield line.decode("utf-8").rstrip("\n")
-        else:
-            thread = core_api.read_namespaced_pod_log(
-                name=pod_name,
-                namespace=namespace,
-                async_req=True,
-            )
-
-            logs = thread.get(common_constants.DEFAULT_TIMEOUT)
-
-            for line in logs.split("\n"):
-                yield line
-
-    except multiprocessing.TimeoutError as e:
-        raise TimeoutError("Timeout while retrieving pod logs.") from e
-
-    except Exception as e:
-        raise RuntimeError("Failed to retrieve pod logs.") from e
 
 
 def _resolve_driver_resources(
@@ -298,13 +241,8 @@ def _validate_cpu_value(cpu: str | int | None) -> int:
 
 
 def generate_session_name() -> str:
-    """Generate a unique session name.
-
-    Returns:
-        Session name in format: spark-connect-{uuid}.
-    """
-    short_uuid = str(uuid.uuid4())[:8]
-    return f"{constants.SESSION_NAME_PREFIX}-{short_uuid}"
+    """Generate a unique session name."""
+    return common_utils.generate_random_name(prefix="spark-connect", length=8)
 
 
 def validate_spark_connect_url(url: str) -> bool:
@@ -557,13 +495,8 @@ def get_spark_connect_info_from_cr(
 
 
 def generate_job_name() -> str:
-    """Generate a unique batch job name.
-
-    Returns:
-        Job name in format: spark-job-{uuid}.
-    """
-    short_uuid = str(uuid.uuid4())[:8]
-    return f"{constants.JOB_NAME_PREFIX}-{short_uuid}"
+    """Generate a unique batch job name."""
+    return common_utils.generate_random_name(prefix="spark-job", length=8)
 
 
 def get_spark_job_driver_spec(
