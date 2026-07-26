@@ -1929,3 +1929,29 @@ def test_get_job_logs(kubernetes_backend, test_case):
             raise
 
     print("test execution complete")
+
+
+def test_kubernetes_backend_initialization():
+    """Test KubernetesBackend initialization with various KubernetesBackendConfig parameters."""
+    custom_config = client.Configuration()
+    custom_config.host = "https://custom-k8s-cluster:6443"
+
+    # Test 1: client_configuration passed explicitly
+    backend = KubernetesBackend(KubernetesBackendConfig(client_configuration=custom_config))
+    assert backend.custom_api.api_client.configuration.host == "https://custom-k8s-cluster:6443"
+    assert backend.core_api.api_client.configuration.host == "https://custom-k8s-cluster:6443"
+
+    # Test 2: config_file and context passed
+    with (
+        patch("kubernetes.config.load_kube_config") as mock_load_kube_config,
+        patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
+        patch("kubeflow.common.utils.get_default_target_namespace", return_value="target-ns"),
+    ):
+        backend = KubernetesBackend(
+            KubernetesBackendConfig(config_file="/path/to/kubeconfig", context="test-context")
+        )
+        mock_load_kube_config.assert_called_once_with(
+            config_file="/path/to/kubeconfig", context="test-context"
+        )
+        assert backend.namespace == "target-ns"
+

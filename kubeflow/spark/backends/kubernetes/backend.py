@@ -37,6 +37,7 @@ from pyspark.sql import SparkSession
 
 from kubeflow.common import constants as common_constants
 from kubeflow.common.types import KubernetesBackendConfig
+import kubeflow.common.utils as common_utils
 from kubeflow.spark.backends.base import RuntimeBackend
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.utils import (
@@ -100,20 +101,25 @@ class KubernetesBackend(RuntimeBackend):
             ConfigException:
                 If the Kubernetes configuration cannot be loaded.
         """
-        self.namespace = backend_config.namespace or "default"
+        if backend_config.namespace is None:
+            backend_config.namespace = common_utils.get_default_target_namespace(
+                backend_config.context
+            )
 
-        if backend_config.config_file:
-            config.load_kube_config(config_file=backend_config.config_file)
-        elif backend_config.context:
-            config.load_kube_config(context=backend_config.context)
-        else:
-            try:
+        if backend_config.client_configuration is None:
+            if backend_config.config_file or not common_utils.is_running_in_k8s():
+                config.load_kube_config(
+                    config_file=backend_config.config_file,
+                    context=backend_config.context,
+                )
+            else:
                 config.load_incluster_config()
-            except config.ConfigException:
-                config.load_kube_config()
 
-        self.custom_api = client.CustomObjectsApi()
-        self.core_api = client.CoreV1Api()
+        k8s_client = client.ApiClient(backend_config.client_configuration)
+        self.custom_api = client.CustomObjectsApi(k8s_client)
+        self.core_api = client.CoreV1Api(k8s_client)
+
+        self.namespace = backend_config.namespace
 
     # ------------------------------------------------------------------
     # Spark Connect sessions
