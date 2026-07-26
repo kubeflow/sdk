@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Public API for defining and running Kubeflow training jobs."""
 
 # Import common types.
 from kubeflow.common.types import KubernetesBackendConfig

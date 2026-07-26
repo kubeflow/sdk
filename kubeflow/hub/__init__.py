@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Public API for registering models and uploading artifacts to Kubeflow Hub."""
+
 from kubeflow.hub.api.model_registry_client import ModelRegistryClient
 from kubeflow.hub.storage import upload_artifact
 from kubeflow.hub.types.types import OCIUploadParams, S3UploadParams, StorageConfig
