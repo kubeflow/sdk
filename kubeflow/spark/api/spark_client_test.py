@@ -14,7 +14,7 @@
 
 """Unit tests for SparkClient API."""
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -78,6 +78,108 @@ def test_create_and_connect(test_case: TestCase):
             assert isinstance(e, test_case.expected_error), (
                 f"Expected exception type '{test_case.expected_error.__name__}' but got '{type(e).__name__}: {str(e)}'"
             )
+
+
+@pytest.fixture
+def client_with_mock_backend() -> SparkClient:
+    """Create a SparkClient without initializing Kubernetes clients."""
+    client = object.__new__(SparkClient)
+    client.backend = Mock()
+    return client
+
+
+def test_connect_to_existing_server_uses_url_and_token(client_with_mock_backend: SparkClient):
+    """Connect mode validates the URL and configures the supplied token."""
+    session = Mock()
+    builder = Mock()
+    builder.config.return_value = builder
+    builder.getOrCreate.return_value = session
+
+    with (
+        patch("kubeflow.spark.api.spark_client.validate_spark_connect_url") as validate_url,
+        patch("kubeflow.spark.api.spark_client.SparkSession") as mock_spark_session,
+    ):
+        mock_spark_session.builder.remote.return_value = builder
+        result = client_with_mock_backend.connect(
+            base_url="sc://spark.example:15002",
+            token="test-token",
+        )
+
+    assert result is session
+    validate_url.assert_called_once_with("sc://spark.example:15002")
+    mock_spark_session.builder.remote.assert_called_once_with("sc://spark.example:15002")
+    builder.config.assert_called_once_with("spark.connect.authenticate.token", "test-token")
+    builder.getOrCreate.assert_called_once_with()
+    client_with_mock_backend.backend.create_and_connect.assert_not_called()
+
+
+def test_connect_creates_session_with_requested_configuration(
+    client_with_mock_backend: SparkClient,
+):
+    """Create mode forwards every session setting to the backend."""
+    expected_session = Mock()
+    client_with_mock_backend.backend.create_and_connect.return_value = expected_session
+    driver = Mock()
+    executor = Mock()
+    options = [Mock()]
+    spark_conf = {"spark.sql.adaptive.enabled": "true"}
+    resources = {"cpu": "2", "memory": "4Gi"}
+
+    result = client_with_mock_backend.connect(
+        num_executors=3,
+        resources_per_executor=resources,
+        spark_conf=spark_conf,
+        driver=driver,
+        executor=executor,
+        options=options,
+        timeout=42,
+        connect_timeout=24,
+    )
+
+    assert result is expected_session
+    client_with_mock_backend.backend.create_and_connect.assert_called_once_with(
+        num_executors=3,
+        resources_per_executor=resources,
+        spark_conf=spark_conf,
+        driver=driver,
+        executor=executor,
+        options=options,
+        timeout=42,
+        connect_timeout=24,
+    )
+
+
+@pytest.mark.parametrize(
+    ("method_name", "args", "expected_kwargs", "returns_backend_value"),
+    [
+        ("list_sessions", (), {}, True),
+        ("get_session", ("daily-orders",), {}, True),
+        ("delete_session", ("daily-orders",), {}, False),
+        ("get_session_logs", ("daily-orders", True), {"follow": True}, True),
+    ],
+)
+def test_session_management_methods_delegate_to_backend(
+    client_with_mock_backend: SparkClient,
+    method_name: str,
+    args: tuple,
+    expected_kwargs: dict[str, bool],
+    returns_backend_value: bool,
+):
+    """Session-management methods preserve their documented delegation behavior."""
+    backend_method = getattr(client_with_mock_backend.backend, method_name)
+    expected_result = Mock()
+    backend_method.return_value = expected_result
+
+    result = getattr(client_with_mock_backend, method_name)(*args)
+
+    if returns_backend_value:
+        assert result is expected_result
+    else:
+        assert result is None
+    if expected_kwargs:
+        backend_method.assert_called_once_with(args[0], **expected_kwargs)
+    else:
+        backend_method.assert_called_once_with(*args)
 
 
 @pytest.mark.parametrize(
