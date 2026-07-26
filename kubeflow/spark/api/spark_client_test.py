@@ -84,13 +84,6 @@ def test_create_and_connect(test_case: TestCase):
     "job,spark_conf,options,backend_error,expected_error",
     [
         (
-            FuncJob(func=lambda: None),
-            None,
-            None,
-            NotImplementedError("Function-based jobs are not supported in Phase 1."),
-            NotImplementedError,
-        ),
-        (
             "not-a-job",
             None,
             None,
@@ -145,7 +138,18 @@ def test_submit_job_validation(
             )
 
 
-def test_submit_job_success():
+@pytest.mark.parametrize(
+    "job",
+    [
+        FileJob(
+            file_source="s3://bucket/job.py",
+        ),
+        FuncJob(
+            func=lambda: None,
+        ),
+    ],
+)
+def test_submit_job_success(job):
     """Test successful submit_job."""
 
     with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
@@ -158,18 +162,12 @@ def test_submit_job_success():
 
         client = SparkClient()
 
-        name = client.submit_job(
-            job=FileJob(
-                file_source="s3://bucket/job.py",
-            ),
-        )
+        name = client.submit_job(job=job)
 
         assert name == "spark-job-123"
 
         backend.submit_job.assert_called_once_with(
-            job=FileJob(
-                file_source="s3://bucket/job.py",
-            ),
+            job=job,
             num_executors=None,
             resources_per_executor=None,
         )

@@ -187,8 +187,6 @@ class SparkClient:
         or remote file source.
         - **FuncJob**: Submit a Python function as a Spark batch job.
 
-        Function-based jobs will be supported in Phase 2.
-
         Args:
             job:
                 Job definition describing the workload to execute.
@@ -269,7 +267,7 @@ class SparkClient:
     def wait_for_job_status(
         self,
         name: str,
-        status: set[SparkJobStatus] | None = None,
+        status: set[SparkJobStatus] = {SparkJobStatus.COMPLETED},
         timeout: int = 600,
         polling_interval: int = 2,
     ) -> SparkJob:

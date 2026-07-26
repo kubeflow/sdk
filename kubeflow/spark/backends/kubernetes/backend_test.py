@@ -14,6 +14,8 @@
 
 """Unit tests for KubernetesBackend."""
 
+from datetime import datetime
+from functools import wraps
 import multiprocessing
 from unittest.mock import Mock, patch
 
@@ -336,6 +338,51 @@ def _mock_read_logs(*args, **kw):
     elif name == RUNTIME:
         return create_error_thread(RuntimeError())
     return create_mock_thread(response="log line 1\nlog line 2")
+
+
+# --------------------------
+# Test Helpers
+# --------------------------
+
+
+def sample_func() -> None:
+    """Sample function used for FuncJob tests."""
+    pass
+
+
+async def async_func() -> None:
+    """Sample async function used for FuncJob tests."""
+    pass
+
+
+def func_with_reserved_delimiter() -> None:
+    print(
+        """
+__KUBEFLOW_FUNC_JOB_SCRIPT__
+"""
+    )
+
+
+def sample_func_with_args(
+    name: str,
+    count: int,
+) -> None:
+    """Sample function with parameters."""
+    pass
+
+
+def _decorator(func: callable) -> callable:
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+@_decorator
+def decorated_func() -> None:
+    """Sample decorated function for testing."""
+    pass
 
 
 # --------------------------
@@ -944,6 +991,192 @@ def test_validate_file_job(kubernetes_backend, test_case):
 
 
 @pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("hello", True),
+        (123, True),
+        (3.14, True),
+        (True, True),
+        (None, True),
+        ([1, "a", False, None], True),
+        ((1, 2, "a"), True),
+        ({"a": 1, "b": [1, 2, None]}, True),
+        (float("inf"), False),
+        (float("-inf"), False),
+        (float("nan"), False),
+        ({1: "value"}, False),
+        (object(), False),
+    ],
+)
+def test_is_supported_func_arg(
+    kubernetes_backend,
+    value,
+    expected,
+):
+    """Test KubernetesBackend._is_supported_func_arg()."""
+
+    assert kubernetes_backend._is_supported_func_arg(value) is expected
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid function job",
+            expected_status=SUCCESS,
+            config={
+                "job": FuncJob(
+                    func=sample_func,
+                ),
+            },
+        ),
+        TestCase(
+            name="non callable function",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func="not-callable",
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="lambda function",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=lambda: None,
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="async function",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=async_func,
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="decorated function",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=decorated_func,
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="func_args unsupported value",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=sample_func,
+                    func_args={
+                        "date": datetime.now(),
+                    },
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="func_args not dict",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=sample_func,
+                    func_args="invalid",
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="func_args keys not strings",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=sample_func,
+                    func_args={1: "value"},
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="func source contains reserved heredoc delimiter",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=func_with_reserved_delimiter,
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="valid func_args",
+            expected_status=SUCCESS,
+            config={
+                "job": FuncJob(
+                    func=sample_func_with_args,
+                    func_args={
+                        "name": "spark",
+                        "count": 1,
+                    },
+                ),
+            },
+        ),
+        TestCase(
+            name="func_args missing required argument",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=sample_func_with_args,
+                    func_args={
+                        "name": "spark",
+                    },
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="func_args unexpected keyword",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=sample_func_with_args,
+                    func_args={
+                        "name": "spark",
+                        "count": 1,
+                        "extra": True,
+                    },
+                ),
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_validate_func_job(kubernetes_backend, test_case):
+    """Test KubernetesBackend._validate_func_job()."""
+
+    print("Executing test:", test_case.name)
+
+    try:
+        kubernetes_backend._validate_func_job(
+            test_case.config["job"],
+        )
+
+        assert test_case.expected_status == SUCCESS
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+
+    print("Test execution complete.")
+
+
+@pytest.mark.parametrize(
     "test_case",
     [
         TestCase(
@@ -956,14 +1189,13 @@ def test_validate_file_job(kubernetes_backend, test_case):
             },
         ),
         TestCase(
-            name="function job not implemented",
-            expected_status=FAILED,
+            name="valid function job",
+            expected_status=SUCCESS,
             config={
                 "job": FuncJob(
-                    func=lambda: None,
+                    func=sample_func,
                 ),
             },
-            expected_error=NotImplementedError,
         ),
         TestCase(
             name="invalid job type",
@@ -1035,6 +1267,16 @@ def test_validate_job(kubernetes_backend, test_case):
             },
             expected_error=ValueError,
         ),
+        TestCase(
+            name="valid function job submission",
+            expected_status=SUCCESS,
+            config={
+                "job": FuncJob(
+                    func=sample_func,
+                ),
+                "use_mock_command": True,
+            },
+        ),
     ],
 )
 def test_submit_job(kubernetes_backend, test_case):
@@ -1047,9 +1289,27 @@ def test_submit_job(kubernetes_backend, test_case):
             DEFAULT_NAMESPACE,
         )
 
-        job = kubernetes_backend.submit_job(
-            job=test_case.config["job"],
-        )
+        if test_case.config.get("use_mock_command"):
+            with patch(
+                "kubeflow.spark.backends.kubernetes.backend.get_spark_application_cr_from_func_job",
+            ) as mock_build:
+                mock_build.return_value = get_spark_application(
+                    "spark-job-test",
+                )
+
+                job = kubernetes_backend.submit_job(
+                    job=test_case.config["job"],
+                )
+
+                mock_build.assert_called_once()
+
+                assert mock_build.call_args.kwargs["func"] == test_case.config["job"].func
+                assert mock_build.call_args.kwargs["func_args"] == test_case.config["job"].func_args
+
+        else:
+            job = kubernetes_backend.submit_job(
+                job=test_case.config["job"],
+            )
 
         assert test_case.expected_status == SUCCESS
         assert job.name.startswith("spark-job-")
@@ -1503,14 +1763,12 @@ def test_wait_for_job_status(kubernetes_backend, test_case):
             if test_case.expected_status == SUCCESS:
                 kubernetes_backend.wait_for_job_status(
                     name="test-job",
-                    status={SparkJobStatus.COMPLETED},
                     timeout=1,
                 )
             else:
                 with pytest.raises(test_case.expected_error):
                     kubernetes_backend.wait_for_job_status(
                         name="test-job",
-                        status={SparkJobStatus.COMPLETED},
                         timeout=1,
                     )
 
