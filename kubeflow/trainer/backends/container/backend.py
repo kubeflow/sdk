@@ -603,6 +603,10 @@ class ContainerBackend(RuntimeBackend):
             }
         }
         volumes.update(self.cfg.volumes)
+        container_init_env = {
+            **self.cfg.env,
+            **container_init.env,
+        }
 
         logger.debug(f"Starting {container_init.name} container: {container_name}")
 
@@ -614,7 +618,7 @@ class ContainerBackend(RuntimeBackend):
             command=container_init.command,
             name=container_name,
             network_id=network_id,
-            environment=container_init.env,
+            environment=container_init_env,
             labels=labels,
             volumes=volumes,
             working_dir="/app",

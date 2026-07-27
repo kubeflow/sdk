@@ -61,6 +61,17 @@ class ContainerBackendConfig(BaseModel):
     auto_remove: bool = Field(default=True)
     container_host: str | None = Field(default=None)
     container_runtime: Literal["docker", "podman"] | None = Field(default=None)
+
+    env: dict[str, str] = Field(
+        default_factory=dict,
+        description="Additional environment variables for all containers.",
+    )
+
+    volumes: dict[str, dict[str, str]] = Field(
+        default_factory=dict,
+        description="Additional Docker volume mappings.",
+    )
+
     runtime_source: TrainingRuntimeSource = Field(
         default_factory=TrainingRuntimeSource,
         description="Configuration for training runtime sources",

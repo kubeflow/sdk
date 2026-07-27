@@ -228,23 +228,12 @@ def container_backend():
     """Provide ContainerBackend with mocked adapter."""
     with patch("kubeflow.trainer.backends.container.backend.DockerClientAdapter") as mock_docker:
         mock_docker.return_value = MockContainerAdapter()
-        backend = ContainerBackend(ContainerBackendConfig())
+        backend = ContainerBackend(
+            ContainerBackendConfig(
+                env={"TEST_ENV": "test-value"},
+            )
+        )
         return backend
-
-
-@pytest.fixture
-def container_backend_with_config():
-    """Create ContainerBackend with a custom config."""
-
-    def _create(cfg: ContainerBackendConfig):
-        with patch(
-            "kubeflow.trainer.backends.container.backend.DockerClientAdapter"
-        ) as mock_docker:
-            mock_docker.return_value = MockContainerAdapter()
-            backend = ContainerBackend(cfg)
-            return backend
-
-    return _create
 
 
 def test_train_backend_env(container_backend_with_config):
@@ -294,6 +283,20 @@ def temp_workdir():
     yield tmpdir
     if os.path.exists(tmpdir):
         shutil.rmtree(tmpdir)
+
+
+@pytest.fixture
+def container_backend_with_config():
+    """Provide ContainerBackend with custom config and mocked adapter."""
+
+    def _create(cfg: ContainerBackendConfig):
+        with patch(
+            "kubeflow.trainer.backends.container.backend.DockerClientAdapter"
+        ) as mock_docker:
+            mock_docker.return_value = MockContainerAdapter()
+            return ContainerBackend(cfg)
+
+    return _create
 
 
 # Helper Function
@@ -722,6 +725,7 @@ def test_train(container_backend, test_case):
             for container in initializer_containers:
                 assert "STORAGE_URI" in container["environment"]
                 assert "OUTPUT_PATH" in container["environment"]
+                assert container["environment"].get("TEST_ENV") == "test-value"
 
                 # Verify OUTPUT_PATH is correct based on initializer type
                 if "dataset-initializer" in container["name"]:
