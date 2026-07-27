@@ -146,7 +146,7 @@ def sample_function_with_args(name: str, age: int):
         TestCase(
             name="Convert fractional Gi to Mi",
             config={"k8s_memory": "1.5Gi"},
-            expected_output="1.5g",
+            expected_output="1536m",
         ),
     ],
 )
@@ -823,7 +823,7 @@ def test_resolve_driver_resources(test_case: TestCase) -> None:
 
     elif test_case.name == "fractional driver memory":
         assert cores == 2
-        assert memory == "1.5g"
+        assert memory == "1536m"
 
     print("test execution complete")
 
@@ -910,7 +910,7 @@ def test_resolve_executor_resources(test_case: TestCase) -> None:
     elif test_case.name == "fractional executor memory":
         assert instances == constants.DEFAULT_NUM_EXECUTORS
         assert cores == 2
-        assert memory == "1.5g"
+        assert memory == "1536m"
 
     print("test execution complete")
 

@@ -330,6 +330,8 @@ def _memory_kubernetes_to_spark(memory: str) -> str:
     """Convert Kubernetes memory units to Spark memory format.
 
     SparkSubmit expects JVM memory suffixes (k, m, g, t); Kubernetes uses Ki, Mi, Gi, Ti.
+    Fractional binary units are converted to the next smaller unit because Spark
+    does not accept fractional JVM memory strings (e.g. 1.5Gi -> 1536m).
     """
     if not memory or not memory[-1].isalpha():
         return memory
@@ -345,6 +347,9 @@ def _memory_kubernetes_to_spark(memory: str) -> str:
     num = m.group(1)
     suffix = m.group(2) or ""
 
+    value = float(num)
+    suffix_lower = suffix.lower()
+
     # Kubernetes binary units -> Spark binary units
     k8s_to_spark = {
         "ki": "k",
@@ -354,13 +359,33 @@ def _memory_kubernetes_to_spark(memory: str) -> str:
         "pi": "p",
         "ei": "e",
     }
-    suffix_lower = suffix.lower()
-    if suffix_lower in k8s_to_spark:
-        return num + k8s_to_spark[suffix_lower]
 
-    # Already Spark binary units (k is excluded intentionally)
+    if suffix_lower in k8s_to_spark:
+        # Integer values can be converted directly.
+        if value.is_integer():
+            return f"{int(value)}{k8s_to_spark[suffix_lower]}"
+
+        # Fractional values must be converted to the next smaller unit because
+        # Spark does not accept fractional memory values like "1.5g".
+        binary_downscale = {
+            "mi": ("k", 1024),
+            "gi": ("m", 1024),
+            "ti": ("g", 1024),
+            "pi": ("t", 1024),
+            "ei": ("p", 1024),
+        }
+
+        if suffix_lower == "ki":
+            # Convert Ki directly to bytes.
+            return str(int(value * 1024))
+
+        target_suffix, factor = binary_downscale[suffix_lower]
+        converted = int(value * factor)
+        return f"{converted}{target_suffix}"
+
+    # Already Spark memory units
     if suffix in {"m", "g", "t", "p", "e"}:
-        return num + suffix
+        return f"{num}{suffix}"
 
     # Kubernetes decimal SI units -> exact bytes
     decimal_units = {
@@ -374,7 +399,7 @@ def _memory_kubernetes_to_spark(memory: str) -> str:
     }
 
     if suffix in decimal_units:
-        bytes_value = int(float(num) * decimal_units[suffix])
+        bytes_value = int(value * decimal_units[suffix])
         return str(bytes_value)
 
     return memory
