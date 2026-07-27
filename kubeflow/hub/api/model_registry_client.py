@@ -91,7 +91,7 @@ class ModelRegistryClient:
         self._registry = ModelRegistry(
             server_address=base_url,
             port=port,
-            author=author,  # type: ignore[arg-type]
+            author=author,  # ty: ignore[invalid-argument-type]
             is_secure=is_secure,
             user_token=user_token,
             custom_ca=custom_ca,
@@ -147,8 +147,8 @@ class ModelRegistryClient:
         return self._registry.register_model(
             name=name,
             uri=uri,
-            model_format_name=model_format_name,  # type: ignore[arg-type]
-            model_format_version=model_format_version,  # type: ignore[arg-type]
+            model_format_name=model_format_name,  # ty: ignore[invalid-argument-type]
+            model_format_version=model_format_version,  # ty: ignore[invalid-argument-type]
             version=version,
             author=author,
             owner=owner,
