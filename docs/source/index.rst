@@ -137,6 +137,7 @@ Getting Involved
 
    getting-started/installation
    getting-started/quickstart
+   getting-started/local-development
 
 .. toctree::
    :maxdepth: 2
