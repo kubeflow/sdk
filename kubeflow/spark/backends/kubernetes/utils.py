@@ -357,15 +357,19 @@ def get_spark_connect_driver_spec(
     """
     cores, memory = _resolve_driver_resources(driver)
 
-    template = None
-
-    if driver and driver.service_account:
-        template = models.IoK8sApiCoreV1PodTemplateSpec(
-            spec=models.IoK8sApiCoreV1PodSpec(
-                containers=[],
-                service_account_name=driver.service_account,
-            )
+    # Fallback to the default service account if not specified.
+    # TODO: Remove this temporary workaround once issue #617 lands.
+    service_account_name = (
+        driver.service_account
+        if driver and driver.service_account
+        else constants.DEFAULT_SERVICE_ACCOUNT
+    )
+    template = models.IoK8sApiCoreV1PodTemplateSpec(
+        spec=models.IoK8sApiCoreV1PodSpec(
+            containers=[],
+            service_account_name=service_account_name,
         )
+    )
 
     return models.SparkV1alpha1ServerSpec(
         cores=cores,
