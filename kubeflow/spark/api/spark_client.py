@@ -32,7 +32,6 @@ from kubeflow.spark.types.types import (
     SparkJob,
     SparkJobStatus,
 )
-from kubeflow.spark.types.types import Driver, Executor, SparkConnectInfo
 
 logger = get_logger(__name__)
 
