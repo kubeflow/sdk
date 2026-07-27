@@ -328,16 +328,37 @@ def validate_spark_connect_url(url: str) -> bool:
 
 
 def build_service_url(info: SparkConnectInfo) -> str:
-    """Build Spark Connect URL from session info.
+    """Build the in-cluster Spark Connect URL from session info.
+
+    Relies on the operator-reported Service name. The operator records the
+    actual Service name (default "<name>-server" or a user-customized name via
+    .spec.server.service) in Status.Server.ServiceName, so this is correct for
+    both default and customized Services. Callers are expected to have waited
+    for readiness (wait_for_ready), by which point the operator has populated
+    this field in the same atomic status write that set the Ready state.
 
     Args:
         info: SparkConnectInfo with service details.
 
     Returns:
-        Spark Connect URL (e.g., "sc://service-name:15002").
+        Spark Connect URL
+        (e.g., "sc://my-session-server.default.svc.cluster.local:15002").
+
+    Raises:
+        RuntimeError: If ``info.service_name`` is not populated. An empty value
+            means the session is not ready yet, not a name we should guess;
+            callers should wait for readiness before building the URL.
     """
-    service = info.service_name or f"{info.name}-svc"
-    return f"sc://{service}.{info.namespace}.svc.cluster.local:{constants.SPARK_CONNECT_PORT}"
+    if not info.service_name:
+        raise RuntimeError(
+            f"Cannot build Spark Connect URL for {info.namespace}/{info.name}: "
+            "status.server.serviceName is not populated yet. The session is not "
+            "ready to accept in-cluster connections."
+        )
+    return (
+        f"sc://{info.service_name}.{info.namespace}.svc.cluster.local"
+        f":{constants.SPARK_CONNECT_PORT}"
+    )
 
 
 def get_spark_connect_driver_spec(

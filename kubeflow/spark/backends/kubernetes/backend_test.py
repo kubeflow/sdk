@@ -744,6 +744,20 @@ def test_get_connect_url(kubernetes_backend, test_case):
     print("test execution complete")
 
 
+def test_get_connect_url_raises_when_no_target(kubernetes_backend):
+    """get_connect_url raises when neither pod_name nor service_name is populated."""
+    info = SparkConnectInfo(
+        name="test-session",
+        namespace="default",
+        state=SparkConnectState.READY,
+    )
+    with (
+        patch.dict("os.environ", {"KUBERNETES_SERVICE_HOST": ""}, clear=False),
+        pytest.raises(RuntimeError, match="No port-forward target"),
+    ):
+        kubernetes_backend.get_connect_url(info)
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
