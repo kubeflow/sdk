@@ -187,6 +187,7 @@ def test_connect_base_url_success():
     with (
         patch("kubeflow.spark.api.spark_client.validate_spark_connect_url") as mock_validate,
         patch("kubeflow.spark.api.spark_client.SparkSession.builder") as mock_builder_factory,
+        patch("kubeflow.spark.api.spark_client.KubernetesBackend"),
     ):
         mock_builder_factory.remote.return_value = mock_builder
 
@@ -220,6 +221,7 @@ def test_connect_base_url_timeout():
     with (
         patch("kubeflow.spark.api.spark_client.validate_spark_connect_url"),
         patch("kubeflow.spark.api.spark_client.SparkSession.builder") as mock_builder_factory,
+        patch("kubeflow.spark.api.spark_client.KubernetesBackend"),
     ):
         mock_builder_factory.remote.return_value = mock_builder
 
@@ -241,6 +243,7 @@ def test_connect_base_url_exception():
     with (
         patch("kubeflow.spark.api.spark_client.validate_spark_connect_url"),
         patch("kubeflow.spark.api.spark_client.SparkSession.builder") as mock_builder_factory,
+        patch("kubeflow.spark.api.spark_client.KubernetesBackend"),
     ):
         mock_builder_factory.remote.return_value = mock_builder
 
