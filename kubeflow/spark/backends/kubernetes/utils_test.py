@@ -381,25 +381,40 @@ class TestGetSparkConnectInfoFromCr:
 
         assert info.state == SparkConnectState.FAILED
 
-    def test_parse_running_status(self, minimal_spec):
-        """Parse CR with Running state (operator may set this when server is up)."""
+    def test_parse_new_status(self, minimal_spec):
+        """Parse CR with operator New state (empty string)."""
         spark_connect_cr = models.SparkV1alpha1SparkConnect(
             metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
-                name="run-session",
+                name="new-session",
+                namespace="default",
+            ),
+            spec=minimal_spec,
+            status=models.SparkV1alpha1SparkConnectStatus(
+                state="",
+                server=models.SparkV1alpha1SparkConnectServerStatus(
+                    podName="new-session-server",
+                    serviceName="new-session-svc",
+                ),
+            ),
+        )
+        info = get_spark_connect_info_from_cr(spark_connect_cr)
+        assert info.state == SparkConnectState.NEW
+        assert info.service_name == "new-session-svc"
+
+    def test_parse_unknown_status_defaults_to_new(self, minimal_spec):
+        """Unknown CR states fall back to New."""
+        spark_connect_cr = models.SparkV1alpha1SparkConnect(
+            metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                name="unknown-session",
                 namespace="default",
             ),
             spec=minimal_spec,
             status=models.SparkV1alpha1SparkConnectStatus(
                 state="Running",
-                server=models.SparkV1alpha1SparkConnectServerStatus(
-                    podName="run-session-server",
-                    serviceName="run-session-svc",
-                ),
             ),
         )
         info = get_spark_connect_info_from_cr(spark_connect_cr)
-        assert info.state == SparkConnectState.RUNNING
-        assert info.service_name == "run-session-svc"
+        assert info.state == SparkConnectState.NEW
 
     def test_parse_empty_status(self, minimal_spec):
         """Parse CR with empty status."""
@@ -412,7 +427,7 @@ class TestGetSparkConnectInfoFromCr:
         )
         info = get_spark_connect_info_from_cr(spark_connect_cr)
 
-        assert info.state == SparkConnectState.PROVISIONING
+        assert info.state == SparkConnectState.NEW
         assert info.driver_pod_name is None
 
     def test_invalid_cr_missing_name_raises_error(self, minimal_spec):

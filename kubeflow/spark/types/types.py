@@ -25,11 +25,15 @@ logger = logging.getLogger(__name__)
 
 
 class SparkConnectState(str, Enum):
-    """State of a SparkConnect session."""
+    """State of a SparkConnect session.
 
+    Values match the Spark Operator SparkConnectState model. The operator uses an
+    empty string for the New state, so avoid truthiness checks on ``status.state``.
+    """
+
+    NEW = ""
     PROVISIONING = "Provisioning"
     READY = "Ready"
-    RUNNING = "Running"  # Operator may set this when server is up; treated as ready
     NOT_READY = "NotReady"
     FAILED = "Failed"
 

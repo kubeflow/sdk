@@ -361,7 +361,7 @@ class KubernetesBackend(RuntimeBackend):
         while True:
             info = self.get_session(name)
 
-            if info.state in (SparkConnectState.READY, SparkConnectState.RUNNING):
+            if info.state == SparkConnectState.READY:
                 logger.info(
                     "Session ready: %s/%s state=%s serviceName=%s (%.0fs)",
                     self.namespace,
@@ -662,6 +662,10 @@ class KubernetesBackend(RuntimeBackend):
         2. Waits for session to become ready
         3. Connects to the session and returns SparkSession
 
+        If waiting for readiness or connecting fails after the SparkConnect CR has been
+        created, the session is deleted in a best-effort manner so failed setup does not
+        leave orphaned cluster resources.
+
         Args:
             num_executors: Number of executor instances.
             resources_per_executor: Resource requirements per executor.
@@ -697,10 +701,29 @@ class KubernetesBackend(RuntimeBackend):
             timeout,
         )
 
-        info = self._wait_for_session_ready(info.name, timeout=timeout)
-        logger.info("Session ready, connecting (service_name=%s)", info.service_name)
+        try:
+            info = self._wait_for_session_ready(info.name, timeout=timeout)
+            logger.info("Session ready, connecting (service_name=%s)", info.service_name)
+            return self.connect(info, connect_timeout=connect_timeout)
+        except Exception:
+            self._cleanup_session_on_failure(info.name)
+            raise
 
-        return self.connect(info, connect_timeout=connect_timeout)
+    def _cleanup_session_on_failure(self, name: str) -> None:
+        """Best-effort delete of a SparkConnect session after setup/connect failure.
+
+        Args:
+            name: Name of the SparkConnect session to delete.
+        """
+        try:
+            self.delete_session(name)
+        except Exception as cleanup_error:
+            logger.warning(
+                "Failed to clean up SparkConnect session %s/%s after setup failure: %s",
+                self.namespace,
+                name,
+                cleanup_error,
+            )
 
     def get_session_logs(
         self,
