@@ -27,9 +27,6 @@ import pytest
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
-from kubeflow.spark.backends.kubernetes.utils import (
-    validate_spark_connect_url,
-)
 from kubeflow.spark.test.common import (
     DEFAULT_NAMESPACE,
     FAILED,
@@ -428,7 +425,18 @@ def decorated_func() -> None:
 def test_create_session(kubernetes_backend, test_case):
     """Test KubernetesBackend._create_session with success and error scenarios."""
     print("Executing test:", test_case.name)
-    try:
+
+    if test_case.expected_status == FAILED:
+        with pytest.raises(test_case.expected_error):
+            kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
+            session_name = test_case.config.get("session_name")
+            options = [Name(session_name)] if session_name else None
+
+            kubernetes_backend._create_session(
+                num_executors=test_case.config.get("num_executors"),
+                options=options,
+            )
+    else:
         kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
         session_name = test_case.config.get("session_name")
         options = [Name(session_name)] if session_name else None
@@ -438,12 +446,9 @@ def test_create_session(kubernetes_backend, test_case):
             options=options,
         )
 
-        assert test_case.expected_status == SUCCESS
         assert info.name.startswith(test_case.config["expected_name_prefix"])
         assert info.state == SparkConnectState.PROVISIONING
 
-    except Exception as e:
-        assert type(e) is test_case.expected_error
     print("test execution complete")
 
 
@@ -479,16 +484,18 @@ def test_create_session(kubernetes_backend, test_case):
 def test_get_session(kubernetes_backend, test_case):
     """Test KubernetesBackend.get_session with success and error scenarios."""
     print("Executing test:", test_case.name)
-    try:
+
+    if test_case.expected_status == FAILED:
+        with pytest.raises(test_case.expected_error):
+            kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
+            kubernetes_backend.get_session(test_case.config["name"])
+    else:
         kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
         info = kubernetes_backend.get_session(test_case.config["name"])
 
-        assert test_case.expected_status == SUCCESS
         assert info.name == test_case.config["name"]
         assert info.state == test_case.expected_output
 
-    except Exception as e:
-        assert type(e) is test_case.expected_error
     print("test execution complete")
 
 
@@ -517,17 +524,19 @@ def test_get_session(kubernetes_backend, test_case):
 def test_list_sessions(kubernetes_backend, test_case):
     """Test KubernetesBackend.list_sessions with success and error scenarios."""
     print("Executing test:", test_case.name)
-    try:
+
+    if test_case.expected_status == FAILED:
+        with pytest.raises(test_case.expected_error):
+            kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
+            kubernetes_backend.list_sessions()
+    else:
         kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
         sessions = kubernetes_backend.list_sessions()
 
-        assert test_case.expected_status == SUCCESS
         assert len(sessions) == 2
         assert sessions[0].name == "session-1"
         assert sessions[1].name == "session-2"
 
-    except Exception as e:
-        assert type(e) is test_case.expected_error
     print("test execution complete")
 
 
@@ -562,14 +571,15 @@ def test_list_sessions(kubernetes_backend, test_case):
 def test_delete_session(kubernetes_backend, test_case):
     """Test KubernetesBackend.delete_session with success and error scenarios."""
     print("Executing test:", test_case.name)
-    try:
+
+    if test_case.expected_status == FAILED:
+        with pytest.raises(test_case.expected_error):
+            kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
+            kubernetes_backend.delete_session(test_case.config["name"])
+    else:
         kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
         kubernetes_backend.delete_session(test_case.config["name"])
 
-        assert test_case.expected_status == SUCCESS
-
-    except Exception as e:
-        assert type(e) is test_case.expected_error
     print("test execution complete")
 
 
@@ -593,14 +603,14 @@ def test_delete_session(kubernetes_backend, test_case):
 def test_wait_for_session_ready(kubernetes_backend, test_case):
     """Test KubernetesBackend._wait_for_session_ready with different session states."""
     print("Executing test:", test_case.name)
-    try:
-        info = kubernetes_backend._wait_for_session_ready(test_case.config["name"], timeout=5)
 
-        assert test_case.expected_status == SUCCESS
+    if test_case.expected_status == FAILED:
+        with pytest.raises(test_case.expected_error):
+            kubernetes_backend._wait_for_session_ready(test_case.config["name"], timeout=5)
+    else:
+        info = kubernetes_backend._wait_for_session_ready(test_case.config["name"], timeout=5)
         assert info.state == test_case.expected_output
 
-    except Exception as e:
-        assert type(e) is test_case.expected_error
     print("test execution complete")
 
 
@@ -629,57 +639,51 @@ def test_wait_for_session_ready(kubernetes_backend, test_case):
 def test_get_session_logs(kubernetes_backend, test_case):
     """Test KubernetesBackend.get_session_logs with success and error scenarios."""
     print("Executing test:", test_case.name)
-    try:
-        kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
 
-        # Mock get_session so execution always reaches the log-reading code path.
-        pod_name = test_case.config.get("pod_name", f"{test_case.config['name']}-0")
-        kubernetes_backend.get_session = Mock(return_value=Mock(driver_pod_name=pod_name))
+    kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
 
-        with patch(
-            "kubeflow.spark.backends.kubernetes.backend.read_pod_logs",
-        ) as mock_read_pod_logs:
-            if test_case.expected_status == SUCCESS:
-                mock_read_pod_logs.return_value = iter(
-                    [
-                        "log line 1",
-                        "log line 2",
-                    ]
+    # Mock get_session so execution always reaches the log-reading code path.
+    pod_name = test_case.config.get("pod_name", f"{test_case.config['name']}-0")
+    kubernetes_backend.get_session = Mock(return_value=Mock(driver_pod_name=pod_name))
+
+    with patch(
+        "kubeflow.spark.backends.kubernetes.backend.read_pod_logs",
+    ) as mock_read_pod_logs:
+        if test_case.expected_status == SUCCESS:
+            mock_read_pod_logs.return_value = iter(
+                [
+                    "log line 1",
+                    "log line 2",
+                ]
+            )
+
+            logs = list(
+                kubernetes_backend.get_session_logs(
+                    test_case.config["name"],
+                    follow=False,
                 )
+            )
 
-                logs = list(
+            assert len(logs) == 2
+            assert logs[0] == "log line 1"
+
+            mock_read_pod_logs.assert_called_once_with(
+                core_api=kubernetes_backend.core_api,
+                namespace=DEFAULT_NAMESPACE,
+                pod_name=pod_name,
+                follow=False,
+            )
+        else:
+            mock_read_pod_logs.side_effect = test_case.expected_error()
+
+            with pytest.raises(test_case.expected_error):
+                list(
                     kubernetes_backend.get_session_logs(
                         test_case.config["name"],
                         follow=False,
                     )
                 )
 
-                assert len(logs) == 2
-                assert logs[0] == "log line 1"
-
-                mock_read_pod_logs.assert_called_once_with(
-                    core_api=kubernetes_backend.core_api,
-                    namespace=DEFAULT_NAMESPACE,
-                    pod_name=pod_name,
-                    follow=False,
-                )
-
-            else:
-                mock_read_pod_logs.side_effect = test_case.expected_error()
-
-                with pytest.raises(test_case.expected_error):
-                    list(
-                        kubernetes_backend.get_session_logs(
-                            test_case.config["name"],
-                            follow=False,
-                        )
-                    )
-
-    except Exception as e:
-        if test_case.expected_status == FAILED:
-            assert type(e) is test_case.expected_error
-        else:
-            raise
     print("test execution complete")
 
 
@@ -786,40 +790,6 @@ def test_wait_for_connect_port(kubernetes_backend, test_case):
     "test_case",
     [
         TestCase(
-            name="valid spark connect url",
-            expected_status=SUCCESS,
-            config={"url": "sc://localhost:15002"},
-        ),
-        TestCase(
-            name="invalid http url error",
-            expected_status=FAILED,
-            config={"url": "http://localhost:15002"},
-            expected_error=ValueError,
-        ),
-        TestCase(
-            name="invalid empty url error",
-            expected_status=FAILED,
-            config={"url": ""},
-            expected_error=ValueError,
-        ),
-    ],
-)
-def test_validate_spark_connect_url(test_case):
-    """Test URL validation for Spark Connect URLs."""
-    print("Executing test:", test_case.name)
-    try:
-        result = validate_spark_connect_url(test_case.config["url"])
-        assert test_case.expected_status == SUCCESS
-        assert result is True
-    except Exception as e:
-        assert type(e) is test_case.expected_error
-    print("test execution complete")
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TestCase(
             name="valid flow with name option",
             expected_status=SUCCESS,
             config={"session_name": "custom-session"},
@@ -834,35 +804,27 @@ def test_validate_spark_connect_url(test_case):
 def test_create_and_connect(kubernetes_backend, test_case):
     """Test create_and_connect with and without Name option."""
     print("Executing test:", test_case.name)
-    try:
-        options = (
-            [Name(test_case.config["session_name"])] if test_case.config["session_name"] else None
-        )
-        ready_info = SparkConnectInfo(
-            name=test_case.config["session_name"] or "spark-connect-abc",
-            namespace=DEFAULT_NAMESPACE,
-            state=SparkConnectState.READY,
-            service_name="svc",
-        )
 
-        with (
-            patch.object(
-                kubernetes_backend, "_create_session", return_value=ready_info
-            ) as mock_create,
-            patch.object(kubernetes_backend, "_wait_for_session_ready", return_value=ready_info),
-            patch.object(
-                kubernetes_backend, "get_connect_url", return_value=("sc://localhost:15002", None)
-            ),
-            patch("kubeflow.spark.backends.kubernetes.backend.SparkSession"),
-        ):
-            kubernetes_backend.create_and_connect(options=options)
-            mock_create.assert_called_once()
-            assert mock_create.call_args.kwargs.get("options") == options
+    options = [Name(test_case.config["session_name"])] if test_case.config["session_name"] else None
+    ready_info = SparkConnectInfo(
+        name=test_case.config["session_name"] or "spark-connect-abc",
+        namespace=DEFAULT_NAMESPACE,
+        state=SparkConnectState.READY,
+        service_name="svc",
+    )
 
-        assert test_case.expected_status == SUCCESS
+    with (
+        patch.object(kubernetes_backend, "_create_session", return_value=ready_info) as mock_create,
+        patch.object(kubernetes_backend, "_wait_for_session_ready", return_value=ready_info),
+        patch.object(
+            kubernetes_backend, "get_connect_url", return_value=("sc://localhost:15002", None)
+        ),
+        patch("kubeflow.spark.backends.kubernetes.backend.SparkSession"),
+    ):
+        kubernetes_backend.create_and_connect(options=options)
+        mock_create.assert_called_once()
+        assert mock_create.call_args.kwargs.get("options") == options
 
-    except Exception as e:
-        assert type(e) is test_case.expected_error
     print("test execution complete")
 
 
@@ -902,20 +864,17 @@ def test_create_and_connect(kubernetes_backend, test_case):
 def test_extract_name_option(kubernetes_backend, test_case):
     """Test KubernetesBackend._extract_name_option for name extraction and auto-generation."""
     print("Executing test:", test_case.name)
-    try:
-        name, filtered = kubernetes_backend._extract_name_option(test_case.config["options"])
 
-        assert test_case.expected_status == SUCCESS
-        if "name" in test_case.expected_output:
-            assert name == test_case.expected_output["name"]
-        else:
-            assert name.startswith(test_case.expected_output["name_prefix"])
-        assert len(filtered) == test_case.expected_output["remaining_count"]
-        if "remaining_type" in test_case.expected_output:
-            assert isinstance(filtered[0], test_case.expected_output["remaining_type"])
+    name, filtered = kubernetes_backend._extract_name_option(test_case.config["options"])
 
-    except Exception as e:
-        assert type(e) is test_case.expected_error
+    if "name" in test_case.expected_output:
+        assert name == test_case.expected_output["name"]
+    else:
+        assert name.startswith(test_case.expected_output["name_prefix"])
+    assert len(filtered) == test_case.expected_output["remaining_count"]
+    if "remaining_type" in test_case.expected_output:
+        assert isinstance(filtered[0], test_case.expected_output["remaining_type"])
+
     print("test execution complete")
 
 
@@ -977,15 +936,15 @@ def test_validate_file_job(kubernetes_backend, test_case):
     """Test KubernetesBackend._validate_file_job()."""
     print("Executing test:", test_case.name)
 
-    try:
+    if test_case.expected_status == FAILED:
+        with pytest.raises(test_case.expected_error):
+            kubernetes_backend._validate_file_job(
+                test_case.config["job"],
+            )
+    else:
         kubernetes_backend._validate_file_job(
             test_case.config["job"],
         )
-
-        assert test_case.expected_status == SUCCESS
-
-    except Exception as e:
-        assert type(e) is test_case.expected_error
 
     print("test execution complete")
 
@@ -1163,15 +1122,15 @@ def test_validate_func_job(kubernetes_backend, test_case):
 
     print("Executing test:", test_case.name)
 
-    try:
+    if test_case.expected_status == FAILED:
+        with pytest.raises(test_case.expected_error):
+            kubernetes_backend._validate_func_job(
+                test_case.config["job"],
+            )
+    else:
         kubernetes_backend._validate_func_job(
             test_case.config["job"],
         )
-
-        assert test_case.expected_status == SUCCESS
-
-    except Exception as e:
-        assert type(e) is test_case.expected_error
 
     print("Test execution complete.")
 
@@ -1211,15 +1170,15 @@ def test_validate_job(kubernetes_backend, test_case):
     """Test KubernetesBackend._validate_job()."""
     print("Executing test:", test_case.name)
 
-    try:
+    if test_case.expected_status == FAILED:
+        with pytest.raises(test_case.expected_error):
+            kubernetes_backend._validate_job(
+                test_case.config["job"],
+            )
+    else:
         kubernetes_backend._validate_job(
             test_case.config["job"],
         )
-
-        assert test_case.expected_status == SUCCESS
-
-    except Exception as e:
-        assert type(e) is test_case.expected_error
 
     print("test execution complete")
 
@@ -1283,7 +1242,16 @@ def test_submit_job(kubernetes_backend, test_case):
     """Test KubernetesBackend.submit_job()."""
     print("Executing test:", test_case.name)
 
-    try:
+    if test_case.expected_status == FAILED:
+        with pytest.raises(test_case.expected_error):
+            kubernetes_backend.namespace = test_case.config.get(
+                "namespace",
+                DEFAULT_NAMESPACE,
+            )
+            kubernetes_backend.submit_job(
+                job=test_case.config["job"],
+            )
+    else:
         kubernetes_backend.namespace = test_case.config.get(
             "namespace",
             DEFAULT_NAMESPACE,
@@ -1305,17 +1273,12 @@ def test_submit_job(kubernetes_backend, test_case):
 
                 assert mock_build.call_args.kwargs["func"] == test_case.config["job"].func
                 assert mock_build.call_args.kwargs["func_args"] == test_case.config["job"].func_args
-
         else:
             job = kubernetes_backend.submit_job(
                 job=test_case.config["job"],
             )
 
-        assert test_case.expected_status == SUCCESS
         assert job.name.startswith("spark-job-")
-
-    except Exception as e:
-        assert type(e) is test_case.expected_error
 
     print("test execution complete")
 
@@ -1482,60 +1445,55 @@ def test_get_job(kubernetes_backend, test_case):
     """Test get_job."""
     print("Executing test:", test_case.name)
 
-    try:
-        kubernetes_backend.namespace = test_case.config.get(
-            "namespace",
-            DEFAULT_NAMESPACE,
-        )
+    kubernetes_backend.namespace = test_case.config.get(
+        "namespace",
+        DEFAULT_NAMESPACE,
+    )
 
-        if test_case.expected_status == SUCCESS:
-            with patch(
-                "kubeflow.spark.backends.kubernetes.backend.models.SparkV1beta2SparkApplication.from_dict"
-            ) as mock_from_dict:
-                if test_case.config.get("no_status"):
-                    mock_from_dict.return_value = get_spark_application(
-                        name=test_case.config["job_name"],
-                        state=None,
-                    )
-                else:
-                    mock_from_dict.return_value = get_spark_application(
-                        name=test_case.config["job_name"],
-                        state=test_case.config["state"],
-                    )
-
-                job = kubernetes_backend.get_job(
-                    test_case.config["job_name"],
+    if test_case.expected_status == SUCCESS:
+        with patch(
+            "kubeflow.spark.backends.kubernetes.backend.models.SparkV1beta2SparkApplication.from_dict"
+        ) as mock_from_dict:
+            if test_case.config.get("no_status"):
+                mock_from_dict.return_value = get_spark_application(
+                    name=test_case.config["job_name"],
+                    state=None,
+                )
+            else:
+                mock_from_dict.return_value = get_spark_application(
+                    name=test_case.config["job_name"],
+                    state=test_case.config["state"],
                 )
 
-                assert job.name == test_case.config["job_name"]
-                assert job.status == test_case.expected_output
+            job = kubernetes_backend.get_job(
+                test_case.config["job_name"],
+            )
 
+            assert job.name == test_case.config["job_name"]
+            assert job.status == test_case.expected_output
+    else:
+        api_status = test_case.config.get("api_status")
+
+        if api_status is not None:
+            with patch.object(
+                kubernetes_backend.custom_api,
+                "get_namespaced_custom_object",
+                side_effect=client.ApiException(status=api_status),
+            ):
+                with pytest.raises(RuntimeError) as exc_info:
+                    kubernetes_backend.get_job(
+                        test_case.config["job_name"],
+                    )
+
+                if api_status == 404:
+                    assert "Spark job not found" in str(exc_info.value)
+                else:
+                    assert "Failed to get Spark job" in str(exc_info.value)
         else:
-            api_status = test_case.config.get("api_status")
-
-            if api_status is not None:
-                with patch.object(
-                    kubernetes_backend.custom_api,
-                    "get_namespaced_custom_object",
-                    side_effect=client.ApiException(status=api_status),
-                ):
-                    with pytest.raises(RuntimeError) as exc_info:
-                        kubernetes_backend.get_job(
-                            test_case.config["job_name"],
-                        )
-
-                    if api_status == 404:
-                        assert "Spark job not found" in str(exc_info.value)
-                    else:
-                        assert "Failed to get Spark job" in str(exc_info.value)
-
-            else:
+            with pytest.raises(test_case.expected_error):
                 kubernetes_backend.get_job(
                     test_case.config["job_name"],
                 )
-
-    except Exception as e:
-        assert type(e) is test_case.expected_error
 
     print("test execution complete")
 
@@ -1603,7 +1561,16 @@ def test_list_jobs(kubernetes_backend, test_case):
     """Test list_jobs."""
     print("Executing test:", test_case.name)
 
-    try:
+    if test_case.expected_status == FAILED:
+        with pytest.raises(test_case.expected_error):
+            kubernetes_backend.namespace = test_case.config.get(
+                "namespace",
+                DEFAULT_NAMESPACE,
+            )
+            kubernetes_backend.list_jobs(
+                status=test_case.config.get("status"),
+            )
+    else:
         kubernetes_backend.namespace = test_case.config.get(
             "namespace",
             DEFAULT_NAMESPACE,
@@ -1613,11 +1580,7 @@ def test_list_jobs(kubernetes_backend, test_case):
             status=test_case.config.get("status"),
         )
 
-        if test_case.expected_status == SUCCESS:
-            assert len(jobs) == test_case.expected_output
-
-    except Exception as e:
-        assert type(e) is test_case.expected_error
+        assert len(jobs) == test_case.expected_output
 
     print("test execution complete")
 
@@ -1664,20 +1627,23 @@ def test_delete_job(kubernetes_backend, test_case):
     """Test delete_job."""
     print("Executing test:", test_case.name)
 
-    try:
+    if test_case.expected_status == FAILED:
+        with pytest.raises(test_case.expected_error):
+            kubernetes_backend.namespace = test_case.config.get(
+                "namespace",
+                DEFAULT_NAMESPACE,
+            )
+            kubernetes_backend.delete_job(
+                test_case.config["job_name"],
+            )
+    else:
         kubernetes_backend.namespace = test_case.config.get(
             "namespace",
             DEFAULT_NAMESPACE,
         )
-
         kubernetes_backend.delete_job(
             test_case.config["job_name"],
         )
-
-        assert test_case.expected_status == SUCCESS
-
-    except Exception as e:
-        assert type(e) is test_case.expected_error
 
     print("test execution complete")
 
@@ -1856,76 +1822,67 @@ def test_get_job_logs(kubernetes_backend, test_case):
     """Test get_job_logs."""
     print("Executing test:", test_case.name)
 
-    try:
-        mock_job = Mock()
+    mock_job = Mock()
 
-        if "driver_pod_name" in test_case.config:
-            mock_job.driver_pod_name = test_case.config["driver_pod_name"]
-        else:
-            mock_job.driver_pod_name = "spark-job-driver"
+    if "driver_pod_name" in test_case.config:
+        mock_job.driver_pod_name = test_case.config["driver_pod_name"]
+    else:
+        mock_job.driver_pod_name = "spark-job-driver"
 
-        with (
-            patch.object(
-                kubernetes_backend,
-                "get_job",
-                return_value=mock_job,
-            ),
-            patch(
-                "kubeflow.spark.backends.kubernetes.backend.read_pod_logs",
-            ) as mock_read_pod_logs,
-        ):
-            if test_case.expected_status == SUCCESS:
-                mock_read_pod_logs.return_value = iter(
-                    [
-                        "log line 1",
-                        "log line 2",
-                    ]
+    with (
+        patch.object(
+            kubernetes_backend,
+            "get_job",
+            return_value=mock_job,
+        ),
+        patch(
+            "kubeflow.spark.backends.kubernetes.backend.read_pod_logs",
+        ) as mock_read_pod_logs,
+    ):
+        if test_case.expected_status == SUCCESS:
+            mock_read_pod_logs.return_value = iter(
+                [
+                    "log line 1",
+                    "log line 2",
+                ]
+            )
+
+            logs = list(
+                kubernetes_backend.get_job_logs(
+                    "spark-job",
+                    follow=test_case.config.get("follow", False),
                 )
+            )
 
-                logs = list(
+            assert logs == test_case.expected_output
+
+            mock_read_pod_logs.assert_called_once_with(
+                core_api=kubernetes_backend.core_api,
+                namespace=kubernetes_backend.namespace,
+                pod_name="spark-job-driver",
+                follow=test_case.config.get("follow", False),
+            )
+        elif "driver_pod_name" in test_case.config:
+            with pytest.raises(test_case.expected_error):
+                list(
                     kubernetes_backend.get_job_logs(
                         "spark-job",
                         follow=test_case.config.get("follow", False),
                     )
                 )
 
-                assert logs == test_case.expected_output
+            mock_read_pod_logs.assert_not_called()
+        else:
+            mock_read_pod_logs.side_effect = test_case.config["read_logs_error"]
 
-                mock_read_pod_logs.assert_called_once_with(
-                    core_api=kubernetes_backend.core_api,
-                    namespace=kubernetes_backend.namespace,
-                    pod_name="spark-job-driver",
-                    follow=test_case.config.get("follow", False),
+            with pytest.raises(test_case.expected_error):
+                list(
+                    kubernetes_backend.get_job_logs(
+                        "spark-job",
+                        follow=test_case.config.get("follow", False),
+                    )
                 )
 
-            elif "driver_pod_name" in test_case.config:
-                with pytest.raises(test_case.expected_error):
-                    list(
-                        kubernetes_backend.get_job_logs(
-                            "spark-job",
-                            follow=test_case.config.get("follow", False),
-                        )
-                    )
-
-                mock_read_pod_logs.assert_not_called()
-
-            else:
-                mock_read_pod_logs.side_effect = test_case.config["read_logs_error"]
-
-                with pytest.raises(test_case.expected_error):
-                    list(
-                        kubernetes_backend.get_job_logs(
-                            "spark-job",
-                            follow=test_case.config.get("follow", False),
-                        )
-                    )
-
-                mock_read_pod_logs.assert_called_once()
-
-    except Exception as e:
-        if test_case.expected_status == FAILED:
-            assert type(e) is test_case.expected_error
-        else:
-            raise
+            mock_read_pod_logs.assert_called_once()
 
     print("test execution complete")

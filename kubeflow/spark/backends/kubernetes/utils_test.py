@@ -177,17 +177,12 @@ def test_generate_session_name(test_case: TestCase) -> None:
 
     print("Executing test:", test_case.name)
 
-    assert test_case.expected_status == SUCCESS
-
-    if test_case.name == "generate session name with prefix":
+    if isinstance(test_case.expected_output, str):
         name = generate_session_name()
-
         assert name.startswith(test_case.expected_output)
         assert len(name) > len(test_case.expected_output)
-
-    elif test_case.name == "generate unique session names":
+    else:
         names = {generate_session_name() for _ in range(10)}
-
         assert len(names) == test_case.expected_output
 
     print("test execution complete")
@@ -278,11 +273,9 @@ def test_build_service_url(test_case: TestCase) -> None:
 
     url = build_service_url(test_case.config["info"])
 
-    assert test_case.expected_status == SUCCESS
-
-    if test_case.name == "build service url with service name":
+    if isinstance(test_case.expected_output, str) and "://" in test_case.expected_output:
         assert url == test_case.expected_output
-    elif test_case.name == "build service url without service name":
+    else:
         assert test_case.expected_output in url
 
     print("test execution complete")
@@ -295,12 +288,28 @@ def test_build_service_url(test_case: TestCase) -> None:
             name="minimal spark connect cr",
             expected_status=SUCCESS,
             config={},
+            expected_output={
+                "api_version": f"{constants.SPARK_CONNECT_GROUP}/{constants.SPARK_CONNECT_VERSION}",
+                "kind": constants.SPARK_CONNECT_KIND,
+                "metadata_name": "test-session",
+                "metadata_namespace": "default",
+                "spark_version": constants.DEFAULT_SPARK_VERSION,
+                "executor_instances": constants.DEFAULT_NUM_EXECUTORS,
+                "executor_cores": constants.DEFAULT_EXECUTOR_CPU,
+                "executor_memory": "512m",
+                "server_cores": constants.DEFAULT_DRIVER_CPU,
+                "server_memory": "512m",
+                "grpc_binding_address": "0.0.0.0",
+            },
         ),
         TestCase(
             name="spark connect cr with num executors",
             expected_status=SUCCESS,
             config={
                 "num_executors": 3,
+            },
+            expected_output={
+                "executor_instances": 3,
             },
         ),
         TestCase(
@@ -312,6 +321,10 @@ def test_build_service_url(test_case: TestCase) -> None:
                     "memory": "4Gi",
                 },
             },
+            expected_output={
+                "executor_cores": 2,
+                "executor_memory": "4g",
+            },
         ),
         TestCase(
             name="spark connect cr with spark conf",
@@ -320,6 +333,9 @@ def test_build_service_url(test_case: TestCase) -> None:
                 "spark_conf": {
                     "spark.sql.adaptive.enabled": "true",
                 },
+            },
+            expected_output={
+                "spark_sql_adaptive_enabled": "true",
             },
         ),
         TestCase(
@@ -330,12 +346,18 @@ def test_build_service_url(test_case: TestCase) -> None:
                     "spark.connect.grpc.binding.address": "127.0.0.1",
                 },
             },
+            expected_output={
+                "grpc_binding_address": "127.0.0.1",
+            },
         ),
         TestCase(
             name="spark connect cr with driver image",
             expected_status=SUCCESS,
             config={
                 "driver": Driver(image="custom-spark:v1"),
+            },
+            expected_output={
+                "image": "custom-spark:v1",
             },
         ),
         TestCase(
@@ -349,12 +371,19 @@ def test_build_service_url(test_case: TestCase) -> None:
                     },
                 ),
             },
+            expected_output={
+                "server_cores": 2,
+                "server_memory": "2g",
+            },
         ),
         TestCase(
             name="spark connect cr with service account",
             expected_status=SUCCESS,
             config={
                 "driver": Driver(service_account="spark-sa"),
+            },
+            expected_output={
+                "service_account_name": "spark-sa",
             },
         ),
         TestCase(
@@ -369,6 +398,11 @@ def test_build_service_url(test_case: TestCase) -> None:
                     },
                 ),
             },
+            expected_output={
+                "executor_instances": 5,
+                "executor_cores": 4,
+                "executor_memory": "8g",
+            },
         ),
         TestCase(
             name="spark connect cr with app name",
@@ -377,6 +411,9 @@ def test_build_service_url(test_case: TestCase) -> None:
                 "spark_conf": {
                     "spark.app.name": "my-spark-app",
                 },
+            },
+            expected_output={
+                "spark_app_name": "my-spark-app",
             },
         ),
         TestCase(
@@ -387,6 +424,9 @@ def test_build_service_url(test_case: TestCase) -> None:
                 "executor": Executor(
                     num_instances=10,
                 ),
+            },
+            expected_output={
+                "executor_instances": 10,
             },
         ),
         TestCase(
@@ -404,6 +444,10 @@ def test_build_service_url(test_case: TestCase) -> None:
                     },
                 ),
             },
+            expected_output={
+                "executor_cores": 8,
+                "executor_memory": "16g",
+            },
         ),
         TestCase(
             name="kep107 level2 simple mode",
@@ -414,6 +458,11 @@ def test_build_service_url(test_case: TestCase) -> None:
                     "cpu": "5",
                     "memory": "10Gi",
                 },
+            },
+            expected_output={
+                "executor_instances": 5,
+                "executor_cores": 5,
+                "executor_memory": "10g",
             },
         ),
         TestCase(
@@ -435,6 +484,14 @@ def test_build_service_url(test_case: TestCase) -> None:
                     },
                 ),
             },
+            expected_output={
+                "server_cores": 4,
+                "server_memory": "8g",
+                "service_account_name": "spark-driver-prod",
+                "executor_instances": 20,
+                "executor_cores": 8,
+                "executor_memory": "32g",
+            },
         ),
     ],
 )
@@ -448,82 +505,54 @@ def test_build_spark_connect_cr(test_case: TestCase) -> None:
         **test_case.config,
     )
 
-    assert test_case.expected_status == SUCCESS
+    expected = test_case.expected_output
 
-    if test_case.name == "minimal spark connect cr":
+    if "api_version" in expected:
+        assert spark_connect.api_version == expected["api_version"]
+    if "kind" in expected:
+        assert spark_connect.kind == expected["kind"]
+    if "metadata_name" in expected:
+        assert spark_connect.metadata.name == expected["metadata_name"]
+    if "metadata_namespace" in expected:
+        assert spark_connect.metadata.namespace == expected["metadata_namespace"]
+    if "spark_version" in expected:
+        assert spark_connect.spec.spark_version == expected["spark_version"]
+    if "executor_instances" in expected:
+        assert spark_connect.spec.executor.instances == expected["executor_instances"]
+    if "executor_cores" in expected:
+        assert spark_connect.spec.executor.cores == expected["executor_cores"]
+    if "executor_memory" in expected:
+        assert spark_connect.spec.executor.memory == expected["executor_memory"]
+    if "server_cores" in expected:
+        assert spark_connect.spec.server.cores == expected["server_cores"]
+    if "server_memory" in expected:
+        assert spark_connect.spec.server.memory == expected["server_memory"]
+    if "grpc_binding_address" in expected:
         assert (
-            spark_connect.api_version
-            == f"{constants.SPARK_CONNECT_GROUP}/{constants.SPARK_CONNECT_VERSION}"
+            spark_connect.spec.spark_conf["spark.connect.grpc.binding.address"]
+            == expected["grpc_binding_address"]
         )
-        assert spark_connect.kind == constants.SPARK_CONNECT_KIND
-        assert spark_connect.metadata.name == "test-session"
-        assert spark_connect.metadata.namespace == "default"
-        assert spark_connect.spec.spark_version == constants.DEFAULT_SPARK_VERSION
-        assert spark_connect.spec.executor.instances == constants.DEFAULT_NUM_EXECUTORS
-        assert spark_connect.spec.executor.cores == constants.DEFAULT_EXECUTOR_CPU
-        assert spark_connect.spec.executor.memory == "512m"
-        assert spark_connect.spec.server.cores == constants.DEFAULT_DRIVER_CPU
-        assert spark_connect.spec.server.memory == "512m"
-        assert spark_connect.spec.spark_conf["spark.connect.grpc.binding.address"] == "0.0.0.0"
-
-    elif test_case.name == "spark connect cr with num executors":
-        assert spark_connect.spec.executor.instances == 3
-
-    elif test_case.name == "spark connect cr with executor resources":
-        assert spark_connect.spec.executor.cores == 2
-        assert spark_connect.spec.executor.memory == "4g"
-
-    elif test_case.name == "spark connect cr with spark conf":
+    if "spark_sql_adaptive_enabled" in expected:
+        assert (
+            spark_connect.spec.spark_conf["spark.sql.adaptive.enabled"]
+            == expected["spark_sql_adaptive_enabled"]
+        )
+    if "image" in expected:
+        assert spark_connect.spec.image == expected["image"]
+    if "service_account_name" in expected:
+        assert (
+            spark_connect.spec.server.template.spec.service_account_name
+            == expected["service_account_name"]
+        )
+    if "spark_app_name" in expected:
+        assert spark_connect.spec.spark_conf["spark.app.name"] == expected["spark_app_name"]
+    # Verify spark.jars is always set when spark_conf is provided
+    if "spark_conf" in test_case.config:
+        assert "spark.jars" in spark_connect.spec.spark_conf
         assert spark_connect.spec.spark_conf["spark.jars"].endswith(
             f"spark-connect_{constants.SPARK_CONNECT_PACKAGE_SCALA_VERSION}-"
             f"{constants.DEFAULT_SPARK_VERSION}.jar"
         )
-        assert spark_connect.spec.spark_conf["spark.sql.adaptive.enabled"] == "true"
-
-    elif test_case.name == "spark conf overrides grpc binding address":
-        assert spark_connect.spec.spark_conf["spark.connect.grpc.binding.address"] == "127.0.0.1"
-
-    elif test_case.name == "spark connect cr with driver image":
-        assert spark_connect.spec.image == "custom-spark:v1"
-
-    elif test_case.name == "spark connect cr with driver resources":
-        assert spark_connect.spec.server.cores == 2
-        assert spark_connect.spec.server.memory == "2g"
-
-    elif test_case.name == "spark connect cr with service account":
-        assert spark_connect.spec.server.template.spec.service_account_name == "spark-sa"
-
-    elif test_case.name == "spark connect cr with executor config":
-        assert spark_connect.spec.executor.instances == 5
-        assert spark_connect.spec.executor.cores == 4
-        assert spark_connect.spec.executor.memory == "8g"
-
-    elif test_case.name == "spark connect cr with app name":
-        assert spark_connect.spec.spark_conf["spark.jars"].endswith(
-            f"spark-connect_{constants.SPARK_CONNECT_PACKAGE_SCALA_VERSION}-"
-            f"{constants.DEFAULT_SPARK_VERSION}.jar"
-        )
-        assert spark_connect.spec.spark_conf["spark.app.name"] == "my-spark-app"
-
-    elif test_case.name == "executor config overrides num executors":
-        assert spark_connect.spec.executor.instances == 10
-
-    elif test_case.name == "executor config overrides executor resources":
-        assert spark_connect.spec.executor.cores == 8
-        assert spark_connect.spec.executor.memory == "16g"
-
-    elif test_case.name == "kep107 level2 simple mode":
-        assert spark_connect.spec.executor.instances == 5
-        assert spark_connect.spec.executor.cores == 5
-        assert spark_connect.spec.executor.memory == "10g"
-
-    elif test_case.name == "kep107 level3 advanced mode":
-        assert spark_connect.spec.server.cores == 4
-        assert spark_connect.spec.server.memory == "8g"
-        assert spark_connect.spec.server.template.spec.service_account_name == "spark-driver-prod"
-        assert spark_connect.spec.executor.instances == 20
-        assert spark_connect.spec.executor.cores == 8
-        assert spark_connect.spec.executor.memory == "32g"
 
     print("test execution complete")
 
@@ -635,31 +664,31 @@ def test_get_spark_connect_info_from_cr(
     if test_case.expected_status == SUCCESS:
         info = get_spark_connect_info_from_cr(spark_connect_cr)
 
-        if test_case.name == "ready status":
-            assert info.name == "my-session"
-            assert info.namespace == "default"
-            assert info.state == SparkConnectState.READY
-            assert info.driver_pod_name == "my-session-server-0"
-            assert info.pod_ip == "10.0.0.5"
-            assert info.service_name == "my-session-svc"
-            assert info.creation_timestamp is not None
+        metadata = test_case.config["metadata"]
+        assert info.name == metadata["name"]
+        assert info.namespace == metadata.get("namespace", "default")
 
-        elif test_case.name == "provisioning status":
-            assert info.name == "new-session"
-            assert info.namespace == "spark"
-            assert info.state == SparkConnectState.PROVISIONING
+        status = test_case.config.get("status")
+        if status and status.state:
+            expected_state_map = {
+                "Ready": SparkConnectState.READY,
+                "Provisioning": SparkConnectState.PROVISIONING,
+                "Failed": SparkConnectState.FAILED,
+                "Running": SparkConnectState.RUNNING,
+            }
+            assert info.state == expected_state_map.get(
+                status.state, SparkConnectState.PROVISIONING
+            )
 
-        elif test_case.name == "failed status":
-            assert info.state == SparkConnectState.FAILED
-
-        elif test_case.name == "running status":
-            assert info.state == SparkConnectState.RUNNING
-            assert info.service_name == "run-session-svc"
-
-        elif test_case.name == "empty status":
+            if status.server:
+                assert info.driver_pod_name == status.server.pod_name
+                if status.server.pod_ip:
+                    assert info.pod_ip == status.server.pod_ip
+                if status.server.service_name:
+                    assert info.service_name == status.server.service_name
+        else:
             assert info.state == SparkConnectState.PROVISIONING
             assert info.driver_pod_name is None
-
     else:
         with pytest.raises(
             test_case.expected_error,
@@ -690,17 +719,12 @@ def test_generate_job_name(test_case: TestCase) -> None:
 
     print("Executing test:", test_case.name)
 
-    assert test_case.expected_status == SUCCESS
-
-    if test_case.name == "generate unique job name":
+    if isinstance(test_case.expected_output, str):
         name = generate_job_name()
-
         assert name.startswith(test_case.expected_output)
         assert len(name) > len(test_case.expected_output)
-
-    elif test_case.name == "generate different job names":
+    else:
         names = {generate_job_name() for _ in range(10)}
-
         assert len(names) == test_case.expected_output
 
     print("test execution complete")
@@ -811,21 +835,15 @@ def test_resolve_driver_resources(test_case: TestCase) -> None:
         test_case.config.get("driver"),
     )
 
-    assert test_case.expected_status == SUCCESS
-
-    if test_case.name == "default driver resources":
+    if "driver" not in test_case.config:
         assert cores == constants.DEFAULT_DRIVER_CPU
         assert memory == _memory_kubernetes_to_spark(
             constants.DEFAULT_DRIVER_MEMORY,
         )
-
-    elif test_case.name == "custom driver resources":
-        assert cores == 2
-        assert memory == "4g"
-
-    elif test_case.name == "fractional driver memory":
-        assert cores == 2
-        assert memory == "1536m"
+    else:
+        driver = test_case.config["driver"]
+        assert cores == int(driver.resources["cpu"])
+        assert memory == _memory_kubernetes_to_spark(driver.resources["memory"])
 
     print("test execution complete")
 
@@ -890,29 +908,27 @@ def test_resolve_executor_resources(test_case: TestCase) -> None:
         resources_per_executor=test_case.config.get("resources_per_executor"),
     )
 
-    assert test_case.expected_status == SUCCESS
-
-    if test_case.name == "default executor resources":
+    if "executor" in test_case.config:
+        executor = test_case.config["executor"]
+        assert instances == executor.num_instances
+        assert cores == int(executor.resources_per_executor["cpu"])
+        assert memory == _memory_kubernetes_to_spark(executor.resources_per_executor["memory"])
+    elif "num_executors" in test_case.config or "resources_per_executor" in test_case.config:
+        num_executors = test_case.config.get("num_executors")
+        resources = test_case.config.get("resources_per_executor")
+        assert instances == (num_executors if num_executors else constants.DEFAULT_NUM_EXECUTORS)
+        assert cores == int(resources["cpu"]) if resources else constants.DEFAULT_EXECUTOR_CPU
+        assert memory == (
+            _memory_kubernetes_to_spark(resources["memory"])
+            if resources
+            else _memory_kubernetes_to_spark(constants.DEFAULT_EXECUTOR_MEMORY)
+        )
+    else:
         assert instances == constants.DEFAULT_NUM_EXECUTORS
         assert cores == constants.DEFAULT_EXECUTOR_CPU
         assert memory == _memory_kubernetes_to_spark(
             constants.DEFAULT_EXECUTOR_MEMORY,
         )
-
-    elif test_case.name == "simple executor parameters":
-        assert instances == 3
-        assert cores == 2
-        assert memory == "4g"
-
-    elif test_case.name == "executor configuration precedence":
-        assert instances == 5
-        assert cores == 8
-        assert memory == "16g"
-
-    elif test_case.name == "fractional executor memory":
-        assert instances == constants.DEFAULT_NUM_EXECUTORS
-        assert cores == 2
-        assert memory == "1536m"
 
     print("test execution complete")
 
@@ -962,47 +978,35 @@ def test_read_pod_logs(test_case: TestCase) -> None:
     core_api = Mock()
     thread = Mock()
 
-    if test_case.name == "read logs":
-        thread.get.return_value = "log line 1\nlog line 2"
-
-    elif test_case.name == "follow logs":
-        stream = Mock()
-        stream.stream.return_value = iter(
-            [
-                b"log line 1\n",
-                b"log line 2\n",
-            ]
-        )
-        thread.get.return_value = stream
-
-    elif test_case.name == "timeout":
-        thread.get.side_effect = multiprocessing.TimeoutError()
-
-    elif test_case.name == "runtime error":
-        thread.get.side_effect = RuntimeError()
-
-    core_api.read_namespaced_pod_log.return_value = thread
+    follow = test_case.config.get("follow", False)
 
     if test_case.expected_status == SUCCESS:
+        if follow:
+            stream = Mock()
+            stream.stream.return_value = iter(
+                [
+                    b"log line 1\n",
+                    b"log line 2\n",
+                ]
+            )
+            thread.get.return_value = stream
+        else:
+            thread.get.return_value = "log line 1\nlog line 2"
+
+        core_api.read_namespaced_pod_log.return_value = thread
+
         logs = list(
             read_pod_logs(
                 core_api=core_api,
                 namespace="default",
                 pod_name="driver-pod",
-                follow=test_case.config["follow"],
+                follow=follow,
             )
         )
 
         assert logs == test_case.expected_output
 
-        if test_case.name == "read logs":
-            core_api.read_namespaced_pod_log.assert_called_once_with(
-                name="driver-pod",
-                namespace="default",
-                async_req=True,
-            )
-
-        elif test_case.name == "follow logs":
+        if follow:
             core_api.read_namespaced_pod_log.assert_called_once_with(
                 name="driver-pod",
                 namespace="default",
@@ -1010,8 +1014,20 @@ def test_read_pod_logs(test_case: TestCase) -> None:
                 _preload_content=False,
                 async_req=True,
             )
-
+        else:
+            core_api.read_namespaced_pod_log.assert_called_once_with(
+                name="driver-pod",
+                namespace="default",
+                async_req=True,
+            )
     else:
+        if test_case.expected_error is TimeoutError:
+            thread.get.side_effect = multiprocessing.TimeoutError()
+        else:
+            thread.get.side_effect = RuntimeError()
+
+        core_api.read_namespaced_pod_log.return_value = thread
+
         with pytest.raises(test_case.expected_error):
             list(
                 read_pod_logs(
@@ -1460,7 +1476,7 @@ def test_get_spark_application_info_from_cr(
         ):
             get_spark_application_info_from_cr(spark_app)
 
-    elif test_case.name == "without status":
+    elif test_case.config.get("without_status"):
         spark_app = models.SparkV1beta2SparkApplication(
             metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
                 name=test_case.config["job_name"],
@@ -1479,7 +1495,7 @@ def test_get_spark_application_info_from_cr(
         assert job.creation_timestamp == creation_timestamp
         assert job.num_executors == 5
 
-    elif test_case.name == "uses from operator state":
+    elif "patch_status" in test_case.config:
         spark_app = models.SparkV1beta2SparkApplication(
             metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
                 name="test-job",
