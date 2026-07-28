@@ -62,7 +62,8 @@ The fastest option for quick testing. Runs training directly as Python processes
    job_name = client.train(trainer=trainer)
 
    # View logs
-   client.get_job_logs(name=job_name, follow=True)
+   for log_line in client.get_job_logs(name=job_name, follow=True):
+       print(log_line)
 
 **Limitations:**
 
@@ -257,9 +258,14 @@ Troubleshooting
 - Image pull errors: Check network connectivity and image registry access
 - Permission denied: For Podman, ensure rootless mode is configured
 
+**Kubernetes Backend:**
+
+- ``ConfigException``: Verify the ``config_file`` path and ``context`` are correct
+- TrainJob stuck in ``Created``: Check that the Trainer operator is installed and pods are schedulable
+
 Next Steps
 ----------
 
-- `Custom Training <../train/custom-training.html>`_ - Define your trainers
-- `Distributed Training <../train/distributed.html>`_ - Scale across nodes
+- :doc:`../train/custom-training` - Define your trainers
+- :doc:`../train/distributed` - Scale across nodes
 - `Kubeflow Trainer Docs <https://www.kubeflow.org/docs/components/trainer/>`_ - Full documentation
