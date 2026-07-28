@@ -15,7 +15,6 @@
 """Utility functions for Kubernetes Spark backend."""
 
 from collections.abc import Callable, Iterator
-from collections.abc import Callable, Iterator
 import inspect
 import logging
 import math
