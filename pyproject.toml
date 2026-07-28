@@ -29,8 +29,8 @@ dependencies = [
   "kubernetes>=27.2.0,<36.0.0",  # 36.0.0 has multiple regressions; see kubernetes-client/python#2592, #2596
   "pydantic>=2.10.0",
   "requests>=2.25.0",
-  "kubeflow-trainer-api>=2.2.0",
-  "kubeflow-katib-api>=0.19.0",
+  "kubeflow-trainer-api>=2.2.0,<2.3",
+  "kubeflow-katib-api>=0.19.0,<0.20",
 ]
 
 [project.optional-dependencies]
@@ -42,10 +42,10 @@ spark = [
   # Ensure pyspark-connect and the spark image align with the Spark version used in the Spark operator image
   # https://github.com/kubeflow/spark-operator/blob/master/Dockerfile#L17
   "pyspark-connect==4.2.0",
-  "kubeflow-spark-api>=2.4.0",
+  "kubeflow-spark-api>=2.4.0,<2.5",
 ]
-hub = ["model-registry>=0.3.6"]
-pipelines = ["kfp[kubernetes]>=2.17.0"]
+hub = ["model-registry>=0.3.14,<0.4"]
+pipelines = ["kfp[kubernetes]>=2.17.0,<2.18"]
 
 [dependency-groups]
 docs = [
@@ -57,14 +57,13 @@ docs = [
   "sphinx-design>=0.6",
 ]
 dev = [
-  "kubeflow[hub,pipelines,spark]",
+  "kubeflow[docker,hub,pipelines,spark]",
   "pytest>=7.0",
   "pytest-mock>=3.10",
   "coverage>=7.0",
-  "kubeflow_trainer_api@git+https://github.com/kubeflow/trainer.git@master#subdirectory=api/python_api",
-  "kubeflow_katib_api@git+https://github.com/kubeflow/katib.git@master#subdirectory=api/python_api",
-  "kubeflow_spark_api@git+https://github.com/kubeflow/spark-operator.git@master#subdirectory=api/python_api",
-  "kfp[kubernetes]>=2.17.0",
+  "papermill>=2.6.0",
+  "jupyter>=1.1.1",
+  "ipykernel>=6.29.5",
   "ruff>=0.12.2",
   "pre-commit>=4.2.0",
   "PyGithub>=2.7.0",
@@ -82,6 +81,13 @@ path = "kubeflow/__init__.py"
 
 [tool.uv]
 package = true
+# Local development resolves the Kubeflow API packages from upstream `master` so contributors test
+# against unreleased changes. These overrides are not part of the published wheel metadata
+override-dependencies = [
+  "kubeflow-trainer-api @ git+https://github.com/kubeflow/trainer.git@master#subdirectory=api/python_api",
+  "kubeflow-katib-api @ git+https://github.com/kubeflow/katib.git@master#subdirectory=api/python_api",
+  "kubeflow-spark-api @ git+https://github.com/kubeflow/spark-operator.git@master#subdirectory=api/python_api",
+]
 
 [build-system]
 requires = ["hatchling"]

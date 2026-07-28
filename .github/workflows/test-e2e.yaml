@@ -11,6 +11,10 @@ jobs:
     name: E2E Test
     runs-on: oracle-vm-16cpu-64gb-x86-64
 
+    defaults:
+      run:
+        working-directory: . # Execute make from the root of the SDK repo
+
     strategy:
       fail-fast: false
       matrix:
@@ -35,19 +39,17 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          echo "Installing Papermill and Jupyter"
-          pip install papermill==2.6.0 jupyter==1.1.1 ipykernel==6.29.5
+          echo "Installing Kubeflow SDK from source with dev dependencies"
+          make install-dev
 
-          echo "Installing Kubeflow SDK from source, with Docker support"
-          pip install ".[docker]"
-        working-directory: . # Ensure pip runs from the SDK repo root
+          # Trainer's hack/e2e-run-notebook.sh calls `papermill` from PATH
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Setup cluster
         run: |
           cd ./trainer
           make test-e2e-setup-cluster \
-            K8S_VERSION=${{ matrix.kubernetes-version }} \
-        working-directory: . # Execute make from the root of the SDK repo
+            K8S_VERSION=${{ matrix.kubernetes-version }}
 
       - name: Run e2e test for example Notebooks
         run: |
@@ -70,7 +72,6 @@ jobs:
             NOTEBOOK_INPUT=./examples/local/local-training-mnist.ipynb \
             NOTEBOOK_OUTPUT=../artifacts/notebooks/${{ matrix.kubernetes-version }}_local-training-mnist.ipynb \
             PAPERMILL_TIMEOUT=900
-        working-directory: . # Execute make from the root of the SDK repo
 
       - name: Upload Artifacts to GitHub
         uses: actions/upload-artifact@v6
