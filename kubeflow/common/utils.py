@@ -68,11 +68,16 @@ def validate_wait_for_job_status(polling_interval: int, timeout: int) -> None:
 
 
 def validate_python_function(func: Callable) -> None:
-    """Validate that a Python function can be serialized and executed.
+    """Validate a Python function.
 
-    This validation is shared by TrainerClient and SparkClient.
+    Args:
+        func: The Python function to validate.
+
+    Raises:
+        ValueError: If the function is not a Python function, is asynchronous,
+            is a lambda function, is decorated, or its source cannot be
+            inspected or parsed.
     """
-
     if not inspect.isfunction(func):
         raise ValueError("Function must be a Python function.")
 

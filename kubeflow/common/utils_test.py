@@ -16,6 +16,10 @@ import pytest
 from kubeflow.common import utils
 from kubeflow.trainer.test.common import SUCCESS, TestCase
 
+# --------------------------
+# Test Helpers
+# --------------------------
+
 
 def sample_function() -> None:
     """Sample function for testing."""
@@ -36,6 +40,11 @@ def sample_decorator(func):
 def sample_decorated_function() -> None:
     """Sample decorated function."""
     pass
+
+
+# --------------------------
+# Tests
+# --------------------------
 
 
 @pytest.mark.parametrize(

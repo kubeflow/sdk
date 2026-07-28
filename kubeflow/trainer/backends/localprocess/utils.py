@@ -8,6 +8,7 @@ from string import Template
 import textwrap
 from typing import Any
 
+from kubeflow.common.utils import validate_python_function
 from kubeflow.trainer.backends.localprocess import constants as local_exec_constants
 from kubeflow.trainer.backends.localprocess.types import LocalRuntimeTrainer
 from kubeflow.trainer.constants import constants
@@ -192,11 +193,8 @@ def get_command_using_train_func(
     if not runtime.trainer:
         raise ValueError(f"Runtime must have a trainer: {runtime}")
 
-    # Check if training function is callable.
-    if not callable(train_func):
-        raise ValueError(
-            f"Training function must be callable, got function type: {type(train_func)}"
-        )
+    # Validate training function.
+    validate_python_function(train_func)
 
     # Extract the function implementation.
     func_code = inspect.getsource(train_func)

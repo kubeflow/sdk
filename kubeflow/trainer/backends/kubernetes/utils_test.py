@@ -25,6 +25,10 @@ from kubeflow.trainer.constants import constants
 from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.types import types
 
+# --------------------------
+# Test Helpers
+# --------------------------
+
 
 def _build_runtime() -> types.Runtime:
     runtime_trainer = types.RuntimeTrainer(
@@ -50,6 +54,11 @@ def sample_train_func() -> None:
 def sample_train_func_kwargs(a: int, b: str, c: float) -> str:
     """Sample training function with kwargs."""
     return "ok"
+
+
+# --------------------------
+# Tests
+# --------------------------
 
 
 @pytest.mark.parametrize(
