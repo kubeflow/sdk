@@ -36,6 +36,7 @@ from kubeflow.spark.backends.kubernetes.utils import (
     get_spark_application_cr_from_file_job,
     get_spark_application_cr_from_func_job,
     get_spark_application_info_from_cr,
+    get_spark_connect_driver_spec,
     get_spark_connect_info_from_cr,
     get_spark_job_driver_spec,
     get_spark_job_executor_spec,
@@ -286,6 +287,54 @@ def test_build_service_url(test_case: TestCase) -> None:
         assert test_case.expected_output in url
 
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="default driver configuration",
+            config={
+                "driver": None,
+                "expected_cores": constants.DEFAULT_DRIVER_CPU,
+                "expected_memory": _memory_kubernetes_to_spark(
+                    constants.DEFAULT_DRIVER_MEMORY,
+                ),
+                "expected_service_account": constants.DEFAULT_SERVICE_ACCOUNT,
+            },
+        ),
+        TestCase(
+            name="driver without service account",
+            config={
+                "driver": Driver(),
+                "expected_cores": constants.DEFAULT_DRIVER_CPU,
+                "expected_memory": _memory_kubernetes_to_spark(
+                    constants.DEFAULT_DRIVER_MEMORY,
+                ),
+                "expected_service_account": constants.DEFAULT_SERVICE_ACCOUNT,
+            },
+        ),
+        TestCase(
+            name="driver with resources and service account",
+            config={
+                "driver": Driver(
+                    resources={"cpu": "2", "memory": "4Gi"},
+                    service_account="custom-spark-sa",
+                ),
+                "expected_cores": 2,
+                "expected_memory": "4g",
+                "expected_service_account": "custom-spark-sa",
+            },
+        ),
+    ],
+)
+def test_get_spark_connect_driver_spec(test_case: TestCase) -> None:
+    """Tests get_spark_connect_driver_spec."""
+    spec = get_spark_connect_driver_spec(test_case.config["driver"])
+
+    assert spec.cores == test_case.config["expected_cores"]
+    assert spec.memory == test_case.config["expected_memory"]
+    assert spec.template.spec.service_account_name == test_case.config["expected_service_account"]
 
 
 @pytest.mark.parametrize(
