@@ -15,14 +15,16 @@
 """SparkClient for Kubeflow SDK."""
 
 from collections.abc import Iterator
-import threading
 
 from pyspark.sql import SparkSession
 
 from kubeflow.common.types import KubernetesBackendConfig
 import kubeflow.common.utils as common_utils
 from kubeflow.spark.backends.kubernetes import KubernetesBackend
-from kubeflow.spark.backends.kubernetes.utils import validate_spark_connect_url
+from kubeflow.spark.backends.kubernetes.utils import (
+    run_with_timeout,
+    validate_spark_connect_url,
+)
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
@@ -111,30 +113,16 @@ class SparkClient:
             builder = SparkSession.builder.remote(base_url)
             if token:
                 builder = builder.config("spark.connect.authenticate.token", token)
-            result: list = []
-            exc_holder: list = []
-
-            def _get_or_create() -> None:
-                try:
-                    session = builder.getOrCreate()
-                    result.append(session)
-                except Exception as e:
-                    exc_holder.append(e)
-
-            thread = threading.Thread(target=_get_or_create, daemon=True)
-            thread.start()
-            thread.join(timeout=connect_timeout)
-
-            if not thread.is_alive():
-                if exc_holder:
-                    raise exc_holder[0]
-                if result:
-                    return result[0]
-
-            raise TimeoutError(
-                f"Spark Connect connection to {base_url} did not complete "
-                f"within {connect_timeout}s."
-            )
+            try:
+                return run_with_timeout(
+                    builder.getOrCreate,
+                    connect_timeout,
+                )
+            except TimeoutError as e:
+                raise TimeoutError(
+                    f"Spark Connect connection to {base_url} did not complete "
+                    f"within {connect_timeout}s."
+                ) from e
 
         return self.backend.create_and_connect(
             num_executors=num_executors,
