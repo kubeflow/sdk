@@ -357,7 +357,7 @@ def get_spark_connect_driver_spec(
     """
     cores, memory = _resolve_driver_resources(driver)
 
-    # Fallback to the default service account if not specified.
+    # Fallback to the the spark-operator chart's default service account if not specified.
     # TODO: Remove this temporary workaround once issue #617 lands.
     service_account_name = (
         driver.service_account
