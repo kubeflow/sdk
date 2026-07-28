@@ -202,6 +202,7 @@ def mock_get_response(name: str) -> dict:
             server_status=models.SparkV1alpha1SparkConnectServerStatus(
                 pod_name=f"{name}-0",
                 pod_ip="10.0.0.5",
+                service_name=f"{name}-server-svc",
             ),
         ).to_dict()
     elif name == SPARK_CONNECT_PROVISIONING:
@@ -725,11 +726,18 @@ def test_get_connect_url(kubernetes_backend, test_case):
             patch(
                 "kubeflow.spark.backends.kubernetes.backend.subprocess.Popen",
                 return_value=mock_popen,
-            ),
+            ) as mock_popen_cls,
             patch("kubeflow.spark.backends.kubernetes.backend.time.sleep"),
             patch.object(kubernetes_backend, "_wait_for_connect_port", return_value=True),
         ):
             url, proc = kubernetes_backend.get_connect_url(info)
+
+            # Verify service is tried before pod (service-first ordering)
+            first_call_args = mock_popen_cls.call_args[0][0]
+            first_call_key = first_call_args[4]
+            assert first_call_key.startswith("svc/"), (
+                f"Expected service-first port-forward, got {first_call_key}"
+            )
 
     if "url_contains" in test_case.expected_output:
         assert test_case.expected_output["url_contains"] in url
