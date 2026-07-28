@@ -41,7 +41,7 @@ spark = [
   # Match major.minor of pyspark-connect to Spark constants declared in kubeflow.spark.backends.kubernetes.constants
   # Ensure pyspark-connect and the spark image align with the Spark version used in the Spark operator image
   # https://github.com/kubeflow/spark-operator/blob/master/Dockerfile#L17
-  "pyspark-connect==4.0.1",
+  "pyspark-connect==4.2.0",
   "kubeflow-spark-api>=2.4.0",
 ]
 hub = ["model-registry>=0.3.6"]
