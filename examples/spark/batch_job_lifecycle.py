@@ -19,7 +19,7 @@ import os
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark import FileJob, SparkClient, SparkJobStatus
 
-REMOTE_PI = "https://raw.githubusercontent.com/apache/spark/master/examples/src/main/python/pi.py"
+REMOTE_JOB = "https://raw.githubusercontent.com/kubeflow/sdk/main/examples/spark/spark_job.py"
 
 JOB_NAME: str | None = None
 
@@ -50,7 +50,7 @@ def example_submit_and_wait():
 
     JOB_NAME = client.submit_job(
         job=FileJob(
-            file_source=REMOTE_PI,
+            file_source=REMOTE_JOB,
             args=["10"],
         ),
         num_executors=1,

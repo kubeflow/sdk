@@ -52,16 +52,16 @@ def test_upload_artifact_delegates_to_oci(monkeypatch):
 def test_upload_artifact_raises_type_error_for_unknown_upload_params():
     """Test upload_artifact rejects unsupported upload parameter types."""
     with pytest.raises(TypeError, match="upload_params must be"):
-        upload_artifact("/tmp/model", upload_params=object())  # type: ignore[arg-type]
+        upload_artifact("/tmp/model", upload_params=object())  # ty: ignore[invalid-argument-type]
 
 
 def test_s3_upload_params_requires_bucket_name():
     """Test S3UploadParams validates required fields."""
     with pytest.raises(ValidationError):
-        S3UploadParams(s3_prefix="prefix")  # type: ignore[call-arg]
+        S3UploadParams(s3_prefix="prefix")  # ty: ignore[missing-argument]
 
 
 def test_oci_upload_params_requires_base_image_and_oci_ref():
     """Test OCIUploadParams validates required fields."""
     with pytest.raises(ValidationError):
-        OCIUploadParams()  # type: ignore[call-arg]
+        OCIUploadParams()  # ty: ignore[missing-argument]
