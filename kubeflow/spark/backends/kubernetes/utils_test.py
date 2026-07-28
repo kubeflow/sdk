@@ -315,6 +315,17 @@ def test_build_service_url(test_case: TestCase) -> None:
             },
         ),
         TestCase(
+            name="driver with service account and default resources",
+            config={
+                "driver": Driver(service_account="custom-spark-sa"),
+                "expected_cores": constants.DEFAULT_DRIVER_CPU,
+                "expected_memory": _memory_kubernetes_to_spark(
+                    constants.DEFAULT_DRIVER_MEMORY,
+                ),
+                "expected_service_account": "custom-spark-sa",
+            },
+        ),
+        TestCase(
             name="driver with resources and service account",
             config={
                 "driver": Driver(
