@@ -40,6 +40,7 @@ from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.backends.base import RuntimeBackend
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.utils import (
+    extract_name_option,
     build_service_url,
     build_spark_connect_cr,
     generate_job_name,
@@ -50,7 +51,6 @@ from kubeflow.spark.backends.kubernetes.utils import (
     get_spark_connect_info_from_cr,
     read_pod_logs,
 )
-from kubeflow.spark.types.options import Name
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
@@ -119,35 +119,6 @@ class KubernetesBackend(RuntimeBackend):
     # Spark Connect sessions
     # ------------------------------------------------------------------
 
-    def _extract_name_option(self, options: list | None) -> tuple[str, list]:
-        """Extract Name option from options list, or generate name if absent.
-
-        Args:
-            options: List of option objects (Labels, Annotations, etc.).
-
-        Returns:
-            Tuple of (session_name, filtered_options):
-            - session_name: Name from Name option, or auto-generated name
-            - filtered_options: Options list with Name option removed
-        """
-        if not options:
-            return generate_session_name(), []
-
-        name_from_option = None
-        filtered_options = []
-
-        for option in options:
-            if isinstance(option, Name):
-                name_from_option = option.name
-                # Don't add Name option to filtered list
-            else:
-                filtered_options.append(option)
-
-        # Use Name option if provided, otherwise auto-generate
-        session_name = name_from_option if name_from_option else generate_session_name()
-
-        return session_name, filtered_options
-
     def _create_session(
         self,
         num_executors: int | None = None,
@@ -177,7 +148,10 @@ class KubernetesBackend(RuntimeBackend):
                 If the SparkConnect resource cannot be created.
         """
         # Extract Name option if present, or auto-generate
-        name, filtered_options = self._extract_name_option(options)
+        name, filtered_options = extract_name_option(
+            options,
+            generate_session_name(),
+        )
 
         spark_connect = build_spark_connect_cr(
             name=name,
@@ -917,6 +891,7 @@ class KubernetesBackend(RuntimeBackend):
         job: FileJob | FuncJob,
         num_executors: int | None = None,
         resources_per_executor: dict[str, str] | None = None,
+        options: list | None = None,
     ) -> SparkJob:
         """Submit a SparkApplication for batch execution.
 
@@ -945,7 +920,10 @@ class KubernetesBackend(RuntimeBackend):
         """
         self._validate_job(job)
 
-        job_name = generate_job_name()
+        job_name, filtered_options = extract_name_option(
+            options,
+            generate_job_name(),
+        )
 
         logger.info(
             "Submitting SparkApplication '%s'",

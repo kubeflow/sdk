@@ -30,6 +30,7 @@ from kubeflow_spark_api import models
 from kubernetes import client
 
 from kubeflow.common import constants as common_constants
+from kubeflow.spark.types.options import Name
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.types.types import (
     Driver,
@@ -291,6 +292,34 @@ def _validate_cpu_value(cpu: str | int | None) -> int:
 
     return cores
 
+def extract_name_option(
+    options: list | None,
+    default_name: str,
+) -> tuple[str, list]:
+    """Extract the Name option from the options list.
+
+    Args:
+        options: List of option objects (Labels, Annotations, etc.).
+        default_name: Default resource name to use when no Name option is provided.
+
+    Returns:
+        Tuple of (resource_name, filtered_options):
+        - resource_name: Name from the Name option, or the provided default name.
+        - filtered_options: Options list with the Name option removed.
+    """
+    if not options:
+        return default_name, []
+
+    name = default_name
+    filtered_options = []
+
+    for option in options:
+        if isinstance(option, Name):
+            name = option.name
+        else:
+            filtered_options.append(option)
+
+    return name, filtered_options
 
 # ----------------------------------------------------------------------
 # Spark Connect session utility functions

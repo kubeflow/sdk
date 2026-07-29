@@ -28,6 +28,8 @@ from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.spark.backends.kubernetes.utils import (
+    extract_name_option,
+    generate_session_name,
     validate_spark_connect_url,
 )
 from kubeflow.spark.test.common import (
@@ -900,10 +902,10 @@ def test_create_and_connect(kubernetes_backend, test_case):
     ],
 )
 def test_extract_name_option(kubernetes_backend, test_case):
-    """Test KubernetesBackend._extract_name_option for name extraction and auto-generation."""
+    """Test extract_name_option for name extraction and auto-generation."""
     print("Executing test:", test_case.name)
     try:
-        name, filtered = kubernetes_backend._extract_name_option(test_case.config["options"])
+        name, filtered = extract_name_option(test_case.config["options"], generate_session_name())
 
         assert test_case.expected_status == SUCCESS
         if "name" in test_case.expected_output:
