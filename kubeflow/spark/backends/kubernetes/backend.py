@@ -14,17 +14,22 @@
 
 """Kubernetes backend for Spark operations."""
 
+import ast
 from collections.abc import Iterator
 import contextlib
+import inspect
 import logging
+import math
 import multiprocessing
 import os
 import random
 import socket
 import subprocess
 import sys
+import textwrap
 import threading
 import time
+from typing import Any
 
 from kubeflow_spark_api import models
 from kubernetes import client, config
@@ -36,10 +41,11 @@ from kubeflow.spark.backends.base import RuntimeBackend
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.utils import (
     build_service_url,
-    build_spark_application_cr,
     build_spark_connect_cr,
     generate_job_name,
     generate_session_name,
+    get_spark_application_cr_from_file_job,
+    get_spark_application_cr_from_func_job,
     get_spark_application_info_from_cr,
     get_spark_connect_info_from_cr,
     read_pod_logs,
@@ -772,8 +778,6 @@ class KubernetesBackend(RuntimeBackend):
             job: Spark job definition to validate.
 
         Raises:
-            NotImplementedError: If a function-based job is provided, as function-based jobs are
-                not supported in Phase 1.
             TypeError: If job is not an instance of FileJob or FuncJob.
         """
 
@@ -782,7 +786,8 @@ class KubernetesBackend(RuntimeBackend):
             return
 
         if isinstance(job, FuncJob):
-            raise NotImplementedError("Function-based jobs are not supported in Phase 1.")
+            self._validate_func_job(job)
+            return
 
         raise TypeError("job must be an instance of FileJob or FuncJob.")
 
@@ -809,6 +814,104 @@ class KubernetesBackend(RuntimeBackend):
             if not all(isinstance(arg, str) for arg in job.args):
                 raise ValueError("All `job.args` must be strings.")
 
+    def _is_supported_func_arg(
+        self,
+        value: Any,
+    ) -> bool:
+        """Return whether a FuncJob argument value is supported."""
+
+        if value is None:
+            return True
+
+        if isinstance(value, (str, int, bool)):
+            return True
+
+        if isinstance(value, float):
+            return math.isfinite(value)
+
+        if isinstance(value, (list, tuple)):
+            return all(self._is_supported_func_arg(v) for v in value)
+
+        if isinstance(value, dict):
+            return all(
+                isinstance(k, str) and self._is_supported_func_arg(v) for k, v in value.items()
+            )
+
+        return False
+
+    def _validate_func_job(
+        self,
+        job: FuncJob,
+    ) -> None:
+        """Validate a function-based Spark job.
+
+        Args:
+            job: Function-based Spark job definition.
+
+        Raises:
+            ValueError:
+                If the function or function arguments are invalid.
+        """
+
+        if not inspect.isfunction(job.func):
+            raise ValueError("`job.func` must be a Python function.")
+
+        if inspect.iscoroutinefunction(job.func):
+            raise ValueError("Async functions are not supported.")
+
+        if job.func.__name__ == "<lambda>":
+            raise ValueError("Lambda functions are not supported.")
+
+        try:
+            func_source = textwrap.dedent(inspect.getsource(job.func))
+        except TypeError as e:
+            raise ValueError(
+                "`job.func` must be a pure-Python function; built-in or "
+                "C-implemented callables are not supported."
+            ) from e
+        except OSError as e:
+            raise ValueError(
+                "`job.func` source could not be read. Functions defined "
+                "interactively (REPL/Jupyter) or generated dynamically are "
+                "not supported; define it in a Python module."
+            ) from e
+
+        if any(
+            line.strip() == constants.FUNC_JOB_SCRIPT_DELIMITER for line in func_source.splitlines()
+        ):
+            raise ValueError(
+                "`job.func` source contains the reserved heredoc delimiter "
+                f"{constants.FUNC_JOB_SCRIPT_DELIMITER!r}, which is not supported."
+            )
+
+        try:
+            func_tree = ast.parse(func_source)
+        except SyntaxError as e:
+            raise ValueError("`job.func` source could not be parsed.") from e
+
+        if any(
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.decorator_list
+            for node in func_tree.body
+        ):
+            raise ValueError("Decorated functions are not supported.")
+
+        if job.func_args is not None:
+            if not isinstance(job.func_args, dict):
+                raise ValueError("`job.func_args` must be a dictionary.")
+
+            if not all(isinstance(key, str) for key in job.func_args):
+                raise ValueError("All `job.func_args` keys must be strings.")
+
+            if not all(self._is_supported_func_arg(value) for value in job.func_args.values()):
+                raise ValueError(
+                    "`job.func_args` values must contain only JSON-like primitive types."
+                )
+
+            try:
+                inspect.signature(job.func).bind(**job.func_args)
+            except TypeError as e:
+                raise ValueError(f"Invalid `job.func_args`: {e}") from e
+
     def submit_job(
         self,
         job: FileJob | FuncJob,
@@ -819,7 +922,7 @@ class KubernetesBackend(RuntimeBackend):
 
         Args:
             job:
-                File-based Spark workload definition.
+                File-based or function-based Spark workload definition.
 
             num_executors:
                 Number of executor instances.
@@ -849,14 +952,25 @@ class KubernetesBackend(RuntimeBackend):
             job_name,
         )
 
-        spark_application = build_spark_application_cr(
-            name=job_name,
-            namespace=self.namespace,
-            main_file=job.file_source,
-            arguments=job.args,
-            num_executors=num_executors,
-            resources_per_executor=resources_per_executor,
-        )
+        if isinstance(job, FileJob):
+            spark_application = get_spark_application_cr_from_file_job(
+                name=job_name,
+                namespace=self.namespace,
+                main_file=job.file_source,
+                arguments=job.args,
+                num_executors=num_executors,
+                resources_per_executor=resources_per_executor,
+            )
+
+        else:
+            spark_application = get_spark_application_cr_from_func_job(
+                name=job_name,
+                namespace=self.namespace,
+                func=job.func,
+                func_args=job.func_args,
+                num_executors=num_executors,
+                resources_per_executor=resources_per_executor,
+            )
 
         try:
             thread = self.custom_api.create_namespaced_custom_object(
@@ -1025,7 +1139,7 @@ class KubernetesBackend(RuntimeBackend):
     def wait_for_job_status(
         self,
         name: str,
-        status: set[SparkJobStatus] | None = None,
+        status: set[SparkJobStatus] = {SparkJobStatus.COMPLETED},
         timeout: int = 600,
         polling_interval: int = 2,
     ) -> SparkJob:
@@ -1046,10 +1160,6 @@ class KubernetesBackend(RuntimeBackend):
                 one of the target statuses.
             TimeoutError: If the target status is not reached within the timeout.
         """
-
-        if status is None:
-            status = {SparkJobStatus.COMPLETED}
-
         if timeout <= 0:
             raise ValueError("timeout must be positive.")
 

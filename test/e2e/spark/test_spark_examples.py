@@ -233,3 +233,15 @@ class TestSparkExamples:
 
         stdout = self._run_example("batch_failed_job.py", namespace)
         assert "Job failed as expected." in stdout
+
+    def test_batch_func_job_lifecycle_example(self):
+        """EX06: Validate batch_func_job_lifecycle.py runs without errors."""
+        namespace = os.environ.get("SPARK_TEST_NAMESPACE", "spark-test")
+
+        if USE_IN_CLUSTER and RUNNER_IMAGE:
+            self._run_example("batch_func_job_lifecycle.py", namespace)
+            return
+
+        stdout = self._run_example("batch_func_job_lifecycle.py", namespace)
+
+        assert "FUNCJOB LIFECYCLE COMPLETE!" in stdout
