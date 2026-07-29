@@ -171,3 +171,15 @@ def test_submit_job_success(job):
             num_executors=None,
             resources_per_executor=None,
         )
+
+
+def test_context_manager():
+    """Test SparkClient context manager support."""
+    with (
+        patch.object(SparkClient, "close") as mock_close,
+        patch("kubeflow.spark.api.spark_client.KubernetesBackend"),
+        SparkClient() as client,
+    ):
+        assert isinstance(client, SparkClient)
+
+    mock_close.assert_called_once()
