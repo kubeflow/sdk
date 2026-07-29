@@ -76,7 +76,7 @@ class TestPipelinesClientReExport:
 class TestDslReExports:
     """Test that KFP DSL modules are re-exported at kubeflow.pipelines level."""
 
-    @pytest.mark.parametrize("module_name", ["dsl", "compiler", "components", "kubernetes"])
+    @pytest.mark.parametrize("module_name", ["compiler", "components", "kubernetes"])
     def test_dsl_reexport(self, module_name):
         import kfp
 
@@ -85,6 +85,15 @@ class TestDslReExports:
         reexported = getattr(kp, module_name)
         original = getattr(kfp, module_name)
         assert reexported is original
+
+    def test_dsl_custom_module(self):
+        import kubeflow.pipelines as kp
+
+        dsl_mod = kp.dsl
+        assert dsl_mod.__name__ == "kubeflow.pipelines.dsl"
+        assert hasattr(dsl_mod, "trigger_pipeline")
+        assert hasattr(dsl_mod, "component")
+        assert hasattr(dsl_mod, "pipeline")
 
 
 class TestTypeReExports:
@@ -118,7 +127,7 @@ class TestTypeReExports:
 class TestImportErrorHandling:
     """Test that helpful ImportError is raised when kfp is not installed."""
 
-    @pytest.mark.parametrize("attr", ["PipelinesClient", "dsl", "Pipeline"])
+    @pytest.mark.parametrize("attr", ["PipelinesClient", "Pipeline"])
     def test_import_error_without_kfp(self, attr, monkeypatch):
         _reload_pipelines_modules()
         for mod_name in list(sys.modules):
@@ -151,6 +160,7 @@ class TestAllExports:
         "ListRunsResponse",
         "KubernetesBackendConfig",
         "constants",
+        "trigger_pipeline",
     ]
 
     def test_all_exports(self):

@@ -47,13 +47,15 @@ __all__ = [
     "KubernetesBackendConfig",
     # Constants
     "constants",
+    # Built-in components
+    "trigger_pipeline",
 ]
 
 _KFP_INSTALL_MSG = (
     "kfp is required for kubeflow.pipelines. Install it with: pip install 'kubeflow[pipelines]'"
 )
 
-_DSL_MODULES = {"compiler", "components", "dsl", "kubernetes"}
+_DSL_MODULES = {"compiler", "components", "kubernetes"}
 
 _KFP_ATTRS = {
     "Experiment",
@@ -75,6 +77,20 @@ def __getattr__(name: str):
             from kubeflow.pipelines.api.pipelines_client import PipelinesClient
 
             return PipelinesClient
+        except ImportError as e:
+            raise ImportError(_KFP_INSTALL_MSG) from e
+
+    if name == "dsl":
+        try:
+            return importlib.import_module("kubeflow.pipelines.dsl")
+        except ImportError as e:
+            raise ImportError(_KFP_INSTALL_MSG) from e
+
+    if name == "trigger_pipeline":
+        try:
+            from kubeflow.pipelines.trigger import trigger_pipeline
+
+            return trigger_pipeline
         except ImportError as e:
             raise ImportError(_KFP_INSTALL_MSG) from e
 
