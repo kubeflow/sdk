@@ -218,13 +218,11 @@ class SparkClient:
         if spark_conf is not None:
             raise NotImplementedError("spark_conf support is not yet implemented.")
 
-        if options is not None:
-            raise NotImplementedError("options are not supported in Phase 1.")
-
         return self.backend.submit_job(
             job=job,
             num_executors=num_executors,
             resources_per_executor=resources_per_executor,
+            options=options,
         ).name
 
     def get_job(self, name: str) -> SparkJob:

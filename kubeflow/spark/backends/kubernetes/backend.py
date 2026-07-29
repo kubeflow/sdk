@@ -40,9 +40,9 @@ from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.backends.base import RuntimeBackend
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.utils import (
-    extract_name_option,
     build_service_url,
     build_spark_connect_cr,
+    extract_name_option,
     generate_job_name,
     generate_session_name,
     get_spark_application_cr_from_file_job,
@@ -905,6 +905,9 @@ class KubernetesBackend(RuntimeBackend):
             resources_per_executor:
                 Resource requirements per executor.
 
+            options:
+                List of additional Spark configuration options.
+
         Returns:
             SparkJob information object.
 
@@ -938,6 +941,8 @@ class KubernetesBackend(RuntimeBackend):
                 arguments=job.args,
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
+                options=filtered_options,
+                backend=self,
             )
 
         else:
@@ -948,6 +953,8 @@ class KubernetesBackend(RuntimeBackend):
                 func_args=job.func_args,
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
+                options=filtered_options,
+                backend=self,
             )
 
         try:

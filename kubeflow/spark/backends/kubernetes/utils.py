@@ -30,8 +30,8 @@ from kubeflow_spark_api import models
 from kubernetes import client
 
 from kubeflow.common import constants as common_constants
-from kubeflow.spark.types.options import Name
 from kubeflow.spark.backends.kubernetes import constants
+from kubeflow.spark.types.options import Name
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
@@ -292,6 +292,7 @@ def _validate_cpu_value(cpu: str | int | None) -> int:
 
     return cores
 
+
 def extract_name_option(
     options: list | None,
     default_name: str,
@@ -320,6 +321,32 @@ def extract_name_option(
             filtered_options.append(option)
 
     return name, filtered_options
+
+
+def apply_options(
+    resource: models.SparkV1alpha1SparkConnect | models.SparkV1beta2SparkApplication,
+    options: list | None,
+    backend: Any | None = None,
+) -> None:
+    """Apply configuration options to a Spark resource.
+
+    Args:
+        resource:
+            Spark resource to configure.
+
+        options:
+            List of configuration options.
+
+        backend:
+            Backend used for option validation.
+    """
+    if not options or backend is None:
+        return
+
+    for option in options:
+        if callable(option):
+            option(resource, backend)
+
 
 # ----------------------------------------------------------------------
 # Spark Connect session utility functions
@@ -531,10 +558,11 @@ def build_spark_connect_cr(
     )
 
     # Apply options - extensibility without API changes (callable pattern)
-    if options and backend is not None:
-        for option in options:
-            if callable(option):
-                option(spark_connect, backend)
+    apply_options(
+        spark_connect,
+        options,
+        backend,
+    )
 
     return spark_connect
 
@@ -734,6 +762,8 @@ def get_spark_application_cr_from_file_job(
     arguments: list[str] | None = None,
     num_executors: int | None = None,
     resources_per_executor: dict[str, str] | None = None,
+    options: list | None = None,
+    backend: Any | None = None,
 ) -> models.SparkV1beta2SparkApplication:
     """Build a SparkApplication custom resource for a file-based Spark job.
 
@@ -744,6 +774,7 @@ def get_spark_application_cr_from_file_job(
         arguments: Command-line arguments passed to the Spark application.
         num_executors: Number of executor instances.
         resources_per_executor: Resource requirements for each executor.
+        options: List of configuration options.
 
     Returns:
         SparkApplication custom resource model.
@@ -752,7 +783,7 @@ def get_spark_application_cr_from_file_job(
         ValueError:
             If the executor resource configuration is invalid.
     """
-    return models.SparkV1beta2SparkApplication(
+    spark_application = models.SparkV1beta2SparkApplication(
         api_version=f"{constants.SPARK_APPLICATION_GROUP}/{constants.SPARK_APPLICATION_VERSION}",
         kind=constants.SPARK_APPLICATION_KIND,
         metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
@@ -774,6 +805,14 @@ def get_spark_application_cr_from_file_job(
         ),
     )
 
+    apply_options(
+        spark_application,
+        options,
+        backend,
+    )
+
+    return spark_application
+
 
 def get_spark_application_cr_from_func_job(
     name: str,
@@ -782,6 +821,8 @@ def get_spark_application_cr_from_func_job(
     func_args: dict[str, Any] | None = None,
     num_executors: int | None = None,
     resources_per_executor: dict[str, str] | None = None,
+    options: list | None = None,
+    backend: Any | None = None,
 ) -> models.SparkV1beta2SparkApplication:
     """Build a SparkApplication custom resource for a function-based Spark job.
 
@@ -792,6 +833,7 @@ def get_spark_application_cr_from_func_job(
         func_args: Keyword arguments passed to the function.
         num_executors: Number of executor instances.
         resources_per_executor: Resource requirements for each executor.
+        options: List of configuration options.
 
     Returns:
         SparkApplication custom resource model.
@@ -845,6 +887,12 @@ def get_spark_application_cr_from_func_job(
             mount_path=constants.FUNC_JOB_SCRIPT_DIR,
         ),
     ]
+
+    apply_options(
+        spark_application,
+        options,
+        backend,
+    )
 
     return spark_application
 

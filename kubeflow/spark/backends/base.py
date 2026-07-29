@@ -149,6 +149,7 @@ class RuntimeBackend(abc.ABC):
         job: FileJob | FuncJob,
         num_executors: int | None = None,
         resources_per_executor: dict[str, str] | None = None,
+        options: list | None = None,
     ) -> SparkJob:
         """Submit a Spark batch job.
 

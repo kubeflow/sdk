@@ -18,6 +18,8 @@ from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.api.spark_client import SparkClient
 from kubeflow.spark.types.options import (
     Annotations,
+    DriverOption,
+    ExecutorOption,
     Labels,
     Name,
     NodeSelector,
@@ -54,6 +56,8 @@ __all__ = [
     "NodeSelector",
     "PodTemplateOverride",
     "Toleration",
+    "DriverOption",
+    "ExecutorOption",
     # Configuration
     "KubernetesBackendConfig",
 ]

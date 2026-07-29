@@ -1279,6 +1279,19 @@ def test_validate_job(kubernetes_backend, test_case):
                 "use_mock_command": True,
             },
         ),
+        TestCase(
+            name="valid remote file submission with options",
+            expected_status=SUCCESS,
+            config={
+                "job": FileJob(
+                    file_source="s3://bucket/job.py",
+                ),
+                "options": [
+                    Name("custom-job"),
+                    Labels({"team": "ml"}),
+                ],
+            },
+        ),
     ],
 )
 def test_submit_job(kubernetes_backend, test_case):
@@ -1301,12 +1314,16 @@ def test_submit_job(kubernetes_backend, test_case):
 
                 job = kubernetes_backend.submit_job(
                     job=test_case.config["job"],
+                    options=test_case.config.get("options"),
                 )
 
                 mock_build.assert_called_once()
 
                 assert mock_build.call_args.kwargs["func"] == test_case.config["job"].func
                 assert mock_build.call_args.kwargs["func_args"] == test_case.config["job"].func_args
+                if test_case.config.get("options"):
+                    assert mock_build.call_args.kwargs["options"] == test_case.config["options"]
+                    assert mock_build.call_args.kwargs["backend"] is kubernetes_backend
 
         else:
             job = kubernetes_backend.submit_job(
