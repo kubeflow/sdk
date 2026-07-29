@@ -39,8 +39,8 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          echo "Installing Kubeflow SDK from source with dev dependencies"
-          make install-dev
+          echo "Installing Kubeflow SDK from source with the Notebook dependencies"
+          make install-dev extras=docker groups="--no-default-groups --group notebooks"
 
           # Trainer's hack/e2e-run-notebook.sh calls `papermill` from PATH
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"

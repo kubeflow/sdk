@@ -26,7 +26,7 @@ classifiers = [
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-  "kubernetes>=27.2.0,<36.0.0",  # 36.0.0 has multiple regressions; see kubernetes-client/python#2592, #2596
+  "kubernetes>=27.2.0,<36.0.0",       # 36.0.0 has multiple regressions; see kubernetes-client/python#2592, #2596
   "pydantic>=2.10.0",
   "requests>=2.25.0",
   "kubeflow-trainer-api>=2.2.0,<2.3",
@@ -56,14 +56,14 @@ docs = [
   "myst-parser>=3.0",
   "sphinx-design>=0.6",
 ]
+# These dependencies are only needed in E2E tests with Papermill.
+notebooks = ["papermill>=2.6.0", "ipykernel>=6.29.5"]
 dev = [
   "kubeflow[docker,hub,pipelines,spark]",
   "pytest>=7.0",
   "pytest-mock>=3.10",
   "coverage>=7.0",
-  "papermill>=2.6.0",
-  "jupyter>=1.1.1",
-  "ipykernel>=6.29.5",
+  { include-group = "notebooks" },
   "ruff>=0.12.2",
   "pre-commit>=4.2.0",
   "PyGithub>=2.7.0",
