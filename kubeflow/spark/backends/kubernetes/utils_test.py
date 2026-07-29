@@ -1251,6 +1251,28 @@ def test_get_spark_application_cr_from_file_job(test_case: TestCase) -> None:
 
 
 @pytest.mark.parametrize(
+    "file_source",
+    [
+        "s3a://bucket/path/job.py",
+        "gs://bucket/path/job.py",
+        "hdfs://namenode:8020/path/job.py",
+        "https://example.com/path/job.py",
+        "local:///opt/spark/work-dir/job.py",
+    ],
+)
+def test_filesystem_uri_schemes_preserved(file_source: str) -> None:
+    """Remote filesystem URIs are passed through as mainApplicationFile."""
+    app = get_spark_application_cr_from_file_job(
+        name="uri-job",
+        namespace="default",
+        main_file=file_source,
+    )
+
+    assert app.spec.main_application_file == file_source
+    assert app.spec.type == "Python"
+
+
+@pytest.mark.parametrize(
     "test_case",
     [
         TestCase(
