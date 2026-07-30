@@ -171,3 +171,54 @@ def test_submit_job_success(job):
             num_executors=None,
             resources_per_executor=None,
         )
+
+
+@pytest.mark.parametrize("method", ["get_job_logs", "get_session_logs"])
+def test_get_logs_wait_for_driver_pass_through(method):
+    """wait_for_driver args are forwarded to the backend log methods."""
+
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
+        backend = mock_backend.return_value
+        getattr(backend, method).return_value = iter(["log line"])
+
+        client = SparkClient()
+
+        logs = list(
+            getattr(client, method)(
+                "spark-workload",
+                wait_for_driver=True,
+                timeout=120,
+                polling_interval=5,
+            )
+        )
+
+        assert logs == ["log line"]
+        mock_method = getattr(backend, method)
+        mock_method.assert_called_once()
+        args, kwargs = mock_method.call_args
+        # name may be passed positionally or by keyword depending on the method.
+        assert (args and args[0] == "spark-workload") or kwargs.get("name") == "spark-workload"
+        assert kwargs["follow"] is False
+        assert kwargs["wait_for_driver"] is True
+        assert kwargs["timeout"] == 120
+        assert kwargs["polling_interval"] == 5
+
+
+@pytest.mark.parametrize("method", ["get_job_logs", "get_session_logs"])
+def test_get_logs_wait_for_driver_invalid_args(method):
+    """Invalid timeout/polling_interval are rejected before calling the backend."""
+
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
+        backend = mock_backend.return_value
+
+        client = SparkClient()
+
+        with pytest.raises(ValueError):
+            getattr(client, method)(
+                "spark-workload",
+                wait_for_driver=True,
+                timeout=5,
+                polling_interval=10,
+            )
+
+        getattr(backend, method).assert_not_called()

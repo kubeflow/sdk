@@ -15,7 +15,7 @@
 """Kubernetes backend for Spark operations."""
 
 import ast
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 import contextlib
 import inspect
 import logging
@@ -708,10 +708,79 @@ class KubernetesBackend(RuntimeBackend):
 
         return self.connect(info, connect_timeout=connect_timeout)
 
+    def _wait_for_driver_pod(
+        self,
+        name: str,
+        kind: str,
+        get_info: Callable[[str], Any],
+        timeout: int,
+        polling_interval: int,
+    ) -> str:
+        """Poll a Spark resource until its driver pod name is populated.
+
+        The Spark Operator creates the driver pod asynchronously after the
+        SparkApplication or SparkConnect resource is created, so the resource
+        status may not expose a driver pod name immediately.
+
+        Args:
+            name:
+                Name of the Spark resource.
+
+            kind:
+                Kubernetes kind of the resource, used for log and error messages.
+
+            get_info:
+                Callable returning the resource info object (exposing
+                ``driver_pod_name``) for the given name.
+
+            timeout:
+                Maximum time in seconds to wait for the driver pod.
+
+            polling_interval:
+                Time in seconds between status checks.
+
+        Returns:
+            Name of the driver pod once it is available.
+
+        Raises:
+            TimeoutError:
+                If the driver pod does not become available within the timeout.
+        """
+        start_time = time.monotonic()
+        last_log_time = start_time
+
+        while True:
+            driver_pod_name = get_info(name).driver_pod_name
+            if driver_pod_name:
+                return driver_pod_name
+
+            now = time.monotonic()
+            if now - last_log_time >= 10.0:
+                logger.info(
+                    "Waiting for driver pod: %s %s/%s elapsed=%.0fs",
+                    kind,
+                    self.namespace,
+                    name,
+                    now - start_time,
+                )
+                last_log_time = now
+
+            if now - start_time >= timeout:
+                raise TimeoutError(
+                    f"Timeout waiting for driver pod for {kind}: "
+                    f"{self.namespace}/{name} (timeout: {timeout}s)"
+                )
+
+            time.sleep(polling_interval)
+
     def get_session_logs(
         self,
         name: str,
         follow: bool = False,
+        *,
+        wait_for_driver: bool = False,
+        timeout: int = 300,
+        polling_interval: int = 2,
     ) -> Iterator[str]:
         """Get logs from a SparkConnect session.
 
@@ -726,6 +795,20 @@ class KubernetesBackend(RuntimeBackend):
             follow:
                 Whether to stream logs continuously.
 
+            wait_for_driver:
+                Whether to poll until the driver pod is available instead of
+                failing immediately when it does not exist yet. This is useful
+                right after session creation, while the Spark Operator is still
+                provisioning the driver pod.
+
+            timeout:
+                Maximum time in seconds to wait for the driver pod when
+                ``wait_for_driver`` is True.
+
+            polling_interval:
+                Time in seconds between driver pod checks when
+                ``wait_for_driver`` is True.
+
         Yields:
             Log lines from the SparkConnect driver pod.
 
@@ -734,21 +817,29 @@ class KubernetesBackend(RuntimeBackend):
                 If the driver pod does not exist or logs cannot be retrieved.
 
             TimeoutError:
-                If retrieving the driver pod logs times out.
+                If waiting for the driver pod or retrieving its logs times out.
         """
-        info = self.get_session(name)
-
-        if not info.driver_pod_name:
-            raise RuntimeError(
-                f"No driver pod for {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
+        if wait_for_driver:
+            driver_pod_name = self._wait_for_driver_pod(
+                name=name,
+                kind=constants.SPARK_CONNECT_KIND,
+                get_info=self.get_session,
+                timeout=timeout,
+                polling_interval=polling_interval,
             )
+        else:
+            driver_pod_name = self.get_session(name).driver_pod_name
+            if not driver_pod_name:
+                raise RuntimeError(
+                    f"No driver pod for {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
+                )
 
         def _stream() -> Iterator[str]:
             try:
                 yield from read_pod_logs(
                     core_api=self.core_api,
                     namespace=self.namespace,
-                    pod_name=info.driver_pod_name,
+                    pod_name=driver_pod_name,
                     follow=follow,
                 )
 
@@ -1211,6 +1302,10 @@ class KubernetesBackend(RuntimeBackend):
         self,
         name: str,
         follow: bool = False,
+        *,
+        wait_for_driver: bool = False,
+        timeout: int = 300,
+        polling_interval: int = 2,
     ) -> Iterator[str]:
         """Get logs from a Spark job.
 
@@ -1221,28 +1316,44 @@ class KubernetesBackend(RuntimeBackend):
         Args:
             name: Name of the SparkApplication.
             follow: Whether to stream logs continuously.
+            wait_for_driver: Whether to poll until the driver pod is available
+                instead of failing immediately when it does not exist yet. This
+                is useful right after job submission, while the Spark Operator
+                is still provisioning the driver pod.
+            timeout: Maximum time in seconds to wait for the driver pod when
+                ``wait_for_driver`` is True.
+            polling_interval: Time in seconds between driver pod checks when
+                ``wait_for_driver`` is True.
 
         Yields:
             Log lines from the SparkApplication driver pod.
 
         Raises:
             RuntimeError: If the driver pod does not exist or logs cannot be retrieved.
-            TimeoutError: If retrieving the driver pod logs times out.
+            TimeoutError: If waiting for the driver pod or retrieving its logs times out.
         """
 
-        job = self.get_job(name)
-
-        if not job.driver_pod_name:
-            raise RuntimeError(
-                f"No driver pod for {constants.SPARK_APPLICATION_KIND}: {self.namespace}/{name}"
+        if wait_for_driver:
+            driver_pod_name = self._wait_for_driver_pod(
+                name=name,
+                kind=constants.SPARK_APPLICATION_KIND,
+                get_info=self.get_job,
+                timeout=timeout,
+                polling_interval=polling_interval,
             )
+        else:
+            driver_pod_name = self.get_job(name).driver_pod_name
+            if not driver_pod_name:
+                raise RuntimeError(
+                    f"No driver pod for {constants.SPARK_APPLICATION_KIND}: {self.namespace}/{name}"
+                )
 
         def _stream() -> Iterator[str]:
             try:
                 yield from read_pod_logs(
                     core_api=self.core_api,
                     namespace=self.namespace,
-                    pod_name=job.driver_pod_name,
+                    pod_name=driver_pod_name,
                     follow=follow,
                 )
 

@@ -152,7 +152,15 @@ class SparkClient:
         """
         self.backend.delete_session(name)
 
-    def get_session_logs(self, name: str, follow: bool = False) -> Iterator[str]:
+    def get_session_logs(
+        self,
+        name: str,
+        follow: bool = False,
+        *,
+        wait_for_driver: bool = False,
+        timeout: int = 300,
+        polling_interval: int = 2,
+    ) -> Iterator[str]:
         """Get logs from a SparkConnect session.
 
         Args:
@@ -162,10 +170,37 @@ class SparkClient:
             follow:
                 Whether to stream logs continuously.
 
+            wait_for_driver:
+                Whether to poll until the driver pod is available instead of
+                failing immediately when it does not exist yet. This is useful
+                right after session creation, while the Spark Operator is still
+                provisioning the driver pod.
+
+            timeout:
+                Maximum time in seconds to wait for the driver pod when
+                ``wait_for_driver`` is True.
+
+            polling_interval:
+                Time in seconds between driver pod checks when
+                ``wait_for_driver`` is True.
+
         Returns:
             Iterator of log lines from the SparkConnect driver pod.
+
+        Raises:
+            ValueError:
+                If the polling interval or timeout values are invalid.
         """
-        return self.backend.get_session_logs(name, follow=follow)
+        if wait_for_driver:
+            common_utils.validate_wait_for_job_status(polling_interval, timeout)
+
+        return self.backend.get_session_logs(
+            name,
+            follow=follow,
+            wait_for_driver=wait_for_driver,
+            timeout=timeout,
+            polling_interval=polling_interval,
+        )
 
     # ------------------------------------------------------------------
     # Spark batch jobs
@@ -301,17 +336,39 @@ class SparkClient:
         self,
         name: str,
         follow: bool = False,
+        *,
+        wait_for_driver: bool = False,
+        timeout: int = 300,
+        polling_interval: int = 2,
     ) -> Iterator[str]:
         """Get logs from a Spark job.
 
         Args:
             name: Spark job name.
             follow: Whether to stream logs in realtime.
+            wait_for_driver: Whether to poll until the driver pod is available
+                instead of failing immediately when it does not exist yet. This
+                is useful right after job submission, while the Spark Operator
+                is still provisioning the driver pod.
+            timeout: Maximum time in seconds to wait for the driver pod when
+                ``wait_for_driver`` is True.
+            polling_interval: Time in seconds between driver pod checks when
+                ``wait_for_driver`` is True.
 
         Returns:
             Iterator of log lines.
+
+        Raises:
+            ValueError:
+                If the polling interval or timeout values are invalid.
         """
+        if wait_for_driver:
+            common_utils.validate_wait_for_job_status(polling_interval, timeout)
+
         return self.backend.get_job_logs(
             name=name,
             follow=follow,
+            wait_for_driver=wait_for_driver,
+            timeout=timeout,
+            polling_interval=polling_interval,
         )

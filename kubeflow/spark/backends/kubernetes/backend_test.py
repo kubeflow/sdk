@@ -1929,3 +1929,80 @@ def test_get_job_logs(kubernetes_backend, test_case):
             raise
 
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="job driver pod appears after polling",
+            expected_status=SUCCESS,
+            config={"kind": "job", "driver_pod_names": [None, "spark-job-driver"]},
+        ),
+        TestCase(
+            name="session driver pod appears after polling",
+            expected_status=SUCCESS,
+            config={"kind": "session", "driver_pod_names": [None, "spark-session-driver"]},
+        ),
+        TestCase(
+            name="job driver pod never appears times out",
+            expected_status=FAILED,
+            config={"kind": "job", "driver_pod_names": [None, None, None, None]},
+            expected_error=TimeoutError,
+        ),
+        TestCase(
+            name="session driver pod never appears times out",
+            expected_status=FAILED,
+            config={"kind": "session", "driver_pod_names": [None, None, None, None]},
+            expected_error=TimeoutError,
+        ),
+    ],
+)
+def test_get_logs_wait_for_driver(kubernetes_backend, test_case):
+    """Test get_job_logs/get_session_logs poll for the driver pod when wait_for_driver=True."""
+    print("Executing test:", test_case.name)
+
+    is_job = test_case.config["kind"] == "job"
+    getter = "get_job" if is_job else "get_session"
+    infos = [Mock(driver_pod_name=name) for name in test_case.config["driver_pod_names"]]
+
+    # Drive the polling clock deterministically so the timeout is reached without
+    # relying on wall-clock time or busy-looping.
+    clock = iter([0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+
+    with (
+        patch.object(kubernetes_backend, getter, side_effect=infos),
+        patch(
+            "kubeflow.spark.backends.kubernetes.backend.time.monotonic",
+            side_effect=lambda: next(clock),
+        ),
+        patch("kubeflow.spark.backends.kubernetes.backend.time.sleep", return_value=None),
+        patch(
+            "kubeflow.spark.backends.kubernetes.backend.read_pod_logs",
+            return_value=iter(["log line 1", "log line 2"]),
+        ) as mock_read_pod_logs,
+    ):
+        get_logs = (
+            kubernetes_backend.get_job_logs if is_job else kubernetes_backend.get_session_logs
+        )
+
+        if test_case.expected_status == SUCCESS:
+            logs = list(
+                get_logs("spark-workload", wait_for_driver=True, timeout=5, polling_interval=1)
+            )
+            assert logs == ["log line 1", "log line 2"]
+            expected_pod = test_case.config["driver_pod_names"][-1]
+            mock_read_pod_logs.assert_called_once_with(
+                core_api=kubernetes_backend.core_api,
+                namespace=kubernetes_backend.namespace,
+                pod_name=expected_pod,
+                follow=False,
+            )
+        else:
+            with pytest.raises(test_case.expected_error):
+                list(
+                    get_logs("spark-workload", wait_for_driver=True, timeout=1, polling_interval=1)
+                )
+            mock_read_pod_logs.assert_not_called()
+
+    print("test execution complete")

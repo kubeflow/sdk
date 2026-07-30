@@ -123,18 +123,28 @@ class RuntimeBackend(abc.ABC):
         self,
         name: str,
         follow: bool = False,
+        *,
+        wait_for_driver: bool = False,
+        timeout: int = 300,
+        polling_interval: int = 2,
     ) -> Iterator[str]:
         """Get logs from a SparkConnect session.
 
         Args:
             name: Session name.
             follow: If True, stream logs continuously.
+            wait_for_driver: If True, poll until the driver pod is available
+                instead of failing immediately when it does not exist yet.
+            timeout: Maximum time in seconds to wait for the driver pod when
+                ``wait_for_driver`` is True.
+            polling_interval: Time in seconds between driver pod checks when
+                ``wait_for_driver`` is True.
 
         Returns:
             Iterator of log lines.
 
         Raises:
-            TimeoutError: If reading logs times out.
+            TimeoutError: If waiting for the driver pod or reading logs times out.
             RuntimeError: If the session/pod is not found or reading fails.
         """
         raise NotImplementedError()
@@ -234,12 +244,22 @@ class RuntimeBackend(abc.ABC):
         self,
         name: str,
         follow: bool = False,
+        *,
+        wait_for_driver: bool = False,
+        timeout: int = 300,
+        polling_interval: int = 2,
     ) -> Iterator[str]:
         """Get logs from a Spark job.
 
         Args:
             name: Name of the Spark job.
             follow: Whether to stream logs in real time.
+            wait_for_driver: If True, poll until the driver pod is available
+                instead of failing immediately when it does not exist yet.
+            timeout: Maximum time in seconds to wait for the driver pod when
+                ``wait_for_driver`` is True.
+            polling_interval: Time in seconds between driver pod checks when
+                ``wait_for_driver`` is True.
 
         Returns:
             Iterator over log lines.
