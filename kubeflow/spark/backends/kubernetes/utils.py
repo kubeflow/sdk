@@ -527,13 +527,13 @@ def get_spark_connect_info_from_cr(
     if not (spark_connect_cr.metadata and spark_connect_cr.metadata.name):
         raise ValueError(f"SparkConnect CR is invalid: {spark_connect_cr}")
 
-    # Parse state
-    state = SparkConnectState.PROVISIONING
-    if spark_connect_cr.status and spark_connect_cr.status.state:
+    # Parse state. Operator New is ""; use `is not None` so empty string is preserved.
+    state = SparkConnectState.NEW
+    if spark_connect_cr.status and spark_connect_cr.status.state is not None:
         try:
             state = SparkConnectState(spark_connect_cr.status.state)
         except ValueError:
-            state = SparkConnectState.PROVISIONING
+            state = SparkConnectState.NEW
 
     # Extract server status
     server_status = None

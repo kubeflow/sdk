@@ -111,7 +111,11 @@ def test_spark_connect_crd_smoke():
     info = backend._create_session(options=[Name(name)])
     assert info.name == name
     assert info.namespace == namespace
-    assert info.state in (SparkConnectState.PROVISIONING, SparkConnectState.READY)
+    assert info.state in (
+        SparkConnectState.NEW,
+        SparkConnectState.PROVISIONING,
+        SparkConnectState.READY,
+    )
     assert backend.get_session(name).name == name
     backend.delete_session(name)
 

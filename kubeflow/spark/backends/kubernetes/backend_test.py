@@ -853,16 +853,111 @@ def test_create_and_connect(kubernetes_backend, test_case):
             patch.object(
                 kubernetes_backend, "get_connect_url", return_value=("sc://localhost:15002", None)
             ),
+            patch.object(kubernetes_backend, "delete_session") as mock_delete,
             patch("kubeflow.spark.backends.kubernetes.backend.SparkSession"),
         ):
             kubernetes_backend.create_and_connect(options=options)
             mock_create.assert_called_once()
             assert mock_create.call_args.kwargs.get("options") == options
+            mock_delete.assert_not_called()
 
         assert test_case.expected_status == SUCCESS
 
     except Exception as e:
         assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="cleanup when wait for ready fails",
+            expected_status=FAILED,
+            expected_error=RuntimeError,
+            config={
+                "session_name": "spark-connect-wait-fail",
+                "fail_at": "wait",
+                "wait_error": RuntimeError("SparkConnect failed"),
+            },
+        ),
+        TestCase(
+            name="cleanup when wait for ready times out",
+            expected_status=TIMEOUT,
+            expected_error=TimeoutError,
+            config={
+                "session_name": "spark-connect-wait-timeout",
+                "fail_at": "wait",
+                "wait_error": TimeoutError("Timeout waiting for SparkConnect"),
+            },
+        ),
+        TestCase(
+            name="cleanup when connect fails",
+            expected_status=FAILED,
+            expected_error=RuntimeError,
+            config={
+                "session_name": "spark-connect-connect-fail",
+                "fail_at": "connect",
+                "connect_error": RuntimeError("Port-forward failed"),
+            },
+        ),
+        TestCase(
+            name="original error preserved when cleanup delete fails",
+            expected_status=FAILED,
+            expected_error=RuntimeError,
+            config={
+                "session_name": "spark-connect-cleanup-fail",
+                "fail_at": "wait",
+                "wait_error": RuntimeError("SparkConnect failed"),
+                "delete_error": RuntimeError("delete failed"),
+            },
+        ),
+    ],
+)
+def test_create_and_connect_cleans_up_on_failure(kubernetes_backend, test_case):
+    """Test create_and_connect deletes the session when setup/connect fails."""
+    print("Executing test:", test_case.name)
+    session_name = test_case.config["session_name"]
+    created_info = SparkConnectInfo(
+        name=session_name,
+        namespace=DEFAULT_NAMESPACE,
+        state=SparkConnectState.PROVISIONING,
+        service_name="svc",
+    )
+    ready_info = SparkConnectInfo(
+        name=session_name,
+        namespace=DEFAULT_NAMESPACE,
+        state=SparkConnectState.READY,
+        service_name="svc",
+    )
+
+    wait_patch_kwargs: dict = {}
+    connect_patch_kwargs: dict = {"return_value": Mock()}
+    if test_case.config["fail_at"] == "wait":
+        wait_patch_kwargs["side_effect"] = test_case.config["wait_error"]
+    else:
+        wait_patch_kwargs["return_value"] = ready_info
+        connect_patch_kwargs["side_effect"] = test_case.config["connect_error"]
+
+    delete_patch_kwargs: dict = {}
+    if test_case.config.get("delete_error") is not None:
+        delete_patch_kwargs["side_effect"] = test_case.config["delete_error"]
+
+    with (
+        patch.object(kubernetes_backend, "_create_session", return_value=created_info),
+        patch.object(kubernetes_backend, "_wait_for_session_ready", **wait_patch_kwargs),
+        patch.object(kubernetes_backend, "connect", **connect_patch_kwargs),
+        patch.object(kubernetes_backend, "delete_session", **delete_patch_kwargs) as mock_delete,
+    ):
+        with pytest.raises(test_case.expected_error) as exc_info:
+            kubernetes_backend.create_and_connect()
+
+        if test_case.config["fail_at"] == "wait":
+            assert exc_info.value is test_case.config["wait_error"]
+        else:
+            assert exc_info.value is test_case.config["connect_error"]
+        mock_delete.assert_called_once_with(session_name)
+
     print("test execution complete")
 
 
