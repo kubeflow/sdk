@@ -88,6 +88,7 @@ def get_spark_application(
     name: str,
     namespace: str = DEFAULT_NAMESPACE,
     state: str | None = "SUBMITTED",
+    error_message: str | None = None,
 ) -> models.SparkV1beta2SparkApplication:
     """Create a mock SparkApplication model for testing."""
     return models.SparkV1beta2SparkApplication(
@@ -117,6 +118,7 @@ def get_spark_application(
             models.SparkV1beta2SparkApplicationStatus(
                 application_state=models.SparkV1beta2ApplicationState(
                     state=state,
+                    error_message=error_message,
                 ),
                 driver_info=models.SparkV1beta2DriverInfo(
                     pod_name=f"{name}-driver",
@@ -1357,7 +1359,7 @@ def test_submit_job(kubernetes_backend, test_case):
                 "job_name": "spark-job-suspending",
                 "state": "SUSPENDING",
             },
-            expected_output=SparkJobStatus.RUNNING,
+            expected_output=SparkJobStatus.SUSPENDED,
         ),
         TestCase(
             name="suspended job",
@@ -1366,7 +1368,7 @@ def test_submit_job(kubernetes_backend, test_case):
                 "job_name": "spark-job-suspended",
                 "state": "SUSPENDED",
             },
-            expected_output=SparkJobStatus.RUNNING,
+            expected_output=SparkJobStatus.SUSPENDED,
         ),
         TestCase(
             name="resuming job",
@@ -1402,7 +1404,7 @@ def test_submit_job(kubernetes_backend, test_case):
                 "job_name": "spark-job-submission-failed",
                 "state": "SUBMISSION_FAILED",
             },
-            expected_output=SparkJobStatus.FAILED,
+            expected_output=SparkJobStatus.RETRYING,
         ),
         TestCase(
             name="failing job",
@@ -1411,7 +1413,7 @@ def test_submit_job(kubernetes_backend, test_case):
                 "job_name": "spark-job-failing",
                 "state": "FAILING",
             },
-            expected_output=SparkJobStatus.FAILED,
+            expected_output=SparkJobStatus.RETRYING,
         ),
         TestCase(
             name="pending rerun job",
@@ -1420,7 +1422,7 @@ def test_submit_job(kubernetes_backend, test_case):
                 "job_name": "spark-job-pending-rerun",
                 "state": "PENDING_RERUN",
             },
-            expected_output=SparkJobStatus.FAILED,
+            expected_output=SparkJobStatus.RETRYING,
         ),
         TestCase(
             name="invalidating job",
@@ -1429,7 +1431,7 @@ def test_submit_job(kubernetes_backend, test_case):
                 "job_name": "spark-job-invalidating",
                 "state": "INVALIDATING",
             },
-            expected_output=SparkJobStatus.FAILED,
+            expected_output=SparkJobStatus.RETRYING,
         ),
         TestCase(
             name="unknown state job",
@@ -1438,7 +1440,7 @@ def test_submit_job(kubernetes_backend, test_case):
                 "job_name": "spark-job-unknown",
                 "state": "UNKNOWN",
             },
-            expected_output=SparkJobStatus.FAILED,
+            expected_output=SparkJobStatus.UNKNOWN,
         ),
         TestCase(
             name="job not found",
@@ -1799,6 +1801,69 @@ def test_wait_for_job_status(kubernetes_backend, test_case):
                     kubernetes_backend.wait_for_job_status(**kwargs)
 
     print("test execution complete")
+
+
+def test_get_job_exposes_operator_state_and_error(kubernetes_backend):
+    """get_job surfaces the raw operator state and error message for diagnostics."""
+    with patch(
+        "kubeflow.spark.backends.kubernetes.backend.models.SparkV1beta2SparkApplication.from_dict"
+    ) as mock_from_dict:
+        mock_from_dict.return_value = get_spark_application(
+            name="spark-job-retrying",
+            state="PENDING_RERUN",
+            error_message="driver pod failed; retrying",
+        )
+
+        job = kubernetes_backend.get_job("spark-job-retrying")
+
+    assert job.status == SparkJobStatus.RETRYING
+    assert job.state == "PENDING_RERUN"
+    assert job.error_message == "driver pod failed; retrying"
+
+
+def test_wait_for_job_status_polls_through_retry(kubernetes_backend):
+    """A job that transitions through a retry cycle is waited on, not failed early."""
+    retrying = Mock(status=SparkJobStatus.RETRYING, state="PENDING_RERUN", error_message=None)
+    completed = Mock(status=SparkJobStatus.COMPLETED, state="COMPLETED", error_message=None)
+
+    with (
+        patch.object(
+            kubernetes_backend,
+            "get_job",
+            side_effect=[retrying, retrying, completed],
+        ),
+        patch("kubeflow.spark.backends.kubernetes.backend.time.sleep"),
+    ):
+        job = kubernetes_backend.wait_for_job_status(
+            name="spark-job-retry",
+            status={SparkJobStatus.COMPLETED},
+            timeout=10,
+            polling_interval=1,
+        )
+
+    assert job.status == SparkJobStatus.COMPLETED
+
+
+def test_wait_for_job_status_failure_includes_diagnostics(kubernetes_backend):
+    """A terminal failure raises with the raw operator state and error message."""
+    failed = Mock(
+        status=SparkJobStatus.FAILED,
+        state="FAILED",
+        error_message="driver container exited with code 1",
+    )
+
+    with patch.object(kubernetes_backend, "get_job", return_value=failed):
+        with pytest.raises(RuntimeError) as exc_info:
+            kubernetes_backend.wait_for_job_status(
+                name="spark-job-failed",
+                status={SparkJobStatus.COMPLETED},
+                timeout=1,
+                polling_interval=1,
+            )
+
+    message = str(exc_info.value)
+    assert "FAILED" in message
+    assert "driver container exited with code 1" in message
 
 
 @pytest.mark.parametrize(

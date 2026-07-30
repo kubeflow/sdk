@@ -838,15 +838,17 @@ def get_spark_application_info_from_cr(
     creation_timestamp = cr.metadata.creation_timestamp
     num_executors = None
     driver_pod_name = None
+    state = None
+    error_message = None
 
     if cr.spec and cr.spec.executor:
         num_executors = cr.spec.executor.instances
 
     if cr.status:
         if cr.status.application_state:
-            status = SparkJobStatus.from_operator_state(
-                cr.status.application_state.state,
-            )
+            state = cr.status.application_state.state
+            error_message = cr.status.application_state.error_message
+            status = SparkJobStatus.from_operator_state(state)
 
         if cr.status.driver_info:
             driver_pod_name = cr.status.driver_info.pod_name
@@ -858,4 +860,6 @@ def get_spark_application_info_from_cr(
         creation_timestamp=creation_timestamp,
         num_executors=num_executors,
         driver_pod_name=driver_pod_name,
+        state=state,
+        error_message=error_message,
     )
