@@ -15,12 +15,11 @@
 
 
 import os
+import uuid
 
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark import (
     Annotations,
-    DriverOption,
-    ExecutorOption,
     FileJob,
     Labels,
     Name,
@@ -65,7 +64,7 @@ def example_submit_and_wait():
             args=["10"],
         ),
         options=[
-            Name("batch-job-options-demo"),
+            Name(f"batch-job-options-{uuid.uuid4().hex[:8]}"),
             Labels(
                 {
                     "app": "spark",
@@ -89,23 +88,6 @@ def example_submit_and_wait():
                 value="spark",
                 effect="NoSchedule",
             ),
-            DriverOption(
-                image="spark:4.0.1",
-                resources={
-                    "cpu": "2",
-                    "memory": "1Gi",
-                },
-                java_options="-XX:+UseG1GC",
-                service_account="spark-operator-spark",
-            ),
-            ExecutorOption(
-                num_instances=2,
-                resources_per_executor={
-                    "cpu": "1",
-                    "memory": "512Mi",
-                },
-                java_options="-XX:+UseG1GC",
-            ),
         ],
     )
 
@@ -126,41 +108,10 @@ def example_submit_and_wait():
     print("\nSubmit and wait example complete.\n")
 
 
-def example_get_job():
-    """Get information about a Spark batch job."""
+def example_verify_options():
+    """Verify that Spark options were applied to the SparkApplication."""
     print("=" * 70)
-    print("GET SPARK BATCH JOB")
-    print("=" * 70)
-
-    if JOB_NAME is None:
-        raise RuntimeError("No job has been submitted.")
-
-    client = _client()
-
-    print(f"\nRetrieving job: {JOB_NAME}")
-
-    job = client.get_job(JOB_NAME)
-
-    if job.status != SparkJobStatus.COMPLETED:
-        raise RuntimeError(f"Expected COMPLETED status, got {job.status}.")
-
-    if not job.driver_pod_name:
-        raise RuntimeError("Expected driver pod name to be populated.")
-
-    print("Job retrieved successfully.")
-    print(f"Name: {job.name}")
-    print(f"Namespace: {job.namespace}")
-    print(f"Status: {job.status}")
-    print(f"Driver Pod: {job.driver_pod_name}")
-    print(f"Executors: {job.num_executors}")
-
-    print("\nGet job example complete.\n")
-
-
-def example_list_jobs():
-    """List Spark batch jobs."""
-    print("=" * 70)
-    print("LIST SPARK BATCH JOBS")
+    print("VERIFY SPARK BATCH JOB OPTIONS")
     print("=" * 70)
 
     if JOB_NAME is None:
@@ -168,80 +119,62 @@ def example_list_jobs():
 
     client = _client()
 
-    print("\nListing Spark jobs...")
-
-    jobs = client.list_jobs()
-
-    print(f"Found {len(jobs)} Spark job(s).\n")
-
-    job_found = False
-
-    for job in jobs:
-        print(f"- {job.name} | Status: {job.status} | Namespace: {job.namespace}")
-
-        if job.name == JOB_NAME:
-            job_found = True
-
-    if not job_found:
-        raise RuntimeError(f"Submitted job '{JOB_NAME}' not found in job list.")
-
-    print("\nSubmitted job found in job list.")
-
-    print("\nListing completed Spark jobs...")
-
-    completed_jobs = client.list_jobs(
-        status={SparkJobStatus.COMPLETED},
+    response = client.backend.custom_api.get_namespaced_custom_object(
+        group="sparkoperator.k8s.io",
+        version="v1beta2",
+        namespace=client.backend.namespace,
+        plural="sparkapplications",
+        name=JOB_NAME,
     )
 
-    print(f"Found {len(completed_jobs)} completed Spark job(s).\n")
+    metadata = response["metadata"]
+    spec = response["spec"]
 
-    completed_job_found = False
+    resource_name = metadata.get("name")
 
-    for job in completed_jobs:
-        if job.status != SparkJobStatus.COMPLETED:
-            raise RuntimeError(f"Expected COMPLETED status, got {job.status}.")
+    if resource_name != JOB_NAME:
+        raise RuntimeError(f"Expected resource name '{JOB_NAME}', got '{resource_name}'.")
 
-        print(f"- {job.name} | Status: {job.status} | Namespace: {job.namespace}")
+    labels = metadata.get("labels", {})
+    annotations = metadata.get("annotations", {})
 
-        if job.name == JOB_NAME:
-            completed_job_found = True
+    if labels.get("app") != "spark":
+        raise RuntimeError("Expected label app=spark.")
 
-    if not completed_job_found:
-        raise RuntimeError(f"Submitted completed job '{JOB_NAME}' not found in filtered job list.")
+    if labels.get("team") != "ml":
+        raise RuntimeError("Expected label team=ml.")
 
-    print("\nCompleted job filter verified.")
-    print("\nList jobs example complete.\n")
+    if annotations.get("owner") != "kubeflow":
+        raise RuntimeError("Expected annotation owner=kubeflow.")
 
+    if annotations.get("environment") != "dev":
+        raise RuntimeError("Expected annotation environment=dev.")
 
-def example_get_job_logs():
-    """Get logs from a Spark batch job."""
-    print("=" * 70)
-    print("GET SPARK BATCH JOB LOGS")
-    print("=" * 70)
+    driver = spec.get("driver", {})
 
-    if JOB_NAME is None:
-        raise RuntimeError("No job has been submitted.")
+    node_selector = driver.get("nodeSelector", {})
 
-    client = _client()
+    if node_selector.get("kubernetes.io/os") != "linux":
+        raise RuntimeError("Expected driver nodeSelector to be applied.")
 
-    print(f"\nRetrieving logs for: {JOB_NAME}")
+    tolerations = driver.get("tolerations", [])
 
-    print("\nDriver logs (first 20 lines):")
-    print("-" * 70)
+    if not any(
+        t.get("key") == "dedicated"
+        and t.get("operator") == "Equal"
+        and t.get("value") == "spark"
+        and t.get("effect") == "NoSchedule"
+        for t in tolerations
+    ):
+        raise RuntimeError("Expected driver toleration to be applied.")
 
-    line_count = 0
-    for line in client.get_job_logs(JOB_NAME):
-        print(line.rstrip())
-        line_count += 1
+    print("✓ Name verified.")
+    print("✓ Labels verified.")
+    print("✓ Annotations verified.")
+    print("✓ NodeSelector verified.")
+    print("✓ Toleration verified.")
 
-        if line_count >= 20:
-            print("...")
-            break
-
-    print("-" * 70)
-    print(f"Displayed {line_count} log lines.")
-
-    print("\nGet job logs example complete.\n")
+    print("\nOptions verification complete.\n")
 
 
 def example_delete_job():
@@ -279,27 +212,25 @@ def example_delete_job():
 
 
 def main():
-    """Run all batch job lifecycle examples."""
-    print("E2E: Starting batch_job_lifecycle.py", flush=True)
+    """Run the batch job option examples."""
+    print("E2E: Starting batch_job_option.py", flush=True)
     print()
     print("=" * 70)
-    print("KUBEFLOW SPARKCLIENT - BATCH JOB LIFECYCLE")
+    print("KUBEFLOW SPARKCLIENT - BATCH JOB OPTIONS")
     print("=" * 70)
 
     try:
         example_submit_and_wait()
-        example_get_job()
-        example_list_jobs()
-        example_get_job_logs()
+        example_verify_options()
         example_delete_job()
 
         print("=" * 70)
-        print("BATCH JOB LIFECYCLE COMPLETE!")
+        print("BATCH JOB OPTIONS COMPLETE!")
         print("=" * 70)
 
     except Exception as e:
-            print(f"\nError: {e}")
-            raise SystemExit(1) from e
+        print(f"\nError: {e}")
+        raise SystemExit(1) from e
 
 
 if __name__ == "__main__":

@@ -157,6 +157,7 @@ class RuntimeBackend(abc.ABC):
             job: Spark application to execute.
             num_executors: Number of executor instances.
             resources_per_executor: Resource requirements for each executor.
+             options: List of additional Spark configuration options.
 
         Returns:
             Submitted Spark job information.

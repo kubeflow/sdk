@@ -31,7 +31,6 @@ from kubernetes import client
 
 from kubeflow.common import constants as common_constants
 from kubeflow.spark.backends.kubernetes import constants
-from kubeflow.spark.types.options import Name
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
@@ -293,36 +292,6 @@ def _validate_cpu_value(cpu: str | int | None) -> int:
     return cores
 
 
-def extract_name_option(
-    options: list | None,
-    default_name: str,
-) -> tuple[str, list]:
-    """Extract the Name option from the options list.
-
-    Args:
-        options: List of option objects (Labels, Annotations, etc.).
-        default_name: Default resource name to use when no Name option is provided.
-
-    Returns:
-        Tuple of (resource_name, filtered_options):
-        - resource_name: Name from the Name option, or the provided default name.
-        - filtered_options: Options list with the Name option removed.
-    """
-    if not options:
-        return default_name, []
-
-    name = default_name
-    filtered_options = []
-
-    for option in options:
-        if isinstance(option, Name):
-            name = option.name
-        else:
-            filtered_options.append(option)
-
-    return name, filtered_options
-
-
 def apply_options(
     resource: models.SparkV1alpha1SparkConnect | models.SparkV1beta2SparkApplication,
     options: list | None,
@@ -340,8 +309,11 @@ def apply_options(
         backend:
             Backend used for option validation.
     """
-    if not options or backend is None:
+    if not options:
         return
+
+    if backend is None:
+        raise ValueError("A backend instance is required to apply Spark options.")
 
     for option in options:
         if callable(option):
@@ -775,6 +747,7 @@ def get_spark_application_cr_from_file_job(
         num_executors: Number of executor instances.
         resources_per_executor: Resource requirements for each executor.
         options: List of configuration options.
+        backend: Backend instance used for option validation.
 
     Returns:
         SparkApplication custom resource model.
@@ -834,6 +807,7 @@ def get_spark_application_cr_from_func_job(
         num_executors: Number of executor instances.
         resources_per_executor: Resource requirements for each executor.
         options: List of configuration options.
+        backend: Backend instance used for option validation.
 
     Returns:
         SparkApplication custom resource model.

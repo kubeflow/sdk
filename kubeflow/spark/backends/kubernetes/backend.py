@@ -42,7 +42,6 @@ from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.utils import (
     build_service_url,
     build_spark_connect_cr,
-    extract_name_option,
     generate_job_name,
     generate_session_name,
     get_spark_application_cr_from_file_job,
@@ -147,11 +146,7 @@ class KubernetesBackend(RuntimeBackend):
             RuntimeError:
                 If the SparkConnect resource cannot be created.
         """
-        # Extract Name option if present, or auto-generate
-        name, filtered_options = extract_name_option(
-            options,
-            generate_session_name(),
-        )
+        name = generate_session_name()
 
         spark_connect = build_spark_connect_cr(
             name=name,
@@ -161,7 +156,7 @@ class KubernetesBackend(RuntimeBackend):
             spark_conf=spark_conf,
             driver=driver,
             executor=executor,
-            options=filtered_options,  # Use filtered list
+            options=options,  # Use filtered list
             backend=self,  # Pass backend for option validation
         )
 
@@ -923,10 +918,7 @@ class KubernetesBackend(RuntimeBackend):
         """
         self._validate_job(job)
 
-        job_name, filtered_options = extract_name_option(
-            options,
-            generate_job_name(),
-        )
+        job_name = generate_job_name()
 
         logger.info(
             "Submitting SparkApplication '%s'",
@@ -941,7 +933,7 @@ class KubernetesBackend(RuntimeBackend):
                 arguments=job.args,
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
-                options=filtered_options,
+                options=options,
                 backend=self,
             )
 
@@ -953,7 +945,7 @@ class KubernetesBackend(RuntimeBackend):
                 func_args=job.func_args,
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
-                options=filtered_options,
+                options=options,
                 backend=self,
             )
 

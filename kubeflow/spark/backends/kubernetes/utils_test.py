@@ -31,7 +31,6 @@ from kubeflow.spark.backends.kubernetes.utils import (
     apply_options,
     build_service_url,
     build_spark_connect_cr,
-    extract_name_option,
     generate_job_name,
     generate_session_name,
     get_command_using_spark_func,
@@ -46,7 +45,7 @@ from kubeflow.spark.backends.kubernetes.utils import (
     validate_spark_connect_url,
 )
 from kubeflow.spark.test.common import FAILED, SUCCESS, TestCase
-from kubeflow.spark.types.options import Labels, Name
+from kubeflow.spark.types.options import Labels
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
@@ -222,76 +221,6 @@ def test_generate_session_name(test_case: TestCase) -> None:
         assert len(names) == test_case.expected_output
 
     print("test execution complete")
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TestCase(
-            name="name option provided",
-            expected_status=SUCCESS,
-            config={
-                "options": [
-                    Name("custom-name"),
-                    Labels({"app": "spark"}),
-                ],
-                "default_name": "generated-name",
-            },
-            expected_output={
-                "name": "custom-name",
-                "remaining_count": 1,
-            },
-        ),
-        TestCase(
-            name="no name option",
-            expected_status=SUCCESS,
-            config={
-                "options": [
-                    Labels({"app": "spark"}),
-                ],
-                "default_name": "generated-name",
-            },
-            expected_output={
-                "name": "generated-name",
-                "remaining_count": 1,
-            },
-        ),
-        TestCase(
-            name="none options",
-            expected_status=SUCCESS,
-            config={
-                "options": None,
-                "default_name": "generated-name",
-            },
-            expected_output={
-                "name": "generated-name",
-                "remaining_count": 0,
-            },
-        ),
-        TestCase(
-            name="empty options",
-            expected_status=SUCCESS,
-            config={
-                "options": [],
-                "default_name": "generated-name",
-            },
-            expected_output={
-                "name": "generated-name",
-                "remaining_count": 0,
-            },
-        ),
-    ],
-)
-def test_extract_name_option(test_case: TestCase) -> None:
-    """Tests extract_name_option."""
-
-    name, filtered = extract_name_option(
-        test_case.config["options"],
-        test_case.config["default_name"],
-    )
-
-    assert name == test_case.expected_output["name"]
-    assert len(filtered) == test_case.expected_output["remaining_count"]
 
 
 @pytest.mark.parametrize(

@@ -28,8 +28,6 @@ from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.spark.backends.kubernetes.utils import (
-    extract_name_option,
-    generate_session_name,
     validate_spark_connect_url,
 )
 from kubeflow.spark.test.common import (
@@ -862,59 +860,6 @@ def test_create_and_connect(kubernetes_backend, test_case):
             assert mock_create.call_args.kwargs.get("options") == options
 
         assert test_case.expected_status == SUCCESS
-
-    except Exception as e:
-        assert type(e) is test_case.expected_error
-    print("test execution complete")
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TestCase(
-            name="valid flow with name option provided",
-            expected_status=SUCCESS,
-            config={"options": [Name("test-name"), Labels({"app": "spark"})]},
-            expected_output={"name": "test-name", "remaining_count": 1, "remaining_type": Labels},
-        ),
-        TestCase(
-            name="valid flow with no name option auto generates",
-            expected_status=SUCCESS,
-            config={"options": [Labels({"app": "spark"})]},
-            expected_output={
-                "name_prefix": "spark-connect-",
-                "remaining_count": 1,
-                "remaining_type": Labels,
-            },
-        ),
-        TestCase(
-            name="valid flow with none options auto generates",
-            expected_status=SUCCESS,
-            config={"options": None},
-            expected_output={"name_prefix": "spark-connect-", "remaining_count": 0},
-        ),
-        TestCase(
-            name="valid flow with empty options auto generates",
-            expected_status=SUCCESS,
-            config={"options": []},
-            expected_output={"name_prefix": "spark-connect-", "remaining_count": 0},
-        ),
-    ],
-)
-def test_extract_name_option(kubernetes_backend, test_case):
-    """Test extract_name_option for name extraction and auto-generation."""
-    print("Executing test:", test_case.name)
-    try:
-        name, filtered = extract_name_option(test_case.config["options"], generate_session_name())
-
-        assert test_case.expected_status == SUCCESS
-        if "name" in test_case.expected_output:
-            assert name == test_case.expected_output["name"]
-        else:
-            assert name.startswith(test_case.expected_output["name_prefix"])
-        assert len(filtered) == test_case.expected_output["remaining_count"]
-        if "remaining_type" in test_case.expected_output:
-            assert isinstance(filtered[0], test_case.expected_output["remaining_type"])
 
     except Exception as e:
         assert type(e) is test_case.expected_error

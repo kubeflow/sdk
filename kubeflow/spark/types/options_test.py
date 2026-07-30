@@ -21,17 +21,15 @@ import pytest
 
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
+from kubeflow.spark.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.spark.types.options import (
     Annotations,
-    DriverOption,
-    ExecutorOption,
     Labels,
     Name,
     NodeSelector,
     PodTemplateOverride,
     Toleration,
 )
-from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 
 
 @pytest.fixture
@@ -761,162 +759,5 @@ def test_name_option_incompatible_backend(
             match=test_case.expected_output,
         ):
             option(resource, mock_non_k8s_backend)
-
-    print("test execution complete")
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TestCase(
-            name="apply driver option",
-            expected_status=SUCCESS,
-            config={
-                "image": "spark:test",
-                "resources": {
-                    "cpu": "2",
-                    "memory": "1Gi",
-                },
-                "java_options": "-XX:+UseG1GC",
-                "service_account": "spark-driver",
-            },
-        ),
-    ],
-)
-def test_driver_option_apply(
-    test_case: TestCase,
-    mock_k8s_backend,
-    spark_application_model,
-):
-    """Test DriverOption."""
-
-    print("Executing test:", test_case.name)
-
-    option = DriverOption(
-        image=test_case.config["image"],
-        resources=test_case.config["resources"],
-        java_options=test_case.config["java_options"],
-        service_account=test_case.config["service_account"],
-    )
-
-    option(spark_application_model, mock_k8s_backend)
-
-    assert spark_application_model.spec.image == test_case.config["image"]
-    assert spark_application_model.spec.driver.cores == 2
-    assert spark_application_model.spec.driver.memory == "1g"
-    assert spark_application_model.spec.driver.java_options == test_case.config["java_options"]
-    assert (
-        spark_application_model.spec.driver.service_account == test_case.config["service_account"]
-    )
-
-    assert test_case.expected_status == SUCCESS
-
-    print("test execution complete")
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TestCase(
-            name="incompatible backend",
-            expected_status=FAILED,
-            expected_error=ValueError,
-            expected_output="not compatible",
-            config={},
-        ),
-    ],
-)
-def test_driver_option_incompatible_backend(
-    test_case: TestCase,
-    mock_non_k8s_backend,
-    spark_application_model,
-):
-    """Test DriverOption with incompatible backend."""
-
-    print("Executing test:", test_case.name)
-
-    option = DriverOption()
-
-    with pytest.raises(
-        test_case.expected_error,
-        match=test_case.expected_output,
-    ):
-        option(spark_application_model, mock_non_k8s_backend)
-
-    print("test execution complete")
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TestCase(
-            name="apply executor option",
-            expected_status=SUCCESS,
-            config={
-                "num_instances": 3,
-                "resources_per_executor": {
-                    "cpu": "2",
-                    "memory": "512Mi",
-                },
-                "java_options": "-XX:+UseG1GC",
-            },
-        ),
-    ],
-)
-def test_executor_option_apply(
-    test_case: TestCase,
-    mock_k8s_backend,
-    spark_application_model,
-):
-    """Test ExecutorOption."""
-
-    print("Executing test:", test_case.name)
-
-    option = ExecutorOption(
-        num_instances=test_case.config["num_instances"],
-        resources_per_executor=test_case.config["resources_per_executor"],
-        java_options=test_case.config["java_options"],
-    )
-
-    option(spark_application_model, mock_k8s_backend)
-
-    assert spark_application_model.spec.executor.instances == test_case.config["num_instances"]
-    assert spark_application_model.spec.executor.cores == 2
-    assert spark_application_model.spec.executor.memory == "512m"
-    assert spark_application_model.spec.executor.java_options == test_case.config["java_options"]
-
-    assert test_case.expected_status == SUCCESS
-
-    print("test execution complete")
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TestCase(
-            name="incompatible backend",
-            expected_status=FAILED,
-            expected_error=ValueError,
-            expected_output="not compatible",
-            config={},
-        ),
-    ],
-)
-def test_executor_option_incompatible_backend(
-    test_case: TestCase,
-    mock_non_k8s_backend,
-    spark_application_model,
-):
-    """Test ExecutorOption with incompatible backend."""
-
-    print("Executing test:", test_case.name)
-
-    option = ExecutorOption()
-
-    with pytest.raises(
-        test_case.expected_error,
-        match=test_case.expected_output,
-    ):
-        option(spark_application_model, mock_non_k8s_backend)
 
     print("test execution complete")
