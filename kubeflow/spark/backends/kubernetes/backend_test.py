@@ -23,6 +23,7 @@ from kubeflow_spark_api import models
 from kubernetes import client
 from kubernetes.client import ApiException
 import pytest
+import requests
 
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.backends.kubernetes import constants
@@ -47,6 +48,7 @@ from kubeflow.spark.types.types import (
     FuncJob,
     SparkConnectInfo,
     SparkConnectState,
+    SparkJobMetrics,
     SparkJobStatus,
 )
 
@@ -88,6 +90,7 @@ def get_spark_application(
     name: str,
     namespace: str = DEFAULT_NAMESPACE,
     state: str | None = "SUBMITTED",
+    spark_application_id: str | None = None,
 ) -> models.SparkV1beta2SparkApplication:
     """Create a mock SparkApplication model for testing."""
     return models.SparkV1beta2SparkApplication(
@@ -121,6 +124,7 @@ def get_spark_application(
                 driver_info=models.SparkV1beta2DriverInfo(
                     pod_name=f"{name}-driver",
                 ),
+                spark_application_id=spark_application_id,
             )
             if state is not None
             else None
@@ -1929,3 +1933,147 @@ def test_get_job_logs(kubernetes_backend, test_case):
             raise
 
     print("test execution complete")
+
+
+def _mock_ui_service(name: str = "spark-job-metrics-ui-svc") -> client.V1Service:
+    """Create a mock driver web UI Service for testing."""
+    return client.V1Service(
+        metadata=client.V1ObjectMeta(name=name, namespace=DEFAULT_NAMESPACE),
+        spec=client.V1ServiceSpec(
+            ports=[
+                client.V1ServicePort(
+                    name=constants.SPARK_UI_PORT_NAME,
+                    port=4040,
+                )
+            ],
+        ),
+    )
+
+
+def _mock_requests_response(payload) -> Mock:
+    response = Mock()
+    response.json.return_value = payload
+    response.raise_for_status.return_value = None
+    return response
+
+
+def test_get_job_metrics_no_app_id(kubernetes_backend):
+    """get_job_metrics returns empty metrics when the job has no Spark application id yet."""
+    with patch(
+        "kubeflow.spark.backends.kubernetes.backend.models.SparkV1beta2SparkApplication.from_dict"
+    ) as mock_from_dict:
+        mock_from_dict.return_value = get_spark_application(
+            name="spark-job-metrics",
+            state="SUBMITTED",
+            spark_application_id=None,
+        )
+
+        with patch.object(kubernetes_backend.core_api, "list_namespaced_service") as mock_list:
+            metrics = kubernetes_backend.get_job_metrics("spark-job-metrics")
+
+            assert metrics == SparkJobMetrics()
+            mock_list.assert_not_called()
+
+
+def test_get_job_metrics_no_ui_service(kubernetes_backend):
+    """get_job_metrics returns empty metrics when no UI service exists for the job."""
+    with patch(
+        "kubeflow.spark.backends.kubernetes.backend.models.SparkV1beta2SparkApplication.from_dict"
+    ) as mock_from_dict:
+        mock_from_dict.return_value = get_spark_application(
+            name="spark-job-metrics",
+            state="RUNNING",
+            spark_application_id="app-123",
+        )
+
+        with patch.object(
+            kubernetes_backend.core_api,
+            "list_namespaced_service",
+            return_value=client.V1ServiceList(items=[]),
+        ) as mock_list:
+            metrics = kubernetes_backend.get_job_metrics("spark-job-metrics")
+
+            assert metrics == SparkJobMetrics()
+            mock_list.assert_called_once_with(
+                namespace=DEFAULT_NAMESPACE,
+                label_selector=f"{constants.SPARK_APP_NAME_LABEL}=spark-job-metrics",
+            )
+
+
+def test_get_job_metrics_success_in_cluster(kubernetes_backend):
+    """get_job_metrics aggregates executor and stage metrics from the Spark REST API."""
+    with patch(
+        "kubeflow.spark.backends.kubernetes.backend.models.SparkV1beta2SparkApplication.from_dict"
+    ) as mock_from_dict:
+        mock_from_dict.return_value = get_spark_application(
+            name="spark-job-metrics",
+            state="RUNNING",
+            spark_application_id="app-123",
+        )
+
+        executors_payload = [
+            {"id": "driver", "activeTasks": 0, "completedTasks": 0, "failedTasks": 0},
+            {"id": "1", "activeTasks": 2, "completedTasks": 5, "failedTasks": 1},
+        ]
+        stages_payload = [
+            {"status": "ACTIVE"},
+            {"status": "COMPLETE"},
+            {"status": "COMPLETE"},
+        ]
+
+        with (
+            patch.object(
+                kubernetes_backend.core_api,
+                "list_namespaced_service",
+                return_value=client.V1ServiceList(items=[_mock_ui_service()]),
+            ),
+            patch.dict("os.environ", {"KUBERNETES_SERVICE_HOST": "10.96.0.1"}, clear=False),
+            patch(
+                "kubeflow.spark.backends.kubernetes.backend.requests.get",
+                side_effect=[
+                    _mock_requests_response(executors_payload),
+                    _mock_requests_response(stages_payload),
+                ],
+            ) as mock_get,
+        ):
+            metrics = kubernetes_backend.get_job_metrics("spark-job-metrics")
+
+        assert metrics == SparkJobMetrics(
+            num_executors=2,
+            active_tasks=2,
+            completed_tasks=5,
+            failed_tasks=1,
+            active_stages=1,
+            completed_stages=2,
+        )
+        assert mock_get.call_count == 2
+        assert "spark-job-metrics-ui-svc" in mock_get.call_args_list[0].args[0]
+        assert "app-123" in mock_get.call_args_list[0].args[0]
+
+
+def test_get_job_metrics_rest_api_unreachable(kubernetes_backend):
+    """get_job_metrics returns empty metrics instead of raising when the REST API can't be reached."""
+    with patch(
+        "kubeflow.spark.backends.kubernetes.backend.models.SparkV1beta2SparkApplication.from_dict"
+    ) as mock_from_dict:
+        mock_from_dict.return_value = get_spark_application(
+            name="spark-job-metrics",
+            state="RUNNING",
+            spark_application_id="app-123",
+        )
+
+        with (
+            patch.object(
+                kubernetes_backend.core_api,
+                "list_namespaced_service",
+                return_value=client.V1ServiceList(items=[_mock_ui_service()]),
+            ),
+            patch.dict("os.environ", {"KUBERNETES_SERVICE_HOST": "10.96.0.1"}, clear=False),
+            patch(
+                "kubeflow.spark.backends.kubernetes.backend.requests.get",
+                side_effect=requests.exceptions.ConnectionError("connection refused"),
+            ),
+        ):
+            metrics = kubernetes_backend.get_job_metrics("spark-job-metrics")
+
+        assert metrics == SparkJobMetrics()

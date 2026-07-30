@@ -26,6 +26,7 @@ from kubeflow.spark.types.types import (
     FuncJob,
     SparkConnectInfo,
     SparkJob,
+    SparkJobMetrics,
     SparkJobStatus,
 )
 
@@ -243,5 +244,18 @@ class RuntimeBackend(abc.ABC):
 
         Returns:
             Iterator over log lines.
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_job_metrics(self, name: str) -> SparkJobMetrics:
+        """Get runtime metrics for a Spark job from the Spark REST API.
+
+        Args:
+            name: Name of the Spark job.
+
+        Returns:
+            Spark job metrics. Fields are ``None`` if metrics are not
+            currently available.
         """
         raise NotImplementedError()

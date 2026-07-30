@@ -25,6 +25,7 @@ from kubeflow.spark.types.types import (
     FileJob,
     FuncJob,
     SparkJob,
+    SparkJobMetrics,
 )
 
 
@@ -171,3 +172,18 @@ def test_submit_job_success(job):
             num_executors=None,
             resources_per_executor=None,
         )
+
+
+def test_get_job_metrics():
+    """Test that get_job_metrics delegates to the backend."""
+
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
+        backend = mock_backend.return_value
+        backend.get_job_metrics.return_value = SparkJobMetrics(num_executors=2)
+
+        client = SparkClient()
+
+        metrics = client.get_job_metrics("spark-job-123")
+
+        assert metrics == SparkJobMetrics(num_executors=2)
+        backend.get_job_metrics.assert_called_once_with("spark-job-123")

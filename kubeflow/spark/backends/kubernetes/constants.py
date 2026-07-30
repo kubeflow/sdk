@@ -40,6 +40,17 @@ SPARK_APPLICATION_VERSION = "v1beta2"
 SPARK_APPLICATION_PLURAL = "sparkapplications"
 SPARK_APPLICATION_KIND = "SparkApplication"
 
+# Label the Spark Operator sets on every resource it creates for a SparkApplication,
+# including the driver web UI service. Safer to look up the UI service by this label
+# than to construct its name, since the operator hashes/truncates names over 63 chars.
+SPARK_APP_NAME_LABEL = "sparkoperator.k8s.io/app-name"
+
+# Spark driver web UI (spark.ui.port); used for job metrics via the Spark REST API.
+# The Spark Operator creates a Service for this port unless started with
+# --enable-ui-service=false, in which case no UI service will exist for any job.
+DEFAULT_SPARK_UI_PORT = 4040
+SPARK_UI_PORT_NAME = "spark-driver-ui-port"
+
 # Default values; keep major.minor aligned with pyspark-connect in pyproject.toml
 DEFAULT_SPARK_VERSION = "4.0.1"
 DEFAULT_SPARK_IMAGE = "apache/spark:4.0.1"
