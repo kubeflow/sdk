@@ -769,6 +769,7 @@ def get_spark_application_cr_from_file_job(
     resources_per_executor: dict[str, str] | None = None,
     options: list | None = None,
     backend: Any | None = None,
+    spark_conf: dict[str, str] | None = None,
 ) -> models.SparkV1beta2SparkApplication:
     """Build a SparkApplication custom resource for a file-based Spark job.
 
@@ -781,6 +782,7 @@ def get_spark_application_cr_from_file_job(
         resources_per_executor: Resource requirements for each executor.
         options: List of configuration options.
         backend: Backend instance used for option validation.
+        spark_conf: Spark configuration properties.
 
     Returns:
         SparkApplication custom resource model.
@@ -808,6 +810,7 @@ def get_spark_application_cr_from_file_job(
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
             ),
+            spark_conf=spark_conf,
         ),
     )
 
@@ -829,6 +832,7 @@ def get_spark_application_cr_from_func_job(
     resources_per_executor: dict[str, str] | None = None,
     options: list | None = None,
     backend: Any | None = None,
+    spark_conf: dict[str, str] | None = None,
 ) -> models.SparkV1beta2SparkApplication:
     """Build a SparkApplication custom resource for a function-based Spark job.
 
@@ -841,6 +845,7 @@ def get_spark_application_cr_from_func_job(
         resources_per_executor: Resource requirements for each executor.
         options: List of configuration options.
         backend: Backend instance used for option validation.
+        spark_conf: Spark configuration properties.
 
     Returns:
         SparkApplication custom resource model.
@@ -874,6 +879,7 @@ def get_spark_application_cr_from_func_job(
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
             ),
+            spark_conf=spark_conf,
         ),
     )
 

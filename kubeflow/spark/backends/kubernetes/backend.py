@@ -893,6 +893,7 @@ class KubernetesBackend(RuntimeBackend):
         num_executors: int | None = None,
         resources_per_executor: dict[str, str] | None = None,
         options: list | None = None,
+        spark_conf: dict[str, str] | None = None,
     ) -> SparkJob:
         """Submit a SparkApplication for batch execution.
 
@@ -908,6 +909,8 @@ class KubernetesBackend(RuntimeBackend):
 
             options:
                 List of additional Spark configuration options.
+            spark_conf:
+                Spark configuration properties to set on the SparkApplication.
 
         Returns:
             SparkJob information object.
@@ -936,6 +939,7 @@ class KubernetesBackend(RuntimeBackend):
                 resources_per_executor=resources_per_executor,
                 options=options,
                 backend=self,
+                spark_conf=spark_conf,
             )
 
         else:
@@ -948,6 +952,7 @@ class KubernetesBackend(RuntimeBackend):
                 resources_per_executor=resources_per_executor,
                 options=options,
                 backend=self,
+                spark_conf=spark_conf,
             )
 
         # The Name option may override the auto-generated name.

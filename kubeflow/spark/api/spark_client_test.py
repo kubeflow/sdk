@@ -100,10 +100,10 @@ def test_create_and_connect(test_case: TestCase):
         ),
         (
             FileJob(file_source="s3://bucket/job.py"),
-            {"spark.executor.memory": "4g"},
+            [],
             None,
-            None,
-            NotImplementedError,
+            ValueError("spark_conf must be a dictionary."),
+            ValueError,
         ),
     ],
 )
@@ -167,5 +167,9 @@ def test_submit_job_success(job, options):
         assert name == "spark-job-123"
 
         backend.submit_job.assert_called_once_with(
-            job=job, num_executors=None, resources_per_executor=None, options=options
+            job=job,
+            num_executors=None,
+            resources_per_executor=None,
+            spark_conf=None,
+            options=options,
         )

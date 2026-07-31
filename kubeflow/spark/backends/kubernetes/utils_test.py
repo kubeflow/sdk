@@ -1353,6 +1353,10 @@ def test_get_spark_job_executor_spec(test_case: TestCase) -> None:
                     "cpu": "2",
                     "memory": "4Gi",
                 },
+                "spark_conf": {
+                    "spark.sql.shuffle.partitions": "8",
+                    "spark.executor.memoryOverhead": "512m",
+                },
             },
         ),
         TestCase(
@@ -1389,6 +1393,7 @@ def test_get_spark_application_cr_from_file_job(test_case: TestCase, mock_k8s_ba
         resources_per_executor=test_case.config["resources_per_executor"],
         options=test_case.config.get("options"),
         backend=mock_k8s_backend,
+        spark_conf=test_case.config.get("spark_conf"),
     )
 
     assert test_case.expected_status == SUCCESS
@@ -1413,6 +1418,8 @@ def test_get_spark_application_cr_from_file_job(test_case: TestCase, mock_k8s_ba
     if test_case.name == "build spark application with options":
         assert app.metadata.labels["team"] == "ml"
 
+    assert app.spec.spark_conf == test_case.config.get("spark_conf")
+
     print("test execution complete")
 
 
@@ -1431,6 +1438,9 @@ def test_get_spark_application_cr_from_file_job(test_case: TestCase, mock_k8s_ba
                 "resources_per_executor": {
                     "cpu": "2",
                     "memory": "4Gi",
+                },
+                "spark_conf": {
+                    "spark.sql.shuffle.partitions": "8",
                 },
             },
         ),
@@ -1471,6 +1481,7 @@ def test_get_spark_application_cr_from_func_job(
         resources_per_executor=test_case.config["resources_per_executor"],
         options=test_case.config.get("options"),
         backend=mock_k8s_backend,
+        spark_conf=test_case.config.get("spark_conf"),
     )
 
     assert test_case.expected_status == SUCCESS
@@ -1498,6 +1509,7 @@ def test_get_spark_application_cr_from_func_job(
 
     if test_case.name == "build spark application from function with options":
         assert app.metadata.labels["team"] == "ml"
+    assert app.spec.spark_conf == test_case.config.get("spark_conf")
 
     print("test execution complete")
 

@@ -200,7 +200,7 @@ class SparkClient:
                 Format: ``{"cpu": "5", "memory": "10Gi"}``.
 
             spark_conf:
-                Spark configuration dictionary.
+                Spark configuration properties.
 
             options:
                 List of additional Spark configuration options.
@@ -215,14 +215,13 @@ class SparkClient:
             NotImplementedError:
                 If unsupported features are requested.
         """
-        if spark_conf is not None:
-            raise NotImplementedError("spark_conf support is not yet implemented.")
 
         return self.backend.submit_job(
             job=job,
             num_executors=num_executors,
             resources_per_executor=resources_per_executor,
             options=options,
+            spark_conf=spark_conf,
         ).name
 
     def get_job(self, name: str) -> SparkJob:
