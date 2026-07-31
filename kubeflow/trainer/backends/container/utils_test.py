@@ -164,3 +164,45 @@ def test_aggregate_status_from_containers(test_case: TestCase):
     result = container_utils.aggregate_status_from_containers(test_case.config["statuses"])
     assert result == test_case.expected_output
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid function",
+            expected_status=SUCCESS,
+            config={"func": simple_train_func},
+        ),
+        TestCase(
+            name="non python function",
+            expected_status=FAILED,
+            config={"func": "not_a_function"},
+            expected_error=ValueError,
+            expected_output="Function must be a Python function.",
+        ),
+        TestCase(
+            name="lambda function",
+            expected_status=FAILED,
+            config={"func": lambda: None},
+            expected_error=ValueError,
+            expected_output="Lambda functions are not supported.",
+        ),
+    ],
+)
+def test_get_training_script_code(test_case: TestCase):
+    """Test training script generation."""
+
+    trainer = types.CustomTrainer(func=test_case.config["func"])
+
+    if test_case.expected_status == SUCCESS:
+        code = container_utils.get_training_script_code(trainer)
+
+        assert "def simple_train_func" in code
+        assert "simple_train_func()" in code
+    else:
+        with pytest.raises(
+            test_case.expected_error,
+            match=test_case.expected_output,
+        ):
+            container_utils.get_training_script_code(trainer)
