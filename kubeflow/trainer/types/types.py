@@ -427,7 +427,7 @@ class HuggingFaceModelInitializer(BaseInitializer):
     """
 
     ignore_patterns: list[str] | None = field(
-        default_factory=lambda: constants.INITIALIZER_DEFAULT_IGNORE_PATTERNS
+        default_factory=lambda: list(constants.INITIALIZER_DEFAULT_IGNORE_PATTERNS)
     )
     access_token: str | None = None
 
@@ -448,7 +448,7 @@ class S3ModelInitializer(BaseInitializer):
     """
 
     ignore_patterns: list[str] | None = field(
-        default_factory=lambda: constants.INITIALIZER_DEFAULT_IGNORE_PATTERNS
+        default_factory=lambda: list(constants.INITIALIZER_DEFAULT_IGNORE_PATTERNS)
     )
     endpoint: str | None = None
     access_key_id: str | None = None
