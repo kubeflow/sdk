@@ -156,7 +156,7 @@ class KubernetesBackend(RuntimeBackend):
             spark_conf=spark_conf,
             driver=driver,
             executor=executor,
-            options=options,  # Use filtered list
+            options=options,
             backend=self,  # Pass backend for option validation
         )
 
@@ -920,11 +920,6 @@ class KubernetesBackend(RuntimeBackend):
 
         job_name = generate_job_name()
 
-        logger.info(
-            "Submitting SparkApplication '%s'",
-            job_name,
-        )
-
         if isinstance(job, FileJob):
             spark_application = get_spark_application_cr_from_file_job(
                 name=job_name,
@@ -948,6 +943,14 @@ class KubernetesBackend(RuntimeBackend):
                 options=options,
                 backend=self,
             )
+
+        # The Name option may override the auto-generated name.
+        job_name = spark_application.metadata.name
+
+        logger.info(
+            "Submitting SparkApplication '%s'",
+            job_name,
+        )
 
         try:
             thread = self.custom_api.create_namespaced_custom_object(

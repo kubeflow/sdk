@@ -1273,10 +1273,15 @@ def test_submit_job(kubernetes_backend, test_case):
         else:
             job = kubernetes_backend.submit_job(
                 job=test_case.config["job"],
+                options=test_case.config.get("options"),
             )
 
         assert test_case.expected_status == SUCCESS
-        assert job.name.startswith("spark-job-")
+
+        if test_case.config.get("options"):
+            assert job.name == "custom-job"
+        else:
+            assert job.name.startswith("spark-job-")
 
     except Exception as e:
         assert type(e) is test_case.expected_error

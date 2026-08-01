@@ -352,12 +352,28 @@ def test_node_selector_applies_to_both_roles(
                 "node_selector": {
                     "node-type": "spark",
                 },
+                "resource": "connect",
+                "backend": "non-k8s",
+            },
+        ),
+        TestCase(
+            name="unsupported resource type",
+            expected_status=FAILED,
+            expected_error=TypeError,
+            expected_output="Unsupported Spark resource type",
+            config={
+                "node_selector": {
+                    "node-type": "spark",
+                },
+                "resource": "unsupported",
+                "backend": "k8s",
             },
         ),
     ],
 )
 def test_node_selector_incompatible_backend(
     test_case: TestCase,
+    mock_k8s_backend,
     mock_non_k8s_backend,
     spark_connect_model,
     spark_application_model,
@@ -368,12 +384,20 @@ def test_node_selector_incompatible_backend(
 
     option = NodeSelector(test_case.config["node_selector"])
 
-    for resource in [spark_connect_model, spark_application_model]:
-        with pytest.raises(
-            test_case.expected_error,
-            match=test_case.expected_output,
-        ):
-            option(resource, mock_non_k8s_backend)
+    backend = mock_k8s_backend if test_case.config["backend"] == "k8s" else mock_non_k8s_backend
+
+    if test_case.config["resource"] == "connect":
+        resource = spark_connect_model
+    elif test_case.config["resource"] == "application":
+        resource = spark_application_model
+    else:
+        resource = object()
+
+    with pytest.raises(
+        test_case.expected_error,
+        match=test_case.expected_output,
+    ):
+        option(resource, backend)
 
     print("test execution complete")
 
@@ -495,12 +519,27 @@ def test_toleration_without_value(
             config={
                 "key": "test",
                 "operator": "Exists",
+                "resource": "connect",
+                "backend": "non-k8s",
+            },
+        ),
+        TestCase(
+            name="unsupported resource type",
+            expected_status=FAILED,
+            expected_error=TypeError,
+            expected_output="Unsupported Spark resource type",
+            config={
+                "key": "test",
+                "operator": "Exists",
+                "resource": "unsupported",
+                "backend": "k8s",
             },
         ),
     ],
 )
 def test_toleration_incompatible_backend(
     test_case: TestCase,
+    mock_k8s_backend,
     mock_non_k8s_backend,
     spark_connect_model,
     spark_application_model,
@@ -514,12 +553,20 @@ def test_toleration_incompatible_backend(
         operator=test_case.config["operator"],
     )
 
-    for resource in [spark_connect_model, spark_application_model]:
-        with pytest.raises(
-            test_case.expected_error,
-            match=test_case.expected_output,
-        ):
-            option(resource, mock_non_k8s_backend)
+    backend = mock_k8s_backend if test_case.config["backend"] == "k8s" else mock_non_k8s_backend
+
+    if test_case.config["resource"] == "connect":
+        resource = spark_connect_model
+    elif test_case.config["resource"] == "application":
+        resource = spark_application_model
+    else:
+        resource = object()
+
+    with pytest.raises(
+        test_case.expected_error,
+        match=test_case.expected_output,
+    ):
+        option(resource, backend)
 
     print("test execution complete")
 
@@ -601,6 +648,18 @@ def test_pod_template_override(
             config={
                 "role": "invalid",
                 "template": {"spec": {}},
+                "resource": "connect",
+            },
+        ),
+        TestCase(
+            name="spark application not supported",
+            expected_status=FAILED,
+            expected_error=ValueError,
+            expected_output="currently supported only for SparkConnect",
+            config={
+                "role": "driver",
+                "template": {"spec": {}},
+                "resource": "application",
             },
         ),
     ],
@@ -620,11 +679,17 @@ def test_pod_template_invalid_role(
         template=test_case.config["template"],
     )
 
+    resource = (
+        spark_connect_model
+        if test_case.config["resource"] == "connect"
+        else spark_application_model
+    )
+
     with pytest.raises(
         test_case.expected_error,
         match=test_case.expected_output,
     ):
-        option(spark_connect_model, mock_k8s_backend)
+        option(resource, mock_k8s_backend)
 
     print("test execution complete")
 

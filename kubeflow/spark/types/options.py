@@ -123,13 +123,20 @@ class Annotations:
 
 @dataclass
 class PodTemplateOverride:
-    """Override pod template specifications for driver or executors.
+    """Override pod template specifications for Spark Connect driver or executors.
 
     Provides full control over Kubernetes pod specifications for advanced use cases
     like custom volumes, init containers, sidecars, or security contexts.
 
+    Supported resources:
+        - Spark Connect
+
     Supported backends:
         - Kubernetes
+
+    Note:
+        PodTemplateOverride is currently supported only for Spark Connect.
+        It is not supported for Spark batch jobs submitted with ``submit_job()``.
 
     Args:
         role: Target role ("driver" or "executor").
@@ -254,6 +261,8 @@ class NodeSelector:
 
         Raises:
             ValueError: If backend does not support node selectors.
+
+            TypeError: If the resource is not a supported Spark resource.
         """
         from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 
@@ -339,6 +348,8 @@ class Toleration:
 
         Raises:
             ValueError: If backend does not support tolerations.
+
+            TypeError: If the resource is not a supported Spark resource.
         """
         from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 

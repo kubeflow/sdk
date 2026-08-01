@@ -168,11 +168,31 @@ def example_verify_options():
     ):
         raise RuntimeError("Expected driver toleration to be applied.")
 
+    executor = spec.get("executor", {})
+
+    executor_node_selector = executor.get("nodeSelector", {})
+
+    if executor_node_selector.get("kubernetes.io/os") != "linux":
+        raise RuntimeError("Expected executor nodeSelector to be applied.")
+
+    executor_tolerations = executor.get("tolerations", [])
+
+    if not any(
+        t.get("key") == "dedicated"
+        and t.get("operator") == "Equal"
+        and t.get("value") == "spark"
+        and t.get("effect") == "NoSchedule"
+        for t in executor_tolerations
+    ):
+        raise RuntimeError("Expected executor toleration to be applied.")
+
     print("✓ Name verified.")
     print("✓ Labels verified.")
     print("✓ Annotations verified.")
-    print("✓ NodeSelector verified.")
-    print("✓ Toleration verified.")
+    print("✓ Driver NodeSelector verified.")
+    print("✓ Driver Toleration verified.")
+    print("✓ Executor NodeSelector verified.")
+    print("✓ Executor Toleration verified.")
 
     print("\nOptions verification complete.\n")
 
@@ -212,8 +232,8 @@ def example_delete_job():
 
 
 def main():
-    """Run the batch job option examples."""
-    print("E2E: Starting batch_job_option.py", flush=True)
+    """Run the batch job options examples."""
+    print("E2E: Starting batch_job_options.py", flush=True)
     print()
     print("=" * 70)
     print("KUBEFLOW SPARKCLIENT - BATCH JOB OPTIONS")

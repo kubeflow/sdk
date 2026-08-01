@@ -308,6 +308,13 @@ def apply_options(
 
         backend:
             Backend used for option validation.
+
+        Raises:
+            ValueError:
+                If options are provided without a backend instance.
+
+            TypeError:
+                If an option is not callable.
     """
     if not options:
         return
@@ -316,8 +323,13 @@ def apply_options(
         raise ValueError("A backend instance is required to apply Spark options.")
 
     for option in options:
-        if callable(option):
-            option(resource, backend)
+        if not callable(option):
+            raise TypeError(
+                f"Invalid Spark option: {option!r}. Options must be callable, "
+                "for example: Name, Labels, Annotations, NodeSelector or Toleration."
+            )
+
+        option(resource, backend)
 
 
 # ----------------------------------------------------------------------

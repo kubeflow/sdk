@@ -99,13 +99,6 @@ def mock_k8s_backend():
 
 
 @pytest.fixture
-def mock_non_k8s_backend():
-    """Create a mock non-Kubernetes backend."""
-    backend = Mock()
-    return backend
-
-
-@pytest.fixture
 def spark_connect_resource(minimal_spec):
     """Creates a minimal SparkConnect resource."""
     return models.SparkV1alpha1SparkConnect(
@@ -243,6 +236,28 @@ def test_generate_session_name(test_case: TestCase) -> None:
             },
         ),
         TestCase(
+            name="missing backend",
+            expected_status=FAILED,
+            expected_error=ValueError,
+            expected_output="backend instance is required",
+            config={
+                "options": [
+                    Labels({"team": "ml"}),
+                ],
+                "backend": None,
+            },
+        ),
+        TestCase(
+            name="non callable option",
+            expected_status=FAILED,
+            expected_error=TypeError,
+            expected_output="Options must be callable",
+            config={
+                "options": ["not-a-callable"],
+                "backend": "k8s",
+            },
+        ),
+        TestCase(
             name="empty options",
             expected_status=SUCCESS,
             config={
@@ -260,10 +275,26 @@ def test_apply_options(
 
     print("Executing test:", test_case.name)
 
+    backend = mock_k8s_backend if test_case.config.get("backend", "k8s") == "k8s" else None
+
+    if test_case.expected_status == FAILED:
+        with pytest.raises(
+            test_case.expected_error,
+            match=test_case.expected_output,
+        ):
+            apply_options(
+                spark_connect_resource,
+                test_case.config["options"],
+                backend,
+            )
+
+        print("test execution complete")
+        return
+
     apply_options(
         spark_connect_resource,
         test_case.config["options"],
-        mock_k8s_backend,
+        backend,
     )
 
     assert test_case.expected_status == SUCCESS
@@ -271,7 +302,8 @@ def test_apply_options(
     if test_case.name == "apply label option":
         assert spark_connect_resource.metadata.labels["team"] == "ml"
 
-    print("test execution complete")
+
+print("test execution complete")
 
 
 @pytest.mark.parametrize(
@@ -1395,7 +1427,7 @@ def test_get_spark_application_cr_from_file_job(test_case: TestCase, mock_k8s_ba
                 "name": "test-job",
                 "namespace": "default",
                 "func": sample_function,
-                "func_args": [1, 2],
+                "func_args": {"a": 1, "b": 2},
                 "num_executors": 3,
                 "resources_per_executor": {
                     "cpu": "2",
