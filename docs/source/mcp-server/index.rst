@@ -1,5 +1,5 @@
-Introduction
-============
+MCP Server
+==========
 
 Let AI agents drive Kubeflow training workflows through natural language.
 
@@ -60,7 +60,18 @@ Quick Start
 
    kubeflow-mcp serve
 
-Add it to your agent's MCP client config (HTTP transport):
+This defaults to the ``stdio`` transport. For Claude Code, register it directly:
+
+.. code-block:: bash
+
+   claude mcp add kubeflow -- kubeflow-mcp serve
+
+To use the HTTP transport instead (e.g. the Docker image, which defaults to HTTP), start the
+server with ``--transport http`` and add it to your agent's MCP client config:
+
+.. code-block:: bash
+
+   kubeflow-mcp serve --transport http --auth-token my-secret-token
 
 .. code-block:: json
 
@@ -72,12 +83,6 @@ Add it to your agent's MCP client config (HTTP transport):
        }
      }
    }
-
-For Claude Code, register it directly:
-
-.. code-block:: bash
-
-   claude mcp add kubeflow -- kubeflow-mcp serve
 
 Example: Fine-Tune a Model via AI Agent
 ----------------------------------------

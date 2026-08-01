@@ -82,22 +82,6 @@ CLI Reference
      --log-format console \          # console | json (auto-detected if omitted)
      --no-banner                     # suppress startup banner
 
-``kubeflow-mcp agent``
-~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: bash
-
-   kubeflow-mcp agent \
-     --backend ollama \              # ollama (default; more backends planned)
-     --model qwen3:8b \              # model name for the backend
-     --mode full \                   # full | progressive | semantic
-     --thinking                      # enable thinking output (supported models)
-
-.. note::
-
-   ``kubeflow-mcp agent --otel-endpoint ...`` emits spans under a separate
-   ``kubeflow-mcp-agent`` service in Jaeger, distinct from the ``kubeflow-mcp`` server spans.
-
 Authentication
 --------------
 
@@ -154,7 +138,7 @@ OpenTelemetry tracing is optional and can be enabled without changing tool code.
    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
    kubeflow-mcp serve
 
-Each tool invocation emits a span with attributes: ``tool.name``, ``tool.args_preview``
+Each tool invocation emits a span with attributes: ``gen_ai.tool.name``, ``tool.args_preview``
 (masked, truncated to 300 chars), ``tool.success``, ``tool.duration_ms``, ``kubeflow.persona``,
 and ``correlation_id``. The OTLP exporter uses a 2s timeout to avoid blocking tool calls, and
 tracing is a no-op when OTel packages are not installed.
