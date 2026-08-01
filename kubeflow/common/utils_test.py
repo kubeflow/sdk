@@ -14,7 +14,7 @@
 import pytest
 
 from kubeflow.common import utils
-from kubeflow.trainer.test.common import SUCCESS, TestCase
+from kubeflow.common.testing import SUCCESS, TestCase
 
 
 @pytest.mark.parametrize(

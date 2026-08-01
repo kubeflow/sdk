@@ -21,6 +21,7 @@ from unittest.mock import Mock, patch
 from kubeflow_spark_api import models
 import pytest
 
+from kubeflow.common.testing import FAILED, SUCCESS, TestCase
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.spark.backends.kubernetes.utils import (
@@ -46,7 +47,6 @@ from kubeflow.spark.backends.kubernetes.utils import (
     validate_spark_connect_url,
 )
 from kubeflow.spark.options import Labels
-from kubeflow.spark.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.spark.types.types import (
     Driver,
     Executor,

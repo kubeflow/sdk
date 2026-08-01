@@ -20,6 +20,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from kubeflow.common.testing import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.backends.localprocess.backend import LocalProcessBackend
 from kubeflow.trainer.backends.localprocess.constants import LOCAL_RUNTIME_IMAGE
 from kubeflow.trainer.backends.localprocess.types import (
@@ -33,7 +34,6 @@ from kubeflow.trainer.options import (
     Name,
     RuntimePatch,
 )
-from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.types import types
 
 # Test constants

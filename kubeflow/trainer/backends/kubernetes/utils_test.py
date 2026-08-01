@@ -20,9 +20,9 @@ from unittest.mock import MagicMock, patch
 from kubeflow_trainer_api import models
 import pytest
 
+from kubeflow.common.testing import FAILED, SUCCESS, TestCase
 import kubeflow.trainer.backends.kubernetes.utils as utils
 from kubeflow.trainer.constants import constants
-from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.types import types
 
 
