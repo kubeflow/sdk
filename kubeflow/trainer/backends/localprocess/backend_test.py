@@ -401,6 +401,23 @@ def test_list_jobs(local_backend, test_case):
     runtime = test_case.config.get("runtime")
     jobs = local_backend.list_jobs(runtime=runtime)
     assert isinstance(jobs, list)
+    step = Mock()
+    step.step_name = "train"
+    step.job.status = constants.TRAINJOB_COMPLETE
+
+    job = Mock()
+    job.name = "job-1"
+    job.created = None
+    job.runtime = Mock()
+    job.runtime.name = TORCH_RUNTIME
+    job.steps = [step]
+
+    local_backend._LocalProcessBackend__local_jobs.append(job)
+
+    jobs = local_backend.list_jobs()
+
+    assert len(jobs) == 1
+    assert jobs[0].status == constants.TRAINJOB_COMPLETE
 
 
 @pytest.mark.parametrize(

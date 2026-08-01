@@ -102,7 +102,6 @@ class LocalProcessBackend(RuntimeBackend):
         # localprocess backend only supports CustomTrainer
         if not isinstance(trainer, types.CustomTrainer):
             raise ValueError("CustomTrainer must be set with LocalProcessBackend")
-
         # create temp dir
         venv_dir = tempfile.mkdtemp(prefix=trainjob_name)
         logger.debug(f"operating in {venv_dir}")
@@ -162,6 +161,7 @@ class LocalProcessBackend(RuntimeBackend):
                         types.Step(name=s.step_name, pod_name=s.step_name, status=s.job.status)
                         for s in _job.steps
                     ],
+                    status=self.__get_job_status(_job),
                 )
             )
         return result
