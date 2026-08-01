@@ -1228,13 +1228,17 @@ def test_validate_job(kubernetes_backend, test_case):
     "test_case",
     [
         TestCase(
-            name="valid remote file submission",
+            name="valid remote file submission with spark configuration",
             expected_status=SUCCESS,
             config={
                 "job": FileJob(
                     file_source="s3://bucket/job.py",
                     args=["--date", "2026-06-30"],
                 ),
+                "spark_conf": {
+                    "spark.sql.adaptive.enabled": "true",
+                    "spark.sql.shuffle.partitions": "200",
+                },
             },
         ),
         TestCase(
@@ -1268,12 +1272,16 @@ def test_validate_job(kubernetes_backend, test_case):
             expected_error=ValueError,
         ),
         TestCase(
-            name="valid function job submission",
+            name="valid function job submission with spark configuration",
             expected_status=SUCCESS,
             config={
                 "job": FuncJob(
                     func=sample_func,
                 ),
+                "spark_conf": {
+                    "spark.sql.adaptive.enabled": "true",
+                    "spark.sql.shuffle.partitions": "200",
+                },
                 "use_mock_command": True,
             },
         ),
@@ -1289,6 +1297,8 @@ def test_submit_job(kubernetes_backend, test_case):
             DEFAULT_NAMESPACE,
         )
 
+        spark_conf = test_case.config.get("spark_conf")
+
         if test_case.config.get("use_mock_command"):
             with patch(
                 "kubeflow.spark.backends.kubernetes.backend.get_spark_application_cr_from_func_job",
@@ -1299,17 +1309,28 @@ def test_submit_job(kubernetes_backend, test_case):
 
                 job = kubernetes_backend.submit_job(
                     job=test_case.config["job"],
+                    spark_conf=spark_conf,
                 )
 
                 mock_build.assert_called_once()
 
-                assert mock_build.call_args.kwargs["func"] == test_case.config["job"].func
-                assert mock_build.call_args.kwargs["func_args"] == test_case.config["job"].func_args
+                assert mock_build.call_args.kwargs["func"] == (test_case.config["job"].func)
+                assert mock_build.call_args.kwargs["func_args"] == (
+                    test_case.config["job"].func_args
+                )
+                assert mock_build.call_args.kwargs["spark_conf"] == (spark_conf)
 
         else:
             job = kubernetes_backend.submit_job(
                 job=test_case.config["job"],
+                spark_conf=spark_conf,
             )
+
+            if test_case.expected_status == SUCCESS and spark_conf is not None:
+                create_mock = kubernetes_backend.custom_api.create_namespaced_custom_object
+                body = create_mock.call_args.kwargs["body"]
+
+                assert body["spec"]["sparkConf"] == spark_conf
 
         assert test_case.expected_status == SUCCESS
         assert job.name.startswith("spark-job-")

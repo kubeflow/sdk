@@ -917,6 +917,7 @@ class KubernetesBackend(RuntimeBackend):
         job: FileJob | FuncJob,
         num_executors: int | None = None,
         resources_per_executor: dict[str, str] | None = None,
+        spark_conf: dict[str, str] | None = None,
     ) -> SparkJob:
         """Submit a SparkApplication for batch execution.
 
@@ -930,12 +931,16 @@ class KubernetesBackend(RuntimeBackend):
             resources_per_executor:
                 Resource requirements per executor.
 
+            spark_conf:
+                Optional Spark configuration properties applied to the
+                submitted application. Keys and values must be strings.
+
         Returns:
             SparkJob information object.
 
         Raises:
             ValueError:
-                If job validation fails.
+                If job, resource, or Spark configuration validation fails.
 
             TimeoutError:
                 If SparkApplication creation times out.
@@ -960,6 +965,7 @@ class KubernetesBackend(RuntimeBackend):
                 arguments=job.args,
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
+                spark_conf=spark_conf,
             )
 
         else:
@@ -970,6 +976,7 @@ class KubernetesBackend(RuntimeBackend):
                 func_args=job.func_args,
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
+                spark_conf=spark_conf,
             )
 
         try:

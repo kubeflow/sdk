@@ -1209,6 +1209,10 @@ def test_get_spark_job_executor_spec(test_case: TestCase) -> None:
                     "cpu": "2",
                     "memory": "4Gi",
                 },
+                "spark_conf": {
+                    "spark.sql.adaptive.enabled": "true",
+                    "spark.sql.shuffle.partitions": "200",
+                },
             },
         ),
     ],
@@ -1225,6 +1229,7 @@ def test_get_spark_application_cr_from_file_job(test_case: TestCase) -> None:
         arguments=test_case.config["arguments"],
         num_executors=test_case.config["num_executors"],
         resources_per_executor=test_case.config["resources_per_executor"],
+        spark_conf=test_case.config["spark_conf"],
     )
 
     assert test_case.expected_status == SUCCESS
@@ -1247,6 +1252,9 @@ def test_get_spark_application_cr_from_file_job(test_case: TestCase) -> None:
         "4Gi",
     )
 
+    assert app.spec.spark_conf == test_case.config["spark_conf"]
+    assert app.to_dict()["spec"]["sparkConf"] == (test_case.config["spark_conf"])
+
     print("test execution complete")
 
 
@@ -1266,6 +1274,10 @@ def test_get_spark_application_cr_from_file_job(test_case: TestCase) -> None:
                     "cpu": "2",
                     "memory": "4Gi",
                 },
+                "spark_conf": {
+                    "spark.sql.adaptive.enabled": "true",
+                    "spark.sql.shuffle.partitions": "200",
+                },
             },
         ),
     ],
@@ -1284,6 +1296,7 @@ def test_get_spark_application_cr_from_func_job(
         func_args=test_case.config["func_args"],
         num_executors=test_case.config["num_executors"],
         resources_per_executor=test_case.config["resources_per_executor"],
+        spark_conf=test_case.config["spark_conf"],
     )
 
     assert test_case.expected_status == SUCCESS
@@ -1309,7 +1322,40 @@ def test_get_spark_application_cr_from_func_job(
     assert app.spec.executor.cores == 2
     assert app.spec.executor.memory == "4g"
 
+    assert app.spec.spark_conf == test_case.config["spark_conf"]
+    assert app.to_dict()["spec"]["sparkConf"] == (test_case.config["spark_conf"])
+
     print("test execution complete")
+
+
+def test_spark_application_builders_reject_invalid_spark_conf() -> None:
+    """Tests strict Spark configuration value validation."""
+
+    invalid_spark_conf = {
+        "spark.sql.shuffle.partitions": 200,
+    }
+
+    with pytest.raises(
+        ValueError,
+        match="Input should be a valid string",
+    ):
+        get_spark_application_cr_from_file_job(
+            name="file-job",
+            namespace="default",
+            main_file="s3://bucket/job.py",
+            spark_conf=invalid_spark_conf,
+        )
+
+    with pytest.raises(
+        ValueError,
+        match="Input should be a valid string",
+    ):
+        get_spark_application_cr_from_func_job(
+            name="func-job",
+            namespace="default",
+            func=sample_function,
+            spark_conf=invalid_spark_conf,
+        )
 
 
 @pytest.mark.parametrize(

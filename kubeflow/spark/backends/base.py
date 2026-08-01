@@ -149,6 +149,7 @@ class RuntimeBackend(abc.ABC):
         job: FileJob | FuncJob,
         num_executors: int | None = None,
         resources_per_executor: dict[str, str] | None = None,
+        spark_conf: dict[str, str] | None = None,
     ) -> SparkJob:
         """Submit a Spark batch job.
 
@@ -156,6 +157,8 @@ class RuntimeBackend(abc.ABC):
             job: Spark application to execute.
             num_executors: Number of executor instances.
             resources_per_executor: Resource requirements for each executor.
+            spark_conf: Optional Spark configuration properties applied to the
+                submitted application. Keys and values must be strings.
 
         Returns:
             Submitted Spark job information.

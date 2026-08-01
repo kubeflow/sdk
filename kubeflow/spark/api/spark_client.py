@@ -200,31 +200,34 @@ class SparkClient:
                 Format: ``{"cpu": "5", "memory": "10Gi"}``.
 
             spark_conf:
-                Spark configuration dictionary.
+                Optional Spark configuration properties applied to the
+                submitted application. Keys and values must be strings.
 
             options:
                 List of additional Spark configuration options.
 
+        Returns:
+            Name of the submitted Spark job.
+
         Raises:
             ValueError:
-                If unsupported Phase 1 features are requested or the job definition is invalid.
+                If the job definition, resource configuration, or Spark
+                configuration is invalid.
 
             TypeError:
                 If the job type is invalid.
 
             NotImplementedError:
-                If unsupported features are requested.
+                If ``options`` is provided.
         """
-        if spark_conf is not None:
-            raise NotImplementedError("spark_conf support is not yet implemented.")
-
         if options is not None:
-            raise NotImplementedError("options are not supported in Phase 1.")
+            raise NotImplementedError("options support is not yet implemented.")
 
         return self.backend.submit_job(
             job=job,
             num_executors=num_executors,
             resources_per_executor=resources_per_executor,
+            spark_conf=spark_conf,
         ).name
 
     def get_job(self, name: str) -> SparkJob:
