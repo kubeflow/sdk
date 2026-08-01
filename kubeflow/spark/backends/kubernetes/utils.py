@@ -136,16 +136,34 @@ def _resolve_executor_resources(
     executor: Executor | None = None,
     num_executors: int | None = None,
     resources_per_executor: dict[str, str] | None = None,
+    spark_conf: dict[str, str] | None = None,
 ) -> tuple[int, int, str]:
     """Resolve executor configuration.
 
+    Precedence rules:
+        - Executor instances:
+          ``spark_conf`` > ``executor.num_instances`` >
+          ``num_executors`` > default.
+        - Executor resources:
+          ``spark_conf`` >
+          ``executor.resources_per_executor`` >
+          ``resources_per_executor`` > default.
+
     Args:
-        executor: Executor configuration.
-        num_executors: Number of executor instances.
-        resources_per_executor: Resource requirements.
+        executor:
+            Executor configuration.
+
+        num_executors:
+            Number of executor instances.
+
+        resources_per_executor:
+            Resource requirements.
+
+        spark_conf:
+            Spark configuration properties.
 
     Returns:
-        Tuple containing (instances, cores, memory).
+        Tuple containing ``(instances, cores, memory)``.
 
     Raises:
         ValueError:
@@ -178,6 +196,22 @@ def _resolve_executor_resources(
         if "memory" in resource_dict:
             memory = _memory_kubernetes_to_spark(
                 resource_dict["memory"],
+            )
+
+    if spark_conf:
+        if "spark.executor.instances" in spark_conf:
+            instances = int(
+                spark_conf["spark.executor.instances"],
+            )
+
+        if "spark.executor.cores" in spark_conf:
+            cores = _validate_cpu_value(
+                spark_conf["spark.executor.cores"],
+            )
+
+        if "spark.executor.memory" in spark_conf:
+            memory = _memory_kubernetes_to_spark(
+                spark_conf["spark.executor.memory"],
             )
 
     return instances, cores, memory
@@ -330,6 +364,33 @@ def apply_options(
             )
 
         option(resource, backend)
+
+
+def _validate_spark_conf(
+    spark_conf: dict[str, str] | None,
+) -> None:
+    """Validate Spark configuration.
+
+    Args:
+        spark_conf:
+            Spark configuration properties.
+
+    Raises:
+        ValueError:
+            If ``spark_conf`` is not a dictionary of string keys and values.
+    """
+    if spark_conf is None:
+        return
+
+    if not isinstance(spark_conf, dict):
+        raise ValueError("spark_conf must be a dictionary.")
+
+    for key, value in spark_conf.items():
+        if not isinstance(key, str):
+            raise ValueError("All spark_conf keys must be strings.")
+
+        if not isinstance(value, str):
+            raise ValueError("All spark_conf values must be strings.")
 
 
 # ----------------------------------------------------------------------
@@ -510,6 +571,8 @@ def build_spark_connect_cr(
         ValueError:
             If the provided driver or executor resource configuration is invalid.
     """
+    _validate_spark_conf(spark_conf)
+
     spark_version = spark_version or constants.DEFAULT_SPARK_VERSION
 
     # Build server spec using conversion function
@@ -652,6 +715,7 @@ def get_spark_job_driver_spec(
 def get_spark_job_executor_spec(
     num_executors: int | None = None,
     resources_per_executor: dict[str, str] | None = None,
+    spark_conf: dict[str, str] | None = None,
 ) -> models.SparkV1beta2ExecutorSpec:
     """Build ExecutorSpec for SparkApplication.
 
@@ -669,6 +733,7 @@ def get_spark_job_executor_spec(
     instances, cores, memory = _resolve_executor_resources(
         num_executors=num_executors,
         resources_per_executor=resources_per_executor,
+        spark_conf=spark_conf,
     )
 
     return models.SparkV1beta2ExecutorSpec(
@@ -809,8 +874,9 @@ def get_spark_application_cr_from_file_job(
             executor=get_spark_job_executor_spec(
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
+                spark_conf=spark_conf,
             ),
-            spark_conf=spark_conf,
+            spark_conf=spark_conf or None,
         ),
     )
 
@@ -855,6 +921,7 @@ def get_spark_application_cr_from_func_job(
             If the provided function is invalid or the executor resource
             configuration is invalid.
     """
+    _validate_spark_conf(spark_conf)
 
     command = get_command_using_spark_func(
         func=func,
@@ -878,8 +945,9 @@ def get_spark_application_cr_from_func_job(
             executor=get_spark_job_executor_spec(
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
+                spark_conf=spark_conf,
             ),
-            spark_conf=spark_conf,
+            spark_conf=spark_conf or None,
         ),
     )
 

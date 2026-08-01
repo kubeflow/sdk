@@ -1240,11 +1240,26 @@ def test_validate_job(kubernetes_backend, test_case):
             },
         ),
         TestCase(
+            name="valid remote file submission with spark conf",
+            expected_status=SUCCESS,
+            config={
+                "job": FileJob(
+                    file_source="s3://bucket/job.py",
+                    args=["--date", "2026-06-30"],
+                ),
+                "spark_conf": {
+                    "spark.executor.memory": "4g",
+                    "spark.sql.shuffle.partitions": "10",
+                },
+            },
+        ),
+        TestCase(
             name="valid remote file submission with options",
             expected_status=SUCCESS,
             config={
                 "job": FileJob(
                     file_source="s3://bucket/job.py",
+                    args=["--date", "2026-06-30"],
                 ),
                 "options": [
                     Name("custom-job"),
@@ -1275,6 +1290,7 @@ def test_submit_job(kubernetes_backend, test_case):
                 job = kubernetes_backend.submit_job(
                     job=test_case.config["job"],
                     options=test_case.config.get("options"),
+                    spark_conf=test_case.config.get("spark_conf"),
                 )
 
                 mock_build.assert_called_once()
@@ -1284,11 +1300,15 @@ def test_submit_job(kubernetes_backend, test_case):
                 if test_case.config.get("options"):
                     assert mock_build.call_args.kwargs["options"] == test_case.config["options"]
                     assert mock_build.call_args.kwargs["backend"] is kubernetes_backend
+                assert mock_build.call_args.kwargs["spark_conf"] == test_case.config.get(
+                    "spark_conf"
+                )
 
         else:
             job = kubernetes_backend.submit_job(
                 job=test_case.config["job"],
                 options=test_case.config.get("options"),
+                spark_conf=test_case.config.get("spark_conf"),
             )
 
         assert test_case.expected_status == SUCCESS

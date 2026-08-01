@@ -28,6 +28,7 @@ from kubeflow.spark.backends.kubernetes.utils import (
     _resolve_driver_resources,
     _resolve_executor_resources,
     _validate_cpu_value,
+    _validate_spark_conf,
     apply_options,
     build_service_url,
     build_spark_connect_cr,
@@ -302,8 +303,61 @@ def test_apply_options(
     if test_case.name == "apply label option":
         assert spark_connect_resource.metadata.labels["team"] == "ml"
 
+    print("test execution complete")
 
-print("test execution complete")
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid spark conf",
+            expected_status=SUCCESS,
+            config={
+                "spark_conf": {
+                    "spark.executor.memory": "4g",
+                    "spark.sql.shuffle.partitions": "200",
+                },
+            },
+        ),
+        TestCase(
+            name="invalid spark conf key",
+            expected_status=FAILED,
+            config={
+                "spark_conf": {
+                    1: "4g",
+                },
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="invalid spark conf value",
+            expected_status=FAILED,
+            config={
+                "spark_conf": {
+                    "spark.executor.memory": 4,
+                },
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_validate_spark_conf(test_case: TestCase) -> None:
+    """Tests _validate_spark_conf."""
+
+    print("Executing test:", test_case.name)
+
+    try:
+        _validate_spark_conf(
+            test_case.config["spark_conf"],
+        )
+
+        assert test_case.expected_status == SUCCESS
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert isinstance(e, test_case.expected_error)
+
+    print("test execution complete")
 
 
 @pytest.mark.parametrize(
@@ -1021,6 +1075,29 @@ def test_resolve_driver_resources(test_case: TestCase) -> None:
                 },
             },
         ),
+        TestCase(
+            name="spark conf overrides executor configuration",
+            expected_status=SUCCESS,
+            config={
+                "executor": Executor(
+                    num_instances=5,
+                    resources_per_executor={
+                        "cpu": "8",
+                        "memory": "16Gi",
+                    },
+                ),
+                "num_executors": 2,
+                "resources_per_executor": {
+                    "cpu": "4",
+                    "memory": "8Gi",
+                },
+                "spark_conf": {
+                    "spark.executor.instances": "10",
+                    "spark.executor.cores": "12",
+                    "spark.executor.memory": "32Gi",
+                },
+            },
+        ),
     ],
 )
 def test_resolve_executor_resources(test_case: TestCase) -> None:
@@ -1032,6 +1109,7 @@ def test_resolve_executor_resources(test_case: TestCase) -> None:
         executor=test_case.config.get("executor"),
         num_executors=test_case.config.get("num_executors"),
         resources_per_executor=test_case.config.get("resources_per_executor"),
+        spark_conf=test_case.config.get("spark_conf"),
     )
 
     assert test_case.expected_status == SUCCESS
@@ -1052,6 +1130,11 @@ def test_resolve_executor_resources(test_case: TestCase) -> None:
         assert instances == 5
         assert cores == 8
         assert memory == "16g"
+
+    elif test_case.name == "spark conf overrides executor configuration":
+        assert instances == 10
+        assert cores == 12
+        assert memory == "32g"
 
     elif test_case.name == "fractional executor memory":
         assert instances == constants.DEFAULT_NUM_EXECUTORS
@@ -1341,18 +1424,45 @@ def test_get_spark_job_executor_spec(test_case: TestCase) -> None:
     "test_case",
     [
         TestCase(
-            name="build spark application for remote uri job",
+            name="minimal file job",
+            expected_status=SUCCESS,
+            config={
+                "name": "test-job",
+                "namespace": "default",
+                "main_file": "s3://bucket/job.py",
+            },
+        ),
+        TestCase(
+            name="file job with arguments",
             expected_status=SUCCESS,
             config={
                 "name": "test-job",
                 "namespace": "default",
                 "main_file": "s3://bucket/job.py",
                 "arguments": ["--date", "2026-06-30"],
+            },
+        ),
+        TestCase(
+            name="file job with executor configuration",
+            expected_status=SUCCESS,
+            config={
+                "name": "test-job",
+                "namespace": "default",
+                "main_file": "s3://bucket/job.py",
                 "num_executors": 3,
                 "resources_per_executor": {
                     "cpu": "2",
                     "memory": "4Gi",
                 },
+            },
+        ),
+        TestCase(
+            name="file job with spark conf",
+            expected_status=SUCCESS,
+            config={
+                "name": "test-job",
+                "namespace": "default",
+                "main_file": "s3://bucket/job.py",
                 "spark_conf": {
                     "spark.sql.shuffle.partitions": "8",
                     "spark.executor.memoryOverhead": "512m",
@@ -1388,37 +1498,39 @@ def test_get_spark_application_cr_from_file_job(test_case: TestCase, mock_k8s_ba
         name=test_case.config["name"],
         namespace=test_case.config["namespace"],
         main_file=test_case.config["main_file"],
-        arguments=test_case.config["arguments"],
-        num_executors=test_case.config["num_executors"],
-        resources_per_executor=test_case.config["resources_per_executor"],
+        arguments=test_case.config.get("arguments"),
+        num_executors=test_case.config.get("num_executors"),
+        resources_per_executor=test_case.config.get("resources_per_executor"),
         options=test_case.config.get("options"),
         backend=mock_k8s_backend,
         spark_conf=test_case.config.get("spark_conf"),
     )
-
     assert test_case.expected_status == SUCCESS
 
     assert app.metadata.name == test_case.config["name"]
     assert app.metadata.namespace == test_case.config["namespace"]
 
-    assert app.spec.main_application_file == test_case.config["main_file"]
-    assert app.spec.arguments == test_case.config["arguments"]
+    if test_case.name == "minimal file job":
+        assert app.spec.main_application_file == test_case.config["main_file"]
 
-    assert app.spec.driver.cores == constants.DEFAULT_DRIVER_CPU
-    assert app.spec.driver.memory == _memory_kubernetes_to_spark(
-        constants.DEFAULT_DRIVER_MEMORY,
-    )
-    assert app.spec.driver.service_account == constants.DEFAULT_SERVICE_ACCOUNT
+        assert app.spec.driver.cores == constants.DEFAULT_DRIVER_CPU
+        assert app.spec.driver.memory == _memory_kubernetes_to_spark(
+            constants.DEFAULT_DRIVER_MEMORY,
+        )
 
-    assert app.spec.executor.instances == test_case.config["num_executors"]
-    assert app.spec.executor.cores == 2
-    assert app.spec.executor.memory == _memory_kubernetes_to_spark(
-        "4Gi",
-    )
-    if test_case.name == "build spark application with options":
+    elif test_case.name == "file job with arguments":
+        assert app.spec.arguments == test_case.config["arguments"]
+
+    elif test_case.name == "file job with executor configuration":
+        assert app.spec.executor.instances == 3
+        assert app.spec.executor.cores == 2
+        assert app.spec.executor.memory == "4g"
+
+    elif test_case.name == "build spark application with options":
         assert app.metadata.labels["team"] == "ml"
 
-    assert app.spec.spark_conf == test_case.config.get("spark_conf")
+    elif test_case.name == "file job with spark conf":
+        assert app.spec.spark_conf == test_case.config["spark_conf"]
 
     print("test execution complete")
 
@@ -1427,18 +1539,48 @@ def test_get_spark_application_cr_from_file_job(test_case: TestCase, mock_k8s_ba
     "test_case",
     [
         TestCase(
-            name="build spark application for function job",
+            name="minimal function job",
             expected_status=SUCCESS,
             config={
                 "name": "test-job",
                 "namespace": "default",
                 "func": sample_function,
-                "func_args": None,
+            },
+        ),
+        TestCase(
+            name="function job with args",
+            expected_status=SUCCESS,
+            config={
+                "name": "test-job",
+                "namespace": "default",
+                "func": sample_function_with_args,
+                "func_args": {
+                    "name": "Alice",
+                    "age": 20,
+                },
+            },
+        ),
+        TestCase(
+            name="function job with executor configuration",
+            expected_status=SUCCESS,
+            config={
+                "name": "test-job",
+                "namespace": "default",
+                "func": sample_function,
                 "num_executors": 3,
                 "resources_per_executor": {
                     "cpu": "2",
                     "memory": "4Gi",
                 },
+            },
+        ),
+        TestCase(
+            name="function job with spark conf",
+            expected_status=SUCCESS,
+            config={
+                "name": "test-job",
+                "namespace": "default",
+                "func": sample_function,
                 "spark_conf": {
                     "spark.sql.shuffle.partitions": "8",
                 },
@@ -1476,9 +1618,9 @@ def test_get_spark_application_cr_from_func_job(
         name=test_case.config["name"],
         namespace=test_case.config["namespace"],
         func=test_case.config["func"],
-        func_args=test_case.config["func_args"],
-        num_executors=test_case.config["num_executors"],
-        resources_per_executor=test_case.config["resources_per_executor"],
+        func_args=test_case.config.get("func_args"),
+        num_executors=test_case.config.get("num_executors"),
+        resources_per_executor=test_case.config.get("resources_per_executor"),
         options=test_case.config.get("options"),
         backend=mock_k8s_backend,
         spark_conf=test_case.config.get("spark_conf"),
@@ -1489,27 +1631,38 @@ def test_get_spark_application_cr_from_func_job(
     assert app.metadata.name == test_case.config["name"]
     assert app.metadata.namespace == test_case.config["namespace"]
 
-    assert app.spec.main_application_file == constants.FUNC_JOB_MAIN_FILE
+    if test_case.name == "minimal function job":
+        assert app.spec.main_application_file == constants.FUNC_JOB_MAIN_FILE
 
-    assert app.spec.driver.init_containers is not None
-    assert len(app.spec.driver.init_containers) == 1
-    assert app.spec.driver.init_containers[0].name == constants.FUNC_JOB_INIT_CONTAINER_NAME
+        assert app.spec.driver.init_containers is not None
+        assert len(app.spec.driver.init_containers) == 1
+        assert app.spec.driver.init_containers[0].name == constants.FUNC_JOB_INIT_CONTAINER_NAME
 
-    assert app.spec.driver.volume_mounts is not None
-    assert len(app.spec.driver.volume_mounts) == 1
-    assert app.spec.driver.volume_mounts[0].name == constants.FUNC_JOB_VOLUME_NAME
+        assert app.spec.driver.volume_mounts is not None
+        assert len(app.spec.driver.volume_mounts) == 1
+        assert app.spec.driver.volume_mounts[0].name == constants.FUNC_JOB_VOLUME_NAME
 
-    assert app.spec.volumes is not None
-    assert len(app.spec.volumes) == 1
-    assert app.spec.volumes[0].name == constants.FUNC_JOB_VOLUME_NAME
+        assert app.spec.volumes is not None
+        assert len(app.spec.volumes) == 1
+        assert app.spec.volumes[0].name == constants.FUNC_JOB_VOLUME_NAME
 
-    assert app.spec.executor.instances == 3
-    assert app.spec.executor.cores == 2
-    assert app.spec.executor.memory == "4g"
+    elif test_case.name == "function job with args":
+        command = app.spec.driver.init_containers[0].command[2]
 
-    if test_case.name == "build spark application from function with options":
+        assert "sample_function_with_args(**" in command
+        assert "'name': 'Alice'" in command
+        assert "'age': 20" in command
+
+    elif test_case.name == "function job with executor configuration":
+        assert app.spec.executor.instances == 3
+        assert app.spec.executor.cores == 2
+        assert app.spec.executor.memory == "4g"
+
+    elif test_case.name == "build spark application from function with options":
         assert app.metadata.labels["team"] == "ml"
-    assert app.spec.spark_conf == test_case.config.get("spark_conf")
+
+    elif test_case.name == "function job with spark conf":
+        assert app.spec.spark_conf == test_case.config["spark_conf"]
 
     print("test execution complete")
 
