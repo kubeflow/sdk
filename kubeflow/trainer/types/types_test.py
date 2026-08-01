@@ -14,7 +14,7 @@
 
 import pytest
 
-from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
+from kubeflow.common.testing import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.types import types
 
 

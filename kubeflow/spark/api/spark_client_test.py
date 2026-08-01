@@ -18,10 +18,10 @@ from unittest.mock import patch
 
 import pytest
 
+from kubeflow.common.testing import FAILED, SUCCESS, TestCase
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.api.spark_client import SparkClient
 from kubeflow.spark.options import Labels
-from kubeflow.spark.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.spark.types.types import (
     FileJob,
     FuncJob,

@@ -28,6 +28,14 @@ from unittest.mock import Mock, patch
 from kubeflow_katib_api import models
 import pytest
 
+from kubeflow.common.testing import (
+    DEFAULT_NAMESPACE,
+    FAILED,
+    RUNTIME,
+    SUCCESS,
+    TIMEOUT,
+    TestCase,
+)
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.optimizer.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.optimizer.constants import constants
@@ -46,14 +54,6 @@ from kubeflow.optimizer.types.search_types import (
     Search,
 )
 import kubeflow.trainer.constants.constants as trainer_constants
-from kubeflow.trainer.test.common import (
-    DEFAULT_NAMESPACE,
-    FAILED,
-    RUNTIME,
-    SUCCESS,
-    TIMEOUT,
-    TestCase,
-)
 from kubeflow.trainer.types import types as trainer_types
 from kubeflow.trainer.types.types import (
     CustomTrainer,

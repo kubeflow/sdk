@@ -12,14 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Shared test utilities and types for Kubeflow Trainer tests.
-# Common helpers have moved to kubeflow.common.testing.
+"""Shared test utilities and types for Kubeflow SDK tests."""
 
-from kubeflow.common.testing import (  # noqa: F401
-    DEFAULT_NAMESPACE,
-    FAILED,
-    RUNTIME,
-    SUCCESS,
-    TIMEOUT,
-    TestCase,
-)
+from dataclasses import dataclass, field
+from typing import Any
+
+# Common status constants
+SUCCESS = "success"
+FAILED = "failed"
+TIMEOUT = "timeout"
+RUNTIME = "runtime"
+DEFAULT_NAMESPACE = "default"
+
+
+@dataclass
+class TestCase:
+    """Test case dataclass for parametrized tests."""
+
+    name: str
+    expected_status: str = SUCCESS
+    config: dict[str, Any] = field(default_factory=dict)
+    expected_output: Any | None = None
+    expected_error: type[Exception] | None = None
+    __test__ = False
