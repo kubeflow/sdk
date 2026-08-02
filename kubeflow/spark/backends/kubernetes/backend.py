@@ -32,7 +32,7 @@ import time
 from typing import Any
 
 from kubeflow_spark_api import models
-from kubernetes import client, config
+from kubernetes import client
 from pyspark.sql import SparkSession
 
 from kubeflow.common import constants as common_constants
@@ -101,25 +101,9 @@ class KubernetesBackend(RuntimeBackend):
             ConfigException:
                 If the Kubernetes configuration cannot be loaded.
         """
-        if backend_config.namespace is None:
-            backend_config.namespace = common_utils.get_default_target_namespace(
-                backend_config.context
-            )
-
-        if backend_config.client_configuration is None:
-            if backend_config.config_file or not common_utils.is_running_in_k8s():
-                config.load_kube_config(
-                    config_file=backend_config.config_file,
-                    context=backend_config.context,
-                )
-            else:
-                config.load_incluster_config()
-
-        k8s_client = client.ApiClient(backend_config.client_configuration)
+        k8s_client, self.namespace = common_utils.get_k8s_client(backend_config)
         self.custom_api = client.CustomObjectsApi(k8s_client)
         self.core_api = client.CoreV1Api(k8s_client)
-
-        self.namespace = backend_config.namespace
 
     # ------------------------------------------------------------------
     # Spark Connect sessions
