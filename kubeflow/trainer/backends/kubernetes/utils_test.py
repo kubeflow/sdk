@@ -1012,6 +1012,22 @@ def _build_builtin_runtime() -> types.Runtime:
             ],
         ),
         TestCase(
+            name="file dataset under a dotted parent path still produces data_files arg",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(),
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(
+                        storage_uri="hf://tatsu-lab/alpaca/my.v2/train/data.json",
+                    ),
+                ),
+            },
+            expected_output=[
+                f"dataset.data_files="
+                f"{os.path.join(constants.DATASET_PATH, 'my.v2/train/data.json')}",
+            ],
+        ),
+        TestCase(
             name="nested directory dataset uri produces data_dir arg",
             expected_status=SUCCESS,
             config={
