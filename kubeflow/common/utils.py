@@ -30,13 +30,15 @@ def get_default_target_namespace(context: str | None = None) -> str:
             if context:
                 for c in all_contexts:
                     if isinstance(c, dict) and c.get("name") == context:
-                        return c["context"]["namespace"]
+                        return c.get("context", {}).get("namespace") or constants.DEFAULT_NAMESPACE
             # Otherwise, try to get namespace from the current context.
-            return current_context["context"]["namespace"]
+            return (
+                current_context.get("context", {}).get("namespace") or constants.DEFAULT_NAMESPACE
+            )
         except Exception:
             return constants.DEFAULT_NAMESPACE
     with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace") as f:
-        return f.readline()
+        return f.read().strip()
 
 
 def validate_wait_for_job_status(polling_interval: int, timeout: int) -> None:
