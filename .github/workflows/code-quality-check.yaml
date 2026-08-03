@@ -34,13 +34,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Check shell script formatting
-        run: |
-          make shell-fmt
-          if ! git diff --quiet; then
-            echo "Shell scripts are not formatted. Run 'make shell-fmt' and commit the changes."
-            git diff
-            false
-          fi
+        run: make shell-fmt-check
 
       - name: Run shellcheck
         run: make shell-lint
