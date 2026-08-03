@@ -14,8 +14,9 @@ Environment Variables
      - Default
      - Description
    * - ``MCP_TRANSPORT``
-     - ``http``
-     - Transport protocol (``http``, ``sse``, ``stdio``)
+     - ``stdio``
+     - Transport protocol (``stdio``, ``http``, ``sse``). The Docker image overrides this
+       default to ``http``.
    * - ``KUBEFLOW_MCP_AUTH_TOKEN``
      - *(none)*
      - Bearer token for HTTP auth
@@ -46,8 +47,9 @@ Environment Variables
      - ``true``
      - Set ``false`` to disable Host/Origin validation (not recommended)
    * - ``LOG_FORMAT``
-     - ``json``
-     - Log format (``json``, ``console``)
+     - *(auto)*
+     - Log format (``json``, ``console``); auto-detected when unset — ``console`` when stderr
+       is a TTY, otherwise ``json``
    * - ``LOG_LEVEL``
      - ``INFO``
      - Log level (``DEBUG``, ``INFO``, ``WARNING``, ``ERROR``)
@@ -68,7 +70,7 @@ CLI Reference
 ``kubeflow-mcp serve``
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: bash
+.. code-block:: text
 
    kubeflow-mcp serve \
      --clients trainer \             # modules: trainer, optimizer (stub), hub (stub)
@@ -108,7 +110,7 @@ Security Model
 ---------------
 
 - **Persona-based tool filtering** restricts which tools are visible to the AI agent (default
-  ``--persona readonly``, which hides all write tools)
+  ``--persona readonly``, which exposes only planning, discovery, monitoring, and health tools)
 - **Policy file** (``~/.kf-mcp-policy.yaml``) can further restrict tools and namespaces
 - **Two-phase confirmation** requires ``confirmed=True`` on write tools (preview first, submit
   after)
@@ -129,8 +131,8 @@ OpenTelemetry tracing is optional and can be enabled without changing tool code.
 
 .. code-block:: bash
 
-   # Install optional dependencies
-   pip install ".[otel]"
+   # Install optional dependencies (a uv dependency group, not a pip extra)
+   uv sync --group otel
 
    # Enable tracing with CLI flag or env var
    kubeflow-mcp serve --otel-endpoint http://localhost:4318

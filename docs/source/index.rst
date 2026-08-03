@@ -98,11 +98,12 @@ Supported Projects
 ----
 
 Kubeflow MCP Server
---------------------
+-------------------
 
-We also have the `MCP Server <https://github.com/kubeflow/mcp-server>`_, that exposes the SDK as `Model Context Protocol <https://modelcontextprotocol.io/>`_
-tools, so agents like Claude, Cursor, or Claude Code can plan, submit, and monitor training jobs
-conversationally — without users needing to learn Kubernetes or the SDK directly.
+We also have the `MCP Server <https://github.com/kubeflow/mcp-server>`_, which exposes the SDK as
+`Model Context Protocol <https://modelcontextprotocol.io/>`_ tools, so agents like Claude, Cursor,
+or Claude Code can plan, submit, and monitor training jobs conversationally — without users
+needing to learn Kubernetes or the SDK directly.
 
 :doc:`Learn more about the MCP Server → <mcp-server/index>`
 

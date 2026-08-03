@@ -30,17 +30,17 @@ Benefits
 Installation
 ------------
 
-Install from source:
+.. code-block:: bash
+
+   pip install kubeflow-mcp
+
+Alternatively, install from source:
 
 .. code-block:: bash
 
    git clone https://github.com/kubeflow/mcp-server.git
    cd mcp-server
    pip install .
-
-.. note::
-
-   Once published to PyPI, install with ``pip install kubeflow-mcp``.
 
 Or run the pre-built multi-arch image published to GHCR on every release:
 
@@ -91,19 +91,19 @@ Once connected, your AI agent can run a complete training workflow through natur
 
 .. code-block:: text
 
-   User: "Fine-tune gemma-2b on the alpaca dataset"
+   User: "Fine-tune Llama 3.2 1B on the alpaca dataset"
 
    Agent calls: check_compatibility()        → ✅ K8s 1.29, Trainer CRD installed
    Agent calls: get_cluster_resources()      → 4x A100 GPUs available
-   Agent calls: estimate_resources("google/gemma-2b") → needs ~16GB GPU, 1x A100
-   Agent calls: list_runtimes()              → torchtune-llama, torchtune-gemma, ...
+   Agent calls: estimate_resources("meta-llama/Llama-3.2-1B") → needs ~8GB GPU, 1x A100
+   Agent calls: list_runtimes()              → torchtune-llama3.2-1b, torchtune-llama3.2-3b, ...
    Agent calls: fine_tune(                   → preview config (confirmed=False)
-       model="hf://google/gemma-2b",
+       model="hf://meta-llama/Llama-3.2-1B",
        dataset="hf://tatsu-lab/alpaca",
-       runtime="torchtune-gemma-2b"
+       runtime="torchtune-llama3.2-1b"
    )
-   Agent calls: fine_tune(..., confirmed=True) → TrainJob "train-gemma-abc" created
-   Agent calls: get_training_logs("train-gemma-abc") → training progress...
+   Agent calls: fine_tune(..., confirmed=True) → TrainJob "train-llama-abc" created
+   Agent calls: get_training_logs("train-llama-abc") → training progress...
 
 Every mutating tool requires ``confirmed=True`` — agents always preview before submitting.
 
@@ -123,7 +123,7 @@ Key Concepts
 ------------
 
 **Persona**: A server-side role filter restricting which tools are visible to a caller.
-Defaults to ``readonly``, which hides all write tools.
+Defaults to ``readonly``, which exposes only planning, discovery, monitoring, and health tools.
 
 **Phase**: One of Planning, Discovery, Training, Monitoring, Lifecycle, Platform, or Health —
 see :doc:`tools` for the full catalog.

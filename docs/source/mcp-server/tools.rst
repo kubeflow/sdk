@@ -1,7 +1,8 @@
 Tools
 =====
 
-The Kubeflow MCP Server exposes 23 tools organized by workflow phase.
+The Kubeflow MCP Server exposes tools organized by workflow phase — see the catalog below for
+the current count.
 
 Tool Catalog
 ------------
@@ -50,17 +51,18 @@ Tool Discovery Modes
      - Tools exposed
      - Description
    * - ``full``
-     - 23
-     - All tools registered directly (default)
+     - up to 23
+     - All persona-allowed tools registered directly (default mode; the default ``readonly``
+       persona exposes 12 of the 23)
    * - ``progressive``
-     - ~3 meta-tools
+     - 3 meta-tools
      - Hierarchical discovery (~85 tokens); agents drill down by phase
    * - ``semantic``
-     - ~2 meta-tools
+     - 2 meta-tools
      - Embedding-search discovery (~69 tokens); agents query by intent
 
 ``progressive`` and ``semantic`` modes significantly reduce token consumption for agent
-workflows compared to registering all 23 tools directly.
+workflows compared to registering all persona-allowed tools directly.
 
 Requirements
 ------------
@@ -76,7 +78,7 @@ Requirements
      - Kubernetes
    * - 0.1.x
      - >= 2.2.0
-     - >= 0.4.0
+     - == 0.4.0
      - 3.10 - 3.12
      - >= 1.27
 
@@ -90,8 +92,9 @@ Container and Kubernetes probes are available without MCP authentication:
    GET /health  # liveness: the server process is accepting HTTP requests
    GET /ready   # readiness: configured clients imported and packaged resources loaded
 
-``/ready`` returns 200 only when both ``clients_ready`` and ``resources_ready`` are true. It
-does not contact Kubernetes or other APIs, so it is not a live dependency check. A missing
-packaged resource Markdown file keeps ``/ready`` at 503 even though ``/health`` and registered
-tools remain available; check the server logs and package contents rather than cluster
-dependencies.
+``/ready`` returns ``{"status": "ready"}`` with HTTP 200 only when the configured clients
+imported successfully **and** all packaged resources loaded; otherwise it returns
+``{"status": "not_ready"}`` with HTTP 503. It does not contact Kubernetes or other APIs, so it
+is not a live dependency check. A missing packaged resource Markdown file keeps ``/ready`` at
+503 even though ``/health`` and registered tools remain available; check the server logs and
+package contents rather than cluster dependencies.
