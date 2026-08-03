@@ -158,11 +158,19 @@ SHELLCHECK_OPTIONS ?=
 
 .PHONY: shell-fmt
 shell-fmt: $(SHFMT) ## Format shell scripts with shfmt.
+	@if [ -z "$(SHELL_SCRIPTS)" ]; then echo "No shell scripts found (not a git repo?)" >&2; exit 1; fi
 	@echo "Running shfmt..."
 	@$(SHFMT) --write --list $(SHFMT_OPTIONS) $(SHELL_SCRIPTS)
 
+.PHONY: shell-fmt-check
+shell-fmt-check: $(SHFMT) ## Check shell script formatting (read-only).
+	@if [ -z "$(SHELL_SCRIPTS)" ]; then echo "No shell scripts found (not a git repo?)" >&2; exit 1; fi
+	@echo "Checking shfmt..."
+	@$(SHFMT) --diff $(SHFMT_OPTIONS) $(SHELL_SCRIPTS)
+
 .PHONY: shell-lint
 shell-lint: $(SHELLCHECK) ## Lint shell scripts with shellcheck.
+	@if [ -z "$(SHELL_SCRIPTS)" ]; then echo "No shell scripts found (not a git repo?)" >&2; exit 1; fi
 	@echo "Running shellcheck..."
 	@$(SHELLCHECK) $(SHELLCHECK_OPTIONS) $(SHELL_SCRIPTS)
 
@@ -183,8 +191,9 @@ $(SHFMT): | $(LOCALBIN)
 	echo "Downloading $${url}"; \
 	tmp=$$(mktemp); \
 	curl -fsSL -o "$${tmp}" "$${url}"; \
+	chmod +x "$${tmp}"; \
+	"$${tmp}" --version > /dev/null 2>&1 || { echo "Downloaded shfmt binary is corrupt" >&2; rm -f "$${tmp}"; exit 1; }; \
 	mv "$${tmp}" "$(SHFMT)"; \
-	chmod +x "$(SHFMT)"; \
 	}
 
 $(SHELLCHECK): | $(LOCALBIN)
@@ -201,10 +210,13 @@ $(SHELLCHECK): | $(LOCALBIN)
 	url="https://github.com/koalaman/shellcheck/releases/download/$(SHELLCHECK_VERSION)/$${archive}"; \
 	echo "Downloading $${url}"; \
 	tmp=$$(mktemp -d); \
+	trap "rm -rf $${tmp}" EXIT; \
 	curl -fsSL "$${url}" | tar -xz -C "$${tmp}"; \
-	mv "$${tmp}/shellcheck-$(SHELLCHECK_VERSION)/shellcheck" "$(SHELLCHECK)"; \
-	chmod +x "$(SHELLCHECK)"; \
-	rm -rf "$${tmp}"; \
+	extracted="$${tmp}/shellcheck-$(SHELLCHECK_VERSION)/shellcheck"; \
+	[ -f "$${extracted}" ] || { echo "shellcheck binary not found in archive" >&2; exit 1; }; \
+	chmod +x "$${extracted}"; \
+	"$${extracted}" --version > /dev/null 2>&1 || { echo "Downloaded shellcheck binary is corrupt" >&2; exit 1; }; \
+	mv "$${extracted}" "$(SHELLCHECK)"; \
 	}
 
 ##@ E2E Testing
