@@ -1,4 +1,4 @@
-# Copyright 2025 The Kubeflow Authors.
+# Copyright The Kubeflow Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,29 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Static formatting and lint checks for shell scripts (no cluster required).
-name: Shell Lint
+name: Code Quality Checks
 
 on:
-  pull_request:
-    branches:
-      - main
-      - release-*
-    paths:
-      - '**.sh'
-      - 'Makefile'
-      - '.github/workflows/shell-lint.yaml'
-      - '.shellcheckrc'
-
   push:
-    branches:
-      - main
-      - release-*
-    paths:
-      - '**.sh'
-      - 'Makefile'
-      - '.github/workflows/shell-lint.yaml'
-      - '.shellcheckrc'
+  pull_request:
 
 permissions:
   contents: read
@@ -44,13 +26,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  shell-lint:
+  code-quality:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
       - name: Check shell script formatting
         run: |
