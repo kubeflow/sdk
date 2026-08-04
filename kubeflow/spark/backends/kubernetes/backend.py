@@ -1268,7 +1268,11 @@ class KubernetesBackend(RuntimeBackend):
         """Get runtime metrics for a Spark job from the Spark REST API.
 
         Args:
-            name: Name of the SparkApplication.
+            name: Name of the SparkApplication Kubernetes object, the same
+                name used by ``get_job`` and ``get_job_logs``. This is not
+                the Spark application id used by the Spark REST API; that id
+                is read from the SparkApplication's status and resolved
+                internally.
 
         Returns:
             SparkJobMetrics with the currently available metrics. Fields are

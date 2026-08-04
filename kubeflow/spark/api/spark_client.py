@@ -327,7 +327,10 @@ class SparkClient:
         was deployed with the web UI service disabled.
 
         Args:
-            name: Spark job name.
+            name: Name of the SparkApplication Kubernetes object, the same
+                name used by ``get_job`` and ``get_job_logs``. Not the Spark
+                application id used by the Spark REST API; that id is
+                resolved internally from the SparkApplication's status.
 
         Returns:
             SparkJobMetrics with the currently available metrics. Fields are
