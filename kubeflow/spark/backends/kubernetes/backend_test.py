@@ -887,7 +887,7 @@ def test_create_and_connect(kubernetes_backend, test_case):
 # --------------------------
 
 
-def _make_connect_info():
+def _make_connect_info() -> SparkConnectInfo:
     return SparkConnectInfo(
         name="test-session",
         namespace=DEFAULT_NAMESPACE,
@@ -1011,12 +1011,16 @@ def test_connect_grpc_ready_delay_from_env_var(kubernetes_backend):
         ),
         patch("kubeflow.spark.backends.kubernetes.backend.SparkSession") as mock_spark_session,
         patch.dict("os.environ", {"SPARK_CONNECT_READY_DELAY_SEC": "0"}, clear=False),
+        patch("kubeflow.spark.backends.kubernetes.backend.time.sleep") as mock_sleep,
     ):
         mock_spark_session.builder.remote.return_value.getOrCreate.return_value = mock_session
 
         result = kubernetes_backend.connect(info, connect_timeout=5)
 
         assert result is mock_session
+        # a delay of 0 must skip the readiness-probing loop entirely, not just
+        # use the default delay
+        mock_sleep.assert_not_called()
 
 
 def test_connect_restarts_dead_port_forward_before_final_attempt(kubernetes_backend):
@@ -1047,6 +1051,9 @@ def test_connect_restarts_dead_port_forward_before_final_attempt(kubernetes_back
 
         assert result is mock_session
         assert mock_get_connect_url.call_count == 2
+        # must actually connect through the replacement port-forward, not the
+        # dead one
+        mock_spark_session.builder.remote.assert_called_once_with("sc://127.0.0.1:15003")
 
 
 @pytest.mark.parametrize(
