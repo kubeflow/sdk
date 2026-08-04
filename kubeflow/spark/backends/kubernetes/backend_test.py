@@ -2051,6 +2051,144 @@ def test_get_job_metrics_success_in_cluster(kubernetes_backend):
         assert "app-123" in mock_get.call_args_list[0].args[0]
 
 
+def test_get_job_metrics_realistic_payload(kubernetes_backend):
+    """get_job_metrics aggregates correctly against real Spark REST API response shapes.
+
+    The fixtures below are trimmed examples of what Spark's own
+    /api/v1/applications/<app-id>/executors and .../stages endpoints actually
+    return for a running job (driver + 2 executors, one active stage and two
+    completed ones), not a synthetic shorthand, to make sure the aggregation
+    logic holds up against the real field set and ignores fields it doesn't
+    use.
+    """
+    with patch(
+        "kubeflow.spark.backends.kubernetes.backend.models.SparkV1beta2SparkApplication.from_dict"
+    ) as mock_from_dict:
+        mock_from_dict.return_value = get_spark_application(
+            name="spark-job-metrics",
+            state="RUNNING",
+            spark_application_id="app-123",
+        )
+
+        executors_payload = [
+            {
+                "id": "driver",
+                "hostPort": "spark-job-metrics-driver-svc.default:7079",
+                "isActive": True,
+                "rddBlocks": 0,
+                "memoryUsed": 0,
+                "diskUsed": 0,
+                "totalCores": 0,
+                "activeTasks": 0,
+                "failedTasks": 0,
+                "completedTasks": 0,
+                "totalTasks": 0,
+                "totalDuration": 0,
+                "totalGCTime": 0,
+                "totalInputBytes": 0,
+                "totalShuffleRead": 0,
+                "totalShuffleWrite": 0,
+                "maxMemory": 908381388,
+            },
+            {
+                "id": "1",
+                "hostPort": "10.244.0.12:37273",
+                "isActive": True,
+                "rddBlocks": 4,
+                "memoryUsed": 20480,
+                "diskUsed": 0,
+                "totalCores": 1,
+                "activeTasks": 1,
+                "failedTasks": 0,
+                "completedTasks": 12,
+                "totalTasks": 13,
+                "totalDuration": 4032,
+                "totalGCTime": 88,
+                "totalInputBytes": 1048576,
+                "totalShuffleRead": 0,
+                "totalShuffleWrite": 2048,
+                "maxMemory": 454193254,
+            },
+            {
+                "id": "2",
+                "hostPort": "10.244.0.13:41111",
+                "isActive": True,
+                "rddBlocks": 4,
+                "memoryUsed": 20480,
+                "diskUsed": 0,
+                "totalCores": 1,
+                "activeTasks": 0,
+                "failedTasks": 1,
+                "completedTasks": 11,
+                "totalTasks": 12,
+                "totalDuration": 3810,
+                "totalGCTime": 65,
+                "totalInputBytes": 1048576,
+                "totalShuffleRead": 2048,
+                "totalShuffleWrite": 0,
+                "maxMemory": 454193254,
+            },
+        ]
+        stages_payload = [
+            {
+                "status": "ACTIVE",
+                "stageId": 2,
+                "attemptId": 0,
+                "numTasks": 10,
+                "numActiveTasks": 1,
+                "numCompleteTasks": 9,
+                "numFailedTasks": 0,
+                "name": "count at NativeMethodAccessorImpl.java:0",
+            },
+            {
+                "status": "COMPLETE",
+                "stageId": 1,
+                "attemptId": 0,
+                "numTasks": 8,
+                "numActiveTasks": 0,
+                "numCompleteTasks": 8,
+                "numFailedTasks": 0,
+                "name": "map at NativeMethodAccessorImpl.java:0",
+            },
+            {
+                "status": "COMPLETE",
+                "stageId": 0,
+                "attemptId": 0,
+                "numTasks": 5,
+                "numActiveTasks": 0,
+                "numCompleteTasks": 4,
+                "numFailedTasks": 1,
+                "name": "textFile at NativeMethodAccessorImpl.java:0",
+            },
+        ]
+
+        with (
+            patch.object(
+                kubernetes_backend.core_api,
+                "list_namespaced_service",
+                return_value=client.V1ServiceList(items=[_mock_ui_service()]),
+            ),
+            patch.dict("os.environ", {"KUBERNETES_SERVICE_HOST": "10.96.0.1"}, clear=False),
+            patch(
+                "kubeflow.spark.backends.kubernetes.backend.requests.get",
+                side_effect=[
+                    _mock_requests_response(executors_payload),
+                    _mock_requests_response(stages_payload),
+                ],
+            ),
+        ):
+            metrics = kubernetes_backend.get_job_metrics("spark-job-metrics")
+
+        assert metrics == SparkJobMetrics(
+            num_executors=3,
+            active_tasks=1,
+            completed_tasks=23,
+            failed_tasks=1,
+            active_stages=1,
+            completed_stages=2,
+        )
+
+
 def test_get_job_metrics_rest_api_unreachable(kubernetes_backend):
     """get_job_metrics returns empty metrics instead of raising when the REST API can't be reached."""
     with patch(
