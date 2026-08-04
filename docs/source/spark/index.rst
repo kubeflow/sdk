@@ -93,6 +93,23 @@ Common Patterns
        },
    )
 
+**Set Spark configuration properties:**
+
+.. code-block:: python
+
+   spark = client.connect(
+       num_executors=3,
+       resources_per_executor={"cpu": "4", "memory": "4Gi"},
+       spark_conf={
+           "spark.sql.adaptive.enabled": "true",
+           "spark.sql.shuffle.partitions": "200",
+           "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
+       },
+   )
+
+``spark_conf`` maps directly to Spark configuration properties and is applied when
+the session is created.
+
 **Create a DataFrame from a range:**
 
 .. code-block:: python
@@ -126,6 +143,131 @@ Common Patterns
 
    result = df.groupBy().count()
    result.show()
+
+Advanced Options
+-----------------
+
+Beyond ``num_executors``, ``resources_per_executor``, and ``spark_conf``, ``connect()``
+accepts an ``options`` list for Kubernetes-native configuration — labels, annotations,
+node placement, tolerations, pod template overrides, and session naming. The options
+pattern is designed for extensibility: new option types can be added in future SDK
+versions without changing the core ``connect()`` signature.
+
+**Labels and annotations**, for resource organization and tooling metadata:
+
+.. code-block:: python
+
+   from kubeflow.spark import Annotations, Labels, SparkClient
+
+   client = SparkClient()
+
+   spark = client.connect(
+       num_executors=3,
+       resources_per_executor={"cpu": "2", "memory": "4Gi"},
+       options=[
+           Labels(
+               {
+                   "app": "spark",
+                   "team": "data-engineering",
+                   "environment": "production",
+               }
+           ),
+           Annotations(
+               {
+                   "description": "Daily ETL pipeline for customer data",
+                   "owner": "data-team@company.com",
+               }
+           ),
+       ],
+   )
+
+**Node selection**, to constrain pods to nodes with matching labels — useful for
+dedicated Spark infrastructure or GPU nodes:
+
+.. code-block:: python
+
+   from kubeflow.spark import NodeSelector, SparkClient
+
+   client = SparkClient()
+
+   spark = client.connect(
+       num_executors=5,
+       resources_per_executor={"cpu": "4", "memory": "16Gi", "nvidia.com/gpu": "1"},
+       options=[
+           NodeSelector({"node-type": "spark-gpu", "workload": "ml"}),
+       ],
+   )
+
+**Tolerations**, to allow scheduling on tainted nodes — for example, dedicated Spark
+nodes or spot instances:
+
+.. code-block:: python
+
+   from kubeflow.spark import SparkClient, Toleration
+
+   client = SparkClient()
+
+   spark = client.connect(
+       num_executors=10,
+       resources_per_executor={"cpu": "8", "memory": "32Gi"},
+       options=[
+           Toleration(
+               key="spot-instance",
+               operator="Exists",
+               effect="NoSchedule",
+           ),
+       ],
+   )
+
+**Custom session name**, via the ``Name`` option. If not specified, a name is
+auto-generated in the form ``spark-connect-{uuid}``:
+
+.. code-block:: python
+
+   from kubeflow.spark import Name, SparkClient
+
+   client = SparkClient()
+
+   spark = client.connect(
+       num_executors=3,
+       resources_per_executor={"cpu": "2", "memory": "4Gi"},
+       options=[Name("custom-session-name")],
+   )
+
+**Pod template overrides**, for full control over pod specifications — for example,
+security contexts, volumes, or sidecars. Use with caution, since overrides can
+conflict with SDK-managed settings:
+
+.. code-block:: python
+
+   from kubeflow.spark import Driver, Executor, PodTemplateOverride, SparkClient
+
+   client = SparkClient()
+
+   spark = client.connect(
+       driver=Driver(resources={"cpu": "2", "memory": "4Gi"}),
+       executor=Executor(
+           num_instances=5,
+           resources_per_executor={"cpu": "4", "memory": "8Gi"},
+       ),
+       options=[
+           PodTemplateOverride(
+               role="executor",
+               template={
+                   "spec": {
+                       "securityContext": {
+                           "runAsUser": 1000,
+                           "runAsNonRoot": True,
+                       },
+                   }
+               },
+           ),
+       ],
+   )
+
+Options are composable — production setups typically combine several at once (name,
+labels, annotations, node selection, and tolerations together) to fully describe how
+a session should run and be scheduled.
 
 Connecting to Existing Spark Connect Servers
 --------------------------------------------
