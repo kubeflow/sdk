@@ -30,6 +30,7 @@ from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.spark.backends.kubernetes.utils import (
     validate_spark_connect_url,
 )
+from kubeflow.spark.options import Labels, Name
 from kubeflow.spark.test.common import (
     DEFAULT_NAMESPACE,
     FAILED,
@@ -41,7 +42,6 @@ from kubeflow.spark.test.common import (
     TIMEOUT,
     TestCase,
 )
-from kubeflow.spark.types.options import Labels, Name
 from kubeflow.spark.types.types import (
     FileJob,
     FuncJob,

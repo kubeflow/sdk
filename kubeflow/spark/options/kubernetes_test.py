@@ -21,8 +21,7 @@ import pytest
 
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
-from kubeflow.spark.test.common import FAILED, SUCCESS, TestCase
-from kubeflow.spark.types.options import (
+from kubeflow.spark.options import (
     Annotations,
     Labels,
     Name,
@@ -30,6 +29,7 @@ from kubeflow.spark.types.options import (
     PodTemplateOverride,
     Toleration,
 )
+from kubeflow.spark.test.common import FAILED, SUCCESS, TestCase
 
 
 @pytest.fixture

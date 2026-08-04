@@ -44,8 +44,8 @@ from kubeflow.spark.backends.kubernetes.utils import (
     read_pod_logs,
     validate_spark_connect_url,
 )
+from kubeflow.spark.options import Labels
 from kubeflow.spark.test.common import FAILED, SUCCESS, TestCase
-from kubeflow.spark.types.options import Labels
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
