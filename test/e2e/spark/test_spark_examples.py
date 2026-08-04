@@ -24,7 +24,7 @@ import pytest
 
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.backends.kubernetes import KubernetesBackend
-from kubeflow.spark.types.options import Name
+from kubeflow.spark.options import Name
 from kubeflow.spark.types.types import SparkConnectState
 
 from .cluster_watcher import run_watcher_in_thread
