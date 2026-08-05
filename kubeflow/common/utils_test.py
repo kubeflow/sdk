@@ -67,3 +67,66 @@ def test_validate_wait_for_job_status(test_case):
             utils.validate_wait_for_job_status(polling_interval, timeout)
     else:
         utils.validate_wait_for_job_status(polling_interval, timeout)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid simple name",
+            expected_status=SUCCESS,
+            config={"name": "my-train-job"},
+        ),
+        TestCase(
+            name="valid name with uuid suffix",
+            expected_status=SUCCESS,
+            config={"name": "a1b2c3d4e5f6"},
+        ),
+        TestCase(
+            name="forward slash rejected",
+            expected_status=SUCCESS,
+            config={"name": "experiment/run_1"},
+            expected_error=ValueError,
+            expected_output="Invalid job name",
+        ),
+        TestCase(
+            name="backslash rejected",
+            expected_status=SUCCESS,
+            config={"name": "experiment\\run_1"},
+            expected_error=ValueError,
+            expected_output="Invalid job name",
+        ),
+        TestCase(
+            name="path traversal rejected",
+            expected_status=SUCCESS,
+            config={"name": "../run"},
+            expected_error=ValueError,
+            expected_output="Invalid job name",
+        ),
+        TestCase(
+            name="current directory rejected",
+            expected_status=SUCCESS,
+            config={"name": "."},
+            expected_error=ValueError,
+            expected_output="Invalid job name",
+        ),
+        TestCase(
+            name="parent directory rejected",
+            expected_status=SUCCESS,
+            config={"name": ".."},
+            expected_error=ValueError,
+            expected_output="Invalid job name",
+        ),
+    ],
+)
+def test_validate_filesystem_safe_name(test_case):
+    """Test validate_filesystem_safe_name across valid and invalid inputs."""
+    print("Executing test:", test_case.name)
+
+    name = test_case.config["name"]
+
+    if test_case.expected_error:
+        with pytest.raises(test_case.expected_error, match=test_case.expected_output):
+            utils.validate_filesystem_safe_name(name)
+    else:
+        utils.validate_filesystem_safe_name(name)

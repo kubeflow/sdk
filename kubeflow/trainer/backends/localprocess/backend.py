@@ -20,6 +20,7 @@ import tempfile
 import time
 import uuid
 
+import kubeflow.common.utils as common_utils
 from kubeflow.trainer.backends.base import RuntimeBackend
 from kubeflow.trainer.backends.localprocess import utils as local_utils
 from kubeflow.trainer.backends.localprocess.constants import local_runtimes
@@ -98,6 +99,7 @@ class LocalProcessBackend(RuntimeBackend):
             random.choice(string.ascii_lowercase)
             + uuid.uuid4().hex[: constants.JOB_NAME_UUID_LENGTH]
         )
+        common_utils.validate_filesystem_safe_name(trainjob_name)
 
         # localprocess backend only supports CustomTrainer
         if not isinstance(trainer, types.CustomTrainer):

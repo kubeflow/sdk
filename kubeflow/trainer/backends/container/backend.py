@@ -47,6 +47,7 @@ import shutil
 import string
 import uuid
 
+import kubeflow.common.utils as common_utils
 from kubeflow.trainer.backends.base import RuntimeBackend
 from kubeflow.trainer.backends.container import utils as container_utils
 from kubeflow.trainer.backends.container.adapters.base import (
@@ -286,6 +287,7 @@ class ContainerBackend(RuntimeBackend):
             random.choice(string.ascii_lowercase)
             + uuid.uuid4().hex[: constants.JOB_NAME_UUID_LENGTH]
         )
+        common_utils.validate_filesystem_safe_name(trainjob_name)
 
         logger.debug(f"Starting training job: {trainjob_name}")
         try:
