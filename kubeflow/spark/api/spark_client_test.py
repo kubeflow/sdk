@@ -52,32 +52,19 @@ from kubeflow.spark.types.types import (
 def test_create_and_connect(test_case: TestCase):
     """Test SparkClient initialization scenarios."""
 
-    try:
-        if "namespace" in test_case.config:
-            with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock:
-                SparkClient(
-                    backend_config=KubernetesBackendConfig(namespace=test_case.config["namespace"])
-                )
-                mock.assert_called_once()
-        elif "backend_config" in test_case.config:
-            SparkClient(backend_config=test_case.config["backend_config"])
-        else:
-            with patch("kubeflow.spark.api.spark_client.KubernetesBackend"):
-                client = SparkClient()
-                assert client.backend is not None
-
-        # If we reach here but expected an exception, fail
-        assert test_case.expected_status == SUCCESS, (
-            f"Expected exception but none was raised for {test_case.name}"
-        )
-    except Exception as e:
-        # If we got an exception but expected success, fail
-        assert test_case.expected_status == FAILED, f"Unexpected exception in {test_case.name}: {e}"
-        # Validate the exception type if specified
-        if test_case.expected_error:
-            assert isinstance(e, test_case.expected_error), (
-                f"Expected exception type '{test_case.expected_error.__name__}' but got '{type(e).__name__}: {str(e)}'"
+    if test_case.expected_status == FAILED:
+        with pytest.raises(test_case.expected_error):
+            SparkClient(backend_config=test_case.config.get("backend_config"))
+    elif "namespace" in test_case.config:
+        with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock:
+            SparkClient(
+                backend_config=KubernetesBackendConfig(namespace=test_case.config["namespace"])
             )
+            mock.assert_called_once()
+    else:
+        with patch("kubeflow.spark.api.spark_client.KubernetesBackend"):
+            client = SparkClient()
+            assert client.backend is not None
 
 
 @pytest.mark.parametrize(
