@@ -43,7 +43,7 @@ NON_MPI_IMPORT_PATH_PRELUDE = (
     "_kubeflow_working_directory = os.getcwd()\n"
     "if sys.path and os.path.realpath(sys.path[0]) == _kubeflow_generated_script_directory:\n"
     "    sys.path[0] = _kubeflow_working_directory\n"
-    "else:\n"
+    'elif not getattr(sys.flags, "safe_path", False):\n'
     "    sys.path.insert(0, _kubeflow_working_directory)\n\n"
 )
 
@@ -761,8 +761,17 @@ def test_generated_command_runs_from_read_only_working_directory(
         ):
             owned_python_cache_file.unlink()
 
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "working-directory:existing-python-path"
+    if safe_path_enabled:
+        # Under PYTHONSAFEPATH the working directory must stay off sys.path, so the module that
+        # lives there is not importable. The existing PYTHONPATH entry is still honoured, which is
+        # what Python itself does when no prelude is involved.
+        assert result.returncode != 0
+        assert "ModuleNotFoundError" in result.stderr
+        assert working_directory_module_name in result.stderr
+        assert "existing_python_path_module" not in result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "working-directory:existing-python-path"
 
 
 @pytest.mark.parametrize(
