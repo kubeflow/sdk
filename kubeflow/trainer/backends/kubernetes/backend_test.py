@@ -302,7 +302,7 @@ def get_custom_trainer(
         "if sys.path and os.path.realpath(sys.path[0]) == "
         "_kubeflow_generated_script_directory:\n"
         "    sys.path[0] = _kubeflow_working_directory\n"
-        "else:\n"
+        'elif not getattr(sys.flags, "safe_path", False):\n'
         "    sys.path.insert(0, _kubeflow_working_directory)\n\n"
         "def sample_train_func() -> None:\n"
         '    """Sample training function."""\n'
