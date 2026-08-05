@@ -99,6 +99,29 @@ Or check the job status:
    job = client.get_job(job_name)
    print(f"Status: {job.status}")
 
+Optional: Configure TrainJob options
+------------------------------------
+
+To customize your training job, you can pass options when submitting it in Step 2. Options allow you to set custom names, labels, annotations, or configure the Kubernetes ``RuntimePatch`` API.
+
+Import the options from ``kubeflow.trainer.options`` and pass them as a list to the ``options`` argument:
+
+.. code-block:: python
+
+   from kubeflow.trainer.options import Name, Labels, Annotations
+
+   # Submit the job with custom name, labels, and annotations
+   job_name = client.train(
+       trainer=CustomTrainer(func=train_mnist),
+       options=[
+           Name("my-mnist-job"),
+           Labels({"team": "ml-platform"}),
+           Annotations({"description": "Quickstart training job"}),
+       ]
+   )
+
+For more advanced configurations, such as mounting volumes or customizing container resources via the ``RuntimePatch`` API, see the :doc:`../train/options` guide.
+
 Step 4: Wait for Completion
 ---------------------------
 
