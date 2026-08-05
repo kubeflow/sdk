@@ -164,6 +164,9 @@ class ReplicatedJobPatch:
         template: Job template patches.
     """
 
+    # TODO: Once upstream Kubeflow Training Operator RuntimePatches support setting
+    # Replicas for ReplicatedJobs, extend this dataclass with a `replicas` field
+    # and add a corresponding `NumReplicas` option to easily configure TrainJobs.
     name: str
     template: JobTemplatePatch | None = None
 

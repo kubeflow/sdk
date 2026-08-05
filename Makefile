@@ -54,10 +54,6 @@ uv: ## Install UV
 	  echo "✅ uv has been installed."; \
 	}
 
-.PHONY: ruff
-ruff: ## Install Ruff
-	@uv run ruff --help &> /dev/null || uv tool install ruff
-
 .PHONY: verify
 verify: install-dev  ## install all required tools
 	@uv lock --check
@@ -154,10 +150,10 @@ test-scripts: uv-venv  ## Run GitHub Actions script tests
 
 
 .PHONY: install-dev
-install-dev: uv uv-venv ruff  ## Install uv, create .venv, sync deps.
+install-dev: uv uv-venv  ## Install uv, create .venv, sync deps. Accepts extras="..." and groups="...".
 	@echo "Using virtual environment at: $(VENV_DIR)"
 	@echo "Syncing dependencies with uv..."
-	@uv sync
+	@uv sync $(addprefix --extra ,$(extras)) $(groups)
 	@echo "Environment is ready."
 
 ## Documentation

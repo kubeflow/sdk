@@ -448,6 +448,11 @@ class KubernetesBackend(RuntimeBackend):
         Returns:
             (connect_url, port_forward_process or None). Caller may keep process reference;
             process exits when the Python process exits.
+
+        Raises:
+            RuntimeError: If the session reports no port-forward target, if
+                build_service_url cannot resolve an in-cluster host, or if
+                port-forward fails for every candidate.
         """
         if os.environ.get("KUBERNETES_SERVICE_HOST"):
             url = build_service_url(info)
@@ -457,19 +462,20 @@ class KubernetesBackend(RuntimeBackend):
         if port is None:
             port_str = os.environ.get("SPARK_CONNECT_LOCAL_PORT")
             port = int(port_str) if port_str else random.randint(15002, 16002)
-        # Prefer pod when available (bypasses Service/EndpointSlice); then try svc names
+        # Prefer pod when available (bypasses Service/EndpointSlice); then try svc name
         candidates: list[tuple[str, str]] = []
         if info.driver_pod_name:
             candidates.append(("pod", info.driver_pod_name))
-        for svc in [f"{info.name}-svc", info.service_name, f"{info.name}-server"]:
-            if svc and not any(c[0] == "svc" and c[1] == svc for c in candidates):
-                candidates.append(("svc", svc))
-        seen: set[str] = set()
+        if info.service_name:
+            candidates.append(("svc", info.service_name))
+        if not candidates:
+            raise RuntimeError(
+                f"No port-forward target for {info.namespace}/{info.name}: neither "
+                "status.server.podName nor status.server.serviceName is populated. "
+                "The session is not ready."
+            )
         for kind, target in candidates:
             key = f"{kind}/{target}"
-            if key in seen:
-                continue
-            seen.add(key)
             # Use 127.0.0.1 instead of localhost to force IPv4 (gRPC may prefer IPv6 which can fail)
             url = f"sc://127.0.0.1:{port}"
             cmd = [
