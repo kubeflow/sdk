@@ -195,6 +195,8 @@ class LocalProcessBackend(RuntimeBackend):
         name: str,
         follow: bool = False,
         step: str = constants.NODE + "-0",
+        timeout: int = 600,
+        polling_interval: int = 2,
     ) -> Iterator[str]:
         _job = [j for j in self.__local_jobs if j.name == name]
         if not _job:
