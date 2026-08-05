@@ -1371,22 +1371,6 @@ def test_get_command_using_spark_func(test_case: TestCase) -> None:
             expected_status=SUCCESS,
             config={},
         ),
-        TestCase(
-            name="spark conf overrides executor spec",
-            expected_status=SUCCESS,
-            config={
-                "num_executors": 2,
-                "resources_per_executor": {
-                    "cpu": "2",
-                    "memory": "4Gi",
-                },
-                "spark_conf": {
-                    "spark.executor.instances": "5",
-                    "spark.executor.cores": "4",
-                    "spark.executor.memory": "8Gi",
-                },
-            },
-        ),
     ],
 )
 def test_get_spark_job_executor_spec(test_case: TestCase) -> None:
@@ -1399,22 +1383,16 @@ def test_get_spark_job_executor_spec(test_case: TestCase) -> None:
         resources_per_executor=test_case.config.get(
             "resources_per_executor",
         ),
-        spark_conf=test_case.config.get("spark_conf"),
     )
 
     assert test_case.expected_status == SUCCESS
 
-    if test_case.name == "default spark job executor spec":
-        assert spec.instances == constants.DEFAULT_NUM_EXECUTORS
-        assert spec.cores == constants.DEFAULT_EXECUTOR_CPU
-        assert spec.memory == _memory_kubernetes_to_spark(
-            constants.DEFAULT_EXECUTOR_MEMORY,
-        )
 
-    elif test_case.name == "spark conf overrides executor spec":
-        assert spec.instances == 5
-        assert spec.cores == 4
-        assert spec.memory == "8g"
+    assert spec.instances == constants.DEFAULT_NUM_EXECUTORS
+    assert spec.cores == constants.DEFAULT_EXECUTOR_CPU
+    assert spec.memory == _memory_kubernetes_to_spark(
+        constants.DEFAULT_EXECUTOR_MEMORY,
+    )
 
     print("test execution complete")
 

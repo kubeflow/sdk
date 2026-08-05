@@ -686,18 +686,12 @@ def get_spark_job_driver_spec(
 def get_spark_job_executor_spec(
     num_executors: int | None = None,
     resources_per_executor: dict[str, str] | None = None,
-    spark_conf: dict[str, str] | None = None,
 ) -> models.SparkV1beta2ExecutorSpec:
     """Build ExecutorSpec for SparkApplication.
 
     Args:
         num_executors: Number of executor instances.
         resources_per_executor: Resource requirements for each executor.
-        spark_conf:
-            Spark configuration properties. Executor-related properties
-            (``spark.executor.instances``, ``spark.executor.cores``, and
-            ``spark.executor.memory``) override values provided through
-            ``num_executors`` and ``resources_per_executor``.
 
     Returns:
         SparkApplication ExecutorSpec model.
@@ -710,22 +704,6 @@ def get_spark_job_executor_spec(
         num_executors=num_executors,
         resources_per_executor=resources_per_executor,
     )
-
-    if spark_conf:
-        if "spark.executor.instances" in spark_conf:
-            instances = int(
-                spark_conf["spark.executor.instances"],
-            )
-
-        if "spark.executor.cores" in spark_conf:
-            cores = _validate_cpu_value(
-                spark_conf["spark.executor.cores"],
-            )
-
-        if "spark.executor.memory" in spark_conf:
-            memory = _memory_kubernetes_to_spark(
-                spark_conf["spark.executor.memory"],
-            )
 
     return models.SparkV1beta2ExecutorSpec(
         instances=instances,
@@ -865,7 +843,6 @@ def get_spark_application_cr_from_file_job(
             executor=get_spark_job_executor_spec(
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
-                spark_conf=spark_conf,
             ),
             spark_conf=spark_conf or None,
         ),
@@ -936,7 +913,6 @@ def get_spark_application_cr_from_func_job(
             executor=get_spark_job_executor_spec(
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
-                spark_conf=spark_conf,
             ),
             spark_conf=spark_conf or None,
         ),
