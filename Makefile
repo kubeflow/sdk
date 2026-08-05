@@ -123,7 +123,7 @@ release: ## Create a release commit. Usage: make release VERSION=X.Y.Z GITHUB_TO
  # make test-python will produce html coverage by default. Run with `make test-python report=xml` to produce xml report.
 .PHONY: test-python
 test-python: uv-venv  ## Run Python unit tests
-	@uv sync --extra spark
+	@uv sync --extra spark --extra telemetry
 	@uv run coverage run --source=kubeflow -m pytest ./kubeflow/
 	@uv run coverage report --omit='*_test.py' --skip-covered --skip-empty
 ifeq ($(report),xml)

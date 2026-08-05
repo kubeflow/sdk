@@ -28,6 +28,7 @@ from kubeflow_trainer_api import models
 from kubernetes import client, config, watch
 
 import kubeflow.common.constants as common_constants
+from kubeflow.common.telemetry import SpanAttributes, SpanNames, get_tracer
 from kubeflow.common.types import KubernetesBackendConfig
 import kubeflow.common.utils as common_utils
 from kubeflow.trainer.backends.base import RuntimeBackend
@@ -56,6 +57,7 @@ class KubernetesBackend(RuntimeBackend):
         self.core_api = client.CoreV1Api(k8s_client)
 
         self.namespace = cfg.namespace
+        self._tracer = get_tracer("kubeflow.trainer")
 
         # Perform control-plane version metadata verification.
         self.verify_backend()
@@ -302,76 +304,89 @@ class KubernetesBackend(RuntimeBackend):
         | None = None,
         options: list | None = None,
     ) -> str:
-        # Process options to extract configuration
-        job_spec = {}
-        labels = None
-        annotations = None
-        name = None
-        trainer_overrides = {}
-        runtime_patches = None
+        with self._tracer.start_as_current_span(SpanNames.TRAINER_TRAIN) as span:
+            span.set_attribute(SpanAttributes.NAMESPACE, self.namespace)
+            span.set_attribute(SpanAttributes.BACKEND, "kubernetes")
+            if isinstance(runtime, str):
+                span.set_attribute(SpanAttributes.TRAINJOB_RUNTIME, runtime)
+            try:
+                # Process options to extract configuration
+                job_spec = {}
+                labels = None
+                annotations = None
+                name = None
+                trainer_overrides = {}
+                runtime_patches = None
 
-        if options:
-            for option in options:
-                option(job_spec, trainer, self)
+                if options:
+                    for option in options:
+                        option(job_spec, trainer, self)
 
-            metadata_section = job_spec.get("metadata", {})
-            labels = metadata_section.get("labels")
-            annotations = metadata_section.get("annotations")
-            name = metadata_section.get("name")
+                    metadata_section = job_spec.get("metadata", {})
+                    labels = metadata_section.get("labels")
+                    annotations = metadata_section.get("annotations")
+                    name = metadata_section.get("name")
 
-            # Extract spec-level configurations
-            spec_section = job_spec.get("spec", {})
-            trainer_overrides = spec_section.get("trainer", {})
-            runtime_patches = spec_section.get("runtimePatches")
+                    # Extract spec-level configurations
+                    spec_section = job_spec.get("spec", {})
+                    trainer_overrides = spec_section.get("trainer", {})
+                    runtime_patches = spec_section.get("runtimePatches")
 
-        # Generate unique name for the TrainJob if not provided
-        train_job_name = name or (
-            random.choice(string.ascii_lowercase)
-            + uuid.uuid4().hex[: constants.JOB_NAME_UUID_LENGTH]
-        )
+                # Generate unique name for the TrainJob if not provided
+                train_job_name = name or (
+                    random.choice(string.ascii_lowercase)
+                    + uuid.uuid4().hex[: constants.JOB_NAME_UUID_LENGTH]
+                )
 
-        # Build the TrainJob spec using the common _get_trainjob_spec method
-        trainjob_spec = self._get_trainjob_spec(
-            runtime=runtime,
-            initializer=initializer,
-            trainer=trainer,
-            trainer_overrides=trainer_overrides,
-            runtime_patches=runtime_patches,
-        )
+                # Build the TrainJob spec using the common _get_trainjob_spec method
+                trainjob_spec = self._get_trainjob_spec(
+                    runtime=runtime,
+                    initializer=initializer,
+                    trainer=trainer,
+                    trainer_overrides=trainer_overrides,
+                    runtime_patches=runtime_patches,
+                )
 
-        # Build the TrainJob.
-        train_job = models.TrainerV1alpha1TrainJob(
-            apiVersion=constants.API_VERSION,
-            kind=constants.TRAINJOB_KIND,
-            metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
-                name=train_job_name, labels=labels, annotations=annotations
-            ),
-            spec=trainjob_spec,
-        )
+                # Build the TrainJob.
+                train_job = models.TrainerV1alpha1TrainJob(
+                    apiVersion=constants.API_VERSION,
+                    kind=constants.TRAINJOB_KIND,
+                    metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                        name=train_job_name, labels=labels, annotations=annotations
+                    ),
+                    spec=trainjob_spec,
+                )
 
-        # Create the TrainJob.
-        try:
-            self.custom_api.create_namespaced_custom_object(
-                constants.GROUP,
-                constants.VERSION,
-                self.namespace,
-                constants.TRAINJOB_PLURAL,
-                train_job.to_dict(),
-            )
-        except multiprocessing.TimeoutError as e:
-            raise TimeoutError(
-                f"Timeout to create {constants.TRAINJOB_KIND}: {self.namespace}/{train_job_name}"
-            ) from e
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to create {constants.TRAINJOB_KIND}: {self.namespace}/{train_job_name}"
-            ) from e
+                # Create the TrainJob.
+                try:
+                    self.custom_api.create_namespaced_custom_object(
+                        constants.GROUP,
+                        constants.VERSION,
+                        self.namespace,
+                        constants.TRAINJOB_PLURAL,
+                        train_job.to_dict(),
+                    )
+                except multiprocessing.TimeoutError as e:
+                    raise TimeoutError(
+                        f"Timeout to create {constants.TRAINJOB_KIND}: "
+                        f"{self.namespace}/{train_job_name}"
+                    ) from e
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Failed to create {constants.TRAINJOB_KIND}: "
+                        f"{self.namespace}/{train_job_name}"
+                    ) from e
 
-        logger.debug(
-            f"{constants.TRAINJOB_KIND} {self.namespace}/{train_job_name} has been created"
-        )
+                logger.debug(
+                    f"{constants.TRAINJOB_KIND} {self.namespace}/{train_job_name} has been created"
+                )
 
-        return train_job_name
+                span.set_attribute(SpanAttributes.TRAINJOB_NAME, train_job_name)
+                return train_job_name
+            except Exception as e:
+                span.set_attribute(SpanAttributes.ERROR_TYPE, type(e).__name__)
+                span.record_exception(e)
+                raise
 
     def list_jobs(self, runtime: types.Runtime | None = None) -> list[types.TrainJob]:
         result = []
@@ -491,28 +506,38 @@ class KubernetesBackend(RuntimeBackend):
                 f"Received polling_interval={polling_interval}, timeout={timeout}"
             )
 
-        for _ in range(round(timeout / polling_interval)):
-            # Check the status after event is generated for the TrainJob's Pods.
-            trainjob = self.get_job(name)
-            logger.debug(f"TrainJob {name}, status {trainjob.status}")
+        with self._tracer.start_as_current_span(SpanNames.TRAINER_POLL_STATUS) as poll_span:
+            poll_span.set_attribute(SpanAttributes.TRAINJOB_NAME, name)
+            poll_span.set_attribute(SpanAttributes.POLL_TIMEOUT, timeout)
+            poll_span.set_attribute(SpanAttributes.POLL_INTERVAL, polling_interval)
+            for _ in range(round(timeout / polling_interval)):
+                # Check the status after event is generated for the TrainJob's Pods.
+                trainjob = self.get_job(name)
+                logger.debug(f"TrainJob {name}, status {trainjob.status}")
 
-            # Invoke callbacks if provided
-            if callbacks:
-                for callback in callbacks:
-                    callback(trainjob)
+                # Invoke callbacks if provided
+                if callbacks:
+                    for callback in callbacks:
+                        callback(trainjob)
 
-            # Raise an error if TrainJob is Failed and it is not the expected status.
-            if (
-                constants.TRAINJOB_FAILED not in status
-                and trainjob.status == constants.TRAINJOB_FAILED
-            ):
-                raise RuntimeError(f"TrainJob {name} is Failed")
+                # Raise an error if TrainJob is Failed and it is not the expected status.
+                if (
+                    constants.TRAINJOB_FAILED not in status
+                    and trainjob.status == constants.TRAINJOB_FAILED
+                ):
+                    raise RuntimeError(f"TrainJob {name} is Failed")
 
-            # Return the TrainJob if it reaches the expected status.
-            if trainjob.status in status:
-                return trainjob
+                # Emit one event per iteration instead of one child span.
+                poll_span.add_event(
+                    "status_check",
+                    {SpanAttributes.TRAINJOB_STATUS: trainjob.status or ""},
+                )
 
-            time.sleep(polling_interval)
+                # Return the TrainJob if it reaches the expected status.
+                if trainjob.status in status:
+                    return trainjob
+
+                time.sleep(polling_interval)
 
         raise TimeoutError(f"Timeout waiting for TrainJob {name} to reach status: {status} status")
 
