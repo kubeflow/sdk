@@ -1088,6 +1088,55 @@ def test_wait_for_job_status(optimizer_backend, test_case):
     print("test execution complete")
 
 
+def test_wait_for_job_status_polls_for_full_timeout(optimizer_backend):
+    """Regression test for round(timeout / polling_interval) truncating the poll loop.
+
+    With timeout=5 and polling_interval=2, round(5 / 2) == 2 under Python's
+    banker's rounding, which previously stopped polling after 2 iterations
+    (~4s) instead of covering the full 5s timeout. The loop must keep polling
+    until the elapsed time reaches the timeout, regardless of rounding.
+    """
+    # No status conditions -> OptimizationJob stays at its default CREATED
+    # status, which never matches the COMPLETE status we wait for below.
+    experiment = create_experiment_cr(name=BASIC_OPTIMIZATION_JOB_NAME)
+
+    poll_count = 0
+
+    def patched_get(*args, **kwargs):
+        nonlocal poll_count
+        mock_thread = Mock()
+        if args[3] == constants.EXPERIMENT_PLURAL:
+            poll_count += 1
+            mock_thread.get.return_value = normalize_model(experiment, models.V1beta1Experiment)
+        return mock_thread
+
+    optimizer_backend.custom_api.get_namespaced_custom_object.side_effect = patched_get
+
+    fake_time = [0.0]
+
+    def fake_time_time():
+        return fake_time[0]
+
+    def fake_sleep(seconds):
+        fake_time[0] += seconds
+
+    with (
+        patch("time.time", side_effect=fake_time_time),
+        patch("time.sleep", side_effect=fake_sleep),
+        pytest.raises(TimeoutError),
+    ):
+        optimizer_backend.wait_for_job_status(
+            name=BASIC_OPTIMIZATION_JOB_NAME,
+            status={constants.OPTIMIZATION_JOB_COMPLETE},
+            timeout=5,
+            polling_interval=2,
+        )
+
+    # Old code: range(round(5 / 2)) == range(2) -> exactly 2 polls.
+    # Fixed code must poll a 3rd time before the 5s timeout elapses.
+    assert poll_count == 3
+
+
 @pytest.mark.parametrize(
     "test_case",
     [

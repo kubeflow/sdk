@@ -474,6 +474,57 @@ def test_wait_for_job_status(local_backend, test_case):
             local_backend.wait_for_job_status(**test_case.config)
 
 
+def test_wait_for_job_status_polls_for_full_timeout(local_backend):
+    """Regression test for round(timeout / polling_interval) truncating the poll loop.
+
+    With timeout=5 and polling_interval=2, round(5 / 2) == 2 under Python's
+    banker's rounding, which previously stopped polling after 2 iterations
+    (~4s) instead of covering the full 5s timeout. The loop must keep polling
+    until the elapsed time reaches the timeout, regardless of rounding.
+    """
+    # Register a job so the pre-loop existence check passes.
+    # `Mock(name=...)` sets the mock's repr, not the `.name` attribute, so set
+    # it explicitly to match what `wait_for_job_status` filters on.
+    stub_job = Mock()
+    stub_job.name = BASIC_TRAIN_JOB_NAME
+    local_backend._LocalProcessBackend__local_jobs.append(stub_job)
+
+    poll_count = 0
+
+    def mock_get_job(name):
+        nonlocal poll_count
+        poll_count += 1
+        job = Mock(spec=types.TrainJob)
+        job.status = constants.TRAINJOB_RUNNING
+        return job
+
+    local_backend.get_job = mock_get_job
+
+    fake_time = [0.0]
+
+    def fake_time_time():
+        return fake_time[0]
+
+    def fake_sleep(seconds):
+        fake_time[0] += seconds
+
+    with (
+        patch("time.time", side_effect=fake_time_time),
+        patch("time.sleep", side_effect=fake_sleep),
+        pytest.raises(TimeoutError),
+    ):
+        local_backend.wait_for_job_status(
+            name=BASIC_TRAIN_JOB_NAME,
+            status={constants.TRAINJOB_COMPLETE},
+            timeout=5,
+            polling_interval=2,
+        )
+
+    # Old code: range(round(5 / 2)) == range(2) -> exactly 2 polls.
+    # Fixed code must poll a 3rd time before the 5s timeout elapses.
+    assert poll_count == 3
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
