@@ -188,28 +188,33 @@ class TrainerClient:
         step: str = constants.NODE + "-0",
         follow: bool | None = False,
     ) -> Iterator[str]:
-        """Get logs from a specific step of a TrainJob.
+        """
+        Retrieve logs from a specific step of a TrainJob.
 
-        You can watch for the logs in realtime as follows:
-        ```python
-        from kubeflow.trainer import TrainerClient
+        This method allows you to fetch logs either as a batch or stream them
+        in real-time using the `follow` parameter.
 
-        for logline in TrainerClient().get_job_logs(name="s8d44aa4fb6d", follow=True):
-            print(logline)
-        ```
+        Example:
+            from kubeflow.trainer import TrainerClient
+
+            client = TrainerClient()
+
+            # Stream logs in real-time
+            for line in client.get_job_logs(name="job-id", follow=True):
+                print(line)
 
         Args:
-            name: Name of the TrainJob.
-            step: Step of the TrainJob to collect logs from, like dataset-initializer or node-0.
-            follow: Whether to stream logs in realtime as they are produced.
+            name (str): Name of the TrainJob.
+            step (str): Step of the TrainJob to collect logs from
+                        (e.g., dataset-initializer or node-0).
+            follow (bool, optional): If True, streams logs in real-time.
+                                     Defaults to False.
 
         Returns:
-            Iterator of log lines.
+            Iterator[str]: An iterator over log lines.
 
-
-        Raises:
-            TimeoutError: Timeout to get a TrainJob.
-            RuntimeError: Failed to get a TrainJob.
+        Note:
+            If no logs are available, an empty iterator may be returned.
         """
         return self.backend.get_job_logs(name=name, follow=follow, step=step)
 
