@@ -834,6 +834,9 @@ class KubernetesBackend(RuntimeBackend):
                 trainer_cr.command = trainer_overrides["command"]
             if "args" in trainer_overrides:
                 trainer_cr.args = trainer_overrides["args"]
+            # trainer env overrides needs to be appended to the variables defined in trainer.env
+            if "env" in trainer_overrides:
+                trainer_cr.env = (trainer_cr.env or []) + trainer_overrides["env"]
 
         # Convert runtime patches dicts to native model objects.
         runtime_patch_models = None

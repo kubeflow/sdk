@@ -21,6 +21,10 @@ Options Reference
    :members:
    :show-inheritance:
 
+.. autoclass:: kubeflow.trainer.options.TrainerEnvFrom
+   :members:
+   :show-inheritance:
+
 .. autoclass:: kubeflow.trainer.options.RuntimePatch
    :members:
    :show-inheritance:

@@ -18,6 +18,8 @@ import dataclasses
 from dataclasses import dataclass
 from typing import Any
 
+from kubeflow_trainer_api import models
+
 from kubeflow.trainer.backends.base import RuntimeBackend
 from kubeflow.trainer.types.types import BuiltinTrainer, CustomTrainer, CustomTrainerContainer
 
@@ -477,3 +479,70 @@ class TrainerArgs:
         spec = job_spec.setdefault("spec", {})
         trainer_spec = spec.setdefault("trainer", {})
         trainer_spec["args"] = self.args
+
+
+class TrainerEnvFrom:
+    """Used to add environment variables using kubernetes resources (secrets, configmaps, etc...)
+    to the trainer container (.spec.trainer.env), these values will be merged with the TrainingRuntime's
+    trainer environments as well as the clear values defined in trainer.env.
+
+    Can only be used with CustomTrainer and CustomTrainerContainer.
+
+    Supported backends:
+        - Kubernetes
+    """
+
+    _env_name: str
+    _value_from: models.IoK8sApiCoreV1EnvVarSource
+
+    def __init__(self, env_name: str, value_from: models.IoK8sApiCoreV1EnvVarSource) -> None:
+        if not env_name:
+            raise ValueError("env_name must be a non-empty string")
+        self._env_name = env_name
+        self._value_from = value_from
+
+    @classmethod
+    def secret(cls, env_name: str, *, secret_name: str, key: str) -> "TrainerEnvFrom":
+        """Create a TrainerEnvFrom sourced from a Kubernetes Secret."""
+        return cls(
+            env_name,
+            models.IoK8sApiCoreV1EnvVarSource(
+                secretKeyRef=models.IoK8sApiCoreV1SecretKeySelector(name=secret_name, key=key)
+            ),
+        )
+
+    @classmethod
+    def config_map(cls, env_name: str, *, config_map_name: str, key: str) -> "TrainerEnvFrom":
+        """Create a TrainerEnvFrom sourced from a Kubernetes ConfigMap."""
+        return cls(
+            env_name,
+            models.IoK8sApiCoreV1EnvVarSource(
+                configMapKeyRef=models.IoK8sApiCoreV1ConfigMapKeySelector(
+                    name=config_map_name, key=key
+                )
+            ),
+        )
+
+    def __call__(
+        self,
+        job_spec: dict[str, Any],
+        trainer: CustomTrainer | BuiltinTrainer | CustomTrainerContainer | None,
+        backend: RuntimeBackend,
+    ) -> None:
+        from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
+
+        if not isinstance(backend, KubernetesBackend):
+            raise ValueError(
+                f"TrainerEnvFrom option is not compatible with {type(backend).__name__}. "
+                "Supported backends: KubernetesBackend"
+            )
+        if trainer is not None and not isinstance(trainer, (CustomTrainer, CustomTrainerContainer)):
+            raise ValueError(
+                f"TrainerEnvFrom option is not compatible with {type(trainer).__name__}. "
+                "Supported trainers: CustomTrainer, CustomTrainerContainer"
+            )
+
+        spec = job_spec.setdefault("spec", {})
+        trainer_spec = spec.setdefault("trainer", {})
+        env = trainer_spec.setdefault("env", [])
+        env.append(models.IoK8sApiCoreV1EnvVar(name=self._env_name, valueFrom=self._value_from))
