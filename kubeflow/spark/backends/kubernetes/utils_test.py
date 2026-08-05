@@ -245,21 +245,34 @@ def test_validate_spark_connect_url(test_case: TestCase) -> None:
     "test_case",
     [
         TestCase(
-            name="build service url with service name",
+            name="build service url from operator default service name",
             expected_status=SUCCESS,
             config={
                 "info": SparkConnectInfo(
                     name="my-session",
                     namespace="spark",
                     state=SparkConnectState.READY,
-                    service_name="my-session-svc",
+                    service_name="my-session-server",
                 ),
             },
-            expected_output="sc://my-session-svc.spark.svc.cluster.local:15002",
+            expected_output="sc://my-session-server.spark.svc.cluster.local:15002",
         ),
         TestCase(
-            name="build service url without service name",
+            name="build service url from custom service name",
             expected_status=SUCCESS,
+            config={
+                "info": SparkConnectInfo(
+                    name="my-session",
+                    namespace="spark",
+                    state=SparkConnectState.READY,
+                    service_name="custom-endpoint",
+                ),
+            },
+            expected_output="sc://custom-endpoint.spark.svc.cluster.local:15002",
+        ),
+        TestCase(
+            name="build service url without service name raises",
+            expected_status=FAILED,
             config={
                 "info": SparkConnectInfo(
                     name="my-session",
@@ -267,7 +280,8 @@ def test_validate_spark_connect_url(test_case: TestCase) -> None:
                     state=SparkConnectState.READY,
                 ),
             },
-            expected_output="my-session-svc",
+            expected_error=RuntimeError,
+            expected_output="not populated",
         ),
     ],
 )
@@ -276,14 +290,14 @@ def test_build_service_url(test_case: TestCase) -> None:
 
     print("Executing test:", test_case.name)
 
-    url = build_service_url(test_case.config["info"])
-
-    assert test_case.expected_status == SUCCESS
-
-    if test_case.name == "build service url with service name":
-        assert url == test_case.expected_output
-    elif test_case.name == "build service url without service name":
-        assert test_case.expected_output in url
+    if test_case.expected_status == SUCCESS:
+        assert build_service_url(test_case.config["info"]) == test_case.expected_output
+    else:
+        with pytest.raises(
+            test_case.expected_error,
+            match=test_case.expected_output,
+        ):
+            build_service_url(test_case.config["info"])
 
     print("test execution complete")
 
