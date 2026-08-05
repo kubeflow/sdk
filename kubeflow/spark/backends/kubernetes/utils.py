@@ -136,18 +136,8 @@ def _resolve_executor_resources(
     executor: Executor | None = None,
     num_executors: int | None = None,
     resources_per_executor: dict[str, str] | None = None,
-    spark_conf: dict[str, str] | None = None,
 ) -> tuple[int, int, str]:
     """Resolve executor configuration.
-
-    Precedence rules:
-        - Executor instances:
-          ``spark_conf`` > ``executor.num_instances`` >
-          ``num_executors`` > default.
-        - Executor resources:
-          ``spark_conf`` >
-          ``executor.resources_per_executor`` >
-          ``resources_per_executor`` > default.
 
     Args:
         executor:
@@ -158,9 +148,6 @@ def _resolve_executor_resources(
 
         resources_per_executor:
             Resource requirements.
-
-        spark_conf:
-            Spark configuration properties.
 
     Returns:
         Tuple containing ``(instances, cores, memory)``.
@@ -196,22 +183,6 @@ def _resolve_executor_resources(
         if "memory" in resource_dict:
             memory = _memory_kubernetes_to_spark(
                 resource_dict["memory"],
-            )
-
-    if spark_conf:
-        if "spark.executor.instances" in spark_conf:
-            instances = int(
-                spark_conf["spark.executor.instances"],
-            )
-
-        if "spark.executor.cores" in spark_conf:
-            cores = _validate_cpu_value(
-                spark_conf["spark.executor.cores"],
-            )
-
-        if "spark.executor.memory" in spark_conf:
-            memory = _memory_kubernetes_to_spark(
-                spark_conf["spark.executor.memory"],
             )
 
     return instances, cores, memory
@@ -722,6 +693,11 @@ def get_spark_job_executor_spec(
     Args:
         num_executors: Number of executor instances.
         resources_per_executor: Resource requirements for each executor.
+        spark_conf:
+            Spark configuration properties. Executor-related properties
+            (``spark.executor.instances``, ``spark.executor.cores``, and
+            ``spark.executor.memory``) override values provided through
+            ``num_executors`` and ``resources_per_executor``.
 
     Returns:
         SparkApplication ExecutorSpec model.
@@ -733,8 +709,23 @@ def get_spark_job_executor_spec(
     instances, cores, memory = _resolve_executor_resources(
         num_executors=num_executors,
         resources_per_executor=resources_per_executor,
-        spark_conf=spark_conf,
     )
+
+    if spark_conf:
+        if "spark.executor.instances" in spark_conf:
+            instances = int(
+                spark_conf["spark.executor.instances"],
+            )
+
+        if "spark.executor.cores" in spark_conf:
+            cores = _validate_cpu_value(
+                spark_conf["spark.executor.cores"],
+            )
+
+        if "spark.executor.memory" in spark_conf:
+            memory = _memory_kubernetes_to_spark(
+                spark_conf["spark.executor.memory"],
+            )
 
     return models.SparkV1beta2ExecutorSpec(
         instances=instances,
