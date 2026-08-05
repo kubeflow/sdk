@@ -61,7 +61,7 @@ class TrainerClient:
         elif isinstance(backend_config, ContainerBackendConfig):
             self.backend = ContainerBackend(backend_config)
         else:
-            raise ValueError(f"Invalid backend config '{backend_config}'")
+            raise ValueError( f"Unsupported  Backend Configuration type: "f"{type(backend_config).__name__}")
 
     def list_runtimes(self) -> list[types.Runtime]:
         """List of the available runtimes, preferring namespaced over cluster-scoped for duplicates.
@@ -91,7 +91,7 @@ class TrainerClient:
         """
         return self.backend.get_runtime(name=name)
 
-    def get_runtime_packages(self, runtime: types.Runtime):
+    def get_runtime_packages(self, runtime: types.Runtime)->str:
         """Print the installed Python packages for the given runtime. If a runtime has GPUs it also
         prints available GPUs on the single training node.
 
@@ -270,7 +270,7 @@ class TrainerClient:
             callbacks=callbacks,
         )
 
-    def delete_job(self, name: str):
+    def delete_job(self, name: str)->None:
         """Delete the TrainJob.
 
         Args:
