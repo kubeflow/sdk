@@ -1387,7 +1387,6 @@ def test_get_spark_job_executor_spec(test_case: TestCase) -> None:
 
     assert test_case.expected_status == SUCCESS
 
-
     assert spec.instances == constants.DEFAULT_NUM_EXECUTORS
     assert spec.cores == constants.DEFAULT_EXECUTOR_CPU
     assert spec.memory == _memory_kubernetes_to_spark(
