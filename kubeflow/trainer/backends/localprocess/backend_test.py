@@ -475,16 +475,7 @@ def test_wait_for_job_status(local_backend, test_case):
 
 
 def test_wait_for_job_status_polls_for_full_timeout(local_backend):
-    """Regression test for round(timeout / polling_interval) truncating the poll loop.
-
-    With timeout=5 and polling_interval=2, round(5 / 2) == 2 under Python's
-    banker's rounding, which previously stopped polling after 2 iterations
-    (~4s) instead of covering the full 5s timeout. The loop must keep polling
-    until the elapsed time reaches the timeout, regardless of rounding.
-    """
-    # Register a job so the pre-loop existence check passes.
-    # `Mock(name=...)` sets the mock's repr, not the `.name` attribute, so set
-    # it explicitly to match what `wait_for_job_status` filters on.
+    """Test LocalProcessBackend.wait_for_job_status polls until timeout elapses."""
     stub_job = Mock()
     stub_job.name = BASIC_TRAIN_JOB_NAME
     local_backend._LocalProcessBackend__local_jobs.append(stub_job)
@@ -520,8 +511,6 @@ def test_wait_for_job_status_polls_for_full_timeout(local_backend):
             polling_interval=2,
         )
 
-    # Old code: range(round(5 / 2)) == range(2) -> exactly 2 polls.
-    # Fixed code must poll a 3rd time before the 5s timeout elapses.
     assert poll_count == 3
 
 
