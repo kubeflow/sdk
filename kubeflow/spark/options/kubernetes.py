@@ -20,6 +20,7 @@ without polluting the main API. Future option types can be added without breakin
 This follows the same callable pattern as kubeflow.trainer.options for SDK consistency.
 """
 
+import copy
 from dataclasses import dataclass
 from typing import Any
 
@@ -222,12 +223,14 @@ class PodTemplateOverride:
 
     @staticmethod
     def _deep_merge(target: dict[str, Any], source: dict[str, Any]) -> None:
-        """Deep merge source dict into target dict."""
+        """Deep merge source dict into target dict, leaving the source untouched."""
         for key, value in source.items():
             if key in target and isinstance(target[key], dict) and isinstance(value, dict):
                 PodTemplateOverride._deep_merge(target[key], value)
             else:
-                target[key] = value
+                # Copy rather than graft: callers go on to edit the merged result, and
+                # the source is a template they own and reuse across resources.
+                target[key] = copy.deepcopy(value)
 
 
 @dataclass

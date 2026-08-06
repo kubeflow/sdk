@@ -14,6 +14,7 @@
 
 """Unit tests for Kubeflow Spark options."""
 
+import copy
 from unittest.mock import MagicMock
 
 from kubeflow_spark_api import models
@@ -732,6 +733,47 @@ def test_pod_template_incompatible_backend(
             option(resource, mock_non_k8s_backend)
 
     print("test execution complete")
+
+
+def test_pod_template_override_does_not_mutate_its_template(
+    mock_k8s_backend,
+    spark_connect_model,
+):
+    """The template belongs to the caller and must come back unchanged."""
+
+    template = {"spec": {"securityContext": {"runAsUser": 1000}}}
+    original = copy.deepcopy(template)
+
+    PodTemplateOverride(role="driver", template=template)(spark_connect_model, mock_k8s_backend)
+
+    assert template == original
+
+
+def test_pod_template_override_reuse_preserves_existing_containers(
+    mock_k8s_backend,
+    spark_connect_model,
+):
+    """One option applied to several resources must not carry state between them."""
+
+    option = PodTemplateOverride(
+        role="driver",
+        template={"spec": {"securityContext": {"runAsUser": 1000}}},
+    )
+
+    # A second resource, captured before the first application, that already declares a
+    # sidecar the option has no business touching.
+    second_resource = copy.deepcopy(spark_connect_model)
+    second_resource.spec.server.template = models.IoK8sApiCoreV1PodTemplateSpec(
+        spec=models.IoK8sApiCoreV1PodSpec(
+            containers=[models.IoK8sApiCoreV1Container(name="sidecar", image="fluentd:latest")]
+        )
+    )
+
+    option(spark_connect_model, mock_k8s_backend)
+    option(second_resource, mock_k8s_backend)
+
+    pod_spec = second_resource.to_dict()["spec"]["server"]["template"]["spec"]
+    assert [container["name"] for container in pod_spec["containers"]] == ["sidecar"]
 
 
 @pytest.mark.parametrize(
