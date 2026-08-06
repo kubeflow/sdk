@@ -57,3 +57,14 @@ METRICS_COLLECTOR_CONTAINER = "metrics-logger-and-collector"
 # Katib search space parameter types.
 DOUBLE_PARAMETER = "double"
 CATEGORICAL_PARAMETERS = "categorical"
+
+# The plural for the trainer-native OptimizationJob (trainer.kubeflow.org/v1alpha1).
+OPTIMIZATION_JOB_PLURAL = "optimizationjobs"
+
+# Trainer-native OptimizationJob search space keys.
+SEARCH_SPACE_UNIFORM = "uniform"
+SEARCH_SPACE_LOG_UNIFORM = "logUniform"
+SEARCH_SPACE_CATEGORICAL = "categorical"
+
+# Trainer-native OptimizationJob parameter data type for continuous search spaces.
+PARAMETER_TYPE_FLOAT = "Float"
