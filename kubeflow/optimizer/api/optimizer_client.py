@@ -41,7 +41,8 @@ class OptimizerClient:
 
         Args:
             backend_config: Backend configuration. Either KubernetesBackendConfig
-                or None to use the default config class. Defaults to None (uses KubernetesBackendConfig).
+                or None to use the default config class.
+                Defaults to None (uses KubernetesBackendConfig).
 
         Raises:
             ValueError: If the backend configuration is invalid.
@@ -75,11 +76,12 @@ class OptimizerClient:
             trial_config: Optional configuration to run Trials.
             search_space: Dictionary mapping parameter names to Search specifications using
                 Search.uniform(), Search.loguniform(), Search.choice(), etc.
-            objectives: Optional list of objectives to optimize.
+            objectives: Optional list of objectives to optimize. Defaults to minimizing the
+                "loss" metric.
             algorithm: The optimization algorithm to use. Defaults to RandomSearch.
 
         Returns:
-            str: The unique name generated for the OptimizationJob (Experiment).
+            The unique name generated for the OptimizationJob (Experiment).
 
         Raises:
             ValueError: If input arguments are invalid.
@@ -89,7 +91,7 @@ class OptimizerClient:
         Examples:
             >>> from kubeflow.trainer import TrainJobTemplate, CustomTrainer
             >>> from kubeflow.optimizer import OptimizerClient, Search, TrialConfig
-            >>> def train_fn():
+            >>> def train_fn(learning_rate, num_epochs):
             ...     pass
             >>> template = TrainJobTemplate(runtime="torch-distributed", trainer=CustomTrainer(func=train_fn))
             >>> client = OptimizerClient()
@@ -115,7 +117,7 @@ class OptimizerClient:
         """List created OptimizationJobs.
 
         Returns:
-            list[OptimizationJob]: List of created OptimizationJobs. If no OptimizationJobs exist,
+            List of created OptimizationJobs. If no OptimizationJobs exist,
             an empty list is returned.
 
         Raises:
@@ -139,7 +141,7 @@ class OptimizerClient:
             name: Name of the OptimizationJob.
 
         Returns:
-            OptimizationJob: An OptimizationJob object.
+            An OptimizationJob object.
 
         Raises:
             TimeoutError: Timeout occurred while getting the OptimizationJob.
@@ -170,7 +172,7 @@ class OptimizerClient:
             follow: Whether to stream logs in realtime as they are produced. Defaults to False.
 
         Returns:
-            Iterator[str]: Iterator of log lines.
+            Iterator of log lines.
 
         Raises:
             TimeoutError: Timeout occurred while getting the OptimizationJob logs.
@@ -194,7 +196,7 @@ class OptimizerClient:
             name: Name of the OptimizationJob.
 
         Returns:
-            Result | None: A Result object containing the best hyperparameters and metrics,
+            A Result object containing the best hyperparameters and metrics,
             or None if no best trial is available yet.
 
         Raises:
@@ -227,12 +229,13 @@ class OptimizerClient:
                 Failed statuses. Defaults to Complete.
             timeout: Maximum number of seconds to wait for the OptimizationJob to reach one of the
                 expected statuses. Defaults to 3600.
-            polling_interval: The polling interval in seconds to check OptimizationJob status. Defaults to 2.
+            polling_interval: The polling interval in seconds to check OptimizationJob status.
+                Defaults to 2.
             callbacks: Optional list of callback functions to be invoked after each polling
                 interval. Each callback should accept a single argument: the OptimizationJob object.
 
         Returns:
-            OptimizationJob: An OptimizationJob object that reaches the desired status.
+            An OptimizationJob object that reaches the desired status.
 
         Raises:
             ValueError: The input values are incorrect.
@@ -262,9 +265,6 @@ class OptimizerClient:
         Args:
             name: Name of the OptimizationJob.
 
-        Returns:
-            None
-
         Raises:
             TimeoutError: Timeout occurred while deleting the OptimizationJob.
             RuntimeError: Failed to delete the OptimizationJob.
@@ -287,7 +287,7 @@ class OptimizerClient:
             name: Name of the OptimizationJob.
 
         Returns:
-            list[Event]: A list of Event objects associated with the OptimizationJob.
+            A list of Event objects associated with the OptimizationJob.
 
         Raises:
             TimeoutError: Timeout occurred while getting the OptimizationJob events.
@@ -298,6 +298,6 @@ class OptimizerClient:
             >>> client = OptimizerClient()
             >>> events = client.get_job_events("opt-12345")
             >>> for event in events:
-            ...     print(f"[{event.time}] {event.message}")
+            ...     print(f"[{event.event_time}] {event.message}")
         """
         return self.backend.get_job_events(name=name)

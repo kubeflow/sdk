@@ -72,7 +72,7 @@ class TrainerClient:
         cluster-scoped runtimes in case of duplicate names.
 
         Returns:
-            list[types.Runtime]: A list of training runtimes from namespace-scoped
+            A list of training runtimes from namespace-scoped
             and cluster-scoped resources. Returns an empty list if no runtimes are found.
 
         Raises:
@@ -95,13 +95,14 @@ class TrainerClient:
             name: Name of the runtime.
 
         Returns:
-            types.Runtime: A runtime object. If both namespace-scoped and
+            A runtime object. If both namespace-scoped and
             cluster-scoped runtimes exist with the same name, the namespace-scoped
             runtime is returned.
 
         Raises:
             TimeoutError: Timeout occurred while retrieving the runtime.
             RuntimeError: Failed to get the runtime.
+            ValueError: If the runtime does not exist (LocalProcess and Container backends).
 
         Examples:
             >>> from kubeflow.trainer import TrainerClient
@@ -118,9 +119,6 @@ class TrainerClient:
 
         Args:
             runtime: Reference to an existing training runtime.
-
-        Returns:
-            None
 
         Raises:
             ValueError: If the input runtime is invalid.
@@ -160,12 +158,13 @@ class TrainerClient:
                 name or Runtime object. Defaults to the torch-distributed runtime if not provided.
             initializer: Optional configuration for the dataset and model initializers.
             trainer: Optional configuration for a CustomTrainer, CustomTrainerContainer, or
-                BuiltinTrainer. If not specified, the TrainJob will use the runtime's default values.
+                BuiltinTrainer. If not specified, the TrainJob will use the runtime's
+                default values.
             options: Optional list of configuration options to apply to the TrainJob.
                 Options can be imported from kubeflow.trainer.options.
 
         Returns:
-            str: The unique name generated for the TrainJob.
+            The unique name generated for the TrainJob.
 
         Raises:
             ValueError: If input arguments are invalid.
@@ -195,7 +194,7 @@ class TrainerClient:
                 only TrainJobs associated with that runtime are returned.
 
         Returns:
-            list[types.TrainJob]: List of created TrainJobs. If no TrainJobs exist, an
+            List of created TrainJobs. If no TrainJobs exist, an
             empty list is returned.
 
         Raises:
@@ -218,7 +217,7 @@ class TrainerClient:
             name: Name of the TrainJob.
 
         Returns:
-            types.TrainJob: A TrainJob object.
+            A TrainJob object.
 
         Raises:
             TimeoutError: Timeout occurred while getting the TrainJob.
@@ -248,7 +247,7 @@ class TrainerClient:
             follow: Whether to stream logs in realtime as they are produced. Defaults to False.
 
         Returns:
-            Iterator[str]: Iterator of log lines.
+            Iterator of log lines.
 
         Raises:
             TimeoutError: Timeout occurred while getting the TrainJob logs.
@@ -273,18 +272,19 @@ class TrainerClient:
             name: Name of the TrainJob.
 
         Returns:
-            list[types.Event]: A list of Event objects associated with the TrainJob.
+            A list of Event objects associated with the TrainJob.
 
         Raises:
             TimeoutError: Timeout occurred while getting the TrainJob events.
             RuntimeError: Failed to get the TrainJob events.
+            NotImplementedError: If the client uses the LocalProcess or Container backend.
 
         Examples:
             >>> from kubeflow.trainer import TrainerClient
             >>> client = TrainerClient()
             >>> events = client.get_job_events("s8d44aa4fb6d")
             >>> for event in events:
-            ...     print(f"[{event.time}] {event.message}")
+            ...     print(f"[{event.event_time}] {event.message}")
         """
         return self.backend.get_job_events(name=name)
 
@@ -304,12 +304,13 @@ class TrainerClient:
                 Failed statuses. Defaults to Complete.
             timeout: Maximum number of seconds to wait for the TrainJob to reach one of the
                 expected statuses. Defaults to 600.
-            polling_interval: The polling interval in seconds to check TrainJob status. Defaults to 2.
+            polling_interval: The polling interval in seconds to check TrainJob status.
+                Defaults to 2.
             callbacks: Optional list of callback functions to be invoked after each polling
                 interval. Each callback should accept a single argument: the TrainJob object.
 
         Returns:
-            types.TrainJob: A TrainJob object that has reached one of the desired statuses.
+            A TrainJob object that has reached one of the desired statuses.
 
         Raises:
             ValueError: The input values are incorrect.
@@ -337,9 +338,6 @@ class TrainerClient:
 
         Args:
             name: Name of the TrainJob.
-
-        Returns:
-            None
 
         Raises:
             TimeoutError: Timeout occurred while deleting the TrainJob.

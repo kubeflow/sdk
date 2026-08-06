@@ -118,6 +118,11 @@ class ModelRegistryClient:
         This registers a model version and its artifact in the registry. The model data
         must be stored in remote storage (e.g., S3, GCS) before registration.
 
+        Most models can be registered using their URI, along with an optional
+        `storage_config` describing how KServe should fetch the model at inference time.
+        URI builder utilities are recommended when referring to specialized storage; for
+        example `utils.s3_uri_from` when using S3 object storage data connections.
+
         Args:
             name: Name of the model.
             uri: URI of the model artifact in remote storage.
@@ -130,15 +135,15 @@ class ModelRegistryClient:
             author: Author of the model. Defaults to the client author.
             owner: Owner of the model. Defaults to the client author.
             version_description: Description of the model version. Defaults to None.
-            metadata: Additional metadata dictionary. Defaults to None.
+            metadata: Additional model version metadata. Defaults to None.
             storage_config: Storage credentials configuration for the model artifact.
                 See `StorageConfig` for details. Defaults to None.
 
         Returns:
-            RegisteredModel: The registered model object.
+            The registered model object.
 
         Raises:
-            Exception: If registration fails in the underlying registry store.
+            model_registry.exceptions.StoreError: If registration fails in the underlying store.
 
         Examples:
             >>> from kubeflow.hub import ModelRegistryClient
@@ -175,7 +180,7 @@ class ModelRegistryClient:
             model: The registered model object to update. Must contain an ID.
 
         Returns:
-            RegisteredModel: The updated registered model object.
+            The updated registered model object.
 
         Raises:
             TypeError: If the input is not a RegisteredModel instance.
@@ -201,11 +206,12 @@ class ModelRegistryClient:
             model_version: The model version object to update. Must contain an ID.
 
         Returns:
-            ModelVersion: The updated model version object.
+            The updated model version object.
 
         Raises:
             TypeError: If the input is not a ModelVersion instance.
-            model_registry.exceptions.StoreError: If the model version does not have an ID or store fails.
+            model_registry.exceptions.StoreError: If the model version does not have an ID
+                or the store operation fails.
 
         Examples:
             >>> from kubeflow.hub import ModelRegistryClient
@@ -227,11 +233,12 @@ class ModelRegistryClient:
             model_artifact: The model artifact object to update. Must contain an ID.
 
         Returns:
-            ModelArtifact: The updated model artifact object.
+            The updated model artifact object.
 
         Raises:
             TypeError: If the input is not a ModelArtifact instance.
-            model_registry.exceptions.StoreError: If the model artifact does not have an ID or store fails.
+            model_registry.exceptions.StoreError: If the model artifact does not have an ID
+                or the store operation fails.
 
         Examples:
             >>> from kubeflow.hub import ModelRegistryClient
@@ -253,7 +260,7 @@ class ModelRegistryClient:
             name: The name of the registered model.
 
         Returns:
-            RegisteredModel: The retrieved registered model object.
+            The retrieved registered model object.
 
         Raises:
             ValueError: If the model name is not found.
@@ -277,7 +284,7 @@ class ModelRegistryClient:
             version: The model version string to retrieve.
 
         Returns:
-            ModelVersion: The retrieved model version object.
+            The retrieved model version object.
 
         Raises:
             model_registry.exceptions.StoreError: If the model does not exist.
@@ -302,7 +309,7 @@ class ModelRegistryClient:
             version: The version string of the model.
 
         Returns:
-            ModelArtifact: The retrieved model artifact object.
+            The retrieved model artifact object.
 
         Raises:
             model_registry.exceptions.StoreError: If either the model or the version does not exist.
@@ -323,7 +330,7 @@ class ModelRegistryClient:
         """List registered models.
 
         Yields:
-            RegisteredModel: Registered model objects in the registry.
+            Registered model objects in the registry.
 
         Examples:
             >>> from kubeflow.hub import ModelRegistryClient
@@ -340,7 +347,7 @@ class ModelRegistryClient:
             name: The name of the registered model.
 
         Yields:
-            ModelVersion: Model version objects associated with the model.
+            Model version objects associated with the model.
 
         Raises:
             model_registry.exceptions.StoreError: If the model does not exist.
