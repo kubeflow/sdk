@@ -24,7 +24,7 @@ import pytest
 
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.backends.kubernetes import KubernetesBackend
-from kubeflow.spark.types.options import Name
+from kubeflow.spark.options import Name
 from kubeflow.spark.types.types import SparkConnectState
 
 from .cluster_watcher import run_watcher_in_thread
@@ -245,3 +245,15 @@ class TestSparkExamples:
         stdout = self._run_example("batch_func_job_lifecycle.py", namespace)
 
         assert "FUNCJOB LIFECYCLE COMPLETE!" in stdout
+
+    def test_batch_job_options_example(self):
+        """EX07: Validate batch_job_options.py runs without errors."""
+        namespace = os.environ.get("SPARK_TEST_NAMESPACE", "spark-test")
+
+        if USE_IN_CLUSTER and RUNNER_IMAGE:
+            self._run_example("batch_job_options.py", namespace)
+            return
+
+        stdout = self._run_example("batch_job_options.py", namespace)
+
+        assert "BATCH JOB OPTIONS COMPLETE!" in stdout

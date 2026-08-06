@@ -140,12 +140,17 @@ def _resolve_executor_resources(
     """Resolve executor configuration.
 
     Args:
-        executor: Executor configuration.
-        num_executors: Number of executor instances.
-        resources_per_executor: Resource requirements.
+        executor:
+            Executor configuration.
+
+        num_executors:
+            Number of executor instances.
+
+        resources_per_executor:
+            Resource requirements.
 
     Returns:
-        Tuple containing (instances, cores, memory).
+        Tuple containing ``(instances, cores, memory)``.
 
     Raises:
         ValueError:
@@ -290,6 +295,73 @@ def _validate_cpu_value(cpu: str | int | None) -> int:
         raise ValueError("CPU cores value is unrealistically large")
 
     return cores
+
+
+def apply_options(
+    resource: models.SparkV1alpha1SparkConnect | models.SparkV1beta2SparkApplication,
+    options: list | None,
+    backend: Any | None = None,
+) -> None:
+    """Apply configuration options to a Spark resource.
+
+    Args:
+        resource:
+            Spark resource to configure.
+
+        options:
+            List of configuration options.
+
+        backend:
+            Backend used for option validation.
+
+        Raises:
+            ValueError:
+                If options are provided without a backend instance.
+
+            TypeError:
+                If an option is not callable.
+    """
+    if not options:
+        return
+
+    if backend is None:
+        raise ValueError("A backend instance is required to apply Spark options.")
+
+    for option in options:
+        if not callable(option):
+            raise TypeError(
+                f"Invalid Spark option: {option!r}. Options must be callable, "
+                "for example: Name, Labels, Annotations, NodeSelector or Toleration."
+            )
+
+        option(resource, backend)
+
+
+def _validate_spark_conf(
+    spark_conf: dict[str, str] | None,
+) -> None:
+    """Validate Spark configuration.
+
+    Args:
+        spark_conf:
+            Spark configuration properties.
+
+    Raises:
+        ValueError:
+            If ``spark_conf`` is not a dictionary of string keys and values.
+    """
+    if spark_conf is None:
+        return
+
+    if not isinstance(spark_conf, dict):
+        raise ValueError("spark_conf must be a dictionary.")
+
+    for key, value in spark_conf.items():
+        if not isinstance(key, str):
+            raise ValueError("All spark_conf keys must be strings.")
+
+        if not isinstance(value, str):
+            raise ValueError("All spark_conf values must be strings.")
 
 
 # ----------------------------------------------------------------------
@@ -470,6 +542,8 @@ def build_spark_connect_cr(
         ValueError:
             If the provided driver or executor resource configuration is invalid.
     """
+    _validate_spark_conf(spark_conf)
+
     spark_version = spark_version or constants.DEFAULT_SPARK_VERSION
 
     # Build server spec using conversion function
@@ -523,10 +597,11 @@ def build_spark_connect_cr(
     )
 
     # Apply options - extensibility without API changes (callable pattern)
-    if options and backend is not None:
-        for option in options:
-            if callable(option):
-                option(spark_connect, backend)
+    apply_options(
+        spark_connect,
+        options,
+        backend,
+    )
 
     return spark_connect
 
@@ -726,6 +801,9 @@ def get_spark_application_cr_from_file_job(
     arguments: list[str] | None = None,
     num_executors: int | None = None,
     resources_per_executor: dict[str, str] | None = None,
+    options: list | None = None,
+    backend: Any | None = None,
+    spark_conf: dict[str, str] | None = None,
 ) -> models.SparkV1beta2SparkApplication:
     """Build a SparkApplication custom resource for a file-based Spark job.
 
@@ -736,6 +814,9 @@ def get_spark_application_cr_from_file_job(
         arguments: Command-line arguments passed to the Spark application.
         num_executors: Number of executor instances.
         resources_per_executor: Resource requirements for each executor.
+        options: List of configuration options.
+        backend: Backend instance used for option validation.
+        spark_conf: Spark configuration properties.
 
     Returns:
         SparkApplication custom resource model.
@@ -744,7 +825,7 @@ def get_spark_application_cr_from_file_job(
         ValueError:
             If the executor resource configuration is invalid.
     """
-    return models.SparkV1beta2SparkApplication(
+    spark_application = models.SparkV1beta2SparkApplication(
         api_version=f"{constants.SPARK_APPLICATION_GROUP}/{constants.SPARK_APPLICATION_VERSION}",
         kind=constants.SPARK_APPLICATION_KIND,
         metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
@@ -763,8 +844,17 @@ def get_spark_application_cr_from_file_job(
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
             ),
+            spark_conf=spark_conf or None,
         ),
     )
+
+    apply_options(
+        spark_application,
+        options,
+        backend,
+    )
+
+    return spark_application
 
 
 def get_spark_application_cr_from_func_job(
@@ -774,6 +864,9 @@ def get_spark_application_cr_from_func_job(
     func_args: dict[str, Any] | None = None,
     num_executors: int | None = None,
     resources_per_executor: dict[str, str] | None = None,
+    options: list | None = None,
+    backend: Any | None = None,
+    spark_conf: dict[str, str] | None = None,
 ) -> models.SparkV1beta2SparkApplication:
     """Build a SparkApplication custom resource for a function-based Spark job.
 
@@ -784,6 +877,9 @@ def get_spark_application_cr_from_func_job(
         func_args: Keyword arguments passed to the function.
         num_executors: Number of executor instances.
         resources_per_executor: Resource requirements for each executor.
+        options: List of configuration options.
+        backend: Backend instance used for option validation.
+        spark_conf: Spark configuration properties.
 
     Returns:
         SparkApplication custom resource model.
@@ -793,6 +889,7 @@ def get_spark_application_cr_from_func_job(
             If the provided function is invalid or the executor resource
             configuration is invalid.
     """
+    _validate_spark_conf(spark_conf)
 
     command = get_command_using_spark_func(
         func=func,
@@ -817,6 +914,7 @@ def get_spark_application_cr_from_func_job(
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
             ),
+            spark_conf=spark_conf or None,
         ),
     )
 
@@ -837,6 +935,12 @@ def get_spark_application_cr_from_func_job(
             mount_path=constants.FUNC_JOB_SCRIPT_DIR,
         ),
     ]
+
+    apply_options(
+        spark_application,
+        options,
+        backend,
+    )
 
     return spark_application
 

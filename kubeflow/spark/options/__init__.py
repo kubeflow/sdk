@@ -12,11 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Public API for the Kubeflow Spark client and types. Import from kubeflow.spark."""
+"""Spark configuration options."""
 
-from kubeflow.common.types import KubernetesBackendConfig
-from kubeflow.spark.api.spark_client import SparkClient
-from kubeflow.spark.options import (
+from kubeflow.spark.options.kubernetes import (
     Annotations,
     Labels,
     Name,
@@ -24,36 +22,12 @@ from kubeflow.spark.options import (
     PodTemplateOverride,
     Toleration,
 )
-from kubeflow.spark.types.types import (
-    Driver,
-    Executor,
-    FileJob,
-    FuncJob,
-    SparkConnectInfo,
-    SparkConnectState,
-    SparkJob,
-    SparkJobStatus,
-)
 
 __all__ = [
-    # Core API
-    "SparkClient",
-    # Types
-    "Driver",
-    "Executor",
-    "FileJob",
-    "FuncJob",
-    "SparkConnectInfo",
-    "SparkConnectState",
-    "SparkJob",
-    "SparkJobStatus",
-    # Options (KEP-107 extensibility pattern - callable pattern like trainer SDK)
     "Annotations",
     "Labels",
     "Name",
     "NodeSelector",
     "PodTemplateOverride",
     "Toleration",
-    # Configuration
-    "KubernetesBackendConfig",
 ]
