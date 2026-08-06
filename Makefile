@@ -84,16 +84,14 @@ release: ## Create a release commit. Usage: make release VERSION=X.Y.Z GITHUB_TO
 		MAJOR_MINOR=$$(echo "$(VERSION)" | cut -d. -f1,2); \
 		CHANGELOG_PATH="CHANGELOG/CHANGELOG-$$MAJOR_MINOR.md"; \
 		RELEASE_BRANCH="release-$$MAJOR_MINOR"; \
-		RELEASE_SHA=$$(git rev-parse --verify --quiet "refs/remotes/upstream/$$RELEASE_BRANCH") || true; \
-		if [ -n "$$RELEASE_SHA" ]; then \
-			RANGE_END="$$RELEASE_SHA"; \
-			RANGE_NAME="$$RELEASE_BRANCH @ $$RELEASE_SHA"; \
-		elif [ -f "$$CHANGELOG_PATH" ]; then \
-			echo "Error: branch $$RELEASE_BRANCH not found on upstream, but $$CHANGELOG_PATH exists. Run: git fetch upstream $$RELEASE_BRANCH"; \
-			exit 1; \
-		else \
-			RANGE_END=$$(git rev-parse HEAD); \
-			RANGE_NAME="HEAD @ $$RANGE_END ($$RELEASE_BRANCH not cut yet)"; \
+		RELEASE_SHA=$$(git rev-parse --verify --quiet "refs/remotes/upstream/$$RELEASE_BRANCH" || true); \
+		if [ -z "$$RELEASE_SHA" ]; then \
+			if [ -f "$$CHANGELOG_PATH" ]; then \
+				echo "Error: branch $$RELEASE_BRANCH not found on upstream, but $$CHANGELOG_PATH exists. Run: git fetch upstream $$RELEASE_BRANCH"; \
+				exit 1; \
+			fi; \
+			RELEASE_SHA=$$(git rev-parse HEAD); \
+			echo "Branch $$RELEASE_BRANCH does not exist yet (new release line $$MAJOR_MINOR, created by the release workflow); using HEAD"; \
 		fi; \
 		PATCH=$$(echo "$(VERSION)" | cut -d. -f3); \
 		if [ "$$PATCH" -gt 0 ]; then \
@@ -102,15 +100,15 @@ release: ## Create a release commit. Usage: make release VERSION=X.Y.Z GITHUB_TO
 			PREV_MINOR=$$(( $$(echo "$(VERSION)" | cut -d. -f2) - 1 )); \
 			PREV_TAG=$$(git tag --list "$$(echo "$(VERSION)" | cut -d. -f1).$$PREV_MINOR.*" | grep -vE -- '(rc)' | sort -t. -k3,3nr | head -1 || true); \
 		fi; \
-		if [ -z "$$PREV_TAG" ] || ! git rev-parse --verify --quiet "$$PREV_TAG^{commit}" >/dev/null; then \
+		if [ -z "$$PREV_TAG" ]; then \
 			echo "Error: cannot determine the previous release tag for $(VERSION)"; \
 			exit 1; \
 		fi; \
-		echo "Generating changelog for $(VERSION) (range: $$PREV_TAG..$$RANGE_NAME)"; \
+		echo "Generating changelog for $(VERSION) (range: $$PREV_TAG..$$RELEASE_SHA)"; \
 		touch "$$CHANGELOG_PATH"; \
 		docker run --rm -u $$(id -u):$$(id -g) -e HOME=/tmp -e GITHUB_TOKEN \
 			-v $(PROJECT_DIR):/app -w /app ghcr.io/orhun/git-cliff/git-cliff:latest \
-			"$$PREV_TAG..$$RANGE_END" --tag $(VERSION) --prepend "$$CHANGELOG_PATH"; \
+			"$$PREV_TAG..$$RELEASE_SHA" --tag $(VERSION) --prepend "$$CHANGELOG_PATH"; \
 		echo "Changelog generated at $$CHANGELOG_PATH"; \
 	fi
 	@echo ""
