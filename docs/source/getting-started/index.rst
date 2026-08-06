@@ -55,7 +55,7 @@ Here's how simple it is to train a model:
 Next Steps
 ----------
 
-.. grid:: 3
+.. grid:: 2
    :gutter: 3
 
    .. grid-item-card:: Installation
@@ -75,3 +75,9 @@ Next Steps
       :link-type: doc
 
       Iterate fast with Local Process or Container backends before deploying to a cluster.
+
+   .. grid-item-card:: End-to-End Workflow
+      :link: end-to-end-workflow
+      :link-type: doc
+
+      Tune hyperparameters, train a final model, and register it.

@@ -150,6 +150,7 @@ Getting Involved
    getting-started/installation
    getting-started/quickstart
    getting-started/local-development
+   getting-started/end-to-end-workflow
 
 .. toctree::
    :maxdepth: 2
