@@ -30,6 +30,7 @@ from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.spark.backends.kubernetes.utils import (
     validate_spark_connect_url,
 )
+from kubeflow.spark.options import Labels, Name
 from kubeflow.spark.test.common import (
     DEFAULT_NAMESPACE,
     FAILED,
@@ -41,7 +42,6 @@ from kubeflow.spark.test.common import (
     TIMEOUT,
     TestCase,
 )
-from kubeflow.spark.types.options import Labels, Name
 from kubeflow.spark.types.types import (
     FileJob,
     FuncJob,
@@ -885,59 +885,6 @@ def test_create_and_connect(kubernetes_backend, test_case):
     "test_case",
     [
         TestCase(
-            name="valid flow with name option provided",
-            expected_status=SUCCESS,
-            config={"options": [Name("test-name"), Labels({"app": "spark"})]},
-            expected_output={"name": "test-name", "remaining_count": 1, "remaining_type": Labels},
-        ),
-        TestCase(
-            name="valid flow with no name option auto generates",
-            expected_status=SUCCESS,
-            config={"options": [Labels({"app": "spark"})]},
-            expected_output={
-                "name_prefix": "spark-connect-",
-                "remaining_count": 1,
-                "remaining_type": Labels,
-            },
-        ),
-        TestCase(
-            name="valid flow with none options auto generates",
-            expected_status=SUCCESS,
-            config={"options": None},
-            expected_output={"name_prefix": "spark-connect-", "remaining_count": 0},
-        ),
-        TestCase(
-            name="valid flow with empty options auto generates",
-            expected_status=SUCCESS,
-            config={"options": []},
-            expected_output={"name_prefix": "spark-connect-", "remaining_count": 0},
-        ),
-    ],
-)
-def test_extract_name_option(kubernetes_backend, test_case):
-    """Test KubernetesBackend._extract_name_option for name extraction and auto-generation."""
-    print("Executing test:", test_case.name)
-    try:
-        name, filtered = kubernetes_backend._extract_name_option(test_case.config["options"])
-
-        assert test_case.expected_status == SUCCESS
-        if "name" in test_case.expected_output:
-            assert name == test_case.expected_output["name"]
-        else:
-            assert name.startswith(test_case.expected_output["name_prefix"])
-        assert len(filtered) == test_case.expected_output["remaining_count"]
-        if "remaining_type" in test_case.expected_output:
-            assert isinstance(filtered[0], test_case.expected_output["remaining_type"])
-
-    except Exception as e:
-        assert type(e) is test_case.expected_error
-    print("test execution complete")
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TestCase(
             name="valid remote file job",
             expected_status=SUCCESS,
             config={
@@ -1292,6 +1239,34 @@ def test_validate_job(kubernetes_backend, test_case):
                 "use_mock_command": True,
             },
         ),
+        TestCase(
+            name="valid remote file submission with spark conf",
+            expected_status=SUCCESS,
+            config={
+                "job": FileJob(
+                    file_source="s3://bucket/job.py",
+                    args=["--date", "2026-06-30"],
+                ),
+                "spark_conf": {
+                    "spark.executor.memory": "4g",
+                    "spark.sql.shuffle.partitions": "10",
+                },
+            },
+        ),
+        TestCase(
+            name="valid remote file submission with options",
+            expected_status=SUCCESS,
+            config={
+                "job": FileJob(
+                    file_source="s3://bucket/job.py",
+                    args=["--date", "2026-06-30"],
+                ),
+                "options": [
+                    Name("custom-job"),
+                    Labels({"team": "ml"}),
+                ],
+            },
+        ),
     ],
 )
 def test_submit_job(kubernetes_backend, test_case):
@@ -1314,20 +1289,34 @@ def test_submit_job(kubernetes_backend, test_case):
 
                 job = kubernetes_backend.submit_job(
                     job=test_case.config["job"],
+                    options=test_case.config.get("options"),
+                    spark_conf=test_case.config.get("spark_conf"),
                 )
 
                 mock_build.assert_called_once()
 
                 assert mock_build.call_args.kwargs["func"] == test_case.config["job"].func
                 assert mock_build.call_args.kwargs["func_args"] == test_case.config["job"].func_args
+                if test_case.config.get("options"):
+                    assert mock_build.call_args.kwargs["options"] == test_case.config["options"]
+                    assert mock_build.call_args.kwargs["backend"] is kubernetes_backend
+                assert mock_build.call_args.kwargs["spark_conf"] == test_case.config.get(
+                    "spark_conf"
+                )
 
         else:
             job = kubernetes_backend.submit_job(
                 job=test_case.config["job"],
+                options=test_case.config.get("options"),
+                spark_conf=test_case.config.get("spark_conf"),
             )
 
         assert test_case.expected_status == SUCCESS
-        assert job.name.startswith("spark-job-")
+
+        if test_case.config.get("options"):
+            assert job.name == "custom-job"
+        else:
+            assert job.name.startswith("spark-job-")
 
     except Exception as e:
         assert type(e) is test_case.expected_error
