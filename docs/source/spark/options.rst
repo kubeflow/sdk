@@ -60,7 +60,7 @@ infrastructure or GPU nodes:
        num_executors=5,
        resources_per_executor={"cpu": "4", "memory": "16Gi", "nvidia.com/gpu": "1"},
        options=[
-           NodeSelector({"node-type": "spark-gpu", "workload": "ml"}),
+           NodeSelector({"kubernetes.io/os": "linux", "node-pool": "batch",}),
        ],
    )
 

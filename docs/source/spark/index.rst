@@ -46,6 +46,20 @@ How It Works
 3. The Spark Operator schedules the driver and executor pods on the cluster
 4. You monitor progress and retrieve logs or results
 
+By default, SparkClient provisions **1 CPU** and **512Mi** of memory per
+executor. You can customize the number of executors and their resource requests
+using ``num_executors`` and ``resources_per_executor``.
+
+.. note::
+
+   Batch job submission requires the ``spark-operator-spark`` ServiceAccount to
+   exist in the target namespace, with the required SparkApplication RBAC
+   permissions bound to it. Otherwise, ``submit_job()`` requests will fail.
+
+   This is a current Spark Operator requirement and is expected to be simplified
+   once `kubeflow/spark-operator#3049 <https://github.com/kubeflow/spark-operator/issues/3049>`_
+   is resolved.
+
 Two Ways to Run Spark
 -----------------------
 

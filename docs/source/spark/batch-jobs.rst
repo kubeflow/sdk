@@ -107,9 +107,6 @@ This is passed through as ``spec.mainApplicationFile`` on the generated
 
    mainApplicationFile: local:///opt/spark/app/etl.py
 
-Additional dependencies (Python packages, JARs, archives) are not configurable
-through ``submit_job()`` yet — the SDK never sets ``spec.deps`` on the
-``SparkApplication``. Bake them into the Spark image or mount them via a PVC.
 
 ``FileJob`` fields:
 
