@@ -105,6 +105,8 @@ This is passed through as ``spec.mainApplicationFile`` on the generated
 
 .. code-block:: yaml
 
+.. code-block:: yaml
+  
    mainApplicationFile: local:///opt/spark/app/etl.py
 
 
