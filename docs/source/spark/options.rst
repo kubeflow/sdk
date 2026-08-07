@@ -53,6 +53,8 @@ Constrain Spark pods to nodes with matching Kubernetes labels:
 
    from kubeflow.spark import NodeSelector, SparkClient
 
+   client = SparkClient()
+
    spark = client.connect(
         num_executors=5,
         resources_per_executor={
