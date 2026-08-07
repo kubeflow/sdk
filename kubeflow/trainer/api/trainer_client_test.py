@@ -70,3 +70,49 @@ def test_backend_selection(test_case):
         client = TrainerClient(backend_config=test_case["backend_config"])
         backend_name = client.backend.__class__.__name__
         assert backend_name == test_case["expected_backend"]
+
+
+@pytest.fixture
+def trainer_client():
+    """Create a TrainerClient with a mocked LocalProcessBackend."""
+    return TrainerClient(backend_config=LocalProcessBackendConfig())
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        {
+            "name": "job_exists_returns_true",
+            "get_job_side_effect": None,
+            "expected_result": True,
+        },
+        {
+            "name": "job_exists_returns_false_on_value_error",
+            "get_job_side_effect": ValueError("No TrainJob with name test-job"),
+            "expected_result": False,
+        },
+        {
+            "name": "job_exists_returns_false_on_runtime_error",
+            "get_job_side_effect": RuntimeError("Failed to get TrainJob"),
+            "expected_result": False,
+        },
+    ],
+)
+def test_job_exists(trainer_client, test_case):
+    """Test TrainerClient.job_exists() across found, not-found, and error cases."""
+    with patch.object(trainer_client.backend, "get_job") as mock_get_job:
+        if test_case["get_job_side_effect"] is not None:
+            mock_get_job.side_effect = test_case["get_job_side_effect"]
+        else:
+            mock_get_job.return_value = Mock()
+
+        assert trainer_client.job_exists("test-job") == test_case["expected_result"]
+
+
+def test_job_exists_propagates_timeout_error(trainer_client):
+    """Test TrainerClient.job_exists() lets a TimeoutError propagate instead of masking it."""
+    with patch.object(trainer_client.backend, "get_job") as mock_get_job:
+        mock_get_job.side_effect = TimeoutError("Timeout to get TrainJob")
+
+        with pytest.raises(TimeoutError):
+            trainer_client.job_exists("test-job")

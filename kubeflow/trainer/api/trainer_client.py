@@ -232,6 +232,30 @@ class TrainerClient:
 
         return self.backend.get_job(name=name)
 
+    def job_exists(self, name: str) -> bool:
+        """Check whether a TrainJob with the given name exists.
+
+        Args:
+            name: Name of the TrainJob.
+
+        Returns:
+            True if the TrainJob exists, False otherwise.
+
+        Raises:
+            TimeoutError: Timeout occurred while getting the TrainJob.
+
+        Examples:
+            >>> from kubeflow.trainer import TrainerClient
+            >>> client = TrainerClient()
+            >>> if client.job_exists("s8d44aa4fb6d"):
+            ...     print("TrainJob exists")
+        """
+        try:
+            self.get_job(name=name)
+            return True
+        except (ValueError, RuntimeError):
+            return False
+
     def get_job_logs(
         self,
         name: str,
