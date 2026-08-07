@@ -12,4 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__version__ = "0.5.0rc0"
+"""Spark configuration options."""
+
+from kubeflow.spark.options.kubernetes import (
+    Annotations,
+    Labels,
+    Name,
+    NodeSelector,
+    PodTemplateOverride,
+    Toleration,
+)
+
+__all__ = [
+    "Annotations",
+    "Labels",
+    "Name",
+    "NodeSelector",
+    "PodTemplateOverride",
+    "Toleration",
+]

@@ -14,6 +14,8 @@
 
 """Unit tests for KubernetesBackend."""
 
+from datetime import datetime
+from functools import wraps
 import multiprocessing
 from unittest.mock import Mock, patch
 
@@ -28,6 +30,7 @@ from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.spark.backends.kubernetes.utils import (
     validate_spark_connect_url,
 )
+from kubeflow.spark.options import Labels, Name
 from kubeflow.spark.test.common import (
     DEFAULT_NAMESPACE,
     FAILED,
@@ -39,7 +42,6 @@ from kubeflow.spark.test.common import (
     TIMEOUT,
     TestCase,
 )
-from kubeflow.spark.types.options import Labels, Name
 from kubeflow.spark.types.types import (
     FileJob,
     FuncJob,
@@ -336,6 +338,51 @@ def _mock_read_logs(*args, **kw):
     elif name == RUNTIME:
         return create_error_thread(RuntimeError())
     return create_mock_thread(response="log line 1\nlog line 2")
+
+
+# --------------------------
+# Test Helpers
+# --------------------------
+
+
+def sample_func() -> None:
+    """Sample function used for FuncJob tests."""
+    pass
+
+
+async def async_func() -> None:
+    """Sample async function used for FuncJob tests."""
+    pass
+
+
+def func_with_reserved_delimiter() -> None:
+    print(
+        """
+__KUBEFLOW_FUNC_JOB_SCRIPT__
+"""
+    )
+
+
+def sample_func_with_args(
+    name: str,
+    count: int,
+) -> None:
+    """Sample function with parameters."""
+    pass
+
+
+def _decorator(func: callable) -> callable:
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+@_decorator
+def decorated_func() -> None:
+    """Sample decorated function for testing."""
+    pass
 
 
 # --------------------------
@@ -651,16 +698,23 @@ def test_get_session_logs(kubernetes_backend, test_case):
             config={"in_cluster": False},
             expected_output={"url": "sc://127.0.0.1:15002", "proc_is_none": False},
         ),
+        TestCase(
+            name="out-of-cluster without pod or service name raises",
+            expected_status=FAILED,
+            config={"in_cluster": False, "service_name": None},
+            expected_error=RuntimeError,
+            expected_output="No port-forward target",
+        ),
     ],
 )
 def test_get_connect_url(kubernetes_backend, test_case):
-    """Test get_connect_url for in-cluster and port-forward scenarios."""
+    """Test get_connect_url for in-cluster, port-forward, and not-ready scenarios."""
     print("Executing test:", test_case.name)
     info = SparkConnectInfo(
         name="test-session",
         namespace="default",
         state=SparkConnectState.READY,
-        service_name="test-session-svc",
+        service_name=test_case.config.get("service_name", "test-session-server"),
     )
 
     if test_case.config["in_cluster"]:
@@ -682,6 +736,14 @@ def test_get_connect_url(kubernetes_backend, test_case):
             patch("kubeflow.spark.backends.kubernetes.backend.time.sleep"),
             patch.object(kubernetes_backend, "_wait_for_connect_port", return_value=True),
         ):
+            if test_case.expected_status == FAILED:
+                with pytest.raises(
+                    test_case.expected_error,
+                    match=test_case.expected_output,
+                ):
+                    kubernetes_backend.get_connect_url(info)
+                print("test execution complete")
+                return
             url, proc = kubernetes_backend.get_connect_url(info)
 
     if "url_contains" in test_case.expected_output:
@@ -823,59 +885,6 @@ def test_create_and_connect(kubernetes_backend, test_case):
     "test_case",
     [
         TestCase(
-            name="valid flow with name option provided",
-            expected_status=SUCCESS,
-            config={"options": [Name("test-name"), Labels({"app": "spark"})]},
-            expected_output={"name": "test-name", "remaining_count": 1, "remaining_type": Labels},
-        ),
-        TestCase(
-            name="valid flow with no name option auto generates",
-            expected_status=SUCCESS,
-            config={"options": [Labels({"app": "spark"})]},
-            expected_output={
-                "name_prefix": "spark-connect-",
-                "remaining_count": 1,
-                "remaining_type": Labels,
-            },
-        ),
-        TestCase(
-            name="valid flow with none options auto generates",
-            expected_status=SUCCESS,
-            config={"options": None},
-            expected_output={"name_prefix": "spark-connect-", "remaining_count": 0},
-        ),
-        TestCase(
-            name="valid flow with empty options auto generates",
-            expected_status=SUCCESS,
-            config={"options": []},
-            expected_output={"name_prefix": "spark-connect-", "remaining_count": 0},
-        ),
-    ],
-)
-def test_extract_name_option(kubernetes_backend, test_case):
-    """Test KubernetesBackend._extract_name_option for name extraction and auto-generation."""
-    print("Executing test:", test_case.name)
-    try:
-        name, filtered = kubernetes_backend._extract_name_option(test_case.config["options"])
-
-        assert test_case.expected_status == SUCCESS
-        if "name" in test_case.expected_output:
-            assert name == test_case.expected_output["name"]
-        else:
-            assert name.startswith(test_case.expected_output["name_prefix"])
-        assert len(filtered) == test_case.expected_output["remaining_count"]
-        if "remaining_type" in test_case.expected_output:
-            assert isinstance(filtered[0], test_case.expected_output["remaining_type"])
-
-    except Exception as e:
-        assert type(e) is test_case.expected_error
-    print("test execution complete")
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TestCase(
             name="valid remote file job",
             expected_status=SUCCESS,
             config={
@@ -944,6 +953,192 @@ def test_validate_file_job(kubernetes_backend, test_case):
 
 
 @pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("hello", True),
+        (123, True),
+        (3.14, True),
+        (True, True),
+        (None, True),
+        ([1, "a", False, None], True),
+        ((1, 2, "a"), True),
+        ({"a": 1, "b": [1, 2, None]}, True),
+        (float("inf"), False),
+        (float("-inf"), False),
+        (float("nan"), False),
+        ({1: "value"}, False),
+        (object(), False),
+    ],
+)
+def test_is_supported_func_arg(
+    kubernetes_backend,
+    value,
+    expected,
+):
+    """Test KubernetesBackend._is_supported_func_arg()."""
+
+    assert kubernetes_backend._is_supported_func_arg(value) is expected
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid function job",
+            expected_status=SUCCESS,
+            config={
+                "job": FuncJob(
+                    func=sample_func,
+                ),
+            },
+        ),
+        TestCase(
+            name="non callable function",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func="not-callable",
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="lambda function",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=lambda: None,
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="async function",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=async_func,
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="decorated function",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=decorated_func,
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="func_args unsupported value",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=sample_func,
+                    func_args={
+                        "date": datetime.now(),
+                    },
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="func_args not dict",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=sample_func,
+                    func_args="invalid",
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="func_args keys not strings",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=sample_func,
+                    func_args={1: "value"},
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="func source contains reserved heredoc delimiter",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=func_with_reserved_delimiter,
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="valid func_args",
+            expected_status=SUCCESS,
+            config={
+                "job": FuncJob(
+                    func=sample_func_with_args,
+                    func_args={
+                        "name": "spark",
+                        "count": 1,
+                    },
+                ),
+            },
+        ),
+        TestCase(
+            name="func_args missing required argument",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=sample_func_with_args,
+                    func_args={
+                        "name": "spark",
+                    },
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="func_args unexpected keyword",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=sample_func_with_args,
+                    func_args={
+                        "name": "spark",
+                        "count": 1,
+                        "extra": True,
+                    },
+                ),
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_validate_func_job(kubernetes_backend, test_case):
+    """Test KubernetesBackend._validate_func_job()."""
+
+    print("Executing test:", test_case.name)
+
+    try:
+        kubernetes_backend._validate_func_job(
+            test_case.config["job"],
+        )
+
+        assert test_case.expected_status == SUCCESS
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+
+    print("Test execution complete.")
+
+
+@pytest.mark.parametrize(
     "test_case",
     [
         TestCase(
@@ -956,14 +1151,13 @@ def test_validate_file_job(kubernetes_backend, test_case):
             },
         ),
         TestCase(
-            name="function job not implemented",
-            expected_status=FAILED,
+            name="valid function job",
+            expected_status=SUCCESS,
             config={
                 "job": FuncJob(
-                    func=lambda: None,
+                    func=sample_func,
                 ),
             },
-            expected_error=NotImplementedError,
         ),
         TestCase(
             name="invalid job type",
@@ -1035,6 +1229,44 @@ def test_validate_job(kubernetes_backend, test_case):
             },
             expected_error=ValueError,
         ),
+        TestCase(
+            name="valid function job submission",
+            expected_status=SUCCESS,
+            config={
+                "job": FuncJob(
+                    func=sample_func,
+                ),
+                "use_mock_command": True,
+            },
+        ),
+        TestCase(
+            name="valid remote file submission with spark conf",
+            expected_status=SUCCESS,
+            config={
+                "job": FileJob(
+                    file_source="s3://bucket/job.py",
+                    args=["--date", "2026-06-30"],
+                ),
+                "spark_conf": {
+                    "spark.executor.memory": "4g",
+                    "spark.sql.shuffle.partitions": "10",
+                },
+            },
+        ),
+        TestCase(
+            name="valid remote file submission with options",
+            expected_status=SUCCESS,
+            config={
+                "job": FileJob(
+                    file_source="s3://bucket/job.py",
+                    args=["--date", "2026-06-30"],
+                ),
+                "options": [
+                    Name("custom-job"),
+                    Labels({"team": "ml"}),
+                ],
+            },
+        ),
     ],
 )
 def test_submit_job(kubernetes_backend, test_case):
@@ -1047,12 +1279,44 @@ def test_submit_job(kubernetes_backend, test_case):
             DEFAULT_NAMESPACE,
         )
 
-        job = kubernetes_backend.submit_job(
-            job=test_case.config["job"],
-        )
+        if test_case.config.get("use_mock_command"):
+            with patch(
+                "kubeflow.spark.backends.kubernetes.backend.get_spark_application_cr_from_func_job",
+            ) as mock_build:
+                mock_build.return_value = get_spark_application(
+                    "spark-job-test",
+                )
+
+                job = kubernetes_backend.submit_job(
+                    job=test_case.config["job"],
+                    options=test_case.config.get("options"),
+                    spark_conf=test_case.config.get("spark_conf"),
+                )
+
+                mock_build.assert_called_once()
+
+                assert mock_build.call_args.kwargs["func"] == test_case.config["job"].func
+                assert mock_build.call_args.kwargs["func_args"] == test_case.config["job"].func_args
+                if test_case.config.get("options"):
+                    assert mock_build.call_args.kwargs["options"] == test_case.config["options"]
+                    assert mock_build.call_args.kwargs["backend"] is kubernetes_backend
+                assert mock_build.call_args.kwargs["spark_conf"] == test_case.config.get(
+                    "spark_conf"
+                )
+
+        else:
+            job = kubernetes_backend.submit_job(
+                job=test_case.config["job"],
+                options=test_case.config.get("options"),
+                spark_conf=test_case.config.get("spark_conf"),
+            )
 
         assert test_case.expected_status == SUCCESS
-        assert job.name.startswith("spark-job-")
+
+        if test_case.config.get("options"):
+            assert job.name == "custom-job"
+        else:
+            assert job.name.startswith("spark-job-")
 
     except Exception as e:
         assert type(e) is test_case.expected_error
@@ -1503,14 +1767,12 @@ def test_wait_for_job_status(kubernetes_backend, test_case):
             if test_case.expected_status == SUCCESS:
                 kubernetes_backend.wait_for_job_status(
                     name="test-job",
-                    status={SparkJobStatus.COMPLETED},
                     timeout=1,
                 )
             else:
                 with pytest.raises(test_case.expected_error):
                     kubernetes_backend.wait_for_job_status(
                         name="test-job",
-                        status={SparkJobStatus.COMPLETED},
                         timeout=1,
                     )
 

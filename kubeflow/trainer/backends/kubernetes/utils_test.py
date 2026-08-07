@@ -340,7 +340,11 @@ def test_get_resources_per_node(test_case: TestCase):
         TestCase(
             name="packages with extras notation",
             config={
-                "packages_to_install": ["datasets", "transformers[torch]", "cloudpathlib[all]"],
+                "packages_to_install": [
+                    "datasets",
+                    "transformers[torch]",
+                    "cloudpathlib[all]",
+                ],
                 "pip_index_urls": constants.DEFAULT_PIP_INDEX_URLS,
                 "is_mpi": False,
             },
@@ -1230,13 +1234,23 @@ def _make_ca_file() -> str:
             name="ETA in seconds",
             expected_status=SUCCESS,
             config={"progress_percent": 50, "estimated_remaining_seconds": 3600},
-            expected_output={"result": True, "post_called": True, "progress": 50, "eta": 3600},
+            expected_output={
+                "result": True,
+                "post_called": True,
+                "progress": 50,
+                "eta": 3600,
+            },
         ),
         TestCase(
             name="negative ETA clamped to 0",
             expected_status=SUCCESS,
             config={"progress_percent": 50, "estimated_remaining_seconds": -30},
-            expected_output={"result": True, "post_called": True, "progress": 50, "eta": 0},
+            expected_output={
+                "result": True,
+                "post_called": True,
+                "progress": 50,
+                "eta": 0,
+            },
         ),
         TestCase(
             name="metrics included with correct count",
@@ -1311,7 +1325,11 @@ def _make_ca_file() -> str:
             name="CA cert used for TLS verification",
             expected_status=SUCCESS,
             config={"progress_percent": 50, "use_ca_cert": True},
-            expected_output={"result": True, "post_called": True, "verify_is_ca_path": True},
+            expected_output={
+                "result": True,
+                "post_called": True,
+                "verify_is_ca_path": True,
+            },
         ),
         TestCase(
             name="returns false on non-200 response",
@@ -1322,7 +1340,10 @@ def _make_ca_file() -> str:
         TestCase(
             name="returns false on network exception",
             expected_status=SUCCESS,
-            config={"progress_percent": 50, "mock_exception": ConnectionError("timeout")},
+            config={
+                "progress_percent": 50,
+                "mock_exception": ConnectionError("timeout"),
+            },
             expected_output={"result": False, "post_called": True},
         ),
         TestCase(
@@ -1490,4 +1511,186 @@ def test_update_trainjob_status(test_case: TestCase):
         os.unlink(token_path)
         if ca_path:
             os.unlink(ca_path)
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="tpu v5e single-slice 2x2",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "2x2"},
+            expected_output=1,
+        ),
+        TestCase(
+            name="tpu v5e single-slice 2x4",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "2x4"},
+            expected_output=2,
+        ),
+        TestCase(
+            name="tpu v5e single-slice 4x4",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "4x4"},
+            expected_output=4,
+        ),
+        TestCase(
+            name="tpu v5e multi-slice 2x2",
+            expected_status=SUCCESS,
+            config={"num_slices": 2, "topology": "2x2"},
+            expected_output=2,
+        ),
+        TestCase(
+            name="tpu v5e multi-slice 2x4",
+            expected_status=SUCCESS,
+            config={"num_slices": 4, "topology": "2x4"},
+            expected_output=8,
+        ),
+        TestCase(
+            name="tpu v5e multi-slice 4x4",
+            expected_status=SUCCESS,
+            config={"num_slices": 2, "topology": "4x4"},
+            expected_output=8,
+        ),
+        TestCase(
+            name="tpu v4/v5p 3D single-slice 2x2x2",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "2x2x2"},
+            expected_output=2,
+        ),
+        TestCase(
+            name="tpu v4/v5p 3D multi-slice 2x2x2",
+            expected_status=SUCCESS,
+            config={"num_slices": 3, "topology": "2x2x2"},
+            expected_output=6,
+        ),
+        TestCase(
+            name="tpu v4/v5p 3D single-slice 2x2x4",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "2x2x4"},
+            expected_output=4,
+        ),
+        TestCase(
+            name="tpu v4/v5p 3D multi-slice 2x2x4",
+            expected_status=SUCCESS,
+            config={"num_slices": 2, "topology": "2x2x4"},
+            expected_output=8,
+        ),
+        TestCase(
+            name="case insensitivity 2D",
+            expected_status=SUCCESS,
+            config={"num_slices": 2, "topology": "2X4"},
+            expected_output=4,
+        ),
+        TestCase(
+            name="case insensitivity 3D",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "2X2X2"},
+            expected_output=2,
+        ),
+        TestCase(
+            name="custom chips per host override",
+            expected_status=SUCCESS,
+            config={"num_slices": 2, "topology": "4x4", "chips_per_host": 8},
+            expected_output=4,
+        ),
+        TestCase(
+            name="fractional TPU single-slice 1x1 on 4-chip host",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "1x1", "chips_per_host": 4},
+            expected_output=1,
+        ),
+        TestCase(
+            name="fractional TPU multi-slice 2x2 on 8-chip host",
+            expected_status=SUCCESS,
+            config={"num_slices": 2, "topology": "2x2", "chips_per_host": 8},
+            expected_output=2,
+        ),
+        TestCase(
+            name="empty topology raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": ""},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="invalid topology format raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "invalid-topo"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="incomplete topology format raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="indivisible topology layout raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x3"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="negative slices raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": -1, "topology": "2x2"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="zero slices raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 0, "topology": "2x2"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="negative chips per host raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x2", "chips_per_host": -4},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="zero chips per host raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x2", "chips_per_host": 0},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="4D topology dimensions raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x2x2x2"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="zero topology dimensions raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x0x2"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="negative topology dimensions raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x-2"},
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_get_tpu_num_nodes(test_case: TestCase):
+    print("Executing test:", test_case.name)
+    try:
+        kwargs = {
+            "num_slices": test_case.config["num_slices"],
+            "topology": test_case.config["topology"],
+        }
+        if "chips_per_host" in test_case.config:
+            kwargs["chips_per_host"] = test_case.config["chips_per_host"]
+
+        num_nodes = utils.get_tpu_num_nodes(**kwargs)
+
+        assert test_case.expected_status == SUCCESS
+        assert num_nodes == test_case.expected_output
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert isinstance(e, test_case.expected_error)
     print("test execution complete")

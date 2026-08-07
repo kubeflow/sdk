@@ -37,6 +37,7 @@ from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
 import kubeflow.trainer.backends.kubernetes.utils as utils
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.options import (
+    ActiveDeadlineSeconds,
     Annotations,
     JobSetSpecPatch,
     JobSetTemplatePatch,
@@ -364,6 +365,7 @@ def get_train_job(
     annotations: dict[str, str] | None = None,
     runtime_patches: list[models.TrainerV1alpha1RuntimePatch] | None = None,
     runtime_kind: types.RuntimeKind = types.RuntimeKind.TRAINING_RUNTIME,
+    active_deadline_seconds: int | None = None,
 ) -> models.TrainerV1alpha1TrainJob:
     """
     Create a mock TrainJob object with optional trainer configurations.
@@ -383,6 +385,7 @@ def get_train_job(
             ),
             trainer=train_job_trainer,
             runtimePatches=runtime_patches,
+            activeDeadlineSeconds=active_deadline_seconds,
         ),
     )
 
@@ -1420,6 +1423,36 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                         ),
                     ),
                 ],
+            ),
+        ),
+        TestCase(
+            name="train with active deadline seconds",
+            expected_status=SUCCESS,
+            config={
+                "options": [
+                    ActiveDeadlineSeconds(seconds=3600),
+                ],
+            },
+            expected_output=get_train_job(
+                runtime_name=TORCH_RUNTIME,
+                train_job_name=BASIC_TRAIN_JOB_NAME,
+                active_deadline_seconds=3600,
+            ),
+        ),
+        TestCase(
+            name="train with active deadline seconds and labels",
+            expected_status=SUCCESS,
+            config={
+                "options": [
+                    ActiveDeadlineSeconds(seconds=600),
+                    Labels({"team": "ml-platform"}),
+                ],
+            },
+            expected_output=get_train_job(
+                runtime_name=TORCH_RUNTIME,
+                train_job_name=BASIC_TRAIN_JOB_NAME,
+                active_deadline_seconds=600,
+                labels={"team": "ml-platform"},
             ),
         ),
         TestCase(
