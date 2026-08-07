@@ -17,7 +17,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from urllib.parse import urlparse
 
 import kubeflow.common.constants as common_constants
 from kubeflow.trainer.constants import constants
@@ -329,36 +328,18 @@ class BaseInitializer(abc.ABC):
     storage_uri: str
 
 
-def _validate_hf_storage_uri(storage_uri: str, entity: str) -> None:
-    """Validate an 'hf://<user_name>/<repo_name>' storage URI."""
-    if not storage_uri.startswith("hf://"):
-        raise ValueError(f"storage_uri must start with 'hf://', got {storage_uri}")
-
-    parsed = urlparse(storage_uri)
-    if not parsed.netloc or not parsed.path.strip("/"):
-        raise ValueError(
-            f"storage_uri: must have absolute path with 'hf://<user_name>/<{entity}>', got "
-            f"{storage_uri}"
-        )
-
-
 @dataclass
 class HuggingFaceDatasetInitializer(BaseInitializer):
     """Configuration for downloading datasets from HuggingFace Hub.
 
     Args:
-        storage_uri (`str`): The HuggingFace Hub dataset identifier in the format 'hf://username/repo_name'.
+        storage_uri (`str`): The HuggingFace Hub dataset identifier.
         ignore_patterns (`Optional[list[str]]`): List of file patterns to ignore during download.
         access_token (`Optional[str]`): HuggingFace Hub access token for private datasets.
     """
 
     ignore_patterns: list[str] | None = None
     access_token: str | None = None
-
-    def __post_init__(self):
-        """Validate HuggingFaceDatasetInitializer parameters."""
-
-        _validate_hf_storage_uri(self.storage_uri, "dataset_name")
 
 
 @dataclass
@@ -440,7 +421,7 @@ class HuggingFaceModelInitializer(BaseInitializer):
     """Configuration for downloading models from HuggingFace Hub.
 
     Args:
-        storage_uri (`str`): The HuggingFace Hub model identifier in the format 'hf://username/repo_name'.
+        storage_uri (`str`): The HuggingFace Hub model identifier.
         ignore_patterns (`Optional[list[str]]`): List of file patterns to ignore during download.
         access_token (`Optional[str]`): HuggingFace Hub access token.
     """
@@ -449,11 +430,6 @@ class HuggingFaceModelInitializer(BaseInitializer):
         default_factory=lambda: constants.INITIALIZER_DEFAULT_IGNORE_PATTERNS
     )
     access_token: str | None = None
-
-    def __post_init__(self):
-        """Validate HuggingFaceModelInitializer parameters."""
-
-        _validate_hf_storage_uri(self.storage_uri, "model_name")
 
 
 @dataclass

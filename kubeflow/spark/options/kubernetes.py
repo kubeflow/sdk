@@ -1,4 +1,4 @@
-# Copyright 2025 The Kubeflow Authors.
+# Copyright The Kubeflow Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,6 +27,8 @@ from kubeflow_spark_api import models
 
 from kubeflow.spark.backends.base import RuntimeBackend
 
+SparkResource = models.SparkV1alpha1SparkConnect | models.SparkV1beta2SparkApplication
+
 
 @dataclass
 class Labels:
@@ -48,13 +50,11 @@ class Labels:
 
     labels: dict[str, str]
 
-    def __call__(
-        self, spark_connect: models.SparkV1alpha1SparkConnect, backend: RuntimeBackend
-    ) -> None:
-        """Apply labels to the SparkConnect model.
+    def __call__(self, resource: SparkResource, backend: RuntimeBackend) -> None:
+        """Apply labels to the Spark resource.
 
         Args:
-            spark_connect: SparkConnect model to modify.
+            resource: Spark resource to modify.
             backend: Backend instance for validation.
 
         Raises:
@@ -68,9 +68,9 @@ class Labels:
                 f"Supported backends: KubernetesBackend"
             )
 
-        if spark_connect.metadata.labels is None:
-            spark_connect.metadata.labels = {}
-        spark_connect.metadata.labels.update(self.labels)
+        if resource.metadata.labels is None:
+            resource.metadata.labels = {}
+        resource.metadata.labels.update(self.labels)
 
 
 @dataclass
@@ -98,13 +98,11 @@ class Annotations:
 
     annotations: dict[str, str]
 
-    def __call__(
-        self, spark_connect: models.SparkV1alpha1SparkConnect, backend: RuntimeBackend
-    ) -> None:
-        """Apply annotations to the SparkConnect model.
+    def __call__(self, resource: SparkResource, backend: RuntimeBackend) -> None:
+        """Apply annotations to the Spark resource.
 
         Args:
-            spark_connect: SparkConnect model to modify.
+            resource: Spark resource to modify.
             backend: Backend instance for validation.
 
         Raises:
@@ -118,20 +116,27 @@ class Annotations:
                 f"Supported backends: KubernetesBackend"
             )
 
-        if spark_connect.metadata.annotations is None:
-            spark_connect.metadata.annotations = {}
-        spark_connect.metadata.annotations.update(self.annotations)
+        if resource.metadata.annotations is None:
+            resource.metadata.annotations = {}
+        resource.metadata.annotations.update(self.annotations)
 
 
 @dataclass
 class PodTemplateOverride:
-    """Override pod template specifications for driver or executors.
+    """Override pod template specifications for Spark Connect driver or executors.
 
     Provides full control over Kubernetes pod specifications for advanced use cases
     like custom volumes, init containers, sidecars, or security contexts.
 
+    Supported resources:
+        - Spark Connect
+
     Supported backends:
         - Kubernetes
+
+    Note:
+        PodTemplateOverride is currently supported only for Spark Connect.
+        It is not supported for Spark batch jobs submitted with ``submit_job()``.
 
     Args:
         role: Target role ("driver" or "executor").
@@ -145,10 +150,10 @@ class PodTemplateOverride:
                     "spec": {
                         "securityContext": {
                             "runAsUser": 1000,
-                            "fsGroup": 1000
+                            "fsGroup": 1000,
                         }
                     }
-                }
+                },
             )
         ]
         spark = client.connect(..., options=options)
@@ -162,29 +167,35 @@ class PodTemplateOverride:
     template: dict[str, Any]
 
     def __call__(
-        self, spark_connect: models.SparkV1alpha1SparkConnect, backend: RuntimeBackend
+        self,
+        resource: SparkResource,
+        backend: RuntimeBackend,
     ) -> None:
         """Apply pod template override to the SparkConnect model.
 
         Args:
-            spark_connect: SparkConnect model to modify.
+            resource: Spark resource to modify.
             backend: Backend instance for validation.
 
         Raises:
-            ValueError: If backend does not support pod template overrides or invalid role.
+            ValueError: If backend does not support pod template overrides,
+                the resource is not SparkConnect, or the role is invalid.
         """
         from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 
         if not isinstance(backend, KubernetesBackend):
             raise ValueError(
-                f"PodTemplateOverride option is not compatible with {type(backend).__name__}. "
-                f"Supported backends: KubernetesBackend"
+                f"PodTemplateOverride option is not compatible with "
+                f"{type(backend).__name__}. Supported backends: KubernetesBackend"
             )
 
+        if not isinstance(resource, models.SparkV1alpha1SparkConnect):
+            raise ValueError("PodTemplateOverride is currently supported only for SparkConnect.")
+
         if self.role == "driver":
-            role_spec = spark_connect.spec.server
+            role_spec = resource.spec.server
         elif self.role == "executor":
-            role_spec = spark_connect.spec.executor
+            role_spec = resource.spec.executor
         else:
             raise ValueError(f"Invalid role '{self.role}'. Must be 'driver' or 'executor'.")
 
@@ -241,17 +252,17 @@ class NodeSelector:
 
     selectors: dict[str, str]
 
-    def __call__(
-        self, spark_connect: models.SparkV1alpha1SparkConnect, backend: RuntimeBackend
-    ) -> None:
-        """Apply node selector constraints to the SparkConnect model.
+    def __call__(self, resource: SparkResource, backend: RuntimeBackend) -> None:
+        """Apply node selector constraints to the Spark resource.
 
         Args:
-            spark_connect: SparkConnect model to modify.
+            resource: Spark resource to modify.
             backend: Backend instance for validation.
 
         Raises:
             ValueError: If backend does not support node selectors.
+
+            TypeError: If the resource is not a supported Spark resource.
         """
         from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 
@@ -262,15 +273,37 @@ class NodeSelector:
             )
 
         # Apply to both server and executor
-        for role_spec in [spark_connect.spec.server, spark_connect.spec.executor]:
-            if role_spec.template is None:
-                role_spec.template = models.IoK8sApiCoreV1PodTemplateSpec()
-            if role_spec.template.spec is None:
-                # PodSpec requires containers field (can be empty list)
-                role_spec.template.spec = models.IoK8sApiCoreV1PodSpec(containers=[])
-            if role_spec.template.spec.node_selector is None:
-                role_spec.template.spec.node_selector = {}
-            role_spec.template.spec.node_selector.update(self.selectors)
+        if isinstance(resource, models.SparkV1alpha1SparkConnect):
+            role_specs = [
+                resource.spec.server,
+                resource.spec.executor,
+            ]
+
+            for role_spec in role_specs:
+                if role_spec.template is None:
+                    role_spec.template = models.IoK8sApiCoreV1PodTemplateSpec()
+
+                if role_spec.template.spec is None:
+                    role_spec.template.spec = models.IoK8sApiCoreV1PodSpec(containers=[])
+
+                if role_spec.template.spec.node_selector is None:
+                    role_spec.template.spec.node_selector = {}
+
+                role_spec.template.spec.node_selector.update(self.selectors)
+
+        elif isinstance(resource, models.SparkV1beta2SparkApplication):
+            role_specs = [
+                resource.spec.driver,
+                resource.spec.executor,
+            ]
+
+            for role_spec in role_specs:
+                if role_spec.node_selector is None:
+                    role_spec.node_selector = {}
+
+                role_spec.node_selector.update(self.selectors)
+        else:
+            raise TypeError(f"Unsupported Spark resource type: {type(resource).__name__}")
 
 
 @dataclass
@@ -306,17 +339,17 @@ class Toleration:
     value: str = ""
     effect: str = "NoSchedule"
 
-    def __call__(
-        self, spark_connect: models.SparkV1alpha1SparkConnect, backend: RuntimeBackend
-    ) -> None:
-        """Apply toleration to the SparkConnect model.
+    def __call__(self, resource: SparkResource, backend: RuntimeBackend) -> None:
+        """Apply toleration to the Spark resource.
 
         Args:
-            spark_connect: SparkConnect model to modify.
+            resource: Spark resource to modify.
             backend: Backend instance for validation.
 
         Raises:
             ValueError: If backend does not support tolerations.
+
+            TypeError: If the resource is not a supported Spark resource.
         """
         from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 
@@ -335,23 +368,48 @@ class Toleration:
         )
 
         # Apply to both server and executor
-        for role_spec in [spark_connect.spec.server, spark_connect.spec.executor]:
-            if role_spec.template is None:
-                role_spec.template = models.IoK8sApiCoreV1PodTemplateSpec()
-            if role_spec.template.spec is None:
-                # PodSpec requires containers field (can be empty list)
-                role_spec.template.spec = models.IoK8sApiCoreV1PodSpec(containers=[])
-            if role_spec.template.spec.tolerations is None:
-                role_spec.template.spec.tolerations = []
-            role_spec.template.spec.tolerations.append(toleration)
+        if isinstance(resource, models.SparkV1alpha1SparkConnect):
+            role_specs = [
+                resource.spec.server,
+                resource.spec.executor,
+            ]
+
+            for role_spec in role_specs:
+                if role_spec.template is None:
+                    role_spec.template = models.IoK8sApiCoreV1PodTemplateSpec()
+
+                if role_spec.template.spec is None:
+                    role_spec.template.spec = models.IoK8sApiCoreV1PodSpec(containers=[])
+
+                if role_spec.template.spec.tolerations is None:
+                    role_spec.template.spec.tolerations = []
+
+                role_spec.template.spec.tolerations.append(toleration)
+
+        elif isinstance(resource, models.SparkV1beta2SparkApplication):
+            role_specs = [
+                resource.spec.driver,
+                resource.spec.executor,
+            ]
+
+            for role_spec in role_specs:
+                if role_spec.tolerations is None:
+                    role_spec.tolerations = []
+
+                role_spec.tolerations.append(toleration)
+        else:
+            raise TypeError(f"Unsupported Spark resource type: {type(resource).__name__}")
 
 
 @dataclass
 class Name:
-    """Set a custom name for the SparkConnect session.
+    """Set a custom name for the Spark resource.
 
-    This option sets the session name which becomes the Kubernetes resource name.
-    If not provided, a name will be auto-generated with format: spark-connect-{uuid}
+    This option sets the Kubernetes resource name.
+
+    If not provided, a name is automatically generated:
+    - Spark Connect sessions: `spark-connect-{uuid}`
+    - Spark batch jobs: `spark-job-{uuid}`
 
     The session name must follow DNS-1123 subdomain rules:
     - Lowercase alphanumeric characters, '-', or '.'
@@ -377,24 +435,15 @@ class Name:
         # Auto-generated name
         spark = client.connect()  # Creates "spark-connect-a1b2c3d4"
         ```
-
-    Note:
-        This option is extracted early in the backend flow before CRD building,
-        unlike other options which modify the CRD after it's built.
     """
 
     name: str
 
-    def __call__(
-        self, spark_connect: models.SparkV1alpha1SparkConnect, backend: RuntimeBackend
-    ) -> None:
-        """Apply custom name to SparkConnect metadata.
-
-        Note: This method exists for interface consistency but is not typically
-        called, as the name is extracted earlier in the backend flow.
+    def __call__(self, resource: SparkResource, backend: RuntimeBackend) -> None:
+        """Apply custom name to the Spark resource metadata.
 
         Args:
-            spark_connect: SparkConnect model to modify.
+            resource: Spark resource to modify.
             backend: Backend instance for validation.
 
         Raises:
@@ -408,4 +457,4 @@ class Name:
                 f"Supported backends: KubernetesBackend"
             )
 
-        spark_connect.metadata.name = self.name
+        resource.metadata.name = self.name
