@@ -242,7 +242,13 @@ def get_resources_per_node(
 
     # Convert only standard resource keys and aliases to lowercase.
     # Extended resources (e.g., "example.com/Custom-NPU") preserve their original case.
-    standard_resources = {constants.CPU_LABEL, "memory", "gpu", "storage", "ephemeral-storage"}
+    standard_resources = {
+        constants.CPU_LABEL,
+        "memory",
+        "gpu",
+        "storage",
+        "ephemeral-storage",
+    }
     resource_aliases = {"gpu": "nvidia.com/gpu", "storage": "ephemeral-storage"}
 
     resources = {}
@@ -628,9 +634,11 @@ def get_optional_initializer_envs(
 
 
 def get_dataset_initializer(
-    dataset: types.HuggingFaceDatasetInitializer
-    | types.S3DatasetInitializer
-    | types.DataCacheInitializer,
+    dataset: (
+        types.HuggingFaceDatasetInitializer
+        | types.S3DatasetInitializer
+        | types.DataCacheInitializer
+    ),
 ) -> models.TrainerV1alpha1DatasetInitializer:
     """
     Get the TrainJob dataset initializer from the given config.
@@ -835,3 +843,69 @@ def update_trainjob_status(
     except Exception as e:
         _logger.warning("Unexpected error in update_trainjob_status: %s", e)
         return False
+
+
+def get_tpu_num_nodes(num_slices: int, topology: str, chips_per_host: int = 4) -> int:
+    """
+    Compute the total number of nodes (hosts) required across all TPU slices.
+
+    This utility function assists in configuring multi-slice TPU TrainJobs where the
+    user wants to scale their training job across multiple physical TPU slices. It calculates
+    the aggregate `num_nodes` based on the slice count and physical TPU topology dimensions.
+
+    Args:
+        num_slices: The number of TPU slices.
+        topology: The TPU topology string (e.g., "2x2", "2x4", "2x2x2", "2x2x4", "4x4").
+        chips_per_host: The number of TPU chips per VM host node. Defaults to 4.
+            Note that this depends on the VM type: e.g., ct6e-standard-4t has 4 chips per host,
+            and ct6e-standard-8t has 8 chips per host.
+
+    Returns:
+        The total number of nodes (hosts) across all slices.
+
+    Raises:
+        ValueError: If topology is empty, improperly formatted, or if the total chips
+                    in a slice is not evenly divisible by the chips_per_host.
+    """
+    if num_slices <= 0:
+        raise ValueError(f"num_slices must be positive, got: {num_slices}")
+
+    if chips_per_host <= 0:
+        raise ValueError(f"chips_per_host must be positive, got: {chips_per_host}")
+
+    if not topology:
+        raise ValueError("TPU topology must be specified.")
+
+    # Parse the topology dimensions (e.g. "2x2" or "2x2x2")
+    try:
+        dims = [int(d) for d in topology.lower().split("x")]
+    except ValueError:
+        raise ValueError(
+            f"Invalid topology format: '{topology}'. Must be formatted as 'AxB' or 'AxBxC' (e.g. '2x2', '2x2x2')."
+        ) from None
+
+    if len(dims) not in (2, 3):
+        raise ValueError(
+            f"Invalid topology format: '{topology}'. Must contain exactly 2 or 3 dimensions (e.g. '2x2', '2x2x2')."
+        )
+
+    if any(dim <= 0 for dim in dims):
+        raise ValueError(f"TPU topology dimensions must be positive, got: '{topology}'.")
+
+    # Calculate total TPU chips in a single slice
+    chips_per_slice = 1
+    for dim in dims:
+        chips_per_slice *= dim
+
+    # Validate and compute hosts per slice
+    if chips_per_slice < chips_per_host:
+        hosts_per_slice = 1
+    else:
+        # Multi-host slice (or full single-host slice) must be cleanly divisible
+        if chips_per_slice % chips_per_host != 0:
+            raise ValueError(
+                f"Total TPU chips in slice ({chips_per_slice}) must be cleanly divisible by chips_per_host ({chips_per_host})."
+            )
+        hosts_per_slice = chips_per_slice // chips_per_host
+
+    return num_slices * hosts_per_slice

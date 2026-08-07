@@ -55,7 +55,7 @@ Here's how simple it is to train a model:
 Next Steps
 ----------
 
-.. grid:: 2
+.. grid:: 3
    :gutter: 3
 
    .. grid-item-card:: Installation
@@ -69,3 +69,9 @@ Next Steps
       :link-type: doc
 
       Train your first model step-by-step.
+
+   .. grid-item-card:: Local Development
+      :link: local-development
+      :link-type: doc
+
+      Iterate fast with Local Process or Container backends before deploying to a cluster.

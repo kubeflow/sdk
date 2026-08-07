@@ -20,6 +20,7 @@ import pytest
 
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.api.spark_client import SparkClient
+from kubeflow.spark.options import Labels
 from kubeflow.spark.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.spark.types.types import (
     FileJob,
@@ -99,17 +100,10 @@ def test_create_and_connect(test_case: TestCase):
         ),
         (
             FileJob(file_source="s3://bucket/job.py"),
-            {"spark.executor.memory": "4g"},
+            [],
             None,
-            None,
-            NotImplementedError,
-        ),
-        (
-            FileJob(file_source="s3://bucket/job.py"),
-            None,
-            [object()],
-            None,
-            NotImplementedError,
+            ValueError("spark_conf must be a dictionary."),
+            ValueError,
         ),
     ],
 )
@@ -139,17 +133,23 @@ def test_submit_job_validation(
 
 
 @pytest.mark.parametrize(
-    "job",
+    "job,options",
     [
-        FileJob(
-            file_source="s3://bucket/job.py",
+        (
+            FileJob(file_source="s3://bucket/job.py"),
+            None,
         ),
-        FuncJob(
-            func=lambda: None,
+        (
+            FileJob(file_source="s3://bucket/job.py"),
+            [Labels({"team": "ml"})],
+        ),
+        (
+            FuncJob(func=lambda: None),
+            None,
         ),
     ],
 )
-def test_submit_job_success(job):
+def test_submit_job_success(job, options):
     """Test successful submit_job."""
 
     with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
@@ -162,7 +162,7 @@ def test_submit_job_success(job):
 
         client = SparkClient()
 
-        name = client.submit_job(job=job)
+        name = client.submit_job(job=job, options=options)
 
         assert name == "spark-job-123"
 
@@ -170,4 +170,6 @@ def test_submit_job_success(job):
             job=job,
             num_executors=None,
             resources_per_executor=None,
+            spark_conf=None,
+            options=options,
         )

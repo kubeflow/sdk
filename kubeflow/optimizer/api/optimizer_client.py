@@ -40,12 +40,16 @@ class OptimizerClient:
         """Initialize a Kubeflow Optimizer client.
 
         Args:
-            backend_config: Backend configuration. Either KubernetesBackendConfig or None to use
-                default config class. Defaults to KubernetesBackendConfig.
+            backend_config: Backend configuration. Either KubernetesBackendConfig
+                or None to use the default config class.
+                Defaults to None (uses KubernetesBackendConfig).
 
         Raises:
-            ValueError: Invalid backend configuration.
+            ValueError: If the backend configuration is invalid.
 
+        Examples:
+            >>> from kubeflow.optimizer import OptimizerClient
+            >>> client = OptimizerClient()
         """
         # Set the default backend config.
         if not backend_config:
@@ -65,23 +69,41 @@ class OptimizerClient:
         objectives: list[Objective] | None = None,
         algorithm: BaseAlgorithm | None = None,
     ) -> str:
-        """Create an OptimizationJob for hyperparameter tuning.
+        """Create and submit an OptimizationJob for hyperparameter tuning.
 
         Args:
             trial_template: The TrainJob template defining the training script.
             trial_config: Optional configuration to run Trials.
-            objectives: List of objectives to optimize.
             search_space: Dictionary mapping parameter names to Search specifications using
                 Search.uniform(), Search.loguniform(), Search.choice(), etc.
+            objectives: Optional list of objectives to optimize. Defaults to minimizing the
+                "loss" metric.
             algorithm: The optimization algorithm to use. Defaults to RandomSearch.
 
         Returns:
-            The unique name of the Experiment that has been generated.
+            The unique name generated for the OptimizationJob (Experiment).
 
         Raises:
-            ValueError: Input arguments are invalid.
-            TimeoutError: Timeout to create Experiment.
-            RuntimeError: Failed to create Experiment.
+            ValueError: If input arguments are invalid.
+            TimeoutError: Timeout occurred while creating the Experiment.
+            RuntimeError: Failed to create the Experiment.
+
+        Examples:
+            >>> from kubeflow.trainer import TrainJobTemplate, CustomTrainer
+            >>> from kubeflow.optimizer import OptimizerClient, Search, TrialConfig
+            >>> def train_fn(learning_rate, num_epochs):
+            ...     pass
+            >>> template = TrainJobTemplate(runtime="torch-distributed", trainer=CustomTrainer(func=train_fn))
+            >>> client = OptimizerClient()
+            >>> opt_id = client.optimize(
+            ...     trial_template=template,
+            ...     trial_config=TrialConfig(num_trials=5, parallel_trials=2),
+            ...     search_space={
+            ...         "learning_rate": Search.loguniform(0.001, 0.1),
+            ...         "num_epochs": Search.choice([5, 10]),
+            ...     },
+            ... )
+            >>> print(opt_id)
         """
         return self.backend.optimize(
             trial_template=trial_template,
@@ -92,31 +114,44 @@ class OptimizerClient:
         )
 
     def list_jobs(self) -> list[OptimizationJob]:
-        """List of the created OptimizationJobs
+        """List created OptimizationJobs.
 
         Returns:
-            List of created OptimizationJobs. If no OptimizationJob exist,
-                an empty list is returned.
+            List of created OptimizationJobs. If no OptimizationJobs exist,
+            an empty list is returned.
 
         Raises:
-            TimeoutError: Timeout to list OptimizationJobs.
+            TimeoutError: Timeout occurred while listing OptimizationJobs.
             RuntimeError: Failed to list OptimizationJobs.
+
+        Examples:
+            >>> from kubeflow.optimizer import OptimizerClient
+            >>> client = OptimizerClient()
+            >>> jobs = client.list_jobs()
+            >>> for job in jobs:
+            ...     print(job.name)
         """
 
         return self.backend.list_jobs()
 
     def get_job(self, name: str) -> OptimizationJob:
-        """Get the OptimizationJob object
+        """Get the OptimizationJob object by name.
 
         Args:
             name: Name of the OptimizationJob.
 
         Returns:
-            A OptimizationJob object.
+            An OptimizationJob object.
 
         Raises:
-            TimeoutError: Timeout to get a OptimizationJob.
-            RuntimeError: Failed to get a OptimizationJob.
+            TimeoutError: Timeout occurred while getting the OptimizationJob.
+            RuntimeError: Failed to get the OptimizationJob.
+
+        Examples:
+            >>> from kubeflow.optimizer import OptimizerClient
+            >>> client = OptimizerClient()
+            >>> job = client.get_job("opt-12345")
+            >>> print(job.status)
         """
 
         return self.backend.get_job(name=name)
@@ -129,35 +164,25 @@ class OptimizerClient:
     ) -> Iterator[str]:
         """Get logs from a specific trial of an OptimizationJob.
 
-        You can watch for the logs in realtime as follows:
-        ```python
-        from kubeflow.optimizer import OptimizerClient
-
-        # Get logs from the best current trial
-        for logline in OptimizerClient().get_job_logs(name="n7fb28dbee94"):
-            print(logline)
-
-        # Get logs from a specific trial
-        for logline in OptimizerClient().get_job_logs(
-            name="n7fb28dbee94", trial_name="n7fb28dbee94-abc123", follow=True
-        ):
-            print(logline)
-        ```
-
         Args:
             name: Name of the OptimizationJob.
             trial_name: Optional name of a specific Trial. If not provided, logs from the
                 current best trial are returned. If no best trial is available yet, logs
                 from the first trial are returned.
-            follow: Whether to stream logs in realtime as they are produced.
+            follow: Whether to stream logs in realtime as they are produced. Defaults to False.
 
         Returns:
             Iterator of log lines.
 
-
         Raises:
-            TimeoutError: Timeout to get an OptimizationJob.
-            RuntimeError: Failed to get an OptimizationJob.
+            TimeoutError: Timeout occurred while getting the OptimizationJob logs.
+            RuntimeError: Failed to get the OptimizationJob logs.
+
+        Examples:
+            >>> from kubeflow.optimizer import OptimizerClient
+            >>> client = OptimizerClient()
+            >>> for line in client.get_job_logs(name="opt-12345"):
+            ...     print(line)
         """
         return self.backend.get_job_logs(name=name, trial_name=trial_name, follow=follow)
 
@@ -171,12 +196,19 @@ class OptimizerClient:
             name: Name of the OptimizationJob.
 
         Returns:
-            A Result object containing the best hyperparameters and metrics, or None if
-            no best trial is available yet.
+            A Result object containing the best hyperparameters and metrics,
+            or None if no best trial is available yet.
 
         Raises:
-            TimeoutError: Timeout to get an OptimizationJob.
-            RuntimeError: Failed to get an OptimizationJob.
+            TimeoutError: Timeout occurred while getting the best results.
+            RuntimeError: Failed to get the best results for the OptimizationJob.
+
+        Examples:
+            >>> from kubeflow.optimizer import OptimizerClient
+            >>> client = OptimizerClient()
+            >>> best_res = client.get_best_results("opt-12345")
+            >>> if best_res:
+            ...     print(best_res.parameters)
         """
 
         return self.backend.get_best_results(name=name)
@@ -194,10 +226,11 @@ class OptimizerClient:
         Args:
             name: Name of the OptimizationJob.
             status: Expected statuses. Must be a subset of Created, Running, Complete, and
-                Failed statuses.
+                Failed statuses. Defaults to Complete.
             timeout: Maximum number of seconds to wait for the OptimizationJob to reach one of the
-                expected statuses.
+                expected statuses. Defaults to 3600.
             polling_interval: The polling interval in seconds to check OptimizationJob status.
+                Defaults to 2.
             callbacks: Optional list of callback functions to be invoked after each polling
                 interval. Each callback should accept a single argument: the OptimizationJob object.
 
@@ -208,7 +241,13 @@ class OptimizerClient:
             ValueError: The input values are incorrect.
             RuntimeError: Failed to get OptimizationJob or OptimizationJob reaches unexpected
                 Failed status.
-            TimeoutError: Timeout to wait for OptimizationJob status.
+            TimeoutError: Timeout occurred while waiting for the OptimizationJob status.
+
+        Examples:
+            >>> from kubeflow.optimizer import OptimizerClient
+            >>> client = OptimizerClient()
+            >>> job = client.wait_for_job_status(name="opt-12345")
+            >>> print(job.status)
         """
         common_utils.validate_wait_for_job_status(polling_interval, timeout)
 
@@ -227,8 +266,13 @@ class OptimizerClient:
             name: Name of the OptimizationJob.
 
         Raises:
-            TimeoutError: Timeout to delete OptimizationJob.
-            RuntimeError: Failed to delete OptimizationJob.
+            TimeoutError: Timeout occurred while deleting the OptimizationJob.
+            RuntimeError: Failed to delete the OptimizationJob.
+
+        Examples:
+            >>> from kubeflow.optimizer import OptimizerClient
+            >>> client = OptimizerClient()
+            >>> client.delete_job("opt-12345")
         """
         return self.backend.delete_job(name=name)
 
@@ -246,7 +290,14 @@ class OptimizerClient:
             A list of Event objects associated with the OptimizationJob.
 
         Raises:
-            TimeoutError: Timeout to get an OptimizationJob events.
-            RuntimeError: Failed to get an OptimizationJob events.
+            TimeoutError: Timeout occurred while getting the OptimizationJob events.
+            RuntimeError: Failed to get the OptimizationJob events.
+
+        Examples:
+            >>> from kubeflow.optimizer import OptimizerClient
+            >>> client = OptimizerClient()
+            >>> events = client.get_job_events("opt-12345")
+            >>> for event in events:
+            ...     print(f"[{event.event_time}] {event.message}")
         """
         return self.backend.get_job_events(name=name)
