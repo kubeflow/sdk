@@ -483,12 +483,13 @@ class TrainerArgs:
 class ActiveDeadlineSeconds:
     """Set the active deadline on the TrainJob (.spec.activeDeadlineSeconds).
 
-    Specifies the duration in seconds relative to the TrainJob start time
+    Specifies the duration in seconds relative to the TrainJob creation time
     that the TrainJob may be active before the system tries to terminate it.
     Once reached, all running Pods are terminated and the TrainJob status
     becomes Failed with reason: DeadlineExceeded.
 
-    The deadline timer resets when the TrainJob is resumed from suspension.
+    This value overrides any default set in the referenced Runtime. The field
+    is immutable, so it cannot be changed after the TrainJob is created.
 
     Supported backends:
         - Kubernetes

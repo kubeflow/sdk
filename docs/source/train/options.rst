@@ -200,6 +200,10 @@ Below is the complete list of options available in the ``kubeflow.trainer.option
    :members:
    :show-inheritance:
 
+.. autoclass:: kubeflow.trainer.options.ActiveDeadlineSeconds
+   :members:
+   :show-inheritance:
+
 .. autoclass:: kubeflow.trainer.options.RuntimePatch
    :members:
    :show-inheritance:
