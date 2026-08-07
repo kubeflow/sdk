@@ -194,6 +194,24 @@ Use the Spark SDK to inspect and manage Spark Connect sessions in the configured
        "spark-connect-example"
    )
 
+Guides
+------
+
+.. grid:: 2
+   :gutter: 3
+
+   .. grid-item-card:: Spark Examples
+      :link: examples
+      :link-type: doc
+
+      Build advanced SQL, ETL, object-storage, and production workflows.
+
+   .. grid-item-card:: API Reference
+      :link: api
+      :link-type: doc
+
+      Explore the Spark client, configuration types, and public methods.
+
 When Things Go Wrong
 --------------------
 

@@ -181,6 +181,7 @@ Getting Involved
    :caption: Spark
 
    spark/index
+   spark/examples
    spark/api
 
 .. toctree::
