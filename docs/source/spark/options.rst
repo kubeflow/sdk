@@ -47,22 +47,27 @@ For resource organization and tooling metadata:
 Node Selection
 --------------
 
-Constrain pods to nodes with matching labels — useful for dedicated Spark
-infrastructure or GPU nodes:
+Constrain Spark pods to nodes with matching Kubernetes labels:
 
 .. code-block:: python
 
    from kubeflow.spark import NodeSelector, SparkClient
 
-   client = SparkClient()
-
    spark = client.connect(
-       num_executors=5,
-       resources_per_executor={"cpu": "4", "memory": "16Gi", "nvidia.com/gpu": "1"},
-       options=[
-           NodeSelector({"kubernetes.io/os": "linux", "node-pool": "batch",}),
-       ],
-   )
+        num_executors=5,
+        resources_per_executor={
+            "cpu": "4",
+            "memory": "16Gi",
+        },
+        options=[
+            NodeSelector(
+                {
+                    "kubernetes.io/os": "linux",
+                    "node-pool": "batch",
+                }
+            ),
+        ],
+    )
 
 Tolerations
 -----------
