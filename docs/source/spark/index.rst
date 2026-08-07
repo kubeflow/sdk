@@ -6,14 +6,18 @@ Run distributed data processing workloads using Apache Spark.
 Overview
 --------
 
-Kubeflow provides integration with Apache Spark to run scalable data processing jobs on Kubernetes. Using the Spark SDK, you can:
+Kubeflow provides integration with Apache Spark to run scalable data processing jobs
+on Kubernetes. Using the Spark SDK, you can:
 
-- **Create Spark sessions** - Connect to a Spark cluster from Python
-- **Run distributed workloads** - Execute Spark DataFrame and SQL operations
+- **Run interactive sessions** - Connect to a Spark cluster from a notebook or script
+- **Submit batch jobs** - Run existing Spark applications as managed Kubernetes workloads
 - **Scale compute resources** - Configure executor counts and resources
 - **Process large datasets** - Perform transformations and aggregations across a cluster
+- **Track progress** - Monitor logs and job status in real-time
 
-Spark jobs are executed on Kubernetes using the Spark Operator. The operator manages the lifecycle of Spark driver and executor pods, allowing Spark workloads to run alongside machine learning pipelines.
+Spark jobs are executed on Kubernetes using the Spark Operator. The operator manages
+the lifecycle of Spark driver and executor pods, allowing Spark workloads to run
+alongside machine learning pipelines.
 
 Spark is commonly used for:
 
@@ -33,318 +37,114 @@ To use Spark with the Kubeflow SDK, install the Spark dependencies:
 
 For full setup instructions, see `the Spark installation guide <https://www.kubeflow.org/docs/components/spark-operator/getting-started/>`_.
 
-Quick Example
--------------
-
-.. code-block:: python
-
-   from kubeflow.spark import SparkClient
-
-   # Connect to a Spark cluster
-   client = SparkClient()
-
-   spark = client.connect(
-       num_executors=5,
-       resources_per_executor={
-           "cpu": "2",
-           "memory": "2Gi",
-       },
-   )
-
-   # Create a distributed DataFrame
-   df = spark.range(10)
-
-   # Run a distributed computation
-   df.show()
-
 How It Works
 ------------
 
-1. **Connect** - Create a Spark client and establish a Spark session
-2. **Configure resources** - Specify executor count and resource allocation
-3. **Submit operations** - Execute DataFrame or SQL transformations
-4. **Execute on cluster** - Spark driver coordinates tasks across executor pods
+1. You create a ``SparkClient``, optionally pointed at a specific namespace via
+   ``KubernetesBackendConfig`` (the only backend supported today)
+2. You either connect interactively or submit a batch job
+3. The Spark Operator schedules the driver and executor pods on the cluster
+4. You monitor progress and retrieve logs or results
 
-When a Spark session is created, a Spark application is started on the Kubernetes cluster. The Spark driver schedules tasks across executor pods, which perform distributed computation on the data.
+Two Ways to Run Spark
+-----------------------
 
-Key Concepts
+Choose the approach that fits your workflow:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 40 35
+
+   * - Approach
+     - Best For
+     - Example
+   * - **Interactive Sessions**
+     - Notebooks, ad-hoc exploration, iterative development
+     - ``client.connect(num_executors=5, ...)``
+   * - **Batch Jobs**
+     - Scheduled ETL, CI/CD pipelines, production workflows
+     - ``client.submit_job(job=FileJob(...))``
+
+Both approaches share the same ``SparkClient`` and the same resource and Spark
+configuration model. Everything below applies across both.
+
+Capabilities
 ------------
 
-**Spark Driver**: The central coordinator that schedules tasks and manages the execution of a Spark application.
+SparkClient is organized around what you're trying to do, not just how you launch
+a job. As new capabilities land, they get their own guide here rather than being
+folded into Sessions or Batch Jobs.
 
-**Executor**: Worker processes that execute Spark tasks and store data partitions.
+**Run Spark**
 
-**Spark Session**: The entry point for interacting with Spark using the DataFrame and SQL APIs.
+.. grid:: 2
+   :gutter: 3
 
-**Spark Operator**: A Kubernetes controller that manages the lifecycle of Spark applications.
+   .. grid-item-card:: Interactive Sessions
+      :link: sessions
+      :link-type: doc
 
-Common Patterns
----------------
+      Connect to Spark from a notebook or script using Spark Connect.
 
-**Configure executor resources:**
+   .. grid-item-card:: Batch Jobs
+      :link: batch-jobs
+      :link-type: doc
 
-.. code-block:: python
+      Submit existing Spark applications as SparkApplication jobs.
 
-   spark = client.connect(
-       num_executors=3,
-       resources_per_executor={
-           "cpu": "4",
-           "memory": "4Gi",
-       },
-   )
+**Monitor**
 
-**Set Spark configuration properties:**
+.. grid:: 2
+   :gutter: 3
 
-.. code-block:: python
+   .. grid-item-card:: Job Lifecycle
+      :link: lifecycle
+      :link-type: doc
 
-   spark = client.connect(
-       num_executors=3,
-       resources_per_executor={"cpu": "4", "memory": "4Gi"},
-       spark_conf={
-           "spark.sql.adaptive.enabled": "true",
-           "spark.sql.shuffle.partitions": "200",
-           "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
-       },
-   )
+      Status model, list/get/wait/logs/delete, and common monitoring patterns.
 
-``spark_conf`` maps directly to Spark configuration properties and is applied when
-the session is created.
+**Configure**
 
-**Create a DataFrame from a range:**
+.. grid:: 2
+   :gutter: 3
 
-.. code-block:: python
+   .. grid-item-card:: Options Reference
+      :link: options
+      :link-type: doc
 
-   df = spark.range(100)
-   df.show()
+      Labels, annotations, node selection, and tolerations. Shared by both
+      Sessions and Batch Jobs.
 
-**Perform transformations:**
+Quick Examples
+--------------
 
-.. code-block:: python
-
-   df = spark.range(10)
-   result = df.withColumn("value_squared", df.id * df.id)
-   result.show()
-
-**Run SQL queries:**
+**Interactive session:**
 
 .. code-block:: python
 
-   df = spark.range(10)
-   df.createOrReplaceTempView("numbers")
-
-   result = spark.sql("SELECT id, id * id AS square FROM numbers")
-   result.show()
-
-**Aggregate data:**
-
-.. code-block:: python
-
-   df = spark.range(100)
-
-   result = df.groupBy().count()
-   result.show()
-
-Advanced Options
------------------
-
-Beyond ``num_executors``, ``resources_per_executor``, and ``spark_conf``, ``connect()``
-accepts an ``options`` list for Kubernetes-native configuration — labels, annotations,
-node placement, tolerations, pod template overrides, and session naming. The options
-pattern is designed for extensibility: new option types can be added in future SDK
-versions without changing the core ``connect()`` signature.
-
-**Labels and annotations**, for resource organization and tooling metadata:
-
-.. code-block:: python
-
-   from kubeflow.spark import Annotations, Labels, SparkClient
+   from kubeflow.spark import SparkClient
 
    client = SparkClient()
-
-   spark = client.connect(
-       num_executors=3,
-       resources_per_executor={"cpu": "2", "memory": "4Gi"},
-       options=[
-           Labels(
-               {
-                   "app": "spark",
-                   "team": "data-engineering",
-                   "environment": "production",
-               }
-           ),
-           Annotations(
-               {
-                   "description": "Daily ETL pipeline for customer data",
-                   "owner": "data-team@company.com",
-               }
-           ),
-       ],
-   )
-
-**Node selection**, to constrain pods to nodes with matching labels — useful for
-dedicated Spark infrastructure or GPU nodes:
-
-.. code-block:: python
-
-   from kubeflow.spark import NodeSelector, SparkClient
-
-   client = SparkClient()
-
    spark = client.connect(
        num_executors=5,
-       resources_per_executor={"cpu": "4", "memory": "16Gi", "nvidia.com/gpu": "1"},
-       options=[
-           NodeSelector({"node-type": "spark-gpu", "workload": "ml"}),
-       ],
+       resources_per_executor={"cpu": "2", "memory": "2Gi"},
    )
 
-**Tolerations**, to allow scheduling on tainted nodes — for example, dedicated Spark
-nodes or spot instances:
+   df = spark.range(10)
+   df.show()
+
+**Batch job:**
 
 .. code-block:: python
 
-   from kubeflow.spark import SparkClient, Toleration
+   from kubeflow.spark import FileJob, SparkClient
 
    client = SparkClient()
-
-   spark = client.connect(
-       num_executors=10,
-       resources_per_executor={"cpu": "8", "memory": "32Gi"},
-       options=[
-           Toleration(
-               key="spot-instance",
-               operator="Exists",
-               effect="NoSchedule",
-           ),
-       ],
+   job_name = client.submit_job(
+       job=FileJob(
+           file_source="https://raw.githubusercontent.com/<repo>/<branch>/daily_pipeline.py",
+           args=["--date", "2026-06-18"],
+       )
    )
 
-**Custom session name**, via the ``Name`` option. If not specified, a name is
-auto-generated in the form ``spark-connect-{uuid}``:
-
-.. code-block:: python
-
-   from kubeflow.spark import Name, SparkClient
-
-   client = SparkClient()
-
-   spark = client.connect(
-       num_executors=3,
-       resources_per_executor={"cpu": "2", "memory": "4Gi"},
-       options=[Name("custom-session-name")],
-   )
-
-**Pod template overrides**, for full control over pod specifications — for example,
-security contexts, volumes, or sidecars. Use with caution, since overrides can
-conflict with SDK-managed settings:
-
-.. code-block:: python
-
-   from kubeflow.spark import Driver, Executor, PodTemplateOverride, SparkClient
-
-   client = SparkClient()
-
-   spark = client.connect(
-       driver=Driver(resources={"cpu": "2", "memory": "4Gi"}),
-       executor=Executor(
-           num_instances=5,
-           resources_per_executor={"cpu": "4", "memory": "8Gi"},
-       ),
-       options=[
-           PodTemplateOverride(
-               role="executor",
-               template={
-                   "spec": {
-                       "securityContext": {
-                           "runAsUser": 1000,
-                           "runAsNonRoot": True,
-                       },
-                   }
-               },
-           ),
-       ],
-   )
-
-Options are composable — production setups typically combine several at once (name,
-labels, annotations, node selection, and tolerations together) to fully describe how
-a session should run and be scheduled.
-
-Connecting to Existing Spark Connect Servers
---------------------------------------------
-
-You can connect to an existing Spark Connect server instead of creating a new Spark session.
-
-.. code-block:: python
-
-   from kubeflow.spark import SparkClient
-
-   client = SparkClient()
-
-   spark = client.connect(
-       base_url="sc://localhost:15002"
-   )
-
-   spark.range(10).show()
-
-This pattern is useful when Spark Connect is already running and managed independently of your application.
-
-Session Management
-------------------
-
-Use the Spark SDK to inspect and manage Spark Connect sessions in the configured Kubernetes namespace (defaults to ``default``).
-
-**List active sessions:**
-
-.. code-block:: python
-
-   from kubeflow.spark import SparkClient
-
-   client = SparkClient()
-
-   sessions = client.list_sessions()
-
-   for session in sessions:
-       print(session.name)
-       print(session.state.value)
-
-**Get session information:**
-
-.. code-block:: python
-
-   session = client.get_session(
-       "spark-connect-example"
-   )
-
-   print(f"Name: {session.name}")
-   print(f"State: {session.state.value}")
-   print(f"Namespace: {session.namespace}")
-
-**View session logs:**
-
-.. code-block:: python
-
-   for line in client.get_session_logs(
-       "spark-connect-example"
-   ):
-       print(line)
-
-**Delete a session:**
-
-.. code-block:: python
-
-   client.delete_session(
-       "spark-connect-example"
-   )
-
-When Things Go Wrong
---------------------
-
-**Common issues:**
-
-- **Connection timeout:** Verify that the Spark Connect server is running and reachable.
-
-- **Session creation failure:** Check Spark Connect logs and available cluster resources.
-
-- **Port-forward errors:** When connecting from outside the cluster, ensure the Spark Connect server is running and reachable. You can also connect directly to an existing Spark Connect endpoint using ``base_url``.
-
-- **Spark application startup issues:** Inspect the Spark Connect server logs and verify the Spark Operator is running correctly.
+   client.wait_for_job_status(job_name)
