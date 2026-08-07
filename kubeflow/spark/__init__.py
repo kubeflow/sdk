@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Public API for the Kubeflow Spark client and types. Import from kubeflow.spark."""
+"""Public API for creating and managing Spark Connect sessions in Kubeflow."""
 
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.api.spark_client import SparkClient
