@@ -104,7 +104,7 @@ This is passed through as ``spec.mainApplicationFile`` on the generated
 ``SparkApplication``:
 
 .. code-block:: yaml
-  
+
    mainApplicationFile: local:///opt/spark/app/etl.py
 
 Additional dependencies (Python packages, JARs, archives) are not configurable
@@ -124,7 +124,7 @@ through ``submit_job()`` yet — the SDK never sets ``spec.deps`` on the
      - ``str``
      - Local or remote path to the Spark application file (required)
    * - ``args``
-     - ``List[str]``
+     - ``list[str] | None``
      - Command-line arguments passed to the application
 
 Function Mode

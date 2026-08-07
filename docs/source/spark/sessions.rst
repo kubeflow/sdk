@@ -6,6 +6,7 @@ Connect to Spark interactively from a notebook or script using Spark Connect.
 Overview
 --------
 
+An interactive session gives you a standard PySpark ``SparkSession`` backed by a
 Spark Connect server running on Kubernetes. The SDK provisions the server and
 executors for you, but does not delete them automatically — call
 ``client.delete_session(name)`` when you are done, otherwise the ``SparkConnect``
