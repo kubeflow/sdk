@@ -1675,7 +1675,7 @@ def test_get_spark_application_cr_from_func_job(
             expected_status=SUCCESS,
             config={
                 "spark_state": "SUSPENDING",
-                "job_status": SparkJobStatus.RUNNING,
+                "job_status": SparkJobStatus.SUSPENDED,
             },
         ),
         TestCase(
@@ -1683,7 +1683,7 @@ def test_get_spark_application_cr_from_func_job(
             expected_status=SUCCESS,
             config={
                 "spark_state": "SUSPENDED",
-                "job_status": SparkJobStatus.RUNNING,
+                "job_status": SparkJobStatus.SUSPENDED,
             },
         ),
         TestCase(
@@ -1715,7 +1715,7 @@ def test_get_spark_application_cr_from_func_job(
             expected_status=SUCCESS,
             config={
                 "spark_state": "SUBMISSION_FAILED",
-                "job_status": SparkJobStatus.FAILED,
+                "job_status": SparkJobStatus.RETRYING,
             },
         ),
         TestCase(
@@ -1723,7 +1723,7 @@ def test_get_spark_application_cr_from_func_job(
             expected_status=SUCCESS,
             config={
                 "spark_state": "FAILING",
-                "job_status": SparkJobStatus.FAILED,
+                "job_status": SparkJobStatus.RETRYING,
             },
         ),
         TestCase(
@@ -1731,7 +1731,7 @@ def test_get_spark_application_cr_from_func_job(
             expected_status=SUCCESS,
             config={
                 "spark_state": "PENDING_RERUN",
-                "job_status": SparkJobStatus.FAILED,
+                "job_status": SparkJobStatus.RETRYING,
             },
         ),
         TestCase(
@@ -1739,7 +1739,15 @@ def test_get_spark_application_cr_from_func_job(
             expected_status=SUCCESS,
             config={
                 "spark_state": "INVALIDATING",
-                "job_status": SparkJobStatus.FAILED,
+                "job_status": SparkJobStatus.RETRYING,
+            },
+        ),
+        TestCase(
+            name="unknown status",
+            expected_status=SUCCESS,
+            config={
+                "spark_state": "UNKNOWN",
+                "job_status": SparkJobStatus.UNKNOWN,
             },
         ),
         TestCase(
@@ -1869,8 +1877,34 @@ def test_get_spark_application_info_from_cr(
         assert job.name == "test-job"
         assert job.namespace == "default"
         assert job.status == test_case.config["job_status"]
+        assert job.state == test_case.config["spark_state"]
         assert job.driver_pod_name == "test-driver"
         assert job.creation_timestamp == creation_timestamp
         assert job.num_executors == 5
 
     print("test execution complete")
+
+
+def test_get_spark_application_info_from_cr_exposes_error_message(
+    spark_application_spec,
+) -> None:
+    """The raw operator state and error message are surfaced on SparkJob."""
+    spark_app = models.SparkV1beta2SparkApplication(
+        metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+            name="test-job",
+            namespace="default",
+        ),
+        spec=spark_application_spec,
+        status=models.SparkV1beta2SparkApplicationStatus(
+            application_state=models.SparkV1beta2ApplicationState(
+                state="FAILING",
+                error_message="driver pod failed; retrying",
+            ),
+        ),
+    )
+
+    job = get_spark_application_info_from_cr(spark_app)
+
+    assert job.status == SparkJobStatus.RETRYING
+    assert job.state == "FAILING"
+    assert job.error_message == "driver pod failed; retrying"

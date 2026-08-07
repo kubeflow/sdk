@@ -78,6 +78,27 @@ Key Concepts
 
 **Spark Operator**: A Kubernetes controller that manages the lifecycle of Spark applications.
 
+Batch Job States
+----------------
+
+``SparkJob.status`` summarizes Spark Operator states for batch jobs:
+
+- ``CREATED``: The application is new or submitted.
+- ``RUNNING``: The application is running or succeeding.
+- ``RETRYING``: The operator is handling a submission or run failure that may be retried.
+- ``SUSPENDED``: The application is suspending, suspended, or resuming.
+- ``COMPLETED``: The application completed successfully.
+- ``FAILED``: The application reached the terminal operator ``FAILED`` state.
+- ``UNKNOWN``: The operator reported ``UNKNOWN`` or a state the SDK does not recognize.
+
+Only ``COMPLETED`` and ``FAILED`` are terminal Spark Operator states.
+``wait_for_job_status()`` continues polling through retry, suspension, and unknown states. It
+raises if the operator reaches ``FAILED`` unless ``FAILED`` is one of the requested target
+statuses.
+
+Use ``SparkJob.operator_state`` to inspect the exact Spark Operator state and
+``SparkJob.error_message`` to inspect the operator-provided error message when available.
+
 Common Patterns
 ---------------
 

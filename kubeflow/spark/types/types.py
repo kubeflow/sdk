@@ -118,10 +118,21 @@ class Executor:
 
 
 class SparkJobStatus(str, Enum):
-    """State of a Spark batch job."""
+    """State of a Spark batch job.
+
+    Only ``COMPLETED`` and ``FAILED`` are terminal. The remaining values are
+    non-terminal: a job may still progress out of them. In particular,
+    ``RETRYING`` covers the Spark Operator retry cycle (for example
+    ``SUBMISSION_FAILED`` -> ``PENDING_RERUN`` -> ``SUBMITTED`` -> ``RUNNING``),
+    so callers must not treat it as a failure. Use :attr:`SparkJob.state` and
+    :attr:`SparkJob.error_message` for the raw operator state and error details.
+    """
 
     CREATED = "Created"
     RUNNING = "Running"
+    SUSPENDED = "Suspended"
+    RETRYING = "Retrying"
+    UNKNOWN = "Unknown"
     COMPLETED = "Completed"
     FAILED = "Failed"
 
@@ -139,16 +150,17 @@ class SparkJobStatus(str, Enum):
             Corresponding SparkJobStatus.
 
         Note:
-            Unknown SparkApplication states default to FAILED so newly
-            introduced operator states are handled conservatively.
+            Unrecognized SparkApplication states default to UNKNOWN (a
+            non-terminal state) so that a newly introduced operator state is
+            not mistaken for a terminal failure and does not abort polling.
         """
         normalized_state = (raw_state or "").upper()
 
         status = _SDK_STATE_BY_OPERATOR_STATE.get(normalized_state)
 
         if status is None:
-            logger.warning("Unknown SparkApplication state '%s'. Defaulting to FAILED.", raw_state)
-            return cls.FAILED
+            logger.warning("Unknown SparkApplication state '%s'. Defaulting to UNKNOWN.", raw_state)
+            return cls.UNKNOWN
 
         return status
 
@@ -163,19 +175,24 @@ _SDK_STATE_BY_OPERATOR_STATE: dict[str, SparkJobStatus] = {
         SparkJobStatus.RUNNING: (
             "RUNNING",
             "SUCCEEDING",
-            "SUSPENDING",
-            "SUSPENDED",
             "RESUMING",
         ),
-        SparkJobStatus.COMPLETED: ("COMPLETED",),
-        SparkJobStatus.FAILED: (
-            "FAILED",
+        SparkJobStatus.SUSPENDED: (
+            "SUSPENDING",
+            "SUSPENDED",
+        ),
+        # Transition states of the operator restart cycle. They are not
+        # terminal: the operator resubmits the job, so waiters must keep
+        # polling instead of raising (see kubeflow/sdk#688).
+        SparkJobStatus.RETRYING: (
             "SUBMISSION_FAILED",
             "FAILING",
             "PENDING_RERUN",
             "INVALIDATING",
-            "UNKNOWN",
         ),
+        SparkJobStatus.UNKNOWN: ("UNKNOWN",),
+        SparkJobStatus.COMPLETED: ("COMPLETED",),
+        SparkJobStatus.FAILED: ("FAILED",),
     }.items()
     for state in operator_states
 }
@@ -194,6 +211,11 @@ class SparkJob:
         creation_timestamp: Timestamp when the SparkApplication was created.
         num_executors: Number of configured Spark executor instances.
         driver_pod_name: Name of the Spark driver pod, if available.
+        state: Raw SparkApplication ``applicationState.state`` reported by the
+            operator, if available. Useful for diagnosing retry cycles that are
+            collapsed into a single SparkJobStatus.
+        error_message: Error message reported by the operator in
+            ``applicationState.errorMessage``, if available.
     """
 
     name: str
@@ -202,6 +224,8 @@ class SparkJob:
     creation_timestamp: datetime | None = None
     num_executors: int | None = None
     driver_pod_name: str | None = None
+    state: str | None = None
+    error_message: str | None = None
 
 
 @dataclass

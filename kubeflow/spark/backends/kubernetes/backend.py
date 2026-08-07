@@ -1147,9 +1147,14 @@ class KubernetesBackend(RuntimeBackend):
 
         Raises:
             ValueError: If polling_interval is negative.
-            RuntimeError: If the SparkApplication reaches the FAILED state before reaching
-                one of the target statuses.
+            RuntimeError: If the SparkApplication reaches the terminal FAILED state before
+                reaching one of the target statuses.
             TimeoutError: If the target status is not reached within the timeout.
+
+        Note:
+            Only the terminal FAILED state aborts polling. Non-terminal states such as
+            RETRYING (the operator restart cycle) and UNKNOWN are polled through, so a job
+            that recovers via a retry is waited on until it reaches a target status.
         """
         if timeout <= 0:
             raise ValueError("timeout must be positive.")
@@ -1174,7 +1179,8 @@ class KubernetesBackend(RuntimeBackend):
                 return job
             if job.status == SparkJobStatus.FAILED and SparkJobStatus.FAILED not in status:
                 raise RuntimeError(
-                    f"Spark job reached failed state: {self.namespace}/{name}(status={job.status})"
+                    f"Spark job reached failed state: {self.namespace}/{name} "
+                    f"(status={job.status}, state={job.state}, error={job.error_message})"
                 )
 
             now = time.monotonic()

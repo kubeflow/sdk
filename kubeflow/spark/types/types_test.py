@@ -257,6 +257,9 @@ def test_executor(test_case: TestCase):
     [
         (SparkJobStatus.CREATED, "Created"),
         (SparkJobStatus.RUNNING, "Running"),
+        (SparkJobStatus.SUSPENDED, "Suspended"),
+        (SparkJobStatus.RETRYING, "Retrying"),
+        (SparkJobStatus.UNKNOWN, "Unknown"),
         (SparkJobStatus.COMPLETED, "Completed"),
         (SparkJobStatus.FAILED, "Failed"),
     ],
@@ -271,6 +274,9 @@ def test_spark_job_status_values(status, expected):
     [
         SparkJobStatus.CREATED,
         SparkJobStatus.RUNNING,
+        SparkJobStatus.SUSPENDED,
+        SparkJobStatus.RETRYING,
+        SparkJobStatus.UNKNOWN,
         SparkJobStatus.COMPLETED,
         SparkJobStatus.FAILED,
     ],
@@ -288,16 +294,19 @@ def test_spark_job_status_is_string(status):
         ("SUBMITTED", SparkJobStatus.CREATED),
         ("RUNNING", SparkJobStatus.RUNNING),
         ("SUCCEEDING", SparkJobStatus.RUNNING),
-        ("SUSPENDING", SparkJobStatus.RUNNING),
-        ("SUSPENDED", SparkJobStatus.RUNNING),
         ("RESUMING", SparkJobStatus.RUNNING),
+        ("SUSPENDING", SparkJobStatus.SUSPENDED),
+        ("SUSPENDED", SparkJobStatus.SUSPENDED),
         ("COMPLETED", SparkJobStatus.COMPLETED),
         ("FAILED", SparkJobStatus.FAILED),
-        ("SUBMISSION_FAILED", SparkJobStatus.FAILED),
-        ("FAILING", SparkJobStatus.FAILED),
-        ("PENDING_RERUN", SparkJobStatus.FAILED),
-        ("INVALIDATING", SparkJobStatus.FAILED),
-        ("UNKNOWN", SparkJobStatus.FAILED),
+        ("SUBMISSION_FAILED", SparkJobStatus.RETRYING),
+        ("FAILING", SparkJobStatus.RETRYING),
+        ("PENDING_RERUN", SparkJobStatus.RETRYING),
+        ("INVALIDATING", SparkJobStatus.RETRYING),
+        ("UNKNOWN", SparkJobStatus.UNKNOWN),
+        # Case-insensitive matching of the raw operator state.
+        ("running", SparkJobStatus.RUNNING),
+        ("pending_rerun", SparkJobStatus.RETRYING),
     ],
 )
 def test_from_operator_state(operator_state, expected_status):
@@ -306,13 +315,13 @@ def test_from_operator_state(operator_state, expected_status):
 
 
 def test_unknown_operator_state():
-    """Verify unknown SparkApplication states default to FAILED."""
+    """Verify unrecognized SparkApplication states default to non-terminal UNKNOWN."""
     with patch("kubeflow.spark.types.types.logger") as mock_logger:
         status = SparkJobStatus.from_operator_state("SOME_NEW_STATE")
 
-    assert status == SparkJobStatus.FAILED
+    assert status == SparkJobStatus.UNKNOWN
     mock_logger.warning.assert_called_once_with(
-        "Unknown SparkApplication state '%s'. Defaulting to FAILED.",
+        "Unknown SparkApplication state '%s'. Defaulting to UNKNOWN.",
         "SOME_NEW_STATE",
     )
 
@@ -334,10 +343,12 @@ def test_unknown_operator_state():
             config={
                 "name": "full-job",
                 "namespace": "spark-ns",
-                "status": SparkJobStatus.RUNNING,
+                "status": SparkJobStatus.RETRYING,
                 "creation_timestamp": datetime(2025, 1, 12, 10, 30, 0),
                 "num_executors": 10,
                 "driver_pod_name": "driver-pod-1",
+                "state": "PENDING_RERUN",
+                "error_message": "driver pod failed, retrying",
             },
         ),
     ],
@@ -359,6 +370,8 @@ def test_spark_job(test_case: TestCase):
         assert job.creation_timestamp is None
         assert job.num_executors is None
         assert job.driver_pod_name is None
+        assert job.state is None
+        assert job.error_message is None
 
     print("test execution complete")
 
