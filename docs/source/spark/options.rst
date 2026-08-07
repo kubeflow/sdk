@@ -88,7 +88,8 @@ Custom Name
 -----------
 
 Set a custom session or job name via the ``Name`` option. If not specified, a name
-is auto-generated (``spark-connect-{uuid}`` for sessions):
+is auto-generated (``spark-connect-{uuid}`` for sessions, ``spark-job-{uuid}`` for
+batch jobs):
 
 .. code-block:: python
 

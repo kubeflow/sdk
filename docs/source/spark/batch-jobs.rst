@@ -38,8 +38,8 @@ job.
 Two Submission Modes
 ---------------------
 
-``submit_job()`` uses function overloading — the type of ``job`` you pass determines
-the mode:
+``submit_job()`` dispatches on the type of ``job`` you pass — anything other than
+``FileJob`` or ``FuncJob`` raises ``TypeError``:
 
 .. list-table::
    :header-rows: 1
@@ -53,7 +53,7 @@ the mode:
      - Existing scripts, CI/CD pipelines
    * - ``job=FuncJob(...)``
      - Function mode
-     - Inline transformations, notebooks
+     - Python functions kept in an importable module
 
 File Mode
 ---------
@@ -100,13 +100,16 @@ automatically:
 
    client.submit_job(job=FileJob(file_source="local:///opt/spark/app/etl.py"))
 
-.. code-block:: yaml
+This is passed through as ``spec.mainApplicationFile`` on the generated
+``SparkApplication``:
 
+.. code-block:: yaml
+  
    mainApplicationFile: local:///opt/spark/app/etl.py
 
-Additional dependencies (Python packages, JARs, archives, and other resources) are
-managed using the Spark Operator's native dependency mechanisms (``deps.files``,
-``deps.pyFiles``, ``deps.jars``, etc.).
+Additional dependencies (Python packages, JARs, archives) are not configurable
+through ``submit_job()`` yet — the SDK never sets ``spec.deps`` on the
+``SparkApplication``. Bake them into the Spark image or mount them via a PVC.
 
 ``FileJob`` fields:
 
@@ -123,9 +126,6 @@ managed using the Spark Operator's native dependency mechanisms (``deps.files``,
    * - ``args``
      - ``List[str]``
      - Command-line arguments passed to the application
-   * - ``main_class``
-     - ``str``
-     - Main class for JVM-based (Java/Scala) applications
 
 Function Mode
 -------------

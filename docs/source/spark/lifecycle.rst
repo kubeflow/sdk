@@ -51,7 +51,7 @@ simplified into four SDK-level states:
    * - SDK Status
      - SparkApplication States
    * - ``CREATED``
-     - SUBMITTED
+     - SUBMITTED, or no state reported yet
    * - ``RUNNING``
      - RUNNING, SUCCEEDING, SUSPENDING, SUSPENDED, RESUMING
    * - ``COMPLETED``
@@ -59,7 +59,8 @@ simplified into four SDK-level states:
    * - ``FAILED``
      - FAILED, SUBMISSION_FAILED, FAILING, PENDING_RERUN, INVALIDATING, UNKNOWN
 
-Additional status categories may be introduced in future releases.
+Any SparkApplication state the SDK doesn't recognize maps to ``FAILED`` and logs a
+warning, so newly introduced operator states are handled conservatively.
 
 The ``SparkJob`` Model
 ------------------------
