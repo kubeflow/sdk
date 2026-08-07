@@ -20,6 +20,15 @@ SHELL = /usr/bin/env bash -o pipefail
 
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 VENV_DIR := $(PROJECT_DIR)/.venv
+LOCALBIN := $(PROJECT_DIR)/bin
+
+## Tool versions
+SHFMT_VERSION ?= v3.13.1
+SHELLCHECK_VERSION ?= v0.11.0
+
+## Tool binaries
+SHFMT ?= $(LOCALBIN)/shfmt-$(SHFMT_VERSION)
+SHELLCHECK ?= $(LOCALBIN)/shellcheck-$(SHELLCHECK_VERSION)
 
 # Setting SED for compatibility with macos
 ifeq ($(shell command -v gsed 2>/dev/null),)
@@ -128,6 +137,80 @@ ifeq ($(report),xml)
 else
 	@uv run coverage html
 endif
+
+##@ Shell Linting
+
+# Shell scripts to format and lint (all tracked *.sh files).
+SHELL_SCRIPTS = $(shell git ls-files '*.sh')
+
+# shfmt options: 2-space indent, indent switch cases, space after redirect operators.
+SHFMT_OPTIONS ?= --indent 2 --case-indent --space-redirects
+
+# Extra shellcheck options, e.g. set SHELLCHECK_OPTIONS=--severity=warning to only fail on warnings.
+SHELLCHECK_OPTIONS ?=
+
+.PHONY: shell-fmt
+shell-fmt: $(SHFMT) ## Format shell scripts with shfmt.
+	@if [ -z "$(SHELL_SCRIPTS)" ]; then echo "No shell scripts found (not a git repo?)" >&2; exit 1; fi
+	@echo "Running shfmt..."
+	@$(SHFMT) --write --list $(SHFMT_OPTIONS) $(SHELL_SCRIPTS)
+
+.PHONY: shell-fmt-check
+shell-fmt-check: $(SHFMT) ## Check shell script formatting (read-only).
+	@if [ -z "$(SHELL_SCRIPTS)" ]; then echo "No shell scripts found (not a git repo?)" >&2; exit 1; fi
+	@echo "Checking shfmt..."
+	@$(SHFMT) --diff $(SHFMT_OPTIONS) $(SHELL_SCRIPTS)
+
+.PHONY: shell-lint
+shell-lint: $(SHELLCHECK) ## Lint shell scripts with shellcheck.
+	@if [ -z "$(SHELL_SCRIPTS)" ]; then echo "No shell scripts found (not a git repo?)" >&2; exit 1; fi
+	@echo "Running shellcheck..."
+	@$(SHELLCHECK) $(SHELLCHECK_OPTIONS) $(SHELL_SCRIPTS)
+
+$(LOCALBIN):
+	@mkdir -p $(LOCALBIN)
+
+$(SHFMT): | $(LOCALBIN)
+	@[ -f "$(SHFMT)" ] || { \
+	set -e; \
+	os=$$(uname -s | tr '[:upper:]' '[:lower:]'); \
+	arch=$$(uname -m); \
+	case "$$arch" in \
+	  x86_64|amd64) arch=amd64 ;; \
+	  arm64|aarch64) arch=arm64 ;; \
+	  *) echo "Unsupported architecture: $$arch" >&2; exit 1 ;; \
+	esac; \
+	url="https://github.com/mvdan/sh/releases/download/$(SHFMT_VERSION)/shfmt_$(SHFMT_VERSION)_$${os}_$${arch}"; \
+	echo "Downloading $${url}"; \
+	tmp=$$(mktemp); \
+	curl -fsSL -o "$${tmp}" "$${url}"; \
+	chmod +x "$${tmp}"; \
+	"$${tmp}" --version > /dev/null 2>&1 || { echo "Downloaded shfmt binary is corrupt" >&2; rm -f "$${tmp}"; exit 1; }; \
+	mv "$${tmp}" "$(SHFMT)"; \
+	}
+
+$(SHELLCHECK): | $(LOCALBIN)
+	@[ -f "$(SHELLCHECK)" ] || { \
+	set -e; \
+	os=$$(uname -s | tr '[:upper:]' '[:lower:]'); \
+	arch=$$(uname -m); \
+	case "$$arch" in \
+	  x86_64|amd64) arch=x86_64 ;; \
+	  arm64|aarch64) arch=aarch64 ;; \
+	  *) echo "Unsupported architecture: $$arch" >&2; exit 1 ;; \
+	esac; \
+	archive="shellcheck-$(SHELLCHECK_VERSION).$${os}.$${arch}.tar.gz"; \
+	url="https://github.com/koalaman/shellcheck/releases/download/$(SHELLCHECK_VERSION)/$${archive}"; \
+	echo "Downloading $${url}"; \
+	tmp=$$(mktemp -d); \
+	trap "rm -rf $${tmp}" EXIT; \
+	curl -fsSL "$${url}" | tar -xz -C "$${tmp}"; \
+	extracted="$${tmp}/shellcheck-$(SHELLCHECK_VERSION)/shellcheck"; \
+	[ -f "$${extracted}" ] || { echo "shellcheck binary not found in archive" >&2; exit 1; }; \
+	chmod +x "$${extracted}"; \
+	"$${extracted}" --version > /dev/null 2>&1 || { echo "Downloaded shellcheck binary is corrupt" >&2; exit 1; }; \
+	mv "$${extracted}" "$(SHELLCHECK)"; \
+	}
 
 ##@ E2E Testing
 
