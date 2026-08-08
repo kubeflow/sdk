@@ -512,6 +512,9 @@ def get_args_using_torchtune_config(
 
     # Override the loss if it is provided.
     if fine_tuning_config.loss:
+        if not isinstance(fine_tuning_config.loss, types.Loss):
+            raise ValueError(f"Invalid loss: {fine_tuning_config.loss}.")
+
         args.append(f"loss={fine_tuning_config.loss.value}")
 
     # Override the data dir or data files if it is provided.
@@ -594,7 +597,7 @@ def get_args_from_dataset_preprocess_config(
     # Override the dataset source field if it is provided.
     if dataset_preprocess_config.source:
         if not isinstance(dataset_preprocess_config.source, types.DataFormat):
-            raise ValueError(f"Invalid data format: {dataset_preprocess_config.source.value}.")
+            raise ValueError(f"Invalid data format: {dataset_preprocess_config.source}.")
 
         args.append(f"dataset.source={dataset_preprocess_config.source.value}")
 

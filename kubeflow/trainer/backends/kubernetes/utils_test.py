@@ -858,6 +858,29 @@ def test_get_args_from_peft_config(test_case: TestCase):
                 "dataset.train_on_input=True",
             ],
         ),
+        TestCase(
+            name="source is serialized by value",
+            expected_status=SUCCESS,
+            config={
+                "dataset_preprocess_config": types.TorchTuneInstructDataset(
+                    source=types.DataFormat.JSON,
+                ),
+            },
+            expected_output=[
+                f"dataset={constants.TORCH_TUNE_INSTRUCT_DATASET}",
+                "dataset.source=json",
+            ],
+        ),
+        TestCase(
+            name="invalid source raises ValueError",
+            expected_status=FAILED,
+            config={
+                "dataset_preprocess_config": types.TorchTuneInstructDataset(
+                    source="json",
+                ),
+            },
+            expected_error=ValueError,
+        ),
     ],
 )
 def test_get_args_from_dataset_preprocess_config(test_case: TestCase):
@@ -1017,6 +1040,16 @@ def _build_builtin_runtime() -> types.Runtime:
             config={
                 "fine_tuning_config": types.TorchTuneConfig(
                     dtype="invalid",
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="invalid loss raises ValueError",
+            expected_status=FAILED,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(
+                    loss="torchtune.modules.loss.CEWithChunkedOutputLoss",
                 ),
             },
             expected_error=ValueError,
