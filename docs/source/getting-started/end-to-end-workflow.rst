@@ -22,9 +22,9 @@ Before you begin, make sure you have:
       pip install "kubeflow[hub]"
 
 2. Access to a Kubernetes cluster with Trainer, Katib, and Model Registry installed.
-   
+
    .. note::
-   
+
       To test the notebook or client interfaces without deploying the Model Registry service first, the client setup in this tutorial includes a connection fallback to mock interactions.
 
 Step 1: Hyperparameter Tuning
@@ -39,24 +39,24 @@ First, we define a standard Python training function that receives hyperparamete
        from kubeflow.trainer import update_trainjob_status
 
        print(f"Starting trial training with learning_rate={lr}, batch_size={batch_size}")
-       
+
        # Simulate epoch training loop
        for epoch in range(1, 4):
            loss = 1.0 / (epoch * lr * batch_size)
            accuracy = 0.5 + (0.45 * epoch / 3)
-           
+
            # Print statements for Katib metrics collector
            print(f"epoch={epoch}")
            print(f"loss={loss:.4f}")
            print(f"accuracy={accuracy:.4f}")
-           
+
            # Report progress & metrics to Trainer
            update_trainjob_status(
                progress_percent=int(epoch / 3 * 100),
                metrics={"loss": loss, "accuracy": accuracy}
            )
            time.sleep(1)
-           
+
        print("Trial training completed successfully!")
 
 Next, we configure the search space, trial constraints, objective goals, and submit the optimization job using the :class:`~kubeflow.optimizer.OptimizerClient`:
@@ -124,7 +124,7 @@ Once we retrieve the optimal hyperparameters from the best trial, we use :class:
            loss = 0.8 / (epoch * lr * batch_size)
            accuracy = 0.6 + (0.35 * epoch / 3)
            print(f"Epoch {epoch}: loss={loss:.4f}, accuracy={accuracy:.4f}")
-           
+
            update_trainjob_status(
                progress_percent=int(epoch / 3 * 100),
                metrics={"loss": loss, "accuracy": accuracy}
