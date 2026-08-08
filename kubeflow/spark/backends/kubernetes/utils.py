@@ -394,6 +394,8 @@ def validate_spark_connect_url(url: str) -> bool:
     parsed = urlparse(url)
     if parsed.scheme != "sc":
         raise ValueError(f"Invalid scheme '{parsed.scheme}'. Expected 'sc://'")
+    if not parsed.hostname:
+        raise ValueError("Host is required in Spark Connect URL")
     if not parsed.port:
         raise ValueError("Port is required in Spark Connect URL")
     return True

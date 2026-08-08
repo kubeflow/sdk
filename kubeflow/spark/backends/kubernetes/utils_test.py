@@ -98,6 +98,11 @@ def mock_k8s_backend():
     backend.__class__ = KubernetesBackend
     return backend
 
+    def test_missing_hostname(self):
+        """U16: Missing hostname raises ValueError."""
+        with pytest.raises(ValueError, match="Host is required"):
+            validate_spark_connect_url("sc://:15002")
+
 
 @pytest.fixture
 def spark_connect_resource(minimal_spec):
