@@ -81,3 +81,9 @@ Next Steps
       :link-type: doc
 
       Tune hyperparameters, train a final model, and register it.
+
+   .. grid-item-card:: Pipelines End-to-End Workflow
+      :link: pipelines-end-to-end-workflow
+      :link-type: doc
+
+      Orchestrate a complete pipeline with Spark, Trainer, Katib, and Model Registry.
