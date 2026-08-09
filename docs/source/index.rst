@@ -181,6 +181,10 @@ Getting Involved
    :caption: Spark
 
    spark/index
+   spark/sessions
+   spark/batch-jobs
+   spark/lifecycle
+   spark/options
    spark/api
 
 .. toctree::
