@@ -23,6 +23,7 @@ from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.spark.options import (
     Annotations,
+    DynamicAllocation,
     Labels,
     Name,
     NodeSelector,
@@ -824,5 +825,142 @@ def test_name_option_incompatible_backend(
             match=test_case.expected_output,
         ):
             option(resource, mock_non_k8s_backend)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="dynamic allocation enabled with defaults",
+            expected_status=SUCCESS,
+            config={
+                "enabled": True,
+            },
+        ),
+        TestCase(
+            name="dynamic allocation disabled",
+            expected_status=SUCCESS,
+            config={
+                "enabled": False,
+            },
+        ),
+        TestCase(
+            name="dynamic allocation with all fields",
+            expected_status=SUCCESS,
+            config={
+                "enabled": True,
+                "initial_executors": 2,
+                "min_executors": 1,
+                "max_executors": 50,
+                "shuffle_tracking_enabled": True,
+                "shuffle_tracking_timeout": 60000,
+            },
+        ),
+    ],
+)
+def test_dynamic_allocation_apply(
+    test_case: TestCase,
+    mock_k8s_backend,
+    spark_connect_model,
+    spark_application_model,
+):
+    """Test DynamicAllocation option for Spark Connect and Spark Application."""
+
+    print("Executing test:", test_case.name)
+
+    option = DynamicAllocation(**test_case.config)
+
+    for resource in [spark_connect_model, spark_application_model]:
+        resource.spec.executor.instances = 2
+
+        option(resource, mock_k8s_backend)
+
+        assert resource.spec.dynamic_allocation is not None
+        assert resource.spec.dynamic_allocation.enabled == test_case.config["enabled"]
+        assert resource.spec.dynamic_allocation.initial_executors == test_case.config.get(
+            "initial_executors"
+        )
+        assert resource.spec.dynamic_allocation.min_executors == test_case.config.get(
+            "min_executors"
+        )
+        assert resource.spec.dynamic_allocation.max_executors == test_case.config.get(
+            "max_executors"
+        )
+        assert resource.spec.dynamic_allocation.shuffle_tracking_enabled == test_case.config.get(
+            "shuffle_tracking_enabled"
+        )
+        assert resource.spec.dynamic_allocation.shuffle_tracking_timeout == test_case.config.get(
+            "shuffle_tracking_timeout"
+        )
+
+        if test_case.config["enabled"]:
+            assert resource.spec.executor.instances is None
+        else:
+            assert resource.spec.executor.instances == 2
+
+    assert test_case.expected_status == SUCCESS
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="dynamic allocation defaults",
+            expected_status=SUCCESS,
+        ),
+    ],
+)
+def test_dynamic_allocation_defaults(test_case: TestCase):
+    """Test DynamicAllocation option defaults."""
+
+    print("Executing test:", test_case.name)
+
+    option = DynamicAllocation()
+
+    assert option.enabled is True
+    assert option.initial_executors is None
+    assert option.min_executors is None
+    assert option.max_executors is None
+    assert option.shuffle_tracking_enabled is None
+    assert option.shuffle_tracking_timeout is None
+
+    assert test_case.expected_status == SUCCESS
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="incompatible backend",
+            expected_status=FAILED,
+            expected_error=ValueError,
+            expected_output="not compatible",
+        ),
+    ],
+)
+def test_dynamic_allocation_incompatible_backend(
+    test_case: TestCase,
+    mock_non_k8s_backend,
+    spark_connect_model,
+    spark_application_model,
+):
+    """Test DynamicAllocation option with incompatible backend."""
+
+    print("Executing test:", test_case.name)
+
+    option = DynamicAllocation()
+
+    for resource in [spark_connect_model, spark_application_model]:
+        with pytest.raises(
+            test_case.expected_error,
+            match=test_case.expected_output,
+        ):
+            option(resource, mock_non_k8s_backend)
+
+    print("test execution complete")
 
     print("test execution complete")

@@ -18,6 +18,7 @@ from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.api.spark_client import SparkClient
 from kubeflow.spark.options import (
     Annotations,
+    DynamicAllocation,
     Labels,
     Name,
     NodeSelector,
@@ -49,6 +50,7 @@ __all__ = [
     "SparkJobStatus",
     # Options (KEP-107 extensibility pattern - callable pattern like trainer SDK)
     "Annotations",
+    "DynamicAllocation",
     "Labels",
     "Name",
     "NodeSelector",

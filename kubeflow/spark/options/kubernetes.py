@@ -402,6 +402,98 @@ class Toleration:
 
 
 @dataclass
+class DynamicAllocation:
+    """Enable dynamic allocation for Spark executors.
+
+    When enabled, Spark dynamically scales the number of executors based on
+    workload demand rather than using a fixed executor count. The fixed executor
+    count (`.spec.executor.instances`) is omitted so the Spark operator manages
+    executor scaling.
+
+    Supported resources:
+        - Spark Connect
+        - Spark Application
+
+    Supported backends:
+        - Kubernetes
+
+    Args:
+        enabled: Whether dynamic allocation is enabled.
+        initial_executors: Initial number of executors to allocate.
+        min_executors: Minimum number of executors to maintain.
+        max_executors: Maximum number of executors to allocate.
+        shuffle_tracking_enabled: Whether to use shuffle tracking for executor
+            liveness instead of requiring a separate shuffle service.
+        shuffle_tracking_timeout: Timeout in milliseconds for shuffle tracking.
+            Executors idle beyond this timeout may be removed.
+
+    Example:
+        options = [
+            DynamicAllocation(
+                enabled=True,
+                min_executors=1,
+                max_executors=20,
+            )
+        ]
+        spark = client.connect(..., options=options)
+    """
+
+    enabled: bool = True
+    initial_executors: int | None = None
+    min_executors: int | None = None
+    max_executors: int | None = None
+    shuffle_tracking_enabled: bool | None = None
+    shuffle_tracking_timeout: int | None = None
+
+    def __call__(self, resource: SparkResource, backend: RuntimeBackend) -> None:
+        """Apply dynamic allocation to the Spark resource.
+
+        Args:
+            resource: Spark resource to modify.
+            backend: Backend instance for validation.
+
+        Raises:
+            ValueError: If backend does not support dynamic allocation.
+
+            TypeError: If the resource is not a supported Spark resource.
+        """
+        from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
+
+        if not isinstance(backend, KubernetesBackend):
+            raise ValueError(
+                f"DynamicAllocation option is not compatible with {type(backend).__name__}. "
+                f"Supported backends: KubernetesBackend"
+            )
+
+        if isinstance(resource, models.SparkV1alpha1SparkConnect):
+            resource.spec.dynamic_allocation = models.SparkV1alpha1DynamicAllocation(
+                enabled=self.enabled,
+                initial_executors=self.initial_executors,
+                min_executors=self.min_executors,
+                max_executors=self.max_executors,
+                shuffle_tracking_enabled=self.shuffle_tracking_enabled,
+                shuffle_tracking_timeout=self.shuffle_tracking_timeout,
+            )
+            executor_spec = resource.spec.executor
+        elif isinstance(resource, models.SparkV1beta2SparkApplication):
+            resource.spec.dynamic_allocation = models.SparkV1beta2DynamicAllocation(
+                enabled=self.enabled,
+                initial_executors=self.initial_executors,
+                min_executors=self.min_executors,
+                max_executors=self.max_executors,
+                shuffle_tracking_enabled=self.shuffle_tracking_enabled,
+                shuffle_tracking_timeout=self.shuffle_tracking_timeout,
+            )
+            executor_spec = resource.spec.executor
+        else:
+            raise TypeError(f"Unsupported Spark resource type: {type(resource).__name__}")
+
+        # Dynamic allocation manages executor counts, so omit a fixed instance count
+        if self.enabled:
+            executor_spec.instances = None
+
+
+@dataclass
 class Name:
     """Set a custom name for the Spark resource.
 
