@@ -284,7 +284,7 @@ class TestSparkExamples:
 
         stdout = self._run_example("iceberg_minio.py", namespace, extra_env=iceberg_env)
         assert "Iceberg + MinIO example complete!" in stdout
-        
+
     def test_batch_job_options_example(self):
         """EX07: Validate batch_job_options.py runs without errors."""
         namespace = os.environ.get("SPARK_TEST_NAMESPACE", "spark-test")

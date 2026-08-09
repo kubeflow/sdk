@@ -105,10 +105,10 @@ def create_spark_session() -> tuple[SparkClient, SparkSession, str]:
 
     spark = client.connect(
         spark_conf={
-            # Iceberg runtime + AWS SDK v2 (required for S3FileIO in Iceberg 1.9.x)
+            # Iceberg runtime + a minimal AWS SDK v2 set (required for S3FileIO in Iceberg 1.9.x)
             "spark.jars.packages": (
                 "org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.9.1,"
-                "software.amazon.awssdk:bundle:2.26.24,"
+                "software.amazon.awssdk:s3:2.26.24,"
                 "software.amazon.awssdk:url-connection-client:2.26.24"
             ),
             # Pass AWS region to driver JVM.
@@ -127,8 +127,6 @@ def create_spark_session() -> tuple[SparkClient, SparkSession, str]:
             "spark.sql.catalog.lakehouse.s3.endpoint": MINIO_ENDPOINT,
             "spark.sql.catalog.lakehouse.s3.path-style-access": "true",
             "spark.sql.catalog.lakehouse.s3.region": "us-east-1",
-            "spark.sql.catalog.lakehouse.s3.access-key-id": MINIO_ACCESS_KEY,
-            "spark.sql.catalog.lakehouse.s3.secret-access-key": MINIO_SECRET_KEY,
         },
         options=[Name(session_name)],
         timeout=180 if os.environ.get("SPARK_E2E_RUN_IN_CLUSTER") == "1" else 300,
