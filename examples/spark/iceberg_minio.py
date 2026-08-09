@@ -106,10 +106,12 @@ def create_spark_session() -> tuple[SparkClient, SparkSession, str]:
     spark = client.connect(
         spark_conf={
             # Iceberg runtime + a minimal AWS SDK v2 set (required for S3FileIO in Iceberg 1.9.x)
-            "spark.jars.packages": (
-                "org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.9.1,"
-                "software.amazon.awssdk:s3:2.26.24,"
-                "software.amazon.awssdk:url-connection-client:2.26.24"
+            # Use direct JAR URLs so the server can fetch artifacts without
+            # relying on Ivy/package resolution (helpful in air-gapped CI).
+            "spark.jars": (
+                "https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-4.0_2.13/1.9.1/iceberg-spark-runtime-4.0_2.13-1.9.1.jar,"
+                "https://repo1.maven.org/maven2/software/amazon/awssdk/s3/2.26.24/s3-2.26.24.jar,"
+                "https://repo1.maven.org/maven2/software/amazon/awssdk/url-connection-client/2.26.24/url-connection-client-2.26.24.jar"
             ),
             # Pass AWS region to driver JVM.
             "spark.driver.extraJavaOptions": "-Daws.region=us-east-1",
