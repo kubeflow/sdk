@@ -84,9 +84,9 @@ def main():
 
     # Rebuild pyproject.toml
     if not has_tool_uv:
-        # Add [tool.uv] section at the end
+        # Add the [tool.uv] section; the header and array are inserted below.
+        # (Adding the header here too would duplicate the whole block -> invalid TOML.)
         content += "\n[tool.uv]\n"
-        content += "# Security overrides - Review periodically and remove if parent constraints allow natural upgrade\n"
         has_tool_uv = True
 
     if has_overrides:
@@ -94,14 +94,14 @@ def main():
         # Single-line: override-dependencies = ["pkg==1.0"]
         # Multi-line: override-dependencies = [\n    "pkg",\n]
         content = re.sub(
-            r"^override-dependencies\s*=\s*\[.*?\]",
+            r"^[ \t]*override-dependencies\s*=\s*\[.*?\]",
             "",
             content,
             flags=re.MULTILINE | re.DOTALL,
         )
         # Also remove any orphaned comments before override-dependencies
         content = re.sub(
-            r"^# Security overrides.*?\n(?:[ \t]*\n)?",
+            r"^[ \t]*# Security overrides.*?\n(?:[ \t]*\n)?",
             "",
             content,
             flags=re.MULTILINE,
