@@ -26,6 +26,7 @@ from kubeflow.spark.types.types import (
     FileJob,
     FuncJob,
     SparkJob,
+    SparkJobStatus,
 )
 
 
@@ -173,3 +174,73 @@ def test_submit_job_success(job, options):
             spark_conf=None,
             options=options,
         )
+
+
+def test_get_job():
+    """Test SparkClient get_job method."""
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
+        backend = mock_backend.return_value
+        backend.get_job.return_value = SparkJob(name="spark-job-123", namespace="default")
+
+        client = SparkClient()
+        job = client.get_job(name="spark-job-123")
+
+        assert job.name == "spark-job-123"
+        backend.get_job.assert_called_once_with("spark-job-123")
+
+
+def test_list_jobs():
+    """Test SparkClient list_jobs method."""
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
+        backend = mock_backend.return_value
+        backend.list_jobs.return_value = [SparkJob(name="spark-job-123", namespace="default")]
+
+        client = SparkClient()
+        jobs = client.list_jobs(status={SparkJobStatus.COMPLETED})
+
+        assert len(jobs) == 1
+        backend.list_jobs.assert_called_once_with(status={SparkJobStatus.COMPLETED})
+
+
+def test_delete_job():
+    """Test SparkClient delete_job method."""
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
+        backend = mock_backend.return_value
+
+        client = SparkClient()
+        client.delete_job(name="spark-job-123")
+
+        backend.delete_job.assert_called_once_with("spark-job-123")
+
+
+def test_wait_for_job_status():
+    """Test SparkClient wait_for_job_status method."""
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
+        backend = mock_backend.return_value
+        backend.wait_for_job_status.return_value = SparkJob(
+            name="spark-job-123", namespace="default"
+        )
+
+        client = SparkClient()
+        job = client.wait_for_job_status(name="spark-job-123", timeout=300)
+
+        assert job.name == "spark-job-123"
+        backend.wait_for_job_status.assert_called_once_with(
+            name="spark-job-123",
+            status={SparkJobStatus.COMPLETED},
+            timeout=300,
+            polling_interval=2,
+        )
+
+
+def test_get_job_logs():
+    """Test SparkClient get_job_logs method."""
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
+        backend = mock_backend.return_value
+        backend.get_job_logs.return_value = iter(["log line 1", "log line 2"])
+
+        client = SparkClient()
+        logs = list(client.get_job_logs(name="spark-job-123", follow=True))
+
+        assert logs == ["log line 1", "log line 2"]
+        backend.get_job_logs.assert_called_once_with(name="spark-job-123", follow=True)
