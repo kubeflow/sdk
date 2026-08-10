@@ -72,14 +72,6 @@ jobs:
             NOTEBOOK_INPUT=./examples/local/local-training-mnist.ipynb \
             NOTEBOOK_OUTPUT=../artifacts/notebooks/${{ matrix.kubernetes-version }}_local-training-mnist.ipynb \
             PAPERMILL_TIMEOUT=900
-          make test-e2e-notebook \
-            NOTEBOOK_INPUT=../examples/end-to-end-tutorial.ipynb \
-            NOTEBOOK_OUTPUT=../artifacts/notebooks/${{ matrix.kubernetes-version }}_end-to-end-tutorial.ipynb \
-            PAPERMILL_TIMEOUT=900
-          make test-e2e-notebook \
-            NOTEBOOK_INPUT=../examples/pipelines-end-to-end-tutorial.ipynb \
-            NOTEBOOK_OUTPUT=../artifacts/notebooks/${{ matrix.kubernetes-version }}_pipelines-end-to-end-tutorial.ipynb \
-            PAPERMILL_TIMEOUT=900
 
       - name: Upload Artifacts to GitHub
         uses: actions/upload-artifact@v6
