@@ -26,8 +26,8 @@ jobs:
         # Bump cadence: check https://github.com/google/osv-scanner/releases monthly
         # Dependabot cannot bump curl-installed binaries — update version + checksum manually
         run: |
-          OSV_VERSION="2.3.8"
-          EXPECTED_SHA="bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc"
+          OSV_VERSION="2.5.0"
+          EXPECTED_SHA="edcfc41d257db36148f065055655fe3fcfc434b0b423ea67468a84c207524e0c"
           curl -fsSL "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64" -o osv-scanner
           ACTUAL_SHA=$(sha256sum osv-scanner | awk '{print $1}')
           if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
