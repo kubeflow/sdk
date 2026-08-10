@@ -1704,7 +1704,7 @@ def test_delete_job(kubernetes_backend, test_case):
             config={
                 "job_name": "spark-job-completed",
                 "job_status": SparkJobStatus.COMPLETED,
-                "target_status": None,
+                "target_status": None,  # Tests the `if status is None:` fallback branch
             },
         ),
         TestCase(

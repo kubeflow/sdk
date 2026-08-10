@@ -1130,7 +1130,7 @@ class KubernetesBackend(RuntimeBackend):
     def wait_for_job_status(
         self,
         name: str,
-        status: set[SparkJobStatus] = {SparkJobStatus.COMPLETED},
+        status: set[SparkJobStatus] | None = None,  # Change from {SparkJobStatus.COMPLETED} to None
         timeout: int = 600,
         polling_interval: int = 2,
     ) -> SparkJob:
@@ -1151,6 +1151,9 @@ class KubernetesBackend(RuntimeBackend):
                 one of the target statuses.
             TimeoutError: If the target status is not reached within the timeout.
         """
+        if status is None:
+            status = {SparkJobStatus.COMPLETED}  # Safely instantiate a fresh set per call
+
         if timeout <= 0:
             raise ValueError("timeout must be positive.")
 
