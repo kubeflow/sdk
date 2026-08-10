@@ -5,9 +5,9 @@ This directory contains examples for using the Kubeflow Spark SDK.
 The Spark SDK supports two ways to run Spark, matching the [Spark SDK documentation](https://sdk.kubeflow.org/en/latest/spark/index.html):
 
 - **Interactive Sessions** - Connect to Spark from a notebook or script using Spark Connect.
-- **Batch Jobs** - Submit existing Spark applications as managed Kubernetes workloads.
+- **Batch Jobs** - Submit Spark applications as managed Kubernetes workloads.
 
-For the full batch job documentation, see [Batch Jobs](https://sdk.kubeflow.org/en/latest/spark/batch-jobs.html) and [Job Lifecycle](https://sdk.kubeflow.org/en/latest/spark/lifecycle.html).
+For the full documentation, see [Interactive Sessions](https://sdk.kubeflow.org/en/latest/spark/sessions.html), [Batch Jobs](https://sdk.kubeflow.org/en/latest/spark/batch-jobs.html), and [Job Lifecycle](https://sdk.kubeflow.org/en/latest/spark/lifecycle.html).
 
 ## Examples
 
@@ -35,17 +35,29 @@ Install spark dependencies:
 uv pip install kubeflow[spark]
 ```
 
-Batch job examples run against a Kubernetes cluster with the Spark Operator installed. Batch job submission requires a `spark-operator-spark` ServiceAccount in the target namespace with the required SparkApplication RBAC permissions. See the [Spark SDK docs](https://sdk.kubeflow.org/en/latest/spark/index.html) for prerequisites.
+The Spark examples run against a Kubernetes cluster with the Spark Operator installed. Batch job submission requires a `spark-operator-spark` ServiceAccount in the target namespace with the required SparkApplication RBAC permissions. See the [Spark SDK docs](https://sdk.kubeflow.org/en/latest/spark/index.html) for prerequisites.
 
 ## Running Examples
 
 ```bash
 # Run from repository root
+
+# Run an interactive session example
 uv run python examples/spark/spark_connect_simple.py
 
 # Run a batch job lifecycle example
 uv run python examples/spark/batch_job_lifecycle.py
 ```
+
+## Interactive Session APIs
+
+Interactive session examples use `SparkClient` and `connect()`:
+
+- `SparkClient()` - Create a client for the Kubernetes cluster
+- `connect()` - Create a new Spark Connect session, or connect to an existing server when `base_url` is provided
+- `delete_session()` - Delete a Spark Connect session when you are done with it
+
+See the [Spark SDK API reference](https://sdk.kubeflow.org/en/latest/spark/api.html) for the current API surface.
 
 ## Batch Job APIs
 
