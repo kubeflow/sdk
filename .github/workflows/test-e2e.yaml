@@ -51,6 +51,24 @@ jobs:
           make test-e2e-setup-cluster \
             K8S_VERSION=${{ matrix.kubernetes-version }}
 
+      - name: Install Kubeflow Pipelines (KFP) control plane
+        run: |
+          echo "Installing Kubeflow Pipelines (KFP) Standalone..."
+          kubectl create namespace kubeflow || true
+          kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/cluster-scoped-resources?ref=2.2.0"
+          kubectl wait --for condition=established --timeout=120s crd/applications.app.k8s.io
+          kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/env/dev?ref=2.2.0"
+
+          echo "Waiting for KFP components to be ready..."
+          kubectl rollout status deployment/ml-pipeline -n kubeflow --timeout=1200s || {
+            echo "Rollout status check failed. Debugging info:"
+            kubectl get deployments -n kubeflow
+            kubectl get pods -n kubeflow
+            kubectl describe deployment/ml-pipeline -n kubeflow
+            kubectl describe pods -n kubeflow
+            exit 1
+          }
+
       - name: Run e2e test for example Notebooks
         run: |
           mkdir -p artifacts/notebooks # Create the output directory
