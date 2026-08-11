@@ -69,3 +69,24 @@ FUNC_JOB_SCRIPT_TEMPLATE = textwrap.dedent(
     printf "%s" "$SCRIPT" > "{{func_file}}"
     """
 )
+
+
+# ----------------------------------------------------------------------
+# RBAC
+# ----------------------------------------------------------------------
+
+# Core Kubernetes API group, used when naming pod subresources in permission errors.
+CORE_API_GROUP = ""
+
+# Verbs each session operation requires on `sparkconnects`. Reported to the caller when
+# the API server denies a request, so the message names what to ask an administrator for.
+# Session creation includes `get` because it polls the resource until it reports Ready.
+SPARK_CONNECT_CREATE_VERBS = ("create", "get")
+SPARK_CONNECT_GET_VERBS = ("get",)
+SPARK_CONNECT_LIST_VERBS = ("list",)
+SPARK_CONNECT_DELETE_VERBS = ("delete",)
+
+# Reading session logs needs `get` on pod logs, in addition to `get` on `sparkconnects`
+# to look up the driver pod name.
+POD_LOG_RESOURCE = "pods/log"
+POD_LOG_VERBS = ("get",)

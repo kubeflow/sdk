@@ -32,6 +32,7 @@ from kubeflow.spark.backends.kubernetes.utils import (
     apply_options,
     build_service_url,
     build_spark_connect_cr,
+    format_missing_permissions_error,
     generate_job_name,
     generate_session_name,
     get_command_using_spark_func,
@@ -1879,3 +1880,42 @@ def test_get_spark_application_info_from_cr(
         assert job.num_executors == 5
 
     print("test execution complete")
+
+
+# --------------------------
+# Permission error message
+# --------------------------
+
+
+def test_format_missing_permissions_error_names_rules_and_manifest():
+    """The message carries the namespace, the verbs, and an appliable Role/RoleBinding."""
+    message = format_missing_permissions_error(
+        action="create a SparkConnect session",
+        namespace="team-analytics",
+        group=constants.SPARK_CONNECT_GROUP,
+        resource=constants.SPARK_CONNECT_PLURAL,
+        verbs=["create", "get"],
+    )
+
+    assert "team-analytics" in message
+    assert constants.SPARK_CONNECT_GROUP in message
+    assert constants.SPARK_CONNECT_PLURAL in message
+    assert "create, get" in message
+    assert 'verbs: ["create", "get"]' in message
+    assert "kind: Role" in message
+    assert "kind: RoleBinding" in message
+
+
+def test_format_missing_permissions_error_handles_core_api_group():
+    """Core group resources render as the empty API group rather than a missing one."""
+    message = format_missing_permissions_error(
+        action="read SparkConnect session logs",
+        namespace="team-analytics",
+        group=constants.CORE_API_GROUP,
+        resource=constants.POD_LOG_RESOURCE,
+        verbs=["get"],
+    )
+
+    assert "core API group" in message
+    assert 'apiGroups: [""]' in message
+    assert constants.POD_LOG_RESOURCE in message

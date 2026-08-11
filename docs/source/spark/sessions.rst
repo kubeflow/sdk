@@ -235,3 +235,65 @@ When Things Go Wrong
   an existing Spark Connect endpoint using ``base_url``.
 - **Spark application startup issues** - Inspect the Spark Connect server logs and
   verify the Spark Operator is running correctly.
+- **Permission denied** - The SDK reports which RBAC verbs are missing, and includes a
+  ``Role`` and ``RoleBinding`` you can pass to a cluster administrator. See
+  :ref:`session-permissions` below.
+
+.. _session-permissions:
+
+Permissions
+-----------
+
+Each session operation requires RBAC in the target namespace:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 35 35
+
+   * - Operation
+     - ``sparkconnects``
+     - ``pods/log``
+   * - ``connect()``
+     - ``create``, ``get``
+     -
+   * - ``get_session()``
+     - ``get``
+     -
+   * - ``list_sessions()``
+     - ``list``
+     -
+   * - ``delete_session()``
+     - ``delete``
+     -
+   * - ``get_session_logs()``
+     - ``get``
+     - ``get``
+
+``connect()`` needs ``get`` as well as ``create`` because it polls the resource until the
+session reports ready. ``get_session_logs()`` needs ``get`` on ``sparkconnects`` because it
+looks up the driver pod name before reading its logs, so granting ``pods/log`` alone is not
+enough.
+
+When the API server denies a request, the SDK raises a ``RuntimeError`` naming the missing
+verbs along with a manifest a cluster administrator can apply:
+
+.. code-block:: text
+
+   Not permitted to create a SparkConnect session in namespace 'team-analytics'.
+   Required RBAC verbs on 'sparkconnects' in API group 'sparkoperator.k8s.io': create, get.
+   Ask a cluster administrator to grant the following, or bind an existing role that
+   includes these rules to your ServiceAccount:
+
+   apiVersion: rbac.authorization.k8s.io/v1
+   kind: Role
+   metadata:
+     name: spark-connect-sparkconnects
+     namespace: team-analytics
+   rules:
+     - apiGroups: ["sparkoperator.k8s.io"]
+       resources: ["sparkconnects"]
+       verbs: ["create", "get"]
+   ---
+   apiVersion: rbac.authorization.k8s.io/v1
+   kind: RoleBinding
+   ...
