@@ -1015,7 +1015,9 @@ def format_missing_permissions_error(
     required = list(verbs)
     api_groups = f'["{group}"]' if group else '[""]'
     quoted_verbs = ", ".join(f'"{verb}"' for verb in required)
-    role_name = f"spark-connect-{resource.replace('/', '-')}"
+    # The name includes the verbs so that remediations for different operations on the
+    # same resource do not overwrite one another when applied in sequence.
+    role_name = "-".join(["spark-connect", resource.replace("/", "-"), *required])
 
     manifest = textwrap.dedent(
         f"""
@@ -1041,7 +1043,7 @@ def format_missing_permissions_error(
         subjects:
           - kind: ServiceAccount
             name: <your-service-account>
-            namespace: {namespace}
+            namespace: <namespace-of-your-service-account>
         """
     ).strip()
 

@@ -1919,3 +1919,48 @@ def test_format_missing_permissions_error_handles_core_api_group():
     assert "core API group" in message
     assert 'apiGroups: [""]' in message
     assert constants.POD_LOG_RESOURCE in message
+
+
+def test_role_names_do_not_collide_across_operations():
+    """Remediations for different operations must not overwrite one another.
+
+    An administrator may apply the manifest for one denied call and later another. If both
+    used the same Role name, the second would silently replace the first's rules.
+    """
+    names = set()
+    for verbs in (
+        constants.SPARK_CONNECT_CREATE_VERBS,
+        constants.SPARK_CONNECT_LIST_VERBS,
+        constants.SPARK_CONNECT_DELETE_VERBS,
+    ):
+        message = format_missing_permissions_error(
+            action="act",
+            namespace="team-analytics",
+            group=constants.SPARK_CONNECT_GROUP,
+            resource=constants.SPARK_CONNECT_PLURAL,
+            verbs=verbs,
+        )
+        names.add(
+            next(line.strip() for line in message.splitlines() if "name: spark-connect" in line)
+        )
+
+    assert len(names) == 3
+
+
+def test_service_account_namespace_is_a_separate_placeholder():
+    """The subject ServiceAccount need not live in the namespace being granted.
+
+    A caller in their own namespace may be granted access to a shared one, so binding a
+    same-named account in the target namespace would be wrong.
+    """
+    message = format_missing_permissions_error(
+        action="act",
+        namespace="team-analytics",
+        group=constants.SPARK_CONNECT_GROUP,
+        resource=constants.SPARK_CONNECT_PLURAL,
+        verbs=["create"],
+    )
+
+    subjects = message.split("subjects:")[1]
+    assert "<namespace-of-your-service-account>" in subjects
+    assert "namespace: team-analytics" not in subjects

@@ -287,7 +287,7 @@ verbs along with a manifest a cluster administrator can apply:
    apiVersion: rbac.authorization.k8s.io/v1
    kind: Role
    metadata:
-     name: spark-connect-sparkconnects
+     name: spark-connect-sparkconnects-create-get
      namespace: team-analytics
    rules:
      - apiGroups: ["sparkoperator.k8s.io"]
