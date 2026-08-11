@@ -55,6 +55,8 @@ Interactive session examples use `SparkClient` and `connect()`:
 
 - `SparkClient()` - Create a client for the Kubernetes cluster
 - `connect()` - Create a new Spark Connect session, or connect to an existing server when `base_url` is provided
+- `list_sessions()` / `get_session()` - Inspect Spark Connect sessions
+- `get_session_logs()` - Read session logs
 - `delete_session()` - Delete a Spark Connect session when you are done with it
 
 See the [Spark SDK API reference](https://sdk.kubeflow.org/en/latest/spark/api.html) for the current API surface.
@@ -66,7 +68,7 @@ Batch job examples use `submit_job()` with either `FileJob` or `FuncJob`, then m
 - `submit_job()` - Submit a Spark application as a managed Kubernetes workload
 - `get_job()` / `list_jobs()` - Inspect batch jobs
 - `wait_for_job_status()` - Wait for a job to reach a target `SparkJobStatus`
-- `get_job_logs()` - Stream driver pod logs
+- `get_job_logs()` - Read driver pod logs
 - `delete_job()` - Delete a batch job
 
 See the [Spark SDK API reference](https://sdk.kubeflow.org/en/latest/spark/api.html) for the current API surface.
