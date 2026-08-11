@@ -60,7 +60,7 @@ jobs:
           kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/env/dev?ref=2.2.0"
 
           echo "Waiting for KFP components to be ready..."
-          kubectl rollout status deployment/ml-pipeline -n kubeflow --timeout=300s
+          kubectl rollout status deployment/ml-pipeline -n kubeflow --timeout=600s
 
       - name: Run e2e test for example Notebooks
         run: |
