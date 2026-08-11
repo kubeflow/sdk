@@ -51,6 +51,17 @@ jobs:
           make test-e2e-setup-cluster \
             K8S_VERSION=${{ matrix.kubernetes-version }}
 
+      - name: Install Kubeflow Pipelines (KFP) control plane
+        run: |
+          echo "Installing Kubeflow Pipelines (KFP) Standalone..."
+          kubectl create namespace kubeflow || true
+          kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/cluster-scoped-resources?ref=2.2.0"
+          kubectl wait --for condition=established --timeout=120s crd/applications.app.k8s.io
+          kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/env/dev?ref=2.2.0"
+
+          echo "Waiting for KFP components to be ready..."
+          kubectl rollout status deployment/ml-pipeline -n kubeflow --timeout=300s
+
       - name: Run e2e test for example Notebooks
         run: |
           mkdir -p artifacts/notebooks # Create the output directory
@@ -71,6 +82,14 @@ jobs:
           make test-e2e-notebook \
             NOTEBOOK_INPUT=./examples/local/local-training-mnist.ipynb \
             NOTEBOOK_OUTPUT=../artifacts/notebooks/${{ matrix.kubernetes-version }}_local-training-mnist.ipynb \
+            PAPERMILL_TIMEOUT=900
+          make test-e2e-notebook \
+            NOTEBOOK_INPUT=../examples/end-to-end-tutorial.ipynb \
+            NOTEBOOK_OUTPUT=../artifacts/notebooks/${{ matrix.kubernetes-version }}_end-to-end-tutorial.ipynb \
+            PAPERMILL_TIMEOUT=900
+          make test-e2e-notebook \
+            NOTEBOOK_INPUT=../examples/pipelines-end-to-end-tutorial.ipynb \
+            NOTEBOOK_OUTPUT=../artifacts/notebooks/${{ matrix.kubernetes-version }}_pipelines-end-to-end-tutorial.ipynb \
             PAPERMILL_TIMEOUT=900
 
       - name: Upload Artifacts to GitHub
