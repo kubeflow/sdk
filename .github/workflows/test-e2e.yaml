@@ -55,9 +55,9 @@ jobs:
         run: |
           echo "Installing Kubeflow Pipelines (KFP) Standalone..."
           kubectl create namespace kubeflow || true
-          kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/cluster-scoped-resources?ref=2.2.0"
+          kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/cluster-scoped-resources?ref=2.17.0"
           kubectl wait --for condition=established --timeout=120s crd/applications.app.k8s.io
-          kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/env/dev?ref=2.2.0"
+          kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/env/platform-agnostic?ref=2.17.0"
 
           echo "Waiting for KFP components to be ready..."
           kubectl rollout status deployment/ml-pipeline -n kubeflow --timeout=1200s || {
