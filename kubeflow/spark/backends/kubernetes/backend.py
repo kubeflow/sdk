@@ -273,7 +273,7 @@ class KubernetesBackend(RuntimeBackend):
             ) from e
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
+                f"Failed to get {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name} : {e}"
             ) from e
         raise RuntimeError(
             f"Failed to get {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}: {e}"
