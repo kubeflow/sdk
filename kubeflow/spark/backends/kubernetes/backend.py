@@ -274,7 +274,9 @@ class KubernetesBackend(RuntimeBackend):
         except Exception as e:
             raise RuntimeError(
                 f"Failed to get {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
-            ) from e
+        raise RuntimeError(
+            f"Failed to get {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}: {e}"
+        ) from e
 
     def list_sessions(self) -> list[SparkConnectInfo]:
         """List SparkConnect sessions.
