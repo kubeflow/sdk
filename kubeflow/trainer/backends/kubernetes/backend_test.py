@@ -1141,10 +1141,13 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
     """Test KubernetesBackend.get_runtime_packages with basic success path."""
     print("Executing test:", test_case.name)
 
-    try:
-        kubernetes_backend.get_runtime_packages(**test_case.config)
-    except Exception as e:
-        assert type(e) is test_case.expected_error
+    if test_case.expected_status == SUCCESS:
+        # get_runtime_packages runs a TrainJob and streams its logs; it does not
+        # return a value, so a successful call completes without raising.
+        assert kubernetes_backend.get_runtime_packages(**test_case.config) is None
+    else:
+        with pytest.raises(test_case.expected_error):
+            kubernetes_backend.get_runtime_packages(**test_case.config)
 
     if test_case.expected_status == SUCCESS:
         kubernetes_backend.custom_api.delete_namespaced_custom_object.assert_called_once()
