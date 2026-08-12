@@ -34,6 +34,7 @@ from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
+    ResourceDict,
     SparkConnectInfo,
     SparkConnectState,
     SparkJob,
@@ -115,6 +116,8 @@ def _resolve_driver_resources(
     Raises:
         ValueError:
             If the configured CPU or memory values are invalid.
+        TypeError:
+            If the configured CPU value is not a supported type.
     """
 
     cores = constants.DEFAULT_DRIVER_CPU
@@ -126,7 +129,7 @@ def _resolve_driver_resources(
 
         if "memory" in driver.resources:
             memory = _memory_kubernetes_to_spark(
-                driver.resources["memory"],
+                str(driver.resources["memory"]),
             )
 
     return cores, memory
@@ -135,7 +138,7 @@ def _resolve_driver_resources(
 def _resolve_executor_resources(
     executor: Executor | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: ResourceDict | None = None,
 ) -> tuple[int, int, str]:
     """Resolve executor configuration.
 
@@ -147,7 +150,7 @@ def _resolve_executor_resources(
             Number of executor instances.
 
         resources_per_executor:
-            Resource requirements.
+            Resource requirements as ResourceDict.
 
     Returns:
         Tuple containing ``(instances, cores, memory)``.
@@ -155,6 +158,8 @@ def _resolve_executor_resources(
     Raises:
         ValueError:
             If the configured CPU or memory values are invalid.
+        TypeError:
+            If the configured CPU value is not a supported type.
     """
 
     if executor and executor.num_instances is not None:
@@ -182,7 +187,7 @@ def _resolve_executor_resources(
 
         if "memory" in resource_dict:
             memory = _memory_kubernetes_to_spark(
-                resource_dict["memory"],
+                str(resource_dict["memory"]),
             )
 
     return instances, cores, memory
@@ -246,22 +251,26 @@ def _memory_kubernetes_to_spark(memory: str) -> str:
     return f"{math.ceil(total_bytes / (2**20))}m"
 
 
-def _validate_cpu_value(cpu: str | int | None) -> int:
+def _validate_cpu_value(cpu: str | int | float | None) -> int:
     """Validate and normalize CPU cores value.
 
     Args:
-        cpu: CPU value provided by user.
+        cpu: CPU value provided by user (str, int, or float).
 
     Returns:
         Integer CPU core value.
 
     Raises:
-        ValueError: If CPU value is invalid.
+        ValueError: If CPU value is invalid or non-positive.
+        TypeError: If CPU value is not a supported type or is a boolean.
     """
     if cpu is None:
         raise ValueError("CPU value cannot be None")
 
-    if isinstance(cpu, int):
+    if isinstance(cpu, bool):
+        raise TypeError(f"Invalid CPU type '{type(cpu).__name__}'. Expected str, int, or float.")
+
+    if isinstance(cpu, (int, float)):
         cores = float(cpu)
 
     elif isinstance(cpu, str):
@@ -281,10 +290,13 @@ def _validate_cpu_value(cpu: str | int | None) -> int:
             cores = int(milli_cpu) / 1000
 
         else:
-            cores = float(cpu)
+            try:
+                cores = float(cpu)
+            except ValueError as e:
+                raise ValueError(f"Invalid CPU value: {cpu!r}") from e
 
     else:
-        raise ValueError(f"Invalid CPU type '{type(cpu)}'. Expected str or int.")
+        raise TypeError(f"Invalid CPU type '{type(cpu).__name__}'. Expected str, int, or float.")
 
     if not math.isfinite(cores) or cores <= 0:
         raise ValueError(f"Invalid CPU value: {cpu!r}")
@@ -314,12 +326,12 @@ def apply_options(
         backend:
             Backend used for option validation.
 
-        Raises:
-            ValueError:
-                If options are provided without a backend instance.
+    Raises:
+        ValueError:
+            If options are provided without a backend instance.
 
-            TypeError:
-                If an option is not callable.
+        TypeError:
+            If an option is not callable.
     """
     if not options:
         return
@@ -449,6 +461,8 @@ def get_spark_connect_driver_spec(
     Raises:
         ValueError:
             If the configured driver resources are invalid.
+        TypeError:
+            If the configured driver CPU resource is not a supported type.
     """
     cores, memory = _resolve_driver_resources(driver)
 
@@ -472,7 +486,7 @@ def get_spark_connect_driver_spec(
 def get_spark_connect_executor_spec(
     executor: Executor | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: ResourceDict | None = None,
 ) -> models.SparkV1alpha1ExecutorSpec:
     """Convert SDK Executor to API ExecutorSpec.
 
@@ -483,7 +497,7 @@ def get_spark_connect_executor_spec(
     Args:
         executor: SDK Executor configuration.
         num_executors: Simple mode number of executors.
-        resources_per_executor: Simple mode resource requirements.
+        resources_per_executor: Simple mode resource requirements as ResourceDict.
 
     Returns:
         API ExecutorSpec model.
@@ -491,6 +505,8 @@ def get_spark_connect_executor_spec(
     Raises:
         ValueError:
             If the configured executor resources are invalid.
+        TypeError:
+            If the configured executor CPU resource is not a supported type.
     """
     instances, cores, memory = _resolve_executor_resources(
         executor,
@@ -510,7 +526,7 @@ def build_spark_connect_cr(
     namespace: str,
     spark_version: str | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: ResourceDict | None = None,
     spark_conf: dict[str, str] | None = None,
     driver: Driver | None = None,
     executor: Executor | None = None,
@@ -530,7 +546,7 @@ def build_spark_connect_cr(
         namespace: Kubernetes namespace.
         spark_version: Spark version (default: `constants.DEFAULT_SPARK_VERSION`).
         num_executors: Number of executor instances (simple mode).
-        resources_per_executor: Resource requirements per executor (simple mode).
+        resources_per_executor: Resource requirements per executor as ResourceDict (simple mode).
         spark_conf: Spark configuration properties.
         driver: Driver configuration (advanced mode).
         executor: Executor configuration (advanced mode).
@@ -543,6 +559,8 @@ def build_spark_connect_cr(
     Raises:
         ValueError:
             If the provided driver or executor resource configuration is invalid.
+        TypeError:
+            If the provided driver or executor CPU resource is not a supported type.
     """
     _validate_spark_conf(spark_conf)
 
@@ -675,6 +693,8 @@ def get_spark_job_driver_spec(
     Raises:
         ValueError:
             If the default driver resource configuration is invalid.
+        TypeError:
+            If the driver CPU resource is not a supported type.
     """
     cores, memory = _resolve_driver_resources(driver)
 
@@ -687,13 +707,13 @@ def get_spark_job_driver_spec(
 
 def get_spark_job_executor_spec(
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: ResourceDict | None = None,
 ) -> models.SparkV1beta2ExecutorSpec:
     """Build ExecutorSpec for SparkApplication.
 
     Args:
         num_executors: Number of executor instances.
-        resources_per_executor: Resource requirements for each executor.
+        resources_per_executor: Resource requirements for each executor as ResourceDict.
 
     Returns:
         SparkApplication ExecutorSpec model.
@@ -701,6 +721,8 @@ def get_spark_job_executor_spec(
     Raises:
         ValueError:
             If the configured executor resources are invalid.
+        TypeError:
+            If the executor CPU resource is not a supported type.
     """
     instances, cores, memory = _resolve_executor_resources(
         num_executors=num_executors,
@@ -802,7 +824,7 @@ def get_spark_application_cr_from_file_job(
     main_file: str,
     arguments: list[str] | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: ResourceDict | None = None,
     options: list | None = None,
     backend: Any | None = None,
     spark_conf: dict[str, str] | None = None,
@@ -815,7 +837,7 @@ def get_spark_application_cr_from_file_job(
         main_file: Path or URI to the Spark application file.
         arguments: Command-line arguments passed to the Spark application.
         num_executors: Number of executor instances.
-        resources_per_executor: Resource requirements for each executor.
+        resources_per_executor: Resource requirements for each executor as ResourceDict.
         options: List of configuration options.
         backend: Backend instance used for option validation.
         spark_conf: Spark configuration properties.
@@ -826,6 +848,8 @@ def get_spark_application_cr_from_file_job(
     Raises:
         ValueError:
             If the executor resource configuration is invalid.
+        TypeError:
+            If the executor CPU resource is not a supported type.
     """
     spark_application = models.SparkV1beta2SparkApplication(
         api_version=f"{constants.SPARK_APPLICATION_GROUP}/{constants.SPARK_APPLICATION_VERSION}",
@@ -865,7 +889,7 @@ def get_spark_application_cr_from_func_job(
     func: Callable,
     func_args: dict[str, Any] | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: ResourceDict | None = None,
     options: list | None = None,
     backend: Any | None = None,
     spark_conf: dict[str, str] | None = None,
@@ -878,7 +902,7 @@ def get_spark_application_cr_from_func_job(
         func: Python function to execute as the Spark application.
         func_args: Keyword arguments passed to the function.
         num_executors: Number of executor instances.
-        resources_per_executor: Resource requirements for each executor.
+        resources_per_executor: Resource requirements for each executor as ResourceDict.
         options: List of configuration options.
         backend: Backend instance used for option validation.
         spark_conf: Spark configuration properties.
@@ -890,6 +914,8 @@ def get_spark_application_cr_from_func_job(
         ValueError:
             If the provided function is invalid or the executor resource
             configuration is invalid.
+        TypeError:
+            If the executor CPU resource is not a supported type.
     """
     _validate_spark_conf(spark_conf)
 

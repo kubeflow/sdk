@@ -27,6 +27,7 @@ from kubeflow.spark.types.types import (
     Executor,
     FileJob,
     FuncJob,
+    ResourceDict,
     SparkConnectInfo,
     SparkJob,
     SparkJobStatus,
@@ -64,7 +65,7 @@ class SparkClient:
         base_url: str | None = None,
         token: str | None = None,
         num_executors: int | None = None,
-        resources_per_executor: dict[str, str] | None = None,
+        resources_per_executor: ResourceDict | None = None,
         spark_conf: dict[str, str] | None = None,
         driver: Driver | None = None,
         executor: Executor | None = None,
@@ -83,8 +84,8 @@ class SparkClient:
                  If provided, connects to existing server. If None, creates new session.
             token: Optional authentication token for existing server.
             num_executors: Number of executor instances (create mode only).
-            resources_per_executor: Resource requirements per executor as dict.
-                Format: `{"cpu": "5", "memory": "10Gi"}` (create mode only).
+            resources_per_executor: Resource requirements per executor as ResourceDict.
+                Format: `{"cpu": 5, "memory": "10Gi"}` (create mode only).
             spark_conf: Spark configuration dictionary (create mode only).
             driver: Driver configuration object (create mode only).
             executor: Executor configuration object (create mode only).
@@ -175,7 +176,7 @@ class SparkClient:
         self,
         job: FileJob | FuncJob,
         num_executors: int | None = None,
-        resources_per_executor: dict[str, str] | None = None,
+        resources_per_executor: ResourceDict | None = None,
         spark_conf: dict[str, str] | None = None,
         options: list | None = None,
     ) -> str:
@@ -196,8 +197,8 @@ class SparkClient:
                 Number of executor instances.
 
             resources_per_executor:
-                Resource requirements per executor.
-                Format: ``{"cpu": "5", "memory": "10Gi"}``.
+                Resource requirements per executor as ResourceDict.
+                Format: ``{"cpu": 5, "memory": "10Gi"}``.
 
             spark_conf:
                 Spark configuration properties.
