@@ -223,28 +223,13 @@ Kubernetes namespace (defaults to ``default``).
 
    client.delete_session("spark-connect-example")
 
-When Things Go Wrong
-----------------------
-
-- **Connection timeout** - Verify that the Spark Connect server is running and
-  reachable.
-- **Session creation failure** - Check Spark Connect logs and available cluster
-  resources.
-- **Port-forward errors** - When connecting from outside the cluster, ensure the
-  Spark Connect server is running and reachable. You can also connect directly to
-  an existing Spark Connect endpoint using ``base_url``.
-- **Spark application startup issues** - Inspect the Spark Connect server logs and
-  verify the Spark Operator is running correctly.
-- **Permission denied** - The SDK reports which RBAC verbs are missing, and includes a
-  ``Role`` and ``RoleBinding`` you can pass to a cluster administrator. See
-  :ref:`session-permissions` below.
-
 .. _session-permissions:
 
 Permissions
 -----------
 
-Each session operation requires RBAC in the target namespace:
+Each session operation that creates or reads Kubernetes resources requires RBAC in the
+target namespace:
 
 .. list-table::
    :header-rows: 1
@@ -253,7 +238,7 @@ Each session operation requires RBAC in the target namespace:
    * - Operation
      - ``sparkconnects``
      - ``pods/log``
-   * - ``connect()``
+   * - ``connect()`` (create mode)
      - ``create``, ``get``
      -
    * - ``get_session()``
@@ -273,6 +258,9 @@ Each session operation requires RBAC in the target namespace:
 session reports ready. ``get_session_logs()`` needs ``get`` on ``sparkconnects`` because it
 looks up the driver pod name before reading its logs, so granting ``pods/log`` alone is not
 enough.
+
+``connect(base_url=...)`` attaches to an existing Spark Connect endpoint over gRPC and
+never calls the Kubernetes API, so it requires no RBAC.
 
 When the API server denies a request, the SDK raises a ``RuntimeError`` naming the missing
 verbs along with a manifest a cluster administrator can apply:
@@ -296,4 +284,20 @@ verbs along with a manifest a cluster administrator can apply:
    ---
    apiVersion: rbac.authorization.k8s.io/v1
    kind: RoleBinding
-   ...
+   # roleRef and subjects omitted for brevity
+
+When Things Go Wrong
+----------------------
+
+- **Connection timeout** - Verify that the Spark Connect server is running and
+  reachable.
+- **Session creation failure** - Check Spark Connect logs and available cluster
+  resources.
+- **Port-forward errors** - When connecting from outside the cluster, ensure the
+  Spark Connect server is running and reachable. You can also connect directly to
+  an existing Spark Connect endpoint using ``base_url``.
+- **Spark application startup issues** - Inspect the Spark Connect server logs and
+  verify the Spark Operator is running correctly.
+- **Permission denied** - The SDK reports which RBAC verbs are missing, and includes a
+  ``Role`` and ``RoleBinding`` you can pass to a cluster administrator. See
+  :ref:`session-permissions` above.
