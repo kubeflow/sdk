@@ -141,9 +141,19 @@ def sample_function_with_args(name: str, age: int):
             expected_output="512m",
         ),
         TestCase(
-            name="Normalize uppercase G",
+            name="Convert decimal G to MiB",
             config={"k8s_memory": "2G"},
-            expected_output="2000000000",
+            expected_output="1908m",
+        ),
+        TestCase(
+            name="Convert decimal M to MiB",
+            config={"k8s_memory": "512M"},
+            expected_output="489m",
+        ),
+        TestCase(
+            name="Convert decimal T to MiB",
+            config={"k8s_memory": "1T"},
+            expected_output="953675m",
         ),
         TestCase(
             name="Convert fractional Gi to Mi",

@@ -89,6 +89,27 @@ def example_labels_and_annotations():
     print("\nExample complete.\n")
 
 
+def example_decimal_memory():
+    """Example: Use decimal Kubernetes memory units."""
+    print("=" * 70)
+    print("EXAMPLE: Decimal Memory Units")
+    print("=" * 70)
+
+    client = SparkClient(backend_config=_backend_config())
+
+    spark = client.connect(
+        num_executors=1,
+        resources_per_executor={"cpu": "1", "memory": "2G"},
+    )
+    print("  Executor memory: 2G")
+
+    df = spark.range(100)
+    print(f"\nProcessed {df.count()} rows with decimal memory")
+
+    spark.stop()
+    print("\nExample complete.\n")
+
+
 def example_node_selection():
     """Example 2: Schedule Spark pods on specific node types.
 
@@ -356,6 +377,7 @@ def main():
 
     try:
         example_labels_and_annotations()
+        example_decimal_memory()
         if os.environ.get("SPARK_E2E_RUN_IN_CLUSTER") != "1":
             example_node_selection()
             example_tolerations()

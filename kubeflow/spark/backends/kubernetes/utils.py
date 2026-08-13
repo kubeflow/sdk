@@ -244,8 +244,8 @@ def _memory_kubernetes_to_spark(memory: str) -> str:
             "P": 1000**5,
             "E": 1000**6,
         }
-        return str(int(float(coefficient) * decimal_units[suffix]))
-
+        total_bytes = math.ceil(float(coefficient) * decimal_units[suffix])
+        return f"{math.ceil(total_bytes / (2**20))}m"
     spark_suffix = {10: "k", 20: "m", 30: "g", 40: "t", 50: "p"}.get(exponent)
     if "." not in coefficient and spark_suffix is not None:
         return coefficient + spark_suffix
