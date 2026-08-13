@@ -214,11 +214,11 @@ class KubernetesBackend(RuntimeBackend):
                     verbs=constants.SPARK_CONNECT_CREATE_VERBS,
                 ) from e
             raise RuntimeError(
-                f"Failed to create {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
+                f"Failed to create {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}: {e}"
             ) from e
         except Exception as e:
             raise RuntimeError(
-                f"Failed to create {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
+                f"Failed to create {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}: {e}"
             ) from e
 
         spark_connect_cr = models.SparkV1alpha1SparkConnect.from_dict(response)
@@ -269,11 +269,11 @@ class KubernetesBackend(RuntimeBackend):
                     verbs=constants.SPARK_CONNECT_GET_VERBS,
                 ) from e
             raise RuntimeError(
-                f"Failed to get {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
+                f"Failed to get {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}: {e}"
             ) from e
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}: {e}"
+                f"Failed to get {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
             ) from e
 
     def list_sessions(self) -> list[SparkConnectInfo]:
@@ -310,11 +310,13 @@ class KubernetesBackend(RuntimeBackend):
                     verbs=constants.SPARK_CONNECT_LIST_VERBS,
                 ) from e
             raise RuntimeError(
-                f"Failed to list {constants.SPARK_CONNECT_KIND}s in namespace: {self.namespace}"
+                f"Failed to list {constants.SPARK_CONNECT_KIND}s in namespace: "
+                f"{self.namespace}: {e}"
             ) from e
         except Exception as e:
             raise RuntimeError(
-                f"Failed to list {constants.SPARK_CONNECT_KIND}s in namespace: {self.namespace}"
+                f"Failed to list {constants.SPARK_CONNECT_KIND}s in namespace: "
+                f"{self.namespace}: {e}"
             ) from e
 
         spark_connect_list = models.SparkV1alpha1SparkConnectList.from_dict(response)
@@ -360,11 +362,11 @@ class KubernetesBackend(RuntimeBackend):
                     verbs=constants.SPARK_CONNECT_DELETE_VERBS,
                 ) from e
             raise RuntimeError(
-                f"Failed to delete {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
+                f"Failed to delete {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}: {e}"
             ) from e
         except Exception as e:
             raise RuntimeError(
-                f"Failed to delete {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
+                f"Failed to delete {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}: {e}"
             ) from e
 
     def _wait_for_session_ready(
@@ -810,7 +812,8 @@ class KubernetesBackend(RuntimeBackend):
                     ) from e
 
                 raise RuntimeError(
-                    f"Failed to get logs for {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
+                    f"Failed to get logs for {constants.SPARK_CONNECT_KIND}: "
+                    f"{self.namespace}/{name}: {e}"
                 ) from e
 
         return _stream()
