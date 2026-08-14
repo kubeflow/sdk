@@ -43,8 +43,16 @@ class Labels:
     Args:
         labels: Dictionary of label key-value pairs.
 
-    Example:
-        options = [Labels({"app": "spark", "team": "data-eng"})]
+    Example::
+
+        options = [
+            Labels(
+                {
+                    "app": "spark",
+                    "team": "data-eng",
+                }
+            ),
+        ]
         spark = client.connect(..., options=options)
     """
 
@@ -86,12 +94,15 @@ class Annotations:
     Args:
         annotations: Dictionary of annotation key-value pairs.
 
-    Example:
+    Example::
+
         options = [
-            Annotations({
-                "description": "Daily ETL pipeline",
-                "owner": "data-team@company.com"
-            })
+            Annotations(
+                {
+                    "description": "Daily ETL pipeline",
+                    "owner": "data-team@company.com",
+                }
+            ),
         ]
         spark = client.connect(..., options=options)
     """
@@ -142,7 +153,8 @@ class PodTemplateOverride:
         role: Target role ("driver" or "executor").
         template: Pod template specification dict.
 
-    Example:
+    Example::
+
         options = [
             PodTemplateOverride(
                 role="executor",
@@ -243,9 +255,15 @@ class NodeSelector:
     Args:
         selectors: Dictionary of node label key-value pairs.
 
-    Example:
+    Example::
+
         options = [
-            NodeSelector({"node-type": "spark", "gpu": "true"})
+            NodeSelector(
+                {
+                    "node-type": "spark",
+                    "gpu": "true",
+                }
+            ),
         ]
         spark = client.connect(..., options=options)
     """
@@ -322,14 +340,15 @@ class Toleration:
         value: Taint value (if operator is Equal).
         effect: Taint effect (NoSchedule, PreferNoSchedule, or NoExecute).
 
-    Example:
+    Example::
+
         options = [
             Toleration(
                 key="spark-workload",
                 operator="Equal",
                 value="true",
-                effect="NoSchedule"
-            )
+                effect="NoSchedule",
+            ),
         ]
         spark = client.connect(..., options=options)
     """
@@ -422,8 +441,8 @@ class Name:
     Args:
         name: Custom name for the session. Must be a valid Kubernetes resource name.
 
-    Example:
-        ```python
+    Example::
+
         from kubeflow.spark import SparkClient
         from kubeflow.spark.types.options import Name
 
@@ -434,7 +453,6 @@ class Name:
 
         # Auto-generated name
         spark = client.connect()  # Creates "spark-connect-a1b2c3d4"
-        ```
     """
 
     name: str
