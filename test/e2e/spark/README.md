@@ -19,7 +19,7 @@ Validates that Spark example scripts execute successfully:
 - `test_batch_func_job_lifecycle_example` - Validates batch_func_job_lifecycle.py: submits a `FuncJob` (a Python function run as the Spark app), waits for completion, then exercises the same lifecycle APIs as above
 - `test_batch_failed_job_example` - Validates batch_failed_job.py: submits a `FileJob` expected to fail, waits for `FAILED` status, and verifies `get_job`, `get_job_logs`, and `delete_job` still work against a failed job
 - `test_batch_job_options_example` - Validates batch_job_options.py: submits a `FileJob` with `Name`, `Labels`, `Annotations`, `NodeSelector`, and `Toleration` options, then verifies those options were applied to the underlying `SparkApplication` CR before deleting the job
- 
+
 `spark_job.py` is not a standalone example — it's the simple Spark application used as the remote `file_source` for the batch job examples (`batch_job_lifecycle.py`, `batch_job_options.py`).
 
 ## Prerequisites
@@ -104,9 +104,9 @@ kubectl get deployment spark-operator-controller -n spark-operator
 ```
 
 ### Batch job tests fail with RBAC or permission errors
- 
+
 **Cause:** Batch job submission needs a `spark-operator-spark` ServiceAccount with `SparkApplication` RBAC permissions in the target namespace — this is separate from the interactive session prerequisites.
- 
+
 **Solution:** Verify the ServiceAccount and role bindings exist in the test namespace:
 ```bash
 kubectl get serviceaccount spark-operator-spark -n spark-test
