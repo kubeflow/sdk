@@ -13,8 +13,8 @@
 # limitations under the License.
 
 from collections.abc import Callable, Iterator
-import logging
 
+from kubeflow.common.structured_logging import get_logger
 from kubeflow.common.types import KubernetesBackendConfig
 import kubeflow.common.utils as common_utils
 from kubeflow.trainer.backends.container.backend import ContainerBackend
@@ -27,7 +27,7 @@ from kubeflow.trainer.backends.localprocess.backend import (
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class TrainerClient:
@@ -291,7 +291,7 @@ class TrainerClient:
     def wait_for_job_status(
         self,
         name: str,
-        status: set[str] = {constants.TRAINJOB_COMPLETE},
+        status: set[str] | None = None,
         timeout: int = 600,
         polling_interval: int = 2,
         callbacks: list[Callable[[types.TrainJob], None]] | None = None,

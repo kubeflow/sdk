@@ -36,6 +36,7 @@ from kubernetes import client, config
 from pyspark.sql import SparkSession
 
 from kubeflow.common import constants as common_constants
+from kubeflow.common.structured_logging import get_logger
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.backends.base import RuntimeBackend
 from kubeflow.spark.backends.kubernetes import constants
@@ -61,7 +62,7 @@ from kubeflow.spark.types.types import (
     SparkJobStatus,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _spark_debug_logging_enabled = False
 

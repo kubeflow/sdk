@@ -13,13 +13,13 @@
 # limitations under the License.
 from collections.abc import Callable, Iterator
 from datetime import datetime
-import logging
 import random
 import string
 import tempfile
 import time
 import uuid
 
+from kubeflow.common.structured_logging import get_logger
 from kubeflow.trainer.backends.base import RuntimeBackend
 from kubeflow.trainer.backends.localprocess import utils as local_utils
 from kubeflow.trainer.backends.localprocess.constants import local_runtimes
@@ -32,7 +32,7 @@ from kubeflow.trainer.backends.localprocess.types import (
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class LocalProcessBackend(RuntimeBackend):

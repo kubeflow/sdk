@@ -12,15 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from datetime import datetime
-import logging
 import os
 import subprocess
 import threading
 
+from kubeflow.common.structured_logging import get_logger
 from kubeflow.trainer.constants import constants
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 
 class LocalJob(threading.Thread):
     def __init__(

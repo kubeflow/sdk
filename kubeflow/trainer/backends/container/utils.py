@@ -17,16 +17,16 @@ Utility functions for the Container backend.
 """
 
 from dataclasses import dataclass
-import logging
 import os
 from pathlib import Path
 import shlex
 
 from kubeflow.common.constants import UNKNOWN
+from kubeflow.common.structured_logging import get_logger
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def create_workdir(job_name: str) -> str:

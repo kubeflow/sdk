@@ -14,7 +14,6 @@
 
 from collections.abc import Callable, Iterator
 import copy
-import logging
 import multiprocessing
 import random
 import string
@@ -26,6 +25,7 @@ from kubeflow_katib_api import models
 from kubernetes import client, config
 
 import kubeflow.common.constants as common_constants
+from kubeflow.common.structured_logging import get_logger
 from kubeflow.common.types import KubernetesBackendConfig
 import kubeflow.common.utils as common_utils
 from kubeflow.optimizer.backends.base import RuntimeBackend
@@ -44,7 +44,7 @@ from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend as Tr
 import kubeflow.trainer.constants.constants as trainer_constants
 from kubeflow.trainer.types.types import Event, TrainJobTemplate
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class KubernetesBackend(RuntimeBackend):
