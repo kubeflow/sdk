@@ -34,6 +34,7 @@ from kubeflow.trainer.backends.container.adapters.base import (
 from kubeflow.trainer.backends.container.backend import ContainerBackend
 from kubeflow.trainer.backends.container.types import ContainerBackendConfig
 from kubeflow.trainer.constants import constants
+from kubeflow.trainer.options.common import Name
 from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.types import types
 
@@ -691,6 +692,19 @@ def test_train(container_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+def test_train_rejects_unsafe_job_name(container_backend):
+    """Test that a job name with path separators raises ValueError."""
+    trainer = types.CustomTrainer(func=simple_train_func)
+    runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
+
+    with pytest.raises(ValueError, match="Invalid job name"):
+        container_backend.train(
+            runtime=runtime,
+            trainer=trainer,
+            options=[Name(name="experiment/run_1")],
+        )
 
 
 @pytest.mark.parametrize(

@@ -39,6 +39,22 @@ def get_default_target_namespace(context: str | None = None) -> str:
         return f.readline()
 
 
+def validate_filesystem_safe_name(name: str) -> None:
+    """Validate that a job name is safe to use as a filesystem path component.
+
+    Args:
+        name: The job name to validate.
+
+    Raises:
+        ValueError: If the name contains path separators or path traversal sequences.
+    """
+    if "/" in name or "\\" in name or name in (".", ".."):
+        raise ValueError(
+            f'Invalid job name "{name}". Job name must not contain path separators '
+            "('/' or '\\\\') or path traversal sequences ('.' or '..')."
+        )
+
+
 def validate_wait_for_job_status(polling_interval: int, timeout: int) -> None:
     """Validate polling_interval and timeout values used by wait_for_job_status methods.
 

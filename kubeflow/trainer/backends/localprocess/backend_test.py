@@ -523,6 +523,33 @@ def test_name_option_sets_job_name(local_backend, mock_train_environment):
     assert job_name == custom_name
 
 
+def test_name_option_rejects_unsafe_job_name(local_backend, mock_train_environment):
+    """Test that Name option with path separators raises ValueError."""
+
+    def dummy_func():
+        pass
+
+    runtime = types.Runtime(
+        name=TORCH_RUNTIME,
+        trainer=types.RuntimeTrainer(
+            trainer_type=types.TrainerType.CUSTOM_TRAINER,
+            framework="torch",
+            image=LOCAL_RUNTIME_IMAGE,
+        ),
+        kind=types.RuntimeKind.TRAINING_RUNTIME,
+    )
+
+    trainer = types.CustomTrainer(func=dummy_func)
+    options = [Name(name="experiment/run_1")]
+
+    with pytest.raises(ValueError, match="Invalid job name"):
+        local_backend.train(
+            runtime=runtime,
+            trainer=trainer,
+            options=options,
+        )
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
