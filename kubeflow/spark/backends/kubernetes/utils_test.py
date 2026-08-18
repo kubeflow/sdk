@@ -441,7 +441,7 @@ def test_validate_spark_connect_url(test_case: TestCase) -> None:
                     service_name="my-session-server",
                 ),
             },
-            expected_output="sc://my-session-server.spark.svc.cluster.local:15002",
+            expected_output="sc://my-session-server.spark.svc:15002",
         ),
         TestCase(
             name="build service url from custom service name",
@@ -454,7 +454,7 @@ def test_validate_spark_connect_url(test_case: TestCase) -> None:
                     service_name="custom-endpoint",
                 ),
             },
-            expected_output="sc://custom-endpoint.spark.svc.cluster.local:15002",
+            expected_output="sc://custom-endpoint.spark.svc:15002",
         ),
         TestCase(
             name="build service url without service name raises",

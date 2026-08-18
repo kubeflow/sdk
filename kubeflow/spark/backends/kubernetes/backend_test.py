@@ -690,7 +690,7 @@ def test_get_session_logs(kubernetes_backend, test_case):
             name="in-cluster returns svc URL and no process",
             expected_status=SUCCESS,
             config={"in_cluster": True},
-            expected_output={"url_contains": "svc.cluster.local", "proc_is_none": True},
+            expected_output={"url_contains": ".svc:", "proc_is_none": True},
         ),
         TestCase(
             name="out-of-cluster starts port-forward and returns localhost URL",
