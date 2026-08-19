@@ -119,7 +119,7 @@ def load_templates(boilerplate_dir: str) -> dict[str, list[str]]:
     templates: dict[str, list[str]] = {}
     for path in glob.glob(os.path.join(boilerplate_dir, "boilerplate.*.txt")):
         stem = os.path.basename(path).replace("boilerplate.", "").replace(".txt", "")
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             templates[stem] = f.read().splitlines()
     return templates
 
@@ -200,16 +200,12 @@ def file_passes(
         return True, None
 
     try:
-        with open(filename, "r", encoding="utf-8") as f:
+        with open(filename, encoding="utf-8") as f:
             data = f.read()
-    except (IOError, UnicodeDecodeError) as e:
+    except (OSError, UnicodeDecodeError) as e:
         return False, f"Error reading file: {e}"
 
-    if (
-        stem == "go"
-        and _RE_GENERATED.search(data)
-        and GENERATED_GO_TEMPLATE in templates
-    ):
+    if stem == "go" and _RE_GENERATED.search(data) and GENERATED_GO_TEMPLATE in templates:
         stem = GENERATED_GO_TEMPLATE
 
     ref = templates[stem]
@@ -259,9 +255,7 @@ def print_remediation(failed: list[tuple[str, str | None]]) -> None:
     print("  Copyright The Kubeflow Authors.", file=sys.stderr)
     print("", file=sys.stderr)
     print("See hack/boilerplate/ for the templates.", file=sys.stderr)
-    print(
-        "Reference: https://github.com/kubernetes/steering/issues/299", file=sys.stderr
-    )
+    print("Reference: https://github.com/kubernetes/steering/issues/299", file=sys.stderr)
 
 
 def parse_args() -> argparse.Namespace:
