@@ -759,6 +759,80 @@ def test_get_connect_url(kubernetes_backend, test_case):
     print("test execution complete")
 
 
+def _mock_ui_service(name="test-job-abc12345-ui-svc", port=4040):
+    service = Mock()
+    service.metadata.name = name
+    service.spec.ports = [Mock(port=port)]
+    return service
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="in-cluster returns svc DNS URL and no process",
+            expected_status=SUCCESS,
+            config={"in_cluster": True},
+            expected_output={"url_contains": "svc:4040", "proc_is_none": True},
+        ),
+        TestCase(
+            name="out-of-cluster starts port-forward and returns localhost URL",
+            expected_status=SUCCESS,
+            config={"in_cluster": False, "local_port": 4040},
+            expected_output={"url": "http://127.0.0.1:4040", "proc_is_none": False},
+        ),
+        TestCase(
+            name="no UI service found raises",
+            expected_status=FAILED,
+            config={"in_cluster": False, "no_service": True},
+            expected_error=RuntimeError,
+            expected_output="No Spark UI service found",
+        ),
+    ],
+)
+def test_get_job_ui_url(kubernetes_backend, test_case):
+    """Test get_job_ui_url for in-cluster, port-forward, and not-found scenarios."""
+    print("Executing test:", test_case.name)
+    service_list = Mock()
+    service_list.items = [] if test_case.config.get("no_service") else [_mock_ui_service()]
+    kubernetes_backend.core_api.list_namespaced_service = Mock(return_value=service_list)
+
+    if test_case.config["in_cluster"]:
+        with patch.dict("os.environ", {"KUBERNETES_SERVICE_HOST": "10.96.0.1"}, clear=False):
+            url, proc = kubernetes_backend.get_job_ui_url("test-job")
+    else:
+        mock_popen = Mock()
+        mock_popen.poll.return_value = None
+        with (
+            patch.dict("os.environ", {"KUBERNETES_SERVICE_HOST": ""}, clear=False),
+            patch(
+                "kubeflow.spark.backends.kubernetes.backend.subprocess.Popen",
+                return_value=mock_popen,
+            ),
+            patch("kubeflow.spark.backends.kubernetes.backend.time.sleep"),
+        ):
+            if test_case.expected_status == FAILED:
+                with pytest.raises(test_case.expected_error, match=test_case.expected_output):
+                    kubernetes_backend.get_job_ui_url("test-job")
+                print("test execution complete")
+                return
+            url, proc = kubernetes_backend.get_job_ui_url(
+                "test-job", local_port=test_case.config["local_port"]
+            )
+
+    if "url_contains" in test_case.expected_output:
+        assert test_case.expected_output["url_contains"] in url
+    else:
+        assert url == test_case.expected_output["url"]
+
+    if test_case.expected_output["proc_is_none"]:
+        assert proc is None
+    else:
+        assert proc is mock_popen
+
+    print("test execution complete")
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
