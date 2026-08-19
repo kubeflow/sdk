@@ -231,8 +231,7 @@ def file_passes(
     if new_file and any(_RE_ANY_YEAR.search(line) for line in header_lines):
         return (
             False,
-            "New file must use the year-less header "
-            "(remove the hardcoded copyright year)",
+            "New file must use the year-less header (remove the hardcoded copyright year)",
         )
 
     return True, None
