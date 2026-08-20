@@ -1,4 +1,4 @@
-# Copyright The Kubeflow Authors.
+# Copyright 2025 The Kubeflow Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Copyright 2025 The Kubeflow Authors.
 # In-cluster E2E runner: runs Spark example scripts inside the cluster so
 # SparkClient uses the in-cluster URL (sc://...svc.cluster.local) and no port-forward.
 FROM python:3.11-slim
