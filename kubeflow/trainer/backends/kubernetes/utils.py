@@ -492,6 +492,8 @@ def get_args_using_torchtune_config(
 ) -> list[str]:
     """
     Get the Trainer args from the TorchTuneConfig.
+    This function generates arguments for TorchTune. It supports HuggingFace,
+    S3 and DataCache initializers to properly set the dataset arguments.
     """
     args = []
 
@@ -531,6 +533,16 @@ def get_args_using_torchtune_config(
             args.append(f"dataset.data_files={os.path.join(constants.DATASET_PATH, relative_path)}")
         else:
             args.append(f"dataset.data_dir={os.path.join(constants.DATASET_PATH, relative_path)}")
+
+    if isinstance(initializer, types.Initializer) and isinstance(
+            initializer.dataset, types.S3DatasetInitializer
+    ):
+        args.append(f"dataset.data_dir={initializer.dataset.storage_uri}")
+
+    if isinstance(initializer, types.Initializer) and isinstance(
+        initializer.dataset, types.DataCacheInitializer
+    ):
+        args.append(f"dataset.data_dir={initializer.dataset.storage_uri}")
 
     if fine_tuning_config.peft_config:
         args += get_args_from_peft_config(fine_tuning_config.peft_config)
