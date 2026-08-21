@@ -14,7 +14,7 @@
 
 """Utility functions for Kubernetes Spark backend."""
 
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator
 import inspect
 import logging
 import math
@@ -985,75 +985,4 @@ def get_spark_application_info_from_cr(
         creation_timestamp=creation_timestamp,
         num_executors=num_executors,
         driver_pod_name=driver_pod_name,
-    )
-
-
-def format_missing_permissions_error(
-    action: str,
-    namespace: str,
-    group: str,
-    resource: str,
-    verbs: Sequence[str],
-) -> str:
-    """Build an error message naming the RBAC rules an operation requires.
-
-    Users who hit a 403 are typically working in a namespace they do not administer, so
-    the message carries a manifest they can hand to a cluster administrator rather than
-    only reporting that access was denied.
-
-    Args:
-        action: Human readable operation that was attempted, e.g. ``create a SparkConnect
-            session``.
-        namespace: Namespace the operation targeted.
-        group: API group of the resource. Empty for core.
-        resource: Plural resource name, e.g. ``sparkconnects``.
-        verbs: Verbs the operation requires.
-
-    Returns:
-        Multi-line message including the required rules and a Role/RoleBinding manifest.
-    """
-    required = list(verbs)
-    api_groups = f'["{group}"]' if group else '[""]'
-    quoted_verbs = ", ".join(f'"{verb}"' for verb in required)
-    # The name includes the verbs so that remediations for different operations on the
-    # same resource do not overwrite one another when applied in sequence.
-    role_name = "-".join(["spark-connect", resource.replace("/", "-"), *required])
-
-    manifest = textwrap.dedent(
-        f"""
-        apiVersion: rbac.authorization.k8s.io/v1
-        kind: Role
-        metadata:
-          name: {role_name}
-          namespace: {namespace}
-        rules:
-          - apiGroups: {api_groups}
-            resources: ["{resource}"]
-            verbs: [{quoted_verbs}]
-        ---
-        apiVersion: rbac.authorization.k8s.io/v1
-        kind: RoleBinding
-        metadata:
-          name: {role_name}
-          namespace: {namespace}
-        roleRef:
-          apiGroup: rbac.authorization.k8s.io
-          kind: Role
-          name: {role_name}
-        subjects:
-          - kind: ServiceAccount
-            name: <your-service-account>
-            namespace: <namespace-of-your-service-account>
-        """
-    ).strip()
-
-    group_description = f"in API group '{group}'" if group else "in the core API group"
-
-    return (
-        f"Not permitted to {action} in namespace '{namespace}'.\n"
-        f"Required RBAC verbs on '{resource}' {group_description}: "
-        f"{', '.join(required)}.\n"
-        "Ask a cluster administrator to grant the following, or bind an existing role "
-        "that includes these rules to your ServiceAccount:\n\n"
-        f"{manifest}"
     )

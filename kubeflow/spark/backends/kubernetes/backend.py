@@ -15,7 +15,7 @@
 """Kubernetes backend for Spark operations."""
 
 import ast
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
 import contextlib
 import inspect
 import logging
@@ -42,7 +42,6 @@ from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.utils import (
     build_service_url,
     build_spark_connect_cr,
-    format_missing_permissions_error,
     generate_job_name,
     generate_session_name,
     get_spark_application_cr_from_file_job,
@@ -115,34 +114,6 @@ class KubernetesBackend(RuntimeBackend):
         self.custom_api = client.CustomObjectsApi()
         self.core_api = client.CoreV1Api()
 
-    def _permission_error(
-        self,
-        action: str,
-        group: str,
-        resource: str,
-        verbs: Sequence[str],
-    ) -> RuntimeError:
-        """Build a RuntimeError naming the RBAC rules a denied operation requires.
-
-        Args:
-            action: Human readable operation that was attempted.
-            group: API group of the resource. Empty for core.
-            resource: Plural resource name.
-            verbs: Verbs the operation requires.
-
-        Returns:
-            RuntimeError whose message names the required rules and includes a manifest.
-        """
-        return RuntimeError(
-            format_missing_permissions_error(
-                action=action,
-                namespace=self.namespace,
-                group=group,
-                resource=resource,
-                verbs=verbs,
-            )
-        )
-
     # ------------------------------------------------------------------
     # Spark Connect sessions
     # ------------------------------------------------------------------
@@ -205,17 +176,6 @@ class KubernetesBackend(RuntimeBackend):
             raise TimeoutError(
                 f"Timeout to create {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
             ) from e
-        except client.ApiException as e:
-            if e.status == 403:
-                raise self._permission_error(
-                    action=f"create a {constants.SPARK_CONNECT_KIND} session",
-                    group=constants.SPARK_CONNECT_GROUP,
-                    resource=constants.SPARK_CONNECT_PLURAL,
-                    verbs=constants.SPARK_CONNECT_CREATE_VERBS,
-                ) from e
-            raise RuntimeError(
-                f"Failed to create {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}: {e}"
-            ) from e
         except Exception as e:
             raise RuntimeError(
                 f"Failed to create {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}: {e}"
@@ -261,13 +221,6 @@ class KubernetesBackend(RuntimeBackend):
                 raise RuntimeError(
                     f"{constants.SPARK_CONNECT_KIND} not found: {self.namespace}/{name}"
                 ) from e
-            if e.status == 403:
-                raise self._permission_error(
-                    action=f"read {constants.SPARK_CONNECT_KIND} sessions",
-                    group=constants.SPARK_CONNECT_GROUP,
-                    resource=constants.SPARK_CONNECT_PLURAL,
-                    verbs=constants.SPARK_CONNECT_GET_VERBS,
-                ) from e
             raise RuntimeError(
                 f"Failed to get {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}: {e}"
             ) from e
@@ -300,18 +253,6 @@ class KubernetesBackend(RuntimeBackend):
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(
                 f"Timeout to list {constants.SPARK_CONNECT_KIND}s in namespace: {self.namespace}"
-            ) from e
-        except client.ApiException as e:
-            if e.status == 403:
-                raise self._permission_error(
-                    action=f"list {constants.SPARK_CONNECT_KIND} sessions",
-                    group=constants.SPARK_CONNECT_GROUP,
-                    resource=constants.SPARK_CONNECT_PLURAL,
-                    verbs=constants.SPARK_CONNECT_LIST_VERBS,
-                ) from e
-            raise RuntimeError(
-                f"Failed to list {constants.SPARK_CONNECT_KIND}s in namespace: "
-                f"{self.namespace}: {e}"
             ) from e
         except Exception as e:
             raise RuntimeError(
@@ -353,13 +294,6 @@ class KubernetesBackend(RuntimeBackend):
             if e.status == 404:
                 raise RuntimeError(
                     f"{constants.SPARK_CONNECT_KIND} not found: {self.namespace}/{name}"
-                ) from e
-            if e.status == 403:
-                raise self._permission_error(
-                    action=f"delete {constants.SPARK_CONNECT_KIND} sessions",
-                    group=constants.SPARK_CONNECT_GROUP,
-                    resource=constants.SPARK_CONNECT_PLURAL,
-                    verbs=constants.SPARK_CONNECT_DELETE_VERBS,
                 ) from e
             raise RuntimeError(
                 f"Failed to delete {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}: {e}"
@@ -801,19 +735,11 @@ class KubernetesBackend(RuntimeBackend):
 
             except RuntimeError as e:
                 # read_pod_logs wraps every failure as RuntimeError but preserves the
-                # original as __cause__, so a denial is only visible by inspecting it.
-                cause = e.__cause__
-                if isinstance(cause, client.ApiException) and cause.status == 403:
-                    raise self._permission_error(
-                        action=f"read {constants.SPARK_CONNECT_KIND} session logs",
-                        group=constants.CORE_API_GROUP,
-                        resource=constants.POD_LOG_RESOURCE,
-                        verbs=constants.POD_LOG_VERBS,
-                    ) from e
-
+                # original as __cause__, so the API server's message is only reachable
+                # by inspecting it.
                 raise RuntimeError(
                     f"Failed to get logs for {constants.SPARK_CONNECT_KIND}: "
-                    f"{self.namespace}/{name}: {e}"
+                    f"{self.namespace}/{name}: {e.__cause__ or e}"
                 ) from e
 
         return _stream()
