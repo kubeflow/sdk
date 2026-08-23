@@ -52,8 +52,8 @@ DEFAULT_SPARK_UI_PORT = 4040
 SPARK_UI_PORT_NAME = "spark-driver-ui-port"
 
 # Default values; keep major.minor aligned with pyspark-connect in pyproject.toml
-DEFAULT_SPARK_VERSION = "4.0.1"
-DEFAULT_SPARK_IMAGE = "apache/spark:4.0.1"
+DEFAULT_SPARK_VERSION = "4.0.4"
+DEFAULT_SPARK_IMAGE = "apache/spark:4.0.4"
 DEFAULT_NUM_EXECUTORS = 1  # Kind-friendly: 1 driver + 1 executor = 2 cores
 
 # Minimal defaults for Kind / resource-constrained clusters (driver and executor)
