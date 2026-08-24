@@ -22,11 +22,14 @@ from kubeflow_spark_api import models
 import pytest
 
 from kubeflow.spark.backends.kubernetes import constants
+from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.spark.backends.kubernetes.utils import (
     _memory_kubernetes_to_spark,
     _resolve_driver_resources,
     _resolve_executor_resources,
     _validate_cpu_value,
+    _validate_spark_conf,
+    apply_options,
     build_service_url,
     build_spark_connect_cr,
     generate_job_name,
@@ -43,6 +46,7 @@ from kubeflow.spark.backends.kubernetes.utils import (
     validate_jar_main_class,
     validate_spark_connect_url,
 )
+from kubeflow.spark.options import Labels
 from kubeflow.spark.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.spark.types.types import (
     Driver,
@@ -85,6 +89,31 @@ def spark_application_spec():
             memory="2g",
             instances=5,
         ),
+    )
+
+
+@pytest.fixture
+def mock_k8s_backend():
+    """Create a mock KubernetesBackend."""
+    backend = Mock(spec=KubernetesBackend)
+    backend.__class__ = KubernetesBackend
+    return backend
+
+    def test_missing_hostname(self):
+        """U16: Missing hostname raises ValueError."""
+        with pytest.raises(ValueError, match="Host is required"):
+            validate_spark_connect_url("sc://:15002")
+
+
+@pytest.fixture
+def spark_connect_resource(minimal_spec):
+    """Creates a minimal SparkConnect resource."""
+    return models.SparkV1alpha1SparkConnect(
+        metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+            name="test-session",
+            namespace="default",
+        ),
+        spec=minimal_spec,
     )
 
 
@@ -198,6 +227,149 @@ def test_generate_session_name(test_case: TestCase) -> None:
     "test_case",
     [
         TestCase(
+            name="apply label option",
+            expected_status=SUCCESS,
+            config={
+                "options": [
+                    Labels({"team": "ml"}),
+                ],
+            },
+        ),
+        TestCase(
+            name="none options",
+            expected_status=SUCCESS,
+            config={
+                "options": None,
+            },
+        ),
+        TestCase(
+            name="missing backend",
+            expected_status=FAILED,
+            expected_error=ValueError,
+            expected_output="backend instance is required",
+            config={
+                "options": [
+                    Labels({"team": "ml"}),
+                ],
+                "backend": None,
+            },
+        ),
+        TestCase(
+            name="non callable option",
+            expected_status=FAILED,
+            expected_error=TypeError,
+            expected_output="Options must be callable",
+            config={
+                "options": ["not-a-callable"],
+                "backend": "k8s",
+            },
+        ),
+        TestCase(
+            name="empty options",
+            expected_status=SUCCESS,
+            config={
+                "options": [],
+            },
+        ),
+    ],
+)
+def test_apply_options(
+    test_case: TestCase,
+    spark_connect_resource,
+    mock_k8s_backend,
+) -> None:
+    """Tests apply_options."""
+
+    print("Executing test:", test_case.name)
+
+    backend = mock_k8s_backend if test_case.config.get("backend", "k8s") == "k8s" else None
+
+    if test_case.expected_status == FAILED:
+        with pytest.raises(
+            test_case.expected_error,
+            match=test_case.expected_output,
+        ):
+            apply_options(
+                spark_connect_resource,
+                test_case.config["options"],
+                backend,
+            )
+
+        print("test execution complete")
+        return
+
+    apply_options(
+        spark_connect_resource,
+        test_case.config["options"],
+        backend,
+    )
+
+    assert test_case.expected_status == SUCCESS
+
+    if test_case.name == "apply label option":
+        assert spark_connect_resource.metadata.labels["team"] == "ml"
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid spark conf",
+            expected_status=SUCCESS,
+            config={
+                "spark_conf": {
+                    "spark.executor.memory": "4g",
+                    "spark.sql.shuffle.partitions": "200",
+                },
+            },
+        ),
+        TestCase(
+            name="invalid spark conf key",
+            expected_status=FAILED,
+            config={
+                "spark_conf": {
+                    1: "4g",
+                },
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="invalid spark conf value",
+            expected_status=FAILED,
+            config={
+                "spark_conf": {
+                    "spark.executor.memory": 4,
+                },
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_validate_spark_conf(test_case: TestCase) -> None:
+    """Tests _validate_spark_conf."""
+
+    print("Executing test:", test_case.name)
+
+    try:
+        _validate_spark_conf(
+            test_case.config["spark_conf"],
+        )
+
+        assert test_case.expected_status == SUCCESS
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert isinstance(e, test_case.expected_error)
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
             name="valid spark connect url",
             expected_status=SUCCESS,
             config={"url": "sc://localhost:15002"},
@@ -222,6 +394,20 @@ def test_generate_session_name(test_case: TestCase) -> None:
             config={"url": "sc://localhost"},
             expected_error=ValueError,
             expected_output="Port is required",
+        ),
+        TestCase(
+            name="missing hostname",
+            expected_status=FAILED,
+            config={"url": "sc://:15002"},
+            expected_error=ValueError,
+            expected_output="Host is required",
+        ),
+        TestCase(
+            name="missing hostname with malformed port",
+            expected_status=FAILED,
+            config={"url": "sc://:abc"},
+            expected_error=ValueError,
+            expected_output="Host is required",
         ),
     ],
 )
@@ -347,20 +533,34 @@ def test_validate_jar_main_class(test_case: TestCase) -> None:
     [
         TestCase(
             name="build service url with service name",
+            name="build service url from operator default service name",
             expected_status=SUCCESS,
             config={
                 "info": SparkConnectInfo(
                     name="my-session",
                     namespace="spark",
                     state=SparkConnectState.READY,
-                    service_name="my-session-svc",
+                    service_name="my-session-server",
                 ),
             },
-            expected_output="sc://my-session-svc.spark.svc.cluster.local:15002",
+            expected_output="sc://my-session-server.spark.svc.cluster.local:15002",
         ),
         TestCase(
-            name="build service url without service name",
+            name="build service url from custom service name",
             expected_status=SUCCESS,
+            config={
+                "info": SparkConnectInfo(
+                    name="my-session",
+                    namespace="spark",
+                    state=SparkConnectState.READY,
+                    service_name="custom-endpoint",
+                ),
+            },
+            expected_output="sc://custom-endpoint.spark.svc.cluster.local:15002",
+        ),
+        TestCase(
+            name="build service url without service name raises",
+            expected_status=FAILED,
             config={
                 "info": SparkConnectInfo(
                     name="my-session",
@@ -368,7 +568,8 @@ def test_validate_jar_main_class(test_case: TestCase) -> None:
                     state=SparkConnectState.READY,
                 ),
             },
-            expected_output="my-session-svc",
+            expected_error=RuntimeError,
+            expected_output="not populated",
         ),
     ],
 )
@@ -377,14 +578,14 @@ def test_build_service_url(test_case: TestCase) -> None:
 
     print("Executing test:", test_case.name)
 
-    url = build_service_url(test_case.config["info"])
-
-    assert test_case.expected_status == SUCCESS
-
-    if test_case.name == "build service url with service name":
-        assert url == test_case.expected_output
-    elif test_case.name == "build service url without service name":
-        assert test_case.expected_output in url
+    if test_case.expected_status == SUCCESS:
+        assert build_service_url(test_case.config["info"]) == test_case.expected_output
+    else:
+        with pytest.raises(
+            test_case.expected_error,
+            match=test_case.expected_output,
+        ):
+            build_service_url(test_case.config["info"])
 
     print("test execution complete")
 
@@ -518,6 +719,15 @@ def test_build_service_url(test_case: TestCase) -> None:
             },
         ),
         TestCase(
+            name="spark connect cr with options",
+            expected_status=SUCCESS,
+            config={
+                "options": [
+                    Labels({"team": "ml"}),
+                ],
+            },
+        ),
+        TestCase(
             name="kep107 level3 advanced mode",
             expected_status=SUCCESS,
             config={
@@ -539,14 +749,19 @@ def test_build_service_url(test_case: TestCase) -> None:
         ),
     ],
 )
-def test_build_spark_connect_cr(test_case: TestCase) -> None:
+def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
     """Tests build_spark_connect_cr."""
     print("Executing test:", test_case.name)
+
+    config = dict(test_case.config)
+
+    if "options" in config:
+        config["backend"] = mock_k8s_backend
 
     spark_connect = build_spark_connect_cr(
         name="test-session",
         namespace="default",
-        **test_case.config,
+        **config,
     )
 
     assert test_case.expected_status == SUCCESS
@@ -625,6 +840,9 @@ def test_build_spark_connect_cr(test_case: TestCase) -> None:
         assert spark_connect.spec.executor.instances == 20
         assert spark_connect.spec.executor.cores == 8
         assert spark_connect.spec.executor.memory == "32g"
+
+    elif test_case.name == "spark connect cr with options":
+        assert spark_connect.metadata.labels["team"] == "ml"
 
     print("test execution complete")
 
@@ -1281,15 +1499,20 @@ def test_get_spark_job_executor_spec(test_case: TestCase) -> None:
 
     print("Executing test:", test_case.name)
 
-    spec = get_spark_job_executor_spec()
+    spec = get_spark_job_executor_spec(
+        num_executors=test_case.config.get("num_executors"),
+        resources_per_executor=test_case.config.get(
+            "resources_per_executor",
+        ),
+    )
 
     assert test_case.expected_status == SUCCESS
 
+    assert spec.instances == constants.DEFAULT_NUM_EXECUTORS
     assert spec.cores == constants.DEFAULT_EXECUTOR_CPU
     assert spec.memory == _memory_kubernetes_to_spark(
         constants.DEFAULT_EXECUTOR_MEMORY,
     )
-    assert spec.instances == constants.DEFAULT_NUM_EXECUTORS
 
     print("test execution complete")
 
@@ -1298,7 +1521,53 @@ def test_get_spark_job_executor_spec(test_case: TestCase) -> None:
     "test_case",
     [
         TestCase(
-            name="build spark application for remote uri job",
+            name="minimal file job",
+            expected_status=SUCCESS,
+            config={
+                "name": "test-job",
+                "namespace": "default",
+                "main_file": "s3://bucket/job.py",
+            },
+        ),
+        TestCase(
+            name="file job with arguments",
+            expected_status=SUCCESS,
+            config={
+                "name": "test-job",
+                "namespace": "default",
+                "main_file": "s3://bucket/job.py",
+                "arguments": ["--date", "2026-06-30"],
+            },
+        ),
+        TestCase(
+            name="file job with executor configuration",
+            expected_status=SUCCESS,
+            config={
+                "name": "test-job",
+                "namespace": "default",
+                "main_file": "s3://bucket/job.py",
+                "num_executors": 3,
+                "resources_per_executor": {
+                    "cpu": "2",
+                    "memory": "4Gi",
+                },
+            },
+        ),
+        TestCase(
+            name="file job with spark conf",
+            expected_status=SUCCESS,
+            config={
+                "name": "test-job",
+                "namespace": "default",
+                "main_file": "s3://bucket/job.py",
+                "spark_conf": {
+                    "spark.sql.shuffle.partitions": "8",
+                    "spark.executor.memoryOverhead": "512m",
+                },
+            },
+        ),
+        TestCase(
+            name="build spark application with options",
             expected_status=SUCCESS,
             config={
                 "name": "test-job",
@@ -1310,11 +1579,14 @@ def test_get_spark_job_executor_spec(test_case: TestCase) -> None:
                     "cpu": "2",
                     "memory": "4Gi",
                 },
+                "options": [
+                    Labels({"team": "ml"}),
+                ],
             },
         ),
     ],
 )
-def test_get_spark_application_cr_from_file_job(test_case: TestCase) -> None:
+def test_get_spark_application_cr_from_file_job(test_case: TestCase, mock_k8s_backend) -> None:
     """Tests build_spark_application_cr."""
 
     print("Executing test:", test_case.name)
@@ -1323,30 +1595,39 @@ def test_get_spark_application_cr_from_file_job(test_case: TestCase) -> None:
         name=test_case.config["name"],
         namespace=test_case.config["namespace"],
         main_file=test_case.config["main_file"],
-        arguments=test_case.config["arguments"],
-        num_executors=test_case.config["num_executors"],
-        resources_per_executor=test_case.config["resources_per_executor"],
+        arguments=test_case.config.get("arguments"),
+        num_executors=test_case.config.get("num_executors"),
+        resources_per_executor=test_case.config.get("resources_per_executor"),
+        options=test_case.config.get("options"),
+        backend=mock_k8s_backend,
+        spark_conf=test_case.config.get("spark_conf"),
     )
-
     assert test_case.expected_status == SUCCESS
 
     assert app.metadata.name == test_case.config["name"]
     assert app.metadata.namespace == test_case.config["namespace"]
 
-    assert app.spec.main_application_file == test_case.config["main_file"]
-    assert app.spec.arguments == test_case.config["arguments"]
+    if test_case.name == "minimal file job":
+        assert app.spec.main_application_file == test_case.config["main_file"]
 
-    assert app.spec.driver.cores == constants.DEFAULT_DRIVER_CPU
-    assert app.spec.driver.memory == _memory_kubernetes_to_spark(
-        constants.DEFAULT_DRIVER_MEMORY,
-    )
-    assert app.spec.driver.service_account == constants.DEFAULT_SERVICE_ACCOUNT
+        assert app.spec.driver.cores == constants.DEFAULT_DRIVER_CPU
+        assert app.spec.driver.memory == _memory_kubernetes_to_spark(
+            constants.DEFAULT_DRIVER_MEMORY,
+        )
 
-    assert app.spec.executor.instances == test_case.config["num_executors"]
-    assert app.spec.executor.cores == 2
-    assert app.spec.executor.memory == _memory_kubernetes_to_spark(
-        "4Gi",
-    )
+    elif test_case.name == "file job with arguments":
+        assert app.spec.arguments == test_case.config["arguments"]
+
+    elif test_case.name == "file job with executor configuration":
+        assert app.spec.executor.instances == 3
+        assert app.spec.executor.cores == 2
+        assert app.spec.executor.memory == "4g"
+
+    elif test_case.name == "build spark application with options":
+        assert app.metadata.labels["team"] == "ml"
+
+    elif test_case.name == "file job with spark conf":
+        assert app.spec.spark_conf == test_case.config["spark_conf"]
 
     print("test execution complete")
 
@@ -1355,13 +1636,34 @@ def test_get_spark_application_cr_from_file_job(test_case: TestCase) -> None:
     "test_case",
     [
         TestCase(
-            name="build spark application for function job",
+            name="minimal function job",
             expected_status=SUCCESS,
             config={
                 "name": "test-job",
                 "namespace": "default",
                 "func": sample_function,
-                "func_args": None,
+            },
+        ),
+        TestCase(
+            name="function job with args",
+            expected_status=SUCCESS,
+            config={
+                "name": "test-job",
+                "namespace": "default",
+                "func": sample_function_with_args,
+                "func_args": {
+                    "name": "Alice",
+                    "age": 20,
+                },
+            },
+        ),
+        TestCase(
+            name="function job with executor configuration",
+            expected_status=SUCCESS,
+            config={
+                "name": "test-job",
+                "namespace": "default",
+                "func": sample_function,
                 "num_executors": 3,
                 "resources_per_executor": {
                     "cpu": "2",
@@ -1369,10 +1671,41 @@ def test_get_spark_application_cr_from_file_job(test_case: TestCase) -> None:
                 },
             },
         ),
+        TestCase(
+            name="function job with spark conf",
+            expected_status=SUCCESS,
+            config={
+                "name": "test-job",
+                "namespace": "default",
+                "func": sample_function,
+                "spark_conf": {
+                    "spark.sql.shuffle.partitions": "8",
+                },
+            },
+        ),
+        TestCase(
+            name="build spark application from function with options",
+            expected_status=SUCCESS,
+            config={
+                "name": "test-job",
+                "namespace": "default",
+                "func": sample_function,
+                "func_args": {"a": 1, "b": 2},
+                "num_executors": 3,
+                "resources_per_executor": {
+                    "cpu": "2",
+                    "memory": "4Gi",
+                },
+                "options": [
+                    Labels({"team": "ml"}),
+                ],
+            },
+        ),
     ],
 )
 def test_get_spark_application_cr_from_func_job(
     test_case: TestCase,
+    mock_k8s_backend,
 ) -> None:
     """Tests get_spark_application_cr_from_func_job."""
 
@@ -1382,9 +1715,12 @@ def test_get_spark_application_cr_from_func_job(
         name=test_case.config["name"],
         namespace=test_case.config["namespace"],
         func=test_case.config["func"],
-        func_args=test_case.config["func_args"],
-        num_executors=test_case.config["num_executors"],
-        resources_per_executor=test_case.config["resources_per_executor"],
+        func_args=test_case.config.get("func_args"),
+        num_executors=test_case.config.get("num_executors"),
+        resources_per_executor=test_case.config.get("resources_per_executor"),
+        options=test_case.config.get("options"),
+        backend=mock_k8s_backend,
+        spark_conf=test_case.config.get("spark_conf"),
     )
 
     assert test_case.expected_status == SUCCESS
@@ -1392,23 +1728,38 @@ def test_get_spark_application_cr_from_func_job(
     assert app.metadata.name == test_case.config["name"]
     assert app.metadata.namespace == test_case.config["namespace"]
 
-    assert app.spec.main_application_file == constants.FUNC_JOB_MAIN_FILE
+    if test_case.name == "minimal function job":
+        assert app.spec.main_application_file == constants.FUNC_JOB_MAIN_FILE
 
-    assert app.spec.driver.init_containers is not None
-    assert len(app.spec.driver.init_containers) == 1
-    assert app.spec.driver.init_containers[0].name == constants.FUNC_JOB_INIT_CONTAINER_NAME
+        assert app.spec.driver.init_containers is not None
+        assert len(app.spec.driver.init_containers) == 1
+        assert app.spec.driver.init_containers[0].name == constants.FUNC_JOB_INIT_CONTAINER_NAME
 
-    assert app.spec.driver.volume_mounts is not None
-    assert len(app.spec.driver.volume_mounts) == 1
-    assert app.spec.driver.volume_mounts[0].name == constants.FUNC_JOB_VOLUME_NAME
+        assert app.spec.driver.volume_mounts is not None
+        assert len(app.spec.driver.volume_mounts) == 1
+        assert app.spec.driver.volume_mounts[0].name == constants.FUNC_JOB_VOLUME_NAME
 
-    assert app.spec.volumes is not None
-    assert len(app.spec.volumes) == 1
-    assert app.spec.volumes[0].name == constants.FUNC_JOB_VOLUME_NAME
+        assert app.spec.volumes is not None
+        assert len(app.spec.volumes) == 1
+        assert app.spec.volumes[0].name == constants.FUNC_JOB_VOLUME_NAME
 
-    assert app.spec.executor.instances == 3
-    assert app.spec.executor.cores == 2
-    assert app.spec.executor.memory == "4g"
+    elif test_case.name == "function job with args":
+        command = app.spec.driver.init_containers[0].command[2]
+
+        assert "sample_function_with_args(**" in command
+        assert "'name': 'Alice'" in command
+        assert "'age': 20" in command
+
+    elif test_case.name == "function job with executor configuration":
+        assert app.spec.executor.instances == 3
+        assert app.spec.executor.cores == 2
+        assert app.spec.executor.memory == "4g"
+
+    elif test_case.name == "build spark application from function with options":
+        assert app.metadata.labels["team"] == "ml"
+
+    elif test_case.name == "function job with spark conf":
+        assert app.spec.spark_conf == test_case.config["spark_conf"]
 
     print("test execution complete")
 

@@ -23,6 +23,7 @@ Check each option's docstring for supported backends.
 
 from kubeflow.trainer.options.common import Name
 from kubeflow.trainer.options.kubernetes import (
+    ActiveDeadlineSeconds,
     Annotations,
     ContainerPatch,
     JobSetSpecPatch,
@@ -43,6 +44,7 @@ __all__ = [
     # Common options (all backends)
     "Name",
     # Kubernetes options
+    "ActiveDeadlineSeconds",
     "Annotations",
     "ContainerPatch",
     "JobSetSpecPatch",

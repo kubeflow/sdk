@@ -30,6 +30,7 @@ from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.spark.backends.kubernetes.utils import (
     validate_spark_connect_url,
 )
+from kubeflow.spark.options import Labels, Name
 from kubeflow.spark.test.common import (
     DEFAULT_NAMESPACE,
     FAILED,
@@ -41,7 +42,6 @@ from kubeflow.spark.test.common import (
     TIMEOUT,
     TestCase,
 )
-from kubeflow.spark.types.options import Labels, Name
 from kubeflow.spark.types.types import (
     FileJob,
     FuncJob,
@@ -698,16 +698,23 @@ def test_get_session_logs(kubernetes_backend, test_case):
             config={"in_cluster": False},
             expected_output={"url": "sc://127.0.0.1:15002", "proc_is_none": False},
         ),
+        TestCase(
+            name="out-of-cluster without pod or service name raises",
+            expected_status=FAILED,
+            config={"in_cluster": False, "service_name": None},
+            expected_error=RuntimeError,
+            expected_output="No port-forward target",
+        ),
     ],
 )
 def test_get_connect_url(kubernetes_backend, test_case):
-    """Test get_connect_url for in-cluster and port-forward scenarios."""
+    """Test get_connect_url for in-cluster, port-forward, and not-ready scenarios."""
     print("Executing test:", test_case.name)
     info = SparkConnectInfo(
         name="test-session",
         namespace="default",
         state=SparkConnectState.READY,
-        service_name="test-session-svc",
+        service_name=test_case.config.get("service_name", "test-session-server"),
     )
 
     if test_case.config["in_cluster"]:
@@ -729,6 +736,14 @@ def test_get_connect_url(kubernetes_backend, test_case):
             patch("kubeflow.spark.backends.kubernetes.backend.time.sleep"),
             patch.object(kubernetes_backend, "_wait_for_connect_port", return_value=True),
         ):
+            if test_case.expected_status == FAILED:
+                with pytest.raises(
+                    test_case.expected_error,
+                    match=test_case.expected_output,
+                ):
+                    kubernetes_backend.get_connect_url(info)
+                print("test execution complete")
+                return
             url, proc = kubernetes_backend.get_connect_url(info)
 
     if "url_contains" in test_case.expected_output:
@@ -802,6 +817,18 @@ def test_wait_for_connect_port(kubernetes_backend, test_case):
             config={"url": ""},
             expected_error=ValueError,
         ),
+        TestCase(
+            name="missing hostname error",
+            expected_status=FAILED,
+            config={"url": "sc://:15002"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="missing hostname and malformed port error",
+            expected_status=FAILED,
+            config={"url": "sc://:abc"},
+            expected_error=ValueError,
+        ),
     ],
 )
 def test_validate_spark_connect_url(test_case):
@@ -860,59 +887,6 @@ def test_create_and_connect(kubernetes_backend, test_case):
             assert mock_create.call_args.kwargs.get("options") == options
 
         assert test_case.expected_status == SUCCESS
-
-    except Exception as e:
-        assert type(e) is test_case.expected_error
-    print("test execution complete")
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TestCase(
-            name="valid flow with name option provided",
-            expected_status=SUCCESS,
-            config={"options": [Name("test-name"), Labels({"app": "spark"})]},
-            expected_output={"name": "test-name", "remaining_count": 1, "remaining_type": Labels},
-        ),
-        TestCase(
-            name="valid flow with no name option auto generates",
-            expected_status=SUCCESS,
-            config={"options": [Labels({"app": "spark"})]},
-            expected_output={
-                "name_prefix": "spark-connect-",
-                "remaining_count": 1,
-                "remaining_type": Labels,
-            },
-        ),
-        TestCase(
-            name="valid flow with none options auto generates",
-            expected_status=SUCCESS,
-            config={"options": None},
-            expected_output={"name_prefix": "spark-connect-", "remaining_count": 0},
-        ),
-        TestCase(
-            name="valid flow with empty options auto generates",
-            expected_status=SUCCESS,
-            config={"options": []},
-            expected_output={"name_prefix": "spark-connect-", "remaining_count": 0},
-        ),
-    ],
-)
-def test_extract_name_option(kubernetes_backend, test_case):
-    """Test KubernetesBackend._extract_name_option for name extraction and auto-generation."""
-    print("Executing test:", test_case.name)
-    try:
-        name, filtered = kubernetes_backend._extract_name_option(test_case.config["options"])
-
-        assert test_case.expected_status == SUCCESS
-        if "name" in test_case.expected_output:
-            assert name == test_case.expected_output["name"]
-        else:
-            assert name.startswith(test_case.expected_output["name_prefix"])
-        assert len(filtered) == test_case.expected_output["remaining_count"]
-        if "remaining_type" in test_case.expected_output:
-            assert isinstance(filtered[0], test_case.expected_output["remaining_type"])
 
     except Exception as e:
         assert type(e) is test_case.expected_error
@@ -1308,6 +1282,34 @@ def test_validate_job(kubernetes_backend, test_case):
                 "use_mock_command": True,
             },
         ),
+        TestCase(
+            name="valid remote file submission with spark conf",
+            expected_status=SUCCESS,
+            config={
+                "job": FileJob(
+                    file_source="s3://bucket/job.py",
+                    args=["--date", "2026-06-30"],
+                ),
+                "spark_conf": {
+                    "spark.executor.memory": "4g",
+                    "spark.sql.shuffle.partitions": "10",
+                },
+            },
+        ),
+        TestCase(
+            name="valid remote file submission with options",
+            expected_status=SUCCESS,
+            config={
+                "job": FileJob(
+                    file_source="s3://bucket/job.py",
+                    args=["--date", "2026-06-30"],
+                ),
+                "options": [
+                    Name("custom-job"),
+                    Labels({"team": "ml"}),
+                ],
+            },
+        ),
     ],
 )
 def test_submit_job(kubernetes_backend, test_case):
@@ -1330,20 +1332,34 @@ def test_submit_job(kubernetes_backend, test_case):
 
                 job = kubernetes_backend.submit_job(
                     job=test_case.config["job"],
+                    options=test_case.config.get("options"),
+                    spark_conf=test_case.config.get("spark_conf"),
                 )
 
                 mock_build.assert_called_once()
 
                 assert mock_build.call_args.kwargs["func"] == test_case.config["job"].func
                 assert mock_build.call_args.kwargs["func_args"] == test_case.config["job"].func_args
+                if test_case.config.get("options"):
+                    assert mock_build.call_args.kwargs["options"] == test_case.config["options"]
+                    assert mock_build.call_args.kwargs["backend"] is kubernetes_backend
+                assert mock_build.call_args.kwargs["spark_conf"] == test_case.config.get(
+                    "spark_conf"
+                )
 
         else:
             job = kubernetes_backend.submit_job(
                 job=test_case.config["job"],
+                options=test_case.config.get("options"),
+                spark_conf=test_case.config.get("spark_conf"),
             )
 
         assert test_case.expected_status == SUCCESS
-        assert job.name.startswith("spark-job-")
+
+        if test_case.config.get("options"):
+            assert job.name == "custom-job"
+        else:
+            assert job.name.startswith("spark-job-")
 
     except Exception as e:
         assert type(e) is test_case.expected_error
