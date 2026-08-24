@@ -394,6 +394,20 @@ def test_validate_spark_conf(test_case: TestCase) -> None:
             expected_error=ValueError,
             expected_output="Port is required",
         ),
+        TestCase(
+            name="missing hostname",
+            expected_status=FAILED,
+            config={"url": "sc://:15002"},
+            expected_error=ValueError,
+            expected_output="Host is required",
+        ),
+        TestCase(
+            name="missing hostname with malformed port",
+            expected_status=FAILED,
+            config={"url": "sc://:abc"},
+            expected_error=ValueError,
+            expected_output="Host is required",
+        ),
     ],
 )
 def test_validate_spark_connect_url(test_case: TestCase) -> None:
