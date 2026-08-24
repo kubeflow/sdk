@@ -516,7 +516,12 @@ def get_args_using_torchtune_config(
 
     # Override the data dir or data files if it is provided.
     if isinstance(initializer, types.Initializer) and isinstance(
-        initializer.dataset, types.HuggingFaceDatasetInitializer
+        initializer.dataset,
+        (
+            types.HuggingFaceDatasetInitializer,
+            types.S3DatasetInitializer,
+            types.DataCacheInitializer,
+        ),
     ):
         storage_uri = (
             "hf://" + initializer.dataset.storage_uri

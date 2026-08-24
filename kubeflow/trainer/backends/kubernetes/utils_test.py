@@ -1029,6 +1029,7 @@ def test_get_args_using_torchtune_config(test_case: TestCase):
         args = utils.get_args_using_torchtune_config(
             test_case.config["fine_tuning_config"],
             test_case.config.get("initializer"),
+            test_case.config.get("relative_path"),
         )
 
         assert test_case.expected_status == SUCCESS
@@ -1038,6 +1039,24 @@ def test_get_args_using_torchtune_config(test_case: TestCase):
         assert test_case.expected_status == FAILED
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+    # -----test-args-using-torchtune-config-with-s3
+    def test_get_args_using_torchtune_config(test_case: TestCase):
+        print("Executing test:", test_case.name)
+        try:
+            args = utils.get_args_using_torchtune_config(
+                test_case.config["fine_tuning_config"],
+                test_case.config.get("initializer"),
+                test_case.config.get("relative_path"),
+            )
+
+            assert test_case.expected_status == SUCCESS
+            assert args == test_case.expected_output
+
+        except Exception as e:
+            assert test_case.expected_status == FAILED
+            assert type(e) is test_case.expected_error
+        print("test execution complete")
 
 
 @pytest.mark.parametrize(
@@ -1138,6 +1157,59 @@ def test_get_args_using_torchtune_config(test_case: TestCase):
                 args=[
                     "batch_size=8",
                     f"dataset.data_files={os.path.join(constants.DATASET_PATH, 'data.json')}",
+                ],
+            ),
+        ),
+        # added lists of cases
+        # S3 Initializer
+        TestCase(
+            name="torchtune-with-s3-initializer",
+            expected_status=SUCCESS,
+            config={
+                "runtime": _build_builtin_runtime(),
+                "trainer": types.BuiltinTrainer(
+                    config=types.TorchTuneConfig(
+                        batch_size=8,
+                    ),
+                ),
+                "initializer": types.Initializer(
+                    dataset=types.S3DatasetInitializer(
+                        storage_uri="s3://my-cloud-bucket/dataset-folder",
+                    ),
+                ),
+            },
+            expected_output=models.TrainerV1alpha1Trainer(
+                command=["tune", "run"],
+                args=[
+                    "batch_size=8",
+                    f"dataset.data_dir={os.path.join(constants.DATASET_PATH, 'dataset-folder')}",
+                ],
+            ),
+        ),
+        # test case for DataCacheInitializer
+        TestCase(
+            name="torchtune-with-datacache-initializer",
+            expected_status=SUCCESS,
+            config={
+                "runtime": _build_builtin_runtime(),
+                "trainer": types.BuiltinTrainer(
+                    config=types.TorchTuneConfig(
+                        batch_size=8,
+                    ),
+                ),
+                "initializer": types.Initializer(
+                    dataset=types.DataCacheInitializer(
+                        storage_uri="cache://my_schema/my_table",
+                        metadata_loc="/mnt/local-cache/dataset-folder",
+                        num_data_nodes=2,
+                    )
+                ),
+            },
+            expected_output=models.TrainerV1alpha1Trainer(
+                command=["tune", "run"],
+                args=[
+                    "batch_size=8",
+                    f"dataset.data_dir={os.path.join(constants.DATASET_PATH, 'my_table')}",
                 ],
             ),
         ),
