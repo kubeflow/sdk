@@ -72,17 +72,27 @@ CLI Reference
 
 .. code-block:: text
 
+   # Modules: trainer, optimizer (stub), hub (stub)
+   # Persona: readonly | data-scientist | ml-engineer | platform-admin
+   # Mode: full | progressive | semantic
+   # Instruction tier: full | compact | minimal
+   # Transport: stdio | http | sse
+   # Auth token: bearer token for HTTP auth (dev/staging)
+   # OTel endpoint: optional OTLP HTTP endpoint for tracing
+   # Log level: DEBUG | INFO | WARNING | ERROR
+   # Log format: console | json (auto-detected if omitted)
+   # No banner: suppress the FastMCP startup banner
    kubeflow-mcp serve \
-     --clients trainer \             # modules: trainer, optimizer (stub), hub (stub)
-     --persona ml-engineer \         # readonly | data-scientist | ml-engineer | platform-admin
-     --mode full \                   # full | progressive | semantic
-     --instruction-tier full \       # full | compact | minimal
-     --transport stdio \             # stdio | http | sse
-     --auth-token SECRET \           # bearer token for HTTP auth (dev/staging)
-     --otel-endpoint URL \           # OTLP HTTP endpoint (optional tracing)
-     --log-level INFO \              # DEBUG | INFO | WARNING | ERROR
-     --log-format console \          # console | json (auto-detected if omitted)
-     --no-banner                     # suppress startup banner
+     --clients trainer \
+     --persona ml-engineer \
+     --mode full \
+     --instruction-tier full \
+     --transport stdio \
+     --auth-token SECRET \
+     --otel-endpoint URL \
+     --log-level INFO \
+     --log-format console \
+     --no-banner
 
 Authentication
 --------------
