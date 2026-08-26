@@ -135,26 +135,12 @@ This step registers the model artifact in the Model Registry:
    @dsl.component
    def register_model(trained_model_uri: str, model_name: str, version: str):
        import os
-       from unittest.mock import MagicMock
+       from kubeflow.hub import ModelRegistryClient
 
        print(f"Registering model '{model_name}' version '{version}' from '{trained_model_uri}'")
        mr_host = os.environ.get("MODEL_REGISTRY_URL", "http://model-registry-service.kubeflow.svc.cluster.local:8080")
 
-       try:
-           from kubeflow.hub import ModelRegistryClient
-           mr_client = ModelRegistryClient(base_url=mr_host)
-           list(mr_client.list_models())
-       except Exception as e:
-           print(f"ModelRegistryClient not available ({e}). Using mock fallback.")
-           class MockModelRegistryClient:
-               def register_model(self, name, uri, version, model_format_name=None, model_format_version=None, version_description=None):
-                   mock_model = MagicMock()
-                   mock_model.name = name
-                   mock_model.version = version
-                   mock_model.uri = uri
-                   return mock_model
-           mr_client = MockModelRegistryClient()
-
+       mr_client = ModelRegistryClient(base_url=mr_host)
        mr_client.register_model(
            name=model_name,
            uri=trained_model_uri,
