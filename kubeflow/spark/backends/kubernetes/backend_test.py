@@ -817,6 +817,18 @@ def test_wait_for_connect_port(kubernetes_backend, test_case):
             config={"url": ""},
             expected_error=ValueError,
         ),
+        TestCase(
+            name="missing hostname error",
+            expected_status=FAILED,
+            config={"url": "sc://:15002"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="missing hostname and malformed port error",
+            expected_status=FAILED,
+            config={"url": "sc://:abc"},
+            expected_error=ValueError,
+        ),
     ],
 )
 def test_validate_spark_connect_url(test_case):
