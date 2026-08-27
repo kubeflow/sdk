@@ -40,12 +40,6 @@ SPARK_APPLICATION_VERSION = "v1beta2"
 SPARK_APPLICATION_PLURAL = "sparkapplications"
 SPARK_APPLICATION_KIND = "SparkApplication"
 
-# Label the Spark Operator stamps on the driver's web UI Service it creates
-# for every SparkApplication by default (see pkg/util.GetResourceLabels in
-# kubeflow/spark-operator). Used to find that Service without guessing its
-# name, which the operator truncates and hashes past 63 characters.
-SPARK_UI_SERVICE_APP_NAME_LABEL = "sparkoperator.k8s.io/app-name"
-
 # Default values; keep major.minor aligned with pyspark-connect in pyproject.toml
 DEFAULT_SPARK_VERSION = "4.0.4"
 DEFAULT_SPARK_IMAGE = "apache/spark:4.0.4"

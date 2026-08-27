@@ -1033,12 +1033,11 @@ class KubernetesBackend(RuntimeBackend):
     ) -> tuple[str, subprocess.Popen | None]:
         """Build a URL to the submitted job's Spark UI, port forwarding to it if needed.
 
-        The Spark Operator creates a web UI Service for every SparkApplication by
-        default (gated by the operator's own --enable-ui-service flag, true unless a
-        cluster admin turned it off), independent of any per-job configuration. This
-        finds that Service via the sparkoperator.k8s.io/app-name label the operator
-        stamps on it rather than guessing its name, which the operator truncates and
-        hashes past 63 characters.
+        The Spark Operator records the web UI Service it created for a job on the
+        SparkApplication itself, under status.driverInfo, and reads that field back
+        when it manages the UI. Take the name and port from there rather than
+        searching for the Service, so a job whose UI Service carries custom labels
+        still resolves, and there is never a choice between several matches.
 
         Args:
             name: Name of the Spark job.
@@ -1050,29 +1049,38 @@ class KubernetesBackend(RuntimeBackend):
             reference; it exits when the Python process exits.
 
         Raises:
-            RuntimeError: If the job's UI Service cannot be found (the operator may
-                have --enable-ui-service disabled, or the job may have been cleaned
-                up already), or if port-forward fails.
+            TimeoutError: If getting the SparkApplication times out.
+            RuntimeError: If the job reports no UI Service (the driver may not be
+                running yet, or the operator may have --enable-ui-service disabled),
+                or if the port-forward never becomes reachable.
         """
         try:
-            services = self.core_api.list_namespaced_service(
+            thread = self.custom_api.get_namespaced_custom_object(
+                group=constants.SPARK_APPLICATION_GROUP,
+                version=constants.SPARK_APPLICATION_VERSION,
                 namespace=self.namespace,
-                label_selector=f"{constants.SPARK_UI_SERVICE_APP_NAME_LABEL}={name}",
+                plural=constants.SPARK_APPLICATION_PLURAL,
+                name=name,
+                async_req=True,
             )
+            response = thread.get(common_constants.DEFAULT_TIMEOUT)
+            spark_application = models.SparkV1beta2SparkApplication.from_dict(response)
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(f"Timeout to get Spark job: {self.namespace}/{name}") from e
         except client.ApiException as e:
-            raise RuntimeError(
-                f"Failed to look up Spark UI service for {self.namespace}/{name}: {e}"
-            ) from e
+            if e.status == 404:
+                raise RuntimeError(f"Spark job not found: {self.namespace}/{name}") from e
+            raise RuntimeError(f"Failed to get Spark job: {self.namespace}/{name}: {e}") from e
 
-        if not services.items:
+        driver_info = spark_application.status.driver_info if spark_application.status else None
+        service_name = driver_info.web_ui_service_name if driver_info else None
+        remote_port = driver_info.web_ui_port if driver_info else None
+        if not service_name or not remote_port:
             raise RuntimeError(
-                f"No Spark UI service found for {self.namespace}/{name}. The Spark "
-                "Operator may have been deployed with --enable-ui-service=false, or "
-                "the job may already have been cleaned up."
+                f"No Spark UI service reported for {self.namespace}/{name}. The driver "
+                "may not be running yet, or the Spark Operator may have been deployed "
+                "with --enable-ui-service=false."
             )
-        service = services.items[0]
-        service_name = service.metadata.name
-        remote_port = service.spec.ports[0].port
 
         if os.environ.get("KUBERNETES_SERVICE_HOST"):
             url = f"http://{service_name}.{self.namespace}.svc:{remote_port}"
@@ -1091,14 +1099,21 @@ class KubernetesBackend(RuntimeBackend):
         url = f"http://127.0.0.1:{port}"
         logger.info("Port-forward command: %s (ui_url=%s)", " ".join(cmd), url)
         proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-        time.sleep(3.0)  # Allow port-forward to fully establish
-        if proc.poll() is not None:
-            stderr = (proc.stderr and proc.stderr.read()) or b""
-            err_msg = stderr.decode("utf-8", errors="replace").strip() if stderr else ""
-            raise RuntimeError(
-                f"Port-forward to svc/{service_name} failed (exit {proc.returncode}): {err_msg}"
-            )
-        return (url, proc)
+        # A live process only means kubectl started, not that the UI answers, so
+        # wait for the port itself the same way get_connect_url() does. The wait can
+        # outlast the process, so confirm it is still up before handing it back.
+        if self._wait_for_connect_port("127.0.0.1", port, timeout_sec=90) and proc.poll() is None:
+            return (url, proc)
+
+        if proc.poll() is None:
+            proc.terminate()
+            proc.wait(timeout=5)
+        stderr = (proc.stderr and proc.stderr.read()) or b""
+        err_msg = stderr.decode("utf-8", errors="replace").strip() if stderr else ""
+        raise RuntimeError(
+            f"Port-forward to svc/{service_name} never became reachable on port {port} "
+            f"(exit {proc.returncode}): {err_msg}"
+        )
 
     def list_jobs(
         self,
