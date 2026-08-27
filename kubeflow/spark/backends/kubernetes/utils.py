@@ -113,8 +113,8 @@ def _resolve_driver_resources(
         Tuple of (cores, memory).
 
     Raises:
-        ValueError:
-            If the configured CPU or memory values are invalid.
+        ValueError: If the configured CPU or memory values are invalid.
+        TypeError: If an unsupported CPU type (such as bool) is passed.
     """
 
     cores = constants.DEFAULT_DRIVER_CPU
@@ -135,7 +135,7 @@ def _resolve_driver_resources(
 def _resolve_executor_resources(
     executor: Executor | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict[str, str | int | float] | None = None,
 ) -> tuple[int, int, str]:
     """Resolve executor configuration.
 
@@ -153,8 +153,8 @@ def _resolve_executor_resources(
         Tuple containing ``(instances, cores, memory)``.
 
     Raises:
-        ValueError:
-            If the configured CPU or memory values are invalid.
+        ValueError: If the configured CPU or memory values are invalid.
+        TypeError: If an unsupported CPU type (such as bool) is passed.
     """
 
     if executor and executor.num_instances is not None:
@@ -246,8 +246,12 @@ def _memory_kubernetes_to_spark(memory: str) -> str:
     return f"{math.ceil(total_bytes / (2**20))}m"
 
 
-def _validate_cpu_value(cpu: str | int | None) -> int:
+def _validate_cpu_value(cpu: str | int | float | None) -> int:
     """Validate and normalize CPU cores value.
+
+    Note:
+        Fractional CPU values (e.g., 1.5) are rounded upward to the nearest integer
+        core count (e.g., 2) for Spark executor cores.
 
     Args:
         cpu: CPU value provided by user.
@@ -256,12 +260,16 @@ def _validate_cpu_value(cpu: str | int | None) -> int:
         Integer CPU core value.
 
     Raises:
-        ValueError: If CPU value is invalid.
+        ValueError: If CPU value is invalid or non-positive.
+        TypeError: If an unsupported type (such as bool) is passed.
     """
     if cpu is None:
         raise ValueError("CPU value cannot be None")
 
-    if isinstance(cpu, int):
+    if isinstance(cpu, bool):
+        raise TypeError("Invalid CPU type 'bool'. Expected str, int, or float.")
+
+    if isinstance(cpu, (int, float)):
         cores = float(cpu)
 
     elif isinstance(cpu, str):
@@ -284,7 +292,7 @@ def _validate_cpu_value(cpu: str | int | None) -> int:
             cores = float(cpu)
 
     else:
-        raise ValueError(f"Invalid CPU type '{type(cpu)}'. Expected str or int.")
+        raise TypeError(f"Invalid CPU type '{type(cpu).__name__}'. Expected str, int, or float.")
 
     if not math.isfinite(cores) or cores <= 0:
         raise ValueError(f"Invalid CPU value: {cpu!r}")
@@ -472,7 +480,7 @@ def get_spark_connect_driver_spec(
 def get_spark_connect_executor_spec(
     executor: Executor | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict[str, str | int | float] | None = None,
 ) -> models.SparkV1alpha1ExecutorSpec:
     """Convert SDK Executor to API ExecutorSpec.
 
@@ -489,8 +497,8 @@ def get_spark_connect_executor_spec(
         API ExecutorSpec model.
 
     Raises:
-        ValueError:
-            If the configured executor resources are invalid.
+        ValueError: If the configured executor resources are invalid.
+        TypeError: If an unsupported CPU type (such as bool) is passed.
     """
     instances, cores, memory = _resolve_executor_resources(
         executor,
@@ -510,7 +518,7 @@ def build_spark_connect_cr(
     namespace: str,
     spark_version: str | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict[str, str | int | float] | None = None,
     spark_conf: dict[str, str] | None = None,
     driver: Driver | None = None,
     executor: Executor | None = None,
@@ -541,8 +549,8 @@ def build_spark_connect_cr(
         SparkConnect CR as typed Pydantic model.
 
     Raises:
-        ValueError:
-            If the provided driver or executor resource configuration is invalid.
+        ValueError: If the provided driver or executor resource configuration is invalid.
+        TypeError: If an unsupported CPU type (such as bool) is passed.
     """
     _validate_spark_conf(spark_conf)
 
@@ -687,7 +695,7 @@ def get_spark_job_driver_spec(
 
 def get_spark_job_executor_spec(
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict[str, str | int | float] | None = None,
 ) -> models.SparkV1beta2ExecutorSpec:
     """Build ExecutorSpec for SparkApplication.
 
@@ -802,7 +810,7 @@ def get_spark_application_cr_from_file_job(
     main_file: str,
     arguments: list[str] | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict[str, str | int | float] | None = None,
     options: list | None = None,
     backend: Any | None = None,
     spark_conf: dict[str, str] | None = None,
@@ -865,7 +873,7 @@ def get_spark_application_cr_from_func_job(
     func: Callable,
     func_args: dict[str, Any] | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict[str, str | int | float] | None = None,
     options: list | None = None,
     backend: Any | None = None,
     spark_conf: dict[str, str] | None = None,
