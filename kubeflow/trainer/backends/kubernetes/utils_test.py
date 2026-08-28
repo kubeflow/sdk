@@ -761,7 +761,7 @@ def test_generated_command_runs_from_read_only_working_directory(
         ):
             owned_python_cache_file.unlink()
 
-    if safe_path_enabled:
+    if safe_path_enabled and sys.version_info >= (3, 11):
         # Under PYTHONSAFEPATH the working directory must stay off sys.path, so the module that
         # lives there is not importable. The existing PYTHONPATH entry is still honoured, which is
         # what Python itself does when no prelude is involved.
@@ -770,6 +770,9 @@ def test_generated_command_runs_from_read_only_working_directory(
         assert working_directory_module_name in result.stderr
         assert "existing_python_path_module" not in result.stderr
     else:
+        # Python 3.10 has no safe path mode and ignores PYTHONSAFEPATH, so the prelude's
+        # `getattr(sys.flags, "safe_path", False)` fallback must restore the working directory
+        # exactly as it does on the normal path.
         assert result.returncode == 0, result.stderr
         assert result.stdout.strip() == "working-directory:existing-python-path"
 
