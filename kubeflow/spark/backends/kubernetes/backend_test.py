@@ -759,6 +759,113 @@ def test_get_connect_url(kubernetes_backend, test_case):
     print("test execution complete")
 
 
+def _mock_ui_cr(name="test-job-abc12345-ui-svc", port=4040, with_ui=True):
+    """A SparkApplication CR carrying (or missing) the operator's driverInfo UI fields."""
+    driver_info = {"podName": "test-job-driver"}
+    if with_ui:
+        driver_info["webUIServiceName"] = name
+        driver_info["webUIPort"] = port
+    return {
+        "apiVersion": "sparkoperator.k8s.io/v1beta2",
+        "kind": "SparkApplication",
+        "metadata": {"name": "test-job", "namespace": "default"},
+        "spec": {
+            "type": "Python",
+            "sparkVersion": "3.5.3",
+            "mainApplicationFile": "local:///opt/spark/examples/src/main/python/pi.py",
+            "driver": {},
+            "executor": {},
+        },
+        "status": {"driverInfo": driver_info},
+    }
+
+
+def _patch_ui_cr(backend, cr):
+    thread = Mock()
+    thread.get = Mock(return_value=cr)
+    backend.custom_api.get_namespaced_custom_object = Mock(return_value=thread)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="in-cluster returns svc DNS URL and no process",
+            expected_status=SUCCESS,
+            config={"in_cluster": True},
+            expected_output={"url_contains": "svc:4040", "proc_is_none": True},
+        ),
+        TestCase(
+            name="out-of-cluster starts port-forward and returns localhost URL",
+            expected_status=SUCCESS,
+            config={"in_cluster": False, "local_port": 4040},
+            expected_output={"url": "http://127.0.0.1:4040", "proc_is_none": False},
+        ),
+        TestCase(
+            name="driver reports no UI service raises",
+            expected_status=FAILED,
+            config={"in_cluster": False, "no_service": True},
+            expected_error=RuntimeError,
+            expected_output="No Spark UI service reported",
+        ),
+        TestCase(
+            name="port never becomes reachable raises and kills the port-forward",
+            expected_status=FAILED,
+            config={"in_cluster": False, "local_port": 4040, "port_ready": False},
+            expected_error=RuntimeError,
+            expected_output="never became reachable",
+        ),
+    ],
+)
+def test_get_job_ui_url(kubernetes_backend, test_case):
+    """Test get_job_ui_url for in-cluster, port-forward, missing-UI and unreachable cases."""
+    print("Executing test:", test_case.name)
+    _patch_ui_cr(
+        kubernetes_backend,
+        _mock_ui_cr(with_ui=not test_case.config.get("no_service")),
+    )
+
+    if test_case.config["in_cluster"]:
+        with patch.dict("os.environ", {"KUBERNETES_SERVICE_HOST": "10.96.0.1"}, clear=False):
+            url, proc = kubernetes_backend.get_job_ui_url("test-job")
+    else:
+        mock_popen = Mock()
+        mock_popen.poll.return_value = None
+        mock_popen.stderr.read.return_value = b""
+        port_ready = test_case.config.get("port_ready", True)
+        with (
+            patch.dict("os.environ", {"KUBERNETES_SERVICE_HOST": ""}, clear=False),
+            patch(
+                "kubeflow.spark.backends.kubernetes.backend.subprocess.Popen",
+                return_value=mock_popen,
+            ),
+            patch.object(kubernetes_backend, "_wait_for_connect_port", return_value=port_ready),
+        ):
+            if test_case.expected_status == FAILED:
+                with pytest.raises(test_case.expected_error, match=test_case.expected_output):
+                    kubernetes_backend.get_job_ui_url("test-job")
+                if test_case.config.get("port_ready") is False:
+                    # an unreachable port must not leave the port-forward running
+                    mock_popen.terminate.assert_called_once()
+                print("test execution complete")
+                return
+            url, proc = kubernetes_backend.get_job_ui_url(
+                "test-job", local_port=test_case.config["local_port"]
+            )
+
+    if "url_contains" in test_case.expected_output:
+        assert test_case.expected_output["url_contains"] in url
+    else:
+        assert url == test_case.expected_output["url"]
+
+    if test_case.expected_output["proc_is_none"]:
+        assert proc is None
+    else:
+        assert proc is mock_popen
+
+    print("test execution complete")
+
+
 @pytest.mark.parametrize(
     "test_case",
     [

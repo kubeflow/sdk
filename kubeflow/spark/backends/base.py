@@ -182,6 +182,23 @@ class RuntimeBackend(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
+    def get_job_ui_url(
+        self,
+        name: str,
+        local_port: int | None = None,
+    ) -> tuple[str, object]:
+        """Build a URL to the submitted job's Spark UI, port forwarding to it if needed.
+
+        Args:
+            name: Name of the Spark job.
+            local_port: Local port for port-forward when running outside the cluster.
+
+        Returns:
+            (ui_url, port_forward_process_or_None).
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
     def list_jobs(
         self,
         status: set[SparkJobStatus] | None = None,
