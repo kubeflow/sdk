@@ -145,6 +145,9 @@ test-scripts: uv-venv  ## Run GitHub Actions script tests
 	@uv sync
 	@uv run pytest .github/scripts/test_scripts.py -v
 
+.PHONY: verify-boilerplate
+verify-boilerplate:  ## Verify copyright boilerplate headers in source files.
+	@python3 hack/boilerplate/boilerplate.py --base-ref "$${TARGET_BRANCH:-main}"
 
 .PHONY: install-dev
 install-dev: uv uv-venv  ## Install uv, create .venv, sync deps. Accepts extras="..." and groups="...".
