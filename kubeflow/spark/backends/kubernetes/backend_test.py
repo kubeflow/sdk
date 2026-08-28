@@ -24,6 +24,14 @@ from kubernetes import client
 from kubernetes.client import ApiException
 import pytest
 
+from kubeflow.common.testing import (
+    DEFAULT_NAMESPACE,
+    FAILED,
+    RUNTIME,
+    SUCCESS,
+    TIMEOUT,
+    TestCase,
+)
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
@@ -32,15 +40,9 @@ from kubeflow.spark.backends.kubernetes.utils import (
 )
 from kubeflow.spark.options import Labels, Name
 from kubeflow.spark.test.common import (
-    DEFAULT_NAMESPACE,
-    FAILED,
-    RUNTIME,
     SPARK_CONNECT_FAILED,
     SPARK_CONNECT_PROVISIONING,
     SPARK_CONNECT_READY,
-    SUCCESS,
-    TIMEOUT,
-    TestCase,
 )
 from kubeflow.spark.types.types import (
     FileJob,
