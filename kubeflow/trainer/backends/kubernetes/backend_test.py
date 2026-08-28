@@ -505,10 +505,12 @@ def list_cluster_custom_object(*args, **kwargs):
 
 
 def mock_read_namespaced_pod_log(*args, **kwargs):
-    """Simulate log retrieval from a pod."""
+    """Simulate async log retrieval from a pod."""
     if kwargs.get("namespace") == FAIL_LOGS:
         raise Exception("Failed to read logs")
-    return "test log content"
+    mock_thread = Mock()
+    mock_thread.get.return_value = "test log content"
+    return mock_thread
 
 
 def mock_list_namespaced_event(*args, **kwargs):

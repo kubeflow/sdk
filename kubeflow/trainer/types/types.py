@@ -19,6 +19,7 @@ from datetime import datetime
 from enum import Enum
 
 import kubeflow.common.constants as common_constants
+from kubeflow.common.types import Event  # noqa: F401
 from kubeflow.trainer.constants import constants
 
 
@@ -297,28 +298,6 @@ class TrainJob:
     num_nodes: int
     creation_timestamp: datetime
     status: str = common_constants.UNKNOWN
-
-
-# Representation for TrainJob events.
-@dataclass
-class Event:
-    """Event object that represents a Kubernetes event related to a TrainJob.
-
-    Args:
-        involved_object_kind (`str`): The kind of object this event is about
-            (e.g., 'TrainJob', 'Pod').
-        involved_object_name (`str`): The name of the object this event is about.
-        message (`str`): Human-readable description of the event.
-        reason (`str`): Short, machine understandable string describing why
-            this event was generated.
-        event_time (`datetime`): The time at which the event was first recorded.
-    """
-
-    involved_object_kind: str
-    involved_object_name: str
-    message: str
-    reason: str
-    event_time: datetime
 
 
 @dataclass

@@ -16,17 +16,14 @@ from collections.abc import Callable, Iterator
 import copy
 import logging
 import multiprocessing
-import random
-import string
 import time
 from typing import Any
-import uuid
 
 from kubeflow_katib_api import models
-from kubernetes import client, config
+from kubernetes import client
 
 import kubeflow.common.constants as common_constants
-from kubeflow.common.types import KubernetesBackendConfig
+from kubeflow.common.types import Event, KubernetesBackendConfig
 import kubeflow.common.utils as common_utils
 from kubeflow.optimizer.backends.base import RuntimeBackend
 from kubeflow.optimizer.backends.kubernetes import utils
@@ -42,23 +39,14 @@ from kubeflow.optimizer.types.optimization_types import (
 )
 from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend as TrainerBackend
 import kubeflow.trainer.constants.constants as trainer_constants
-from kubeflow.trainer.types.types import Event, TrainJobTemplate
+from kubeflow.trainer.types.types import TrainJobTemplate
 
 logger = logging.getLogger(__name__)
 
 
 class KubernetesBackend(RuntimeBackend):
     def __init__(self, cfg: KubernetesBackendConfig):
-        if cfg.namespace is None:
-            cfg.namespace = common_utils.get_default_target_namespace(cfg.context)
-
-        # If client configuration is not set, use kube-config to access Kubernetes APIs.
-        if cfg.client_configuration is None:
-            # Load kube-config or in-cluster config.
-            if cfg.config_file or not common_utils.is_running_in_k8s():
-                config.load_kube_config(config_file=cfg.config_file, context=cfg.context)
-            else:
-                config.load_incluster_config()
+        common_utils.load_kube_config(cfg)
 
         k8s_client = client.ApiClient(cfg.client_configuration)
         self.custom_api = client.CustomObjectsApi(k8s_client)
@@ -77,7 +65,7 @@ class KubernetesBackend(RuntimeBackend):
         algorithm: BaseAlgorithm | None = None,
     ) -> str:
         # Generate unique name for the OptimizationJob.
-        optimization_job_name = random.choice(string.ascii_lowercase) + uuid.uuid4().hex[:11]
+        optimization_job_name = common_utils.generate_random_name()
 
         # Validate search_space
         if not search_space:
@@ -249,9 +237,12 @@ class KubernetesBackend(RuntimeBackend):
         if pod_name is None:
             return
 
-        container_name = constants.METRICS_COLLECTOR_CONTAINER
-        yield from self.trainer_backend._read_pod_logs(
-            pod_name=pod_name, container_name=container_name, follow=follow
+        yield from common_utils.read_pod_logs(
+            core_api=self.core_api,
+            pod_name=pod_name,
+            namespace=self.namespace,
+            container_name=constants.METRICS_COLLECTOR_CONTAINER,
+            follow=follow,
         )
 
     def get_best_results(self, name: str) -> Result | None:
@@ -352,40 +343,14 @@ class KubernetesBackend(RuntimeBackend):
         for trial in job.trials:
             optimization_job_resources.add(trial.name)
 
-        events = []
         try:
-            # Retrieve events from the namespace
-            event_response: models.IoK8sApiCoreV1EventList = self.core_api.list_namespaced_event(
+            return common_utils.get_job_events(
+                core_api=self.core_api,
                 namespace=self.namespace,
-                async_req=True,
-            ).get(common_constants.DEFAULT_TIMEOUT)
-
-            # Filter events related to OptimizationJob resources
-            for event in event_response.items:
-                if not (event.metadata and event.involved_object and event.first_timestamp):
-                    continue
-
-                involved_object = event.involved_object
-
-                # Check if event is related to OptimizationJob resources
-                if (
-                    involved_object.kind in {constants.EXPERIMENT_KIND, constants.TRIAL_KIND}
-                    and involved_object.name in optimization_job_resources
-                ):
-                    events.append(
-                        Event(
-                            involved_object_kind=involved_object.kind,
-                            involved_object_name=involved_object.name,
-                            message=event.message or "",
-                            reason=event.reason or "",
-                            event_time=event.first_timestamp,
-                        )
-                    )
-
-            # Sort events by first occurrence time
-            events.sort(key=lambda e: e.event_time)
-            return events
-        except multiprocessing.TimeoutError as e:
+                job_resources=optimization_job_resources,
+                job_kinds={constants.EXPERIMENT_KIND, constants.TRIAL_KIND},
+            )
+        except TimeoutError as e:
             raise TimeoutError(
                 f"Timeout getting {constants.OPTIMIZATION_JOB_KIND} events: {self.namespace}/{name}"
             ) from e

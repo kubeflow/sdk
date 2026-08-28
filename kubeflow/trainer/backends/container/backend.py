@@ -42,11 +42,9 @@ import concurrent.futures
 from datetime import datetime
 import logging
 import os
-import random
 import shutil
-import string
-import uuid
 
+from kubeflow.common import utils as common_utils
 from kubeflow.trainer.backends.base import RuntimeBackend
 from kubeflow.trainer.backends.container import utils as container_utils
 from kubeflow.trainer.backends.container.adapters.base import (
@@ -282,9 +280,8 @@ class ContainerBackend(RuntimeBackend):
             raise ValueError(f"{self.__class__.__name__} supports only CustomTrainer in v1")
 
         # Generate train job name if not provided via options
-        trainjob_name = name or (
-            random.choice(string.ascii_lowercase)
-            + uuid.uuid4().hex[: constants.JOB_NAME_UUID_LENGTH]
+        trainjob_name = name or common_utils.generate_random_name(
+            length=constants.JOB_NAME_UUID_LENGTH
         )
 
         logger.debug(f"Starting training job: {trainjob_name}")

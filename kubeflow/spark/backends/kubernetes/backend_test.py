@@ -637,7 +637,7 @@ def test_get_session_logs(kubernetes_backend, test_case):
         kubernetes_backend.get_session = Mock(return_value=Mock(driver_pod_name=pod_name))
 
         with patch(
-            "kubeflow.spark.backends.kubernetes.backend.read_pod_logs",
+            "kubeflow.spark.backends.kubernetes.backend.common_utils.read_pod_logs",
         ) as mock_read_pod_logs:
             if test_case.expected_status == SUCCESS:
                 mock_read_pod_logs.return_value = iter(
@@ -1887,7 +1887,7 @@ def test_get_job_logs(kubernetes_backend, test_case):
                 return_value=mock_job,
             ),
             patch(
-                "kubeflow.spark.backends.kubernetes.backend.read_pod_logs",
+                "kubeflow.spark.backends.kubernetes.backend.common_utils.read_pod_logs",
             ) as mock_read_pod_logs,
         ):
             if test_case.expected_status == SUCCESS:

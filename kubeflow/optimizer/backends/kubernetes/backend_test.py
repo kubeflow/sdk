@@ -111,7 +111,6 @@ def optimizer_backend():
             return_value=Mock(to_dict=Mock(return_value={}))
         )
         backend.trainer_backend.get_job = Mock(side_effect=mock_trainer_get_job)
-        backend.trainer_backend._read_pod_logs = Mock(return_value=iter(["test log content"]))
         yield backend
 
 
@@ -795,21 +794,33 @@ def test_get_job_logs(optimizer_backend, test_case):
 
     try:
         optimizer_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
-        logs = optimizer_backend.get_job_logs(
-            test_case.config.get("name"),
-            trial_name=test_case.config.get("trial_name"),
-            follow=test_case.config.get("follow", False),
-        )
-        logs_list = list(logs)
-        assert test_case.expected_status == SUCCESS
-        assert logs_list == test_case.expected_output
+        with patch(
+            "kubeflow.optimizer.backends.kubernetes.backend.common_utils.read_pod_logs"
+        ) as mock_read:
+            if test_case.config.get("name") == TIMEOUT:
+                mock_read.side_effect = TimeoutError()
+            elif test_case.config.get("name") == RUNTIME:
+                mock_read.side_effect = RuntimeError()
+            else:
+                mock_read.return_value = iter(["test log content"])
 
-        if test_case.config.get("follow"):
-            optimizer_backend.trainer_backend._read_pod_logs.assert_called_once_with(
-                pod_name=f"{BASIC_TRIAL_NAME}-node-0-pod",
-                container_name=constants.METRICS_COLLECTOR_CONTAINER,
-                follow=True,
+            logs = optimizer_backend.get_job_logs(
+                test_case.config.get("name"),
+                trial_name=test_case.config.get("trial_name"),
+                follow=test_case.config.get("follow", False),
             )
+            logs_list = list(logs)
+            assert test_case.expected_status == SUCCESS
+            assert logs_list == test_case.expected_output
+
+            if test_case.config.get("follow"):
+                mock_read.assert_called_once_with(
+                    core_api=optimizer_backend.core_api,
+                    pod_name=f"{BASIC_TRIAL_NAME}-node-0-pod",
+                    namespace=optimizer_backend.namespace,
+                    container_name=constants.METRICS_COLLECTOR_CONTAINER,
+                    follow=True,
+                )
 
     except Exception as e:
         assert test_case.expected_status != SUCCESS

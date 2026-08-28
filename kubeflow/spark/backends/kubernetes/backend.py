@@ -32,10 +32,10 @@ import time
 from typing import Any
 
 from kubeflow_spark_api import models
-from kubernetes import client, config
+from kubernetes import client
 from pyspark.sql import SparkSession
 
-from kubeflow.common import constants as common_constants
+from kubeflow.common import constants as common_constants, utils as common_utils
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.backends.base import RuntimeBackend
 from kubeflow.spark.backends.kubernetes import constants
@@ -48,7 +48,6 @@ from kubeflow.spark.backends.kubernetes.utils import (
     get_spark_application_cr_from_func_job,
     get_spark_application_info_from_cr,
     get_spark_connect_info_from_cr,
-    read_pod_logs,
 )
 from kubeflow.spark.types.types import (
     Driver,
@@ -99,17 +98,8 @@ class KubernetesBackend(RuntimeBackend):
             ConfigException:
                 If the Kubernetes configuration cannot be loaded.
         """
+        common_utils.load_kube_config(backend_config)
         self.namespace = backend_config.namespace or "default"
-
-        if backend_config.config_file:
-            config.load_kube_config(config_file=backend_config.config_file)
-        elif backend_config.context:
-            config.load_kube_config(context=backend_config.context)
-        else:
-            try:
-                config.load_incluster_config()
-            except config.ConfigException:
-                config.load_kube_config()
 
         self.custom_api = client.CustomObjectsApi()
         self.core_api = client.CoreV1Api()
@@ -712,32 +702,30 @@ class KubernetesBackend(RuntimeBackend):
                 If retrieving the driver pod logs times out.
         """
         info = self.get_session(name)
+        pod_name = info.driver_pod_name
 
-        if not info.driver_pod_name:
+        if not pod_name:
             raise RuntimeError(
                 f"No driver pod for {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
             )
 
-        def _stream() -> Iterator[str]:
-            try:
-                yield from read_pod_logs(
-                    core_api=self.core_api,
-                    namespace=self.namespace,
-                    pod_name=info.driver_pod_name,
-                    follow=follow,
-                )
+        try:
+            return common_utils.read_pod_logs(
+                core_api=self.core_api,
+                namespace=self.namespace,
+                pod_name=pod_name,
+                follow=follow,
+            )
 
-            except TimeoutError as e:
-                raise TimeoutError(
-                    f"Timeout to get logs for {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
-                ) from e
+        except TimeoutError as e:
+            raise TimeoutError(
+                f"Timeout to get logs for {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
+            ) from e
 
-            except RuntimeError as e:
-                raise RuntimeError(
-                    f"Failed to get logs for {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
-                ) from e
-
-        return _stream()
+        except RuntimeError as e:
+            raise RuntimeError(
+                f"Failed to get logs for {constants.SPARK_CONNECT_KIND}: {self.namespace}/{name}"
+            ) from e
 
     # ------------------------------------------------------------------
     # Spark batch jobs
@@ -1222,33 +1210,29 @@ class KubernetesBackend(RuntimeBackend):
         """
 
         job = self.get_job(name)
+        pod_name = job.driver_pod_name
 
-        if not job.driver_pod_name:
+        if not pod_name:
             raise RuntimeError(
                 f"No driver pod for {constants.SPARK_APPLICATION_KIND}: {self.namespace}/{name}"
             )
 
-        def _stream() -> Iterator[str]:
-            try:
-                yield from read_pod_logs(
-                    core_api=self.core_api,
-                    namespace=self.namespace,
-                    pod_name=job.driver_pod_name,
-                    follow=follow,
-                )
-
-            except TimeoutError as e:
-                raise TimeoutError(
-                    f"Timeout to get logs for "
-                    f"{constants.SPARK_APPLICATION_KIND}: "
-                    f"{self.namespace}/{name}"
-                ) from e
-
-            except RuntimeError as e:
-                raise RuntimeError(
-                    f"Failed to get logs for "
-                    f"{constants.SPARK_APPLICATION_KIND}: "
-                    f"{self.namespace}/{name}"
-                ) from e
-
-        return _stream()
+        try:
+            return common_utils.read_pod_logs(
+                core_api=self.core_api,
+                namespace=self.namespace,
+                pod_name=pod_name,
+                follow=follow,
+            )
+        except TimeoutError as e:
+            raise TimeoutError(
+                f"Timeout to get logs for "
+                f"{constants.SPARK_APPLICATION_KIND}: "
+                f"{self.namespace}/{name}"
+            ) from e
+        except RuntimeError as e:
+            raise RuntimeError(
+                f"Failed to get logs for "
+                f"{constants.SPARK_APPLICATION_KIND}: "
+                f"{self.namespace}/{name}"
+            ) from e

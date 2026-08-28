@@ -17,15 +17,12 @@ import copy
 import logging
 import multiprocessing
 import os
-import random
 import re
-import string
 import time
 from typing import Any
-import uuid
 
 from kubeflow_trainer_api import models
-from kubernetes import client, config, watch
+from kubernetes import client
 
 import kubeflow.common.constants as common_constants
 from kubeflow.common.types import KubernetesBackendConfig
@@ -40,16 +37,7 @@ logger = logging.getLogger(__name__)
 
 class KubernetesBackend(RuntimeBackend):
     def __init__(self, cfg: KubernetesBackendConfig):
-        if cfg.namespace is None:
-            cfg.namespace = common_utils.get_default_target_namespace(cfg.context)
-
-        # If client configuration is not set, use kube-config to access Kubernetes APIs.
-        if cfg.client_configuration is None:
-            # Load kube-config or in-cluster config.
-            if cfg.config_file or not common_utils.is_running_in_k8s():
-                config.load_kube_config(config_file=cfg.config_file, context=cfg.context)
-            else:
-                config.load_incluster_config()
+        common_utils.load_kube_config(cfg)
 
         k8s_client = client.ApiClient(cfg.client_configuration)
         self.custom_api = client.CustomObjectsApi(k8s_client)
@@ -327,9 +315,8 @@ class KubernetesBackend(RuntimeBackend):
             active_deadline_seconds = spec_section.get("activeDeadlineSeconds")
 
         # Generate unique name for the TrainJob if not provided
-        train_job_name = name or (
-            random.choice(string.ascii_lowercase)
-            + uuid.uuid4().hex[: constants.JOB_NAME_UUID_LENGTH]
+        train_job_name = name or common_utils.generate_random_name(
+            length=constants.JOB_NAME_UUID_LENGTH
         )
 
         # Build the TrainJob spec using the common _get_trainjob_spec method
@@ -463,8 +450,12 @@ class KubernetesBackend(RuntimeBackend):
 
         # Remove the number for the node step.
         container_name = re.sub(r"-\d+$", "", step)
-        yield from self._read_pod_logs(
-            pod_name=pod_name, container_name=container_name, follow=follow
+        yield from common_utils.read_pod_logs(
+            core_api=self.core_api,
+            pod_name=pod_name,
+            namespace=self.namespace,
+            container_name=container_name,
+            follow=follow,
         )
 
     def wait_for_job_status(
@@ -550,41 +541,14 @@ class KubernetesBackend(RuntimeBackend):
             if step.pod_name:
                 trainjob_resources.add(step.pod_name)
 
-        events = []
         try:
-            # Retrieve events from the namespace
-            event_response: models.IoK8sApiCoreV1EventList = self.core_api.list_namespaced_event(
+            return common_utils.get_job_events(
+                core_api=self.core_api,
                 namespace=self.namespace,
-                async_req=True,
-            ).get(common_constants.DEFAULT_TIMEOUT)
-
-            # Filter events related to this TrainJob or its pods
-            for event in event_response.items:
-                if not (event.metadata and event.involved_object and event.first_timestamp):
-                    continue
-
-                involved_object = event.involved_object
-
-                # Check if event is related to TrainJob resources
-                if (
-                    involved_object.kind in {constants.TRAINJOB_KIND, "JobSet", "Job", "Pod"}
-                    and involved_object.name in trainjob_resources
-                ):
-                    events.append(
-                        types.Event(
-                            involved_object_kind=involved_object.kind,
-                            involved_object_name=involved_object.name,
-                            message=event.message or "",
-                            reason=event.reason or "",
-                            event_time=event.first_timestamp,
-                        )
-                    )
-
-            # Sort events by first occurrence time
-            events.sort(key=lambda e: e.event_time)
-
-            return events
-        except multiprocessing.TimeoutError as e:
+                job_resources=trainjob_resources,
+                job_kinds={constants.TRAINJOB_KIND, "JobSet", "Job", "Pod"},
+            )
+        except TimeoutError as e:
             raise TimeoutError(
                 f"Timeout getting {constants.TRAINJOB_KIND} events: {self.namespace}/{name}"
             ) from e
@@ -625,34 +589,6 @@ class KubernetesBackend(RuntimeBackend):
                 runtime_cr.spec.ml_policy,
             ),
         )
-
-    def _read_pod_logs(self, pod_name: str, container_name: str, follow: bool) -> Iterator[str]:
-        """Read logs from a pod container."""
-        try:
-            if follow:
-                log_stream = watch.Watch().stream(
-                    self.core_api.read_namespaced_pod_log,
-                    name=pod_name,
-                    namespace=self.namespace,
-                    container=container_name,
-                    follow=True,
-                )
-
-                # Stream logs incrementally.
-                yield from log_stream  # type: ignore
-            else:
-                logs = self.core_api.read_namespaced_pod_log(
-                    name=pod_name,
-                    namespace=self.namespace,
-                    container=container_name,
-                )
-
-                yield from logs.splitlines()
-
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to read logs for the pod {self.namespace}/{pod_name}"
-            ) from e
 
     def __get_trainjob_from_cr(
         self,
