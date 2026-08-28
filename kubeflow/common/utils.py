@@ -13,9 +13,10 @@
 # limitations under the License.
 import os
 
-from kubernetes import config
+from kubernetes import client, config
 
 from kubeflow.common import constants
+from kubeflow.common.types import KubernetesBackendConfig
 
 
 def is_running_in_k8s() -> bool:
@@ -36,7 +37,7 @@ def get_default_target_namespace(context: str | None = None) -> str:
         except Exception:
             return constants.DEFAULT_NAMESPACE
     with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace") as f:
-        return f.readline()
+        return f.read().strip()
 
 
 def validate_wait_for_job_status(polling_interval: int, timeout: int) -> None:
@@ -61,3 +62,26 @@ def validate_wait_for_job_status(polling_interval: int, timeout: int) -> None:
             "Polling interval must be strictly less than timeout. "
             f"Received polling_interval={polling_interval}, timeout={timeout}"
         )
+
+
+def get_k8s_client(cfg: KubernetesBackendConfig) -> tuple[client.ApiClient, str]:
+    """Initialize and return the Kubernetes ApiClient and target namespace.
+
+    Args:
+        cfg: Kubernetes backend configuration.
+
+    Returns:
+        A tuple of (ApiClient, namespace).
+    """
+    if cfg.namespace is None:
+        cfg.namespace = get_default_target_namespace(cfg.context)
+
+    # If client configuration is not set, use kube-config to access Kubernetes APIs.
+    if cfg.client_configuration is None:
+        # Load kube-config or in-cluster config.
+        if cfg.config_file or not is_running_in_k8s():
+            config.load_kube_config(config_file=cfg.config_file, context=cfg.context)
+        else:
+            config.load_incluster_config()
+
+    return client.ApiClient(cfg.client_configuration), cfg.namespace
