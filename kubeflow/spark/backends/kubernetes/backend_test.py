@@ -1945,3 +1945,52 @@ def test_get_job_logs(kubernetes_backend, test_case):
             raise
 
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="client_configuration passed explicitly",
+            config={
+                "client_configuration": client.Configuration(),
+                "expected_host": "https://custom-k8s-cluster:6443",
+            },
+        ),
+        TestCase(
+            name="config_file and context passed",
+            config={
+                "config_file": "/path/to/kubeconfig",
+                "context": "test-context",
+                "expected_namespace": "target-ns",
+            },
+        ),
+    ],
+)
+def test_kubernetes_backend_initialization(test_case: TestCase):
+    """Test KubernetesBackend initialization with various KubernetesBackendConfig parameters."""
+    print("Executing test:", test_case.name)
+
+    if "client_configuration" in test_case.config:
+        custom_config = test_case.config["client_configuration"]
+        custom_config.host = test_case.config["expected_host"]
+        backend = KubernetesBackend(KubernetesBackendConfig(client_configuration=custom_config))
+        assert backend.custom_api.api_client.configuration.host == test_case.config["expected_host"]
+        assert backend.core_api.api_client.configuration.host == test_case.config["expected_host"]
+    else:
+        with (
+            patch("kubernetes.config.load_kube_config") as mock_load_kube_config,
+            patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
+            patch("kubeflow.common.utils.get_default_target_namespace", return_value="target-ns"),
+        ):
+            backend = KubernetesBackend(
+                KubernetesBackendConfig(
+                    config_file=test_case.config["config_file"],
+                    context=test_case.config["context"],
+                )
+            )
+            mock_load_kube_config.assert_called_once_with(
+                config_file=test_case.config["config_file"],
+                context=test_case.config["context"],
+            )
+            assert backend.namespace == test_case.config["expected_namespace"]

@@ -11,9 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from unittest.mock import patch
+
+from kubernetes import client
 import pytest
 
 from kubeflow.common import utils
+from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.trainer.test.common import SUCCESS, TestCase
 
 
@@ -67,3 +71,51 @@ def test_validate_wait_for_job_status(test_case):
             utils.validate_wait_for_job_status(polling_interval, timeout)
     else:
         utils.validate_wait_for_job_status(polling_interval, timeout)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="client_configuration provided explicitly",
+            config={
+                "client_configuration": client.Configuration(),
+                "expected_host": "https://custom-k8s:6443",
+            },
+        ),
+        TestCase(
+            name="load_kube_config with config_file and context",
+            config={
+                "config_file": "/path/to/kubeconfig",
+                "context": "test-context",
+                "namespace": "target-ns",
+            },
+        ),
+    ],
+)
+def test_get_k8s_client(test_case):
+    """Test get_k8s_client initialization logic."""
+    print("Executing test:", test_case.name)
+
+    if "client_configuration" in test_case.config:
+        custom_config = test_case.config["client_configuration"]
+        custom_config.host = test_case.config["expected_host"]
+        cfg = KubernetesBackendConfig(client_configuration=custom_config)
+        api_client, ns = utils.get_k8s_client(cfg)
+        assert api_client.configuration.host == test_case.config["expected_host"]
+    else:
+        with (
+            patch("kubernetes.config.load_kube_config") as mock_load_kube_config,
+            patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
+            patch("kubeflow.common.utils.get_default_target_namespace", return_value="target-ns"),
+        ):
+            cfg = KubernetesBackendConfig(
+                config_file=test_case.config["config_file"],
+                context=test_case.config["context"],
+            )
+            api_client, ns = utils.get_k8s_client(cfg)
+            mock_load_kube_config.assert_called_once_with(
+                config_file=test_case.config["config_file"],
+                context=test_case.config["context"],
+            )
+            assert ns == test_case.config["namespace"]
