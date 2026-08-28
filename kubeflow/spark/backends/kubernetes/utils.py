@@ -205,14 +205,16 @@ def _memory_kubernetes_to_spark(memory: str) -> str:
         return memory
 
     match = re.match(
-        r"^(\d+(?:\.\d+)?)\s*([KMGTPE]i?|[kmgtp]b?)$",
+        r"^(\d+(?:\.\d+)?)\s*([KMGTPE]i?|k|m|g|t|p|e|kb|mb|gb|tb)?$",
         memory,
         re.IGNORECASE,
     )
     if not match:
         return memory
 
-    coefficient, suffix = match.group(1), (match.group(2) or "").lower()
+    coefficient = match.group(1)
+    suffix = match.group(2) or ""
+    suffix_lower = suffix.lower()
 
     exponent_by_suffix = {
         "ki": 10,
@@ -233,16 +235,28 @@ def _memory_kubernetes_to_spark(memory: str) -> str:
         "ei": 60,
     }
 
-    if suffix not in exponent_by_suffix:
+    if suffix_lower not in exponent_by_suffix:
         return memory
 
-    exponent = exponent_by_suffix[suffix]
-
+    exponent = exponent_by_suffix[suffix_lower]
+    # Kubernetes decimal SI units -> exact bytes
+    if suffix in {"K", "M", "G", "T", "P", "E"}:
+        decimal_units = {
+            "K": 1000,
+            "M": 1000**2,
+            "G": 1000**3,
+            "T": 1000**4,
+            "P": 1000**5,
+            "E": 1000**6,
+        }
+        total_bytes = math.ceil(float(coefficient) * decimal_units[suffix])
+        return f"{math.ceil(total_bytes / (2**20))}m"
     spark_suffix = {10: "k", 20: "m", 30: "g", 40: "t", 50: "p"}.get(exponent)
     if "." not in coefficient and spark_suffix is not None:
         return coefficient + spark_suffix
 
     total_bytes = math.ceil(float(coefficient) * (2**exponent))
+
     return f"{math.ceil(total_bytes / (2**20))}m"
 
 
