@@ -22,6 +22,7 @@ import pytest
 
 from kubeflow.trainer.backends.localprocess.backend import LocalProcessBackend
 from kubeflow.trainer.backends.localprocess.constants import LOCAL_RUNTIME_IMAGE
+from kubeflow.trainer.backends.localprocess.job import LocalJob
 from kubeflow.trainer.backends.localprocess.types import (
     LocalProcessBackendConfig,
     LocalRuntimeTrainer,
@@ -409,6 +410,33 @@ def test_list_jobs(local_backend, test_case):
     runtime = test_case.config.get("runtime")
     jobs = local_backend.list_jobs(runtime=runtime)
     assert isinstance(jobs, list)
+
+
+def test_list_jobs_sets_job_status(local_backend):
+    """Test LocalProcessBackend.list_jobs() returns the actual TrainJob status."""
+    runtime = local_backend.get_runtime(TORCH_RUNTIME)
+    step_job = LocalJob(
+        name=f"{BASIC_TRAIN_JOB_NAME}-train",
+        command=["python", "-c", "print('training')"],
+    )
+    step_job._status = constants.TRAINJOB_COMPLETE
+    local_backend._LocalProcessBackend__register_job(
+        train_job_name=BASIC_TRAIN_JOB_NAME,
+        step_name="train",
+        job=step_job,
+        runtime=runtime,
+    )
+
+    jobs = local_backend.list_jobs()
+
+    assert len(jobs) == 1
+    listed_job = jobs[0]
+    fetched_job = local_backend.get_job(BASIC_TRAIN_JOB_NAME)
+    assert listed_job.name == fetched_job.name
+    assert listed_job.creation_timestamp == fetched_job.creation_timestamp
+    assert listed_job.steps == fetched_job.steps
+    assert listed_job.runtime is runtime
+    assert listed_job.status == fetched_job.status == constants.TRAINJOB_COMPLETE
 
 
 @pytest.mark.parametrize(
