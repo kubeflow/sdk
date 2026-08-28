@@ -67,3 +67,42 @@ def test_validate_wait_for_job_status(test_case):
             utils.validate_wait_for_job_status(polling_interval, timeout)
     else:
         utils.validate_wait_for_job_status(polling_interval, timeout)
+
+
+def test_get_default_target_namespace_in_k8s(mocker):
+    """Test get_default_target_namespace strips trailing newlines when running in k8s."""
+    mocker.patch("kubeflow.common.utils.is_running_in_k8s", return_value=True)
+    mock_open = mocker.patch("builtins.open", mocker.mock_open(read_data="my-namespace\n"))
+
+    namespace = utils.get_default_target_namespace()
+
+    assert namespace == "my-namespace"
+    mock_open.assert_called_once_with("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+
+
+def test_get_default_target_namespace_out_of_k8s_with_context(mocker):
+    """Test get_default_target_namespace resolves namespace from specified or current context."""
+    mocker.patch("kubeflow.common.utils.is_running_in_k8s", return_value=False)
+    all_contexts = [
+        {"name": "ctx1", "context": {"namespace": "ns1"}},
+        {"name": "ctx2", "context": {"namespace": "ns2"}},
+    ]
+    current_context = {"name": "ctx1", "context": {"namespace": "ns1"}}
+    mocker.patch(
+        "kubernetes.config.list_kube_config_contexts",
+        return_value=(all_contexts, current_context),
+    )
+
+    assert utils.get_default_target_namespace(context="ctx2") == "ns2"
+    assert utils.get_default_target_namespace() == "ns1"
+
+
+def test_get_default_target_namespace_out_of_k8s_fallback(mocker):
+    """Test get_default_target_namespace fallback to DEFAULT_NAMESPACE on exception."""
+    mocker.patch("kubeflow.common.utils.is_running_in_k8s", return_value=False)
+    mocker.patch(
+        "kubernetes.config.list_kube_config_contexts",
+        side_effect=Exception("No kubeconfig"),
+    )
+
+    assert utils.get_default_target_namespace() == "default"
