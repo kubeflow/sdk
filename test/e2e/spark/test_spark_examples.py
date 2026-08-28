@@ -36,7 +36,7 @@ EXAMPLES_DIR = Path(__file__).parent.parent.parent.parent / "examples" / "spark"
 EXAMPLE_TIMEOUT_SEC = 600
 WATCHER_INTERVAL_SEC = 5.0
 
-# In-cluster: run example as K8s Job so client uses sc://...svc.cluster.local (no port-forward).
+# In-cluster: run example as K8s Job so client uses sc://...svc (no port-forward).
 USE_IN_CLUSTER = os.environ.get("SPARK_E2E_RUN_IN_CLUSTER") == "1"
 RUNNER_IMAGE = os.environ.get("SPARK_E2E_RUNNER_IMAGE", "")
 
