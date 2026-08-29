@@ -24,6 +24,7 @@ from kubeflow.spark.types.types import (
     Executor,
     FileJob,
     FuncJob,
+    ResourceDict,
     SparkConnectInfo,
     SparkJob,
     SparkJobStatus,
@@ -44,7 +45,7 @@ class RuntimeBackend(abc.ABC):
     def create_and_connect(
         self,
         num_executors: int | None = None,
-        resources_per_executor: dict[str, str] | None = None,
+        resources_per_executor: ResourceDict | None = None,
         spark_conf: dict[str, str] | None = None,
         driver: Driver | None = None,
         executor: Executor | None = None,
@@ -59,7 +60,7 @@ class RuntimeBackend(abc.ABC):
 
         Args:
             num_executors: Number of executor instances.
-            resources_per_executor: Resource requirements per executor.
+            resources_per_executor: Resource requirements per executor as ResourceDict.
             spark_conf: Spark configuration properties.
             driver: Driver configuration.
             executor: Executor configuration.
@@ -148,7 +149,7 @@ class RuntimeBackend(abc.ABC):
         self,
         job: FileJob | FuncJob,
         num_executors: int | None = None,
-        resources_per_executor: dict[str, str] | None = None,
+        resources_per_executor: ResourceDict | None = None,
         options: list | None = None,
         spark_conf: dict[str, str] | None = None,
     ) -> SparkJob:
@@ -157,7 +158,7 @@ class RuntimeBackend(abc.ABC):
         Args:
             job: Spark application to execute.
             num_executors: Number of executor instances.
-            resources_per_executor: Resource requirements for each executor.
+            resources_per_executor: Resource requirements for each executor as ResourceDict.
             options: List of configuration options. Use the Name option for a custom job name.
             spark_conf: Spark configuration properties to set on the SparkApplication.
 

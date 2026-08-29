@@ -21,6 +21,9 @@ from enum import Enum
 import logging
 from typing import Any
 
+# Type alias for driver and executor resource dictionary specifications
+ResourceDict = dict[str, str | int | float]
+
 logger = logging.getLogger(__name__)
 
 
@@ -87,7 +90,7 @@ class Driver:
     """
 
     image: str | None = None
-    resources: dict[str, str] | None = None
+    resources: ResourceDict | None = None
     java_options: str | None = None
     service_account: str | None = None
 
@@ -121,7 +124,7 @@ class Executor:
     """
 
     num_instances: int | None = None
-    resources_per_executor: dict[str, str] | None = None
+    resources_per_executor: ResourceDict | None = None
     java_options: str | None = None
 
 
