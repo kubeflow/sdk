@@ -18,7 +18,7 @@ set -euo pipefail
 CLUSTER_NAME="${SPARK_TEST_CLUSTER:-spark-test}"
 NAMESPACE="${SPARK_TEST_NAMESPACE:-spark-test}"
 SPARK_OPERATOR_VERSION="${SPARK_OPERATOR_VERSION:-2.1.0}"
-SPARK_OPERATOR_IMAGE_TAG="${SPARK_OPERATOR_IMAGE_TAG:-latest}"
+SPARK_OPERATOR_IMAGE_TAG="${SPARK_OPERATOR_IMAGE_TAG:-v${SPARK_OPERATOR_VERSION}}"
 K8S_VERSION="${K8S_VERSION:-1.32.0}"
 KIND_BIN="${KIND:-kind}"
 
@@ -206,13 +206,25 @@ setup_test_namespace() {
 }
 
 # 1) Operator: grant Spark Operator controller permission to manage SparkConnect and pods in the test namespace.
-# 2) Driver: grant default SA in test namespace permission so the Spark Connect server (driver) can create/watch executor pods.
+# 2) Driver: grant an explicit e2e driver service account permission to create/watch executor pods.
 # 3) ClusterRole for endpointslices: Helm chart may not grant discovery.k8s.io/endpointslices; bind to controller so Service/EndpointSlice updates succeed.
 ensure_sparkconnect_rbac() {
     phase_start "ensure_sparkconnect_rbac"
     log_info "Creating Role, RoleBinding, and ClusterRole for SparkConnect (namespace $NAMESPACE)"
 
     kubectl apply -f - <<EOF
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spark-e2e-driver
+  namespace: $NAMESPACE
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spark-e2e-runner
+  namespace: $NAMESPACE
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -292,10 +304,9 @@ roleRef:
   name: spark-driver
 subjects:
   - kind: ServiceAccount
-    name: default
+    name: spark-e2e-driver
     namespace: $NAMESPACE
 ---
-# E2E in-cluster runner: default SA can create/get SparkConnect so Job pods use in-cluster URL (no port-forward).
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -320,45 +331,31 @@ roleRef:
   name: e2e-sparkconnect-client
 subjects:
   - kind: ServiceAccount
-    name: default
+    name: spark-e2e-runner
     namespace: $NAMESPACE
 EOF
     phase_end "ensure_sparkconnect_rbac"
 }
 
-# Apply SparkConnect CRD from vendored hack/crds (Helm chart may not include it).
-apply_sparkconnect_crd() {
-    phase_start "apply_sparkconnect_crd"
-    local script_dir repo_root crd_file
-    script_dir="$(cd "$(dirname "$0")" && pwd)"
-    repo_root="$(cd "$script_dir/.." && pwd)"
-    crd_file="$repo_root/hack/crds/sparkoperator.k8s.io_sparkconnects.yaml"
-    if [[ -f "$crd_file" ]]; then
-        log_info "Applying SparkConnect CRD (controller requires it)"
-        kubectl apply -f "$crd_file"
-    else
-        log_warn "SparkConnect CRD not found at $crd_file; controller may CrashLoopBackOff"
-    fi
-    phase_end "apply_sparkconnect_crd"
-}
+# Apply the latest upstream SparkOperator CRDs from the Helm chart instead of a vendored copy.
+apply_upstream_crds() {
+    phase_start "apply_upstream_crds"
+    log_info "Applying SparkOperator CRDs from upstream chart v${SPARK_OPERATOR_VERSION}"
+    helm repo add spark-operator https://kubeflow.github.io/spark-operator 2>/dev/null || true
+    helm repo update 2>/dev/null || true
 
-apply_crd_only() {
-    phase_start "apply_crd_only"
-    kubectl config use-context "kind-${CLUSTER_NAME}" 2>/dev/null || true
-    local script_dir repo_root crds_dir
-    script_dir="$(cd "$(dirname "$0")" && pwd)"
-    repo_root="$(cd "$script_dir/.." && pwd)"
-    crds_dir="$repo_root/hack/crds"
-    if [[ ! -d "$crds_dir" ]]; then
-        log_error "CRDs dir not found: $crds_dir"
-        exit 1
+    local crd_manifest
+    if ! crd_manifest="$(helm show crds "spark-operator/spark-operator" --version "$SPARK_OPERATOR_VERSION" 2>/dev/null)"; then
+        log_error "Failed to fetch upstream SparkOperator CRDs for chart version $SPARK_OPERATOR_VERSION"
+        return 1
     fi
-    for f in "$crds_dir"/*.yaml; do
-        [[ -f "$f" ]] || continue
-        log_info "Applying CRD: $(basename "$f")"
-        kubectl apply -f "$f"
-    done
-    phase_end "apply_crd_only"
+
+    if ! printf '%s\n' "$crd_manifest" | kubectl apply -f -; then
+        log_error "Failed to apply upstream SparkOperator CRDs"
+        return 1
+    fi
+
+    phase_end "apply_upstream_crds"
 }
 
 print_status() {
@@ -407,10 +404,10 @@ main() {
     create_cluster
     setup_test_namespace
     if [[ "${E2E_CRD_ONLY:-0}" == "1" ]]; then
-        apply_crd_only
+        apply_upstream_crds
     else
         ensure_sparkconnect_rbac
-        apply_sparkconnect_crd
+        apply_upstream_crds
         if [[ "$SPARK_OPERATOR_IMAGE_TAG" == "local" ]]; then
             phase_start "kind_load_local_image"
             log_info "Loading locally built controller image into Kind..."

@@ -41,6 +41,8 @@ def _snapshot(namespace: str, elapsed_sec: float) -> list[str]:
     lines = [f"--- T+{elapsed_sec:.0f}s ---"]
     sc = _run_kubectl(["get", "sparkconnect", "-o", "wide"], namespace)
     lines.append(f"SparkConnect:\n{sc}" if sc else "SparkConnect: (none)")
+    sa = _run_kubectl(["get", "sparkapplication", "-o", "wide"], namespace)
+    lines.append(f"SparkApplication:\n{sa}" if sa else "SparkApplication: (none)")
     pods = _run_kubectl(["get", "pods", "-o", "wide"], namespace)
     lines.append(f"Pods:\n{pods}" if pods else "Pods: (none)")
     events = _run_kubectl(
@@ -69,8 +71,31 @@ def _driver_pod_from_sparkconnect(namespace: str) -> str | None:
     return pods[0] if pods else None
 
 
+def _driver_pod_from_sparkapplication(namespace: str) -> str | None:
+    out = _run_kubectl(
+        ["get", "sparkapplication", "-o", "jsonpath={.items[*].status.driverInfo.podName}"],
+        namespace,
+    )
+    if not out or out.startswith("(exit") or out.startswith("(error)"):
+        return None
+    pods = [p for p in out.strip().split() if p]
+    return pods[0] if pods else None
+
+
 def _driver_logs(namespace: str, pod_name: str, tail: int = 25) -> str:
     return _run_kubectl(["logs", pod_name, f"--tail={tail}"], namespace, timeout=15)
+
+
+def _driver_pods(namespace: str) -> list[str]:
+    """Collect driver pod names from both SparkConnect and SparkApplication resources."""
+    driver_pods: list[str] = []
+    for pod_name in (
+        _driver_pod_from_sparkconnect(namespace),
+        _driver_pod_from_sparkapplication(namespace),
+    ):
+        if pod_name and pod_name not in driver_pods:
+            driver_pods.append(pod_name)
+    return driver_pods
 
 
 def run_watcher(
@@ -88,7 +113,7 @@ def run_watcher(
     executor startup and where time is spent.
     """
     start = time.monotonic()
-    last_driver: str | None = None
+    last_drivers: set[str] = set()
 
     while not stop_event.is_set():
         elapsed = time.monotonic() - start
@@ -96,11 +121,11 @@ def run_watcher(
             break
         for line in _snapshot(namespace, elapsed):
             log_out.append(line)
-        driver_pod = _driver_pod_from_sparkconnect(namespace)
-        if driver_pod and (log_driver_when_ready or driver_pod != last_driver):
-            last_driver = driver_pod
-            dr_logs = _driver_logs(namespace, driver_pod)
-            log_out.append(f"Driver pod {driver_pod} logs (tail 25):\n{dr_logs}")
+        for driver_pod in _driver_pods(namespace):
+            if log_driver_when_ready or driver_pod not in last_drivers:
+                last_drivers.add(driver_pod)
+                dr_logs = _driver_logs(namespace, driver_pod)
+                log_out.append(f"Driver pod {driver_pod} logs (tail 25):\n{dr_logs}")
         stop_event.wait(timeout=interval_sec)
 
 
