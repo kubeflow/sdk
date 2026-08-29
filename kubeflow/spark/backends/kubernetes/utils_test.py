@@ -1350,7 +1350,7 @@ def test_get_func_job_init_container(test_case: TestCase) -> None:
                 "func_args": None,
             },
             expected_error=ValueError,
-            expected_output="Expected a callable function",
+            expected_output="Function must be a Python function.",
         ),
     ],
 )
