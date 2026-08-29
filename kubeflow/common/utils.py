@@ -30,17 +30,24 @@ def get_default_target_namespace(context: str | None = None) -> str:
     if not is_running_in_k8s():
         try:
             all_contexts, current_context = config.list_kube_config_contexts()
-            # If context is set, we should get namespace from it.
-            if context:
+            # If a context is explicitly requested, honor only that context. Fall
+            # back to the default namespace rather than silently using the current
+            # context's namespace when the requested context is missing or has no
+            # namespace set. Use "is not None" so an explicit empty string is still
+            # treated as an explicit request instead of falling through to the
+            # current context.
+            if context is not None:
                 for c in all_contexts:
                     if isinstance(c, dict) and c.get("name") == context:
-                        return c["context"]["namespace"]
+                        namespace = c.get("context", {}).get("namespace")
+                        return namespace if namespace else constants.DEFAULT_NAMESPACE
+                return constants.DEFAULT_NAMESPACE
             # Otherwise, try to get namespace from the current context.
             return current_context["context"]["namespace"]
         except Exception:
             return constants.DEFAULT_NAMESPACE
     with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace") as f:
-        return f.readline()
+        return f.readline().strip()
 
 
 def validate_wait_for_job_status(polling_interval: int, timeout: int) -> None:
