@@ -14,7 +14,6 @@
 
 """Kubernetes backend for Spark operations."""
 
-import ast
 from collections.abc import Iterator
 import contextlib
 import inspect
@@ -37,6 +36,7 @@ from pyspark.sql import SparkSession
 
 from kubeflow.common import constants as common_constants
 from kubeflow.common.types import KubernetesBackendConfig
+from kubeflow.common.utils import validate_python_function
 from kubeflow.spark.backends.base import RuntimeBackend
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.utils import (
@@ -829,29 +829,13 @@ class KubernetesBackend(RuntimeBackend):
                 If the function or function arguments are invalid.
         """
 
-        if not inspect.isfunction(job.func):
-            raise ValueError("`job.func` must be a Python function.")
+        # Validate generic Python function properties.
+        validate_python_function(job.func)
 
-        if inspect.iscoroutinefunction(job.func):
-            raise ValueError("Async functions are not supported.")
+        # Get the function source for Spark-specific validation.
+        func_source = textwrap.dedent(inspect.getsource(job.func))
 
-        if job.func.__name__ == "<lambda>":
-            raise ValueError("Lambda functions are not supported.")
-
-        try:
-            func_source = textwrap.dedent(inspect.getsource(job.func))
-        except TypeError as e:
-            raise ValueError(
-                "`job.func` must be a pure-Python function; built-in or "
-                "C-implemented callables are not supported."
-            ) from e
-        except OSError as e:
-            raise ValueError(
-                "`job.func` source could not be read. Functions defined "
-                "interactively (REPL/Jupyter) or generated dynamically are "
-                "not supported; define it in a Python module."
-            ) from e
-
+        # Ensure the function source does not contain the reserved heredoc delimiter.
         if any(
             line.strip() == constants.FUNC_JOB_SCRIPT_DELIMITER for line in func_source.splitlines()
         ):
@@ -859,17 +843,6 @@ class KubernetesBackend(RuntimeBackend):
                 "`job.func` source contains the reserved heredoc delimiter "
                 f"{constants.FUNC_JOB_SCRIPT_DELIMITER!r}, which is not supported."
             )
-
-        try:
-            func_tree = ast.parse(func_source)
-        except SyntaxError as e:
-            raise ValueError("`job.func` source could not be parsed.") from e
-
-        if any(
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.decorator_list
-            for node in func_tree.body
-        ):
-            raise ValueError("Decorated functions are not supported.")
 
         if job.func_args is not None:
             if not isinstance(job.func_args, dict):
