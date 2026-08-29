@@ -16,7 +16,7 @@
 
 from datetime import datetime
 import multiprocessing
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from kubeflow_spark_api import models
 import pytest
@@ -45,7 +45,7 @@ from kubeflow.spark.backends.kubernetes.utils import (
     read_pod_logs,
     validate_spark_connect_url,
 )
-from kubeflow.spark.options import Labels
+from kubeflow.spark.options import DynamicAllocation, Labels
 from kubeflow.spark.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.spark.types.types import (
     Driver,
@@ -741,6 +741,122 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
 
     elif test_case.name == "spark connect cr with options":
         assert spark_connect.metadata.labels["team"] == "ml"
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="dynamic allocation enabled with defaults",
+            expected_status=SUCCESS,
+            config={
+                "options": [DynamicAllocation(enabled=True)],
+            },
+        ),
+        TestCase(
+            name="dynamic allocation disabled",
+            expected_status=SUCCESS,
+            config={
+                "options": [DynamicAllocation(enabled=False)],
+            },
+        ),
+        TestCase(
+            name="dynamic allocation with min/max executors",
+            expected_status=SUCCESS,
+            config={
+                "options": [
+                    DynamicAllocation(
+                        enabled=True,
+                        min_executors=1,
+                        max_executors=20,
+                    )
+                ],
+            },
+        ),
+        TestCase(
+            name="dynamic allocation with all fields",
+            expected_status=SUCCESS,
+            config={
+                "options": [
+                    DynamicAllocation(
+                        enabled=True,
+                        initial_executors=2,
+                        min_executors=1,
+                        max_executors=50,
+                        shuffle_tracking_enabled=True,
+                        shuffle_tracking_timeout=60000,
+                    )
+                ],
+            },
+        ),
+        TestCase(
+            name="dynamic allocation overrides num_executors",
+            expected_status=SUCCESS,
+            config={
+                "num_executors": 5,
+                "options": [DynamicAllocation(enabled=True)],
+            },
+        ),
+        TestCase(
+            name="dynamic allocation disabled preserves num_executors",
+            expected_status=SUCCESS,
+            config={
+                "num_executors": 5,
+                "options": [DynamicAllocation(enabled=False)],
+            },
+        ),
+    ],
+)
+def test_build_spark_connect_cr_dynamic_allocation(test_case: TestCase) -> None:
+    """Tests build_spark_connect_cr with dynamic allocation."""
+    print("Executing test:", test_case.name)
+
+    backend = MagicMock()
+    backend.__class__ = KubernetesBackend
+
+    spark_connect = build_spark_connect_cr(
+        name="test-session",
+        namespace="default",
+        backend=backend,
+        **test_case.config,
+    )
+
+    assert test_case.expected_status == SUCCESS
+
+    if test_case.name == "dynamic allocation enabled with defaults":
+        assert spark_connect.spec.dynamic_allocation is not None
+        assert spark_connect.spec.dynamic_allocation.enabled is True
+        assert spark_connect.spec.executor.instances is None
+
+    elif test_case.name == "dynamic allocation disabled":
+        assert spark_connect.spec.dynamic_allocation is not None
+        assert spark_connect.spec.dynamic_allocation.enabled is False
+        assert spark_connect.spec.executor.instances == constants.DEFAULT_NUM_EXECUTORS
+
+    elif test_case.name == "dynamic allocation with min/max executors":
+        assert spark_connect.spec.dynamic_allocation.enabled is True
+        assert spark_connect.spec.dynamic_allocation.min_executors == 1
+        assert spark_connect.spec.dynamic_allocation.max_executors == 20
+        assert spark_connect.spec.executor.instances is None
+
+    elif test_case.name == "dynamic allocation with all fields":
+        assert spark_connect.spec.dynamic_allocation.enabled is True
+        assert spark_connect.spec.dynamic_allocation.initial_executors == 2
+        assert spark_connect.spec.dynamic_allocation.min_executors == 1
+        assert spark_connect.spec.dynamic_allocation.max_executors == 50
+        assert spark_connect.spec.dynamic_allocation.shuffle_tracking_enabled is True
+        assert spark_connect.spec.dynamic_allocation.shuffle_tracking_timeout == 60000
+        assert spark_connect.spec.executor.instances is None
+
+    elif test_case.name == "dynamic allocation overrides num_executors":
+        assert spark_connect.spec.dynamic_allocation.enabled is True
+        assert spark_connect.spec.executor.instances is None
+
+    elif test_case.name == "dynamic allocation disabled preserves num_executors":
+        assert spark_connect.spec.dynamic_allocation.enabled is False
+        assert spark_connect.spec.executor.instances == 5
 
     print("test execution complete")
 
@@ -1482,6 +1598,23 @@ def test_get_spark_job_executor_spec(test_case: TestCase) -> None:
                 ],
             },
         ),
+        TestCase(
+            name="build spark application with dynamic allocation",
+            expected_status=SUCCESS,
+            config={
+                "name": "test-job",
+                "namespace": "default",
+                "main_file": "s3://bucket/job.py",
+                "num_executors": 3,
+                "options": [
+                    DynamicAllocation(
+                        enabled=True,
+                        min_executors=1,
+                        max_executors=20,
+                    ),
+                ],
+            },
+        ),
     ],
 )
 def test_get_spark_application_cr_from_file_job(test_case: TestCase, mock_k8s_backend) -> None:
@@ -1526,6 +1659,13 @@ def test_get_spark_application_cr_from_file_job(test_case: TestCase, mock_k8s_ba
 
     elif test_case.name == "file job with spark conf":
         assert app.spec.spark_conf == test_case.config["spark_conf"]
+
+    elif test_case.name == "build spark application with dynamic allocation":
+        assert app.spec.dynamic_allocation is not None
+        assert app.spec.dynamic_allocation.enabled is True
+        assert app.spec.dynamic_allocation.min_executors == 1
+        assert app.spec.dynamic_allocation.max_executors == 20
+        assert app.spec.executor.instances is None
 
     print("test execution complete")
 
