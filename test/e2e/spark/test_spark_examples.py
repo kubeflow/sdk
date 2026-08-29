@@ -246,6 +246,30 @@ class TestSparkExamples:
 
         assert "FUNCJOB LIFECYCLE COMPLETE!" in stdout
 
+    def test_batch_job_filesystem_uris_example(self):
+        """EX07: Validate batch jobs submitted with s3a://, gs://, or hdfs:// URIs."""
+        configured = any(
+            os.environ.get(env_name, "").strip()
+            for env_name in (
+                "SPARK_E2E_S3A_URI",
+                "SPARK_E2E_GS_URI",
+                "SPARK_E2E_HDFS_URI",
+            )
+        )
+        if not configured:
+            pytest.skip(
+                "Set SPARK_E2E_S3A_URI, SPARK_E2E_GS_URI, and/or SPARK_E2E_HDFS_URI "
+                "to a cluster-accessible Spark application path"
+            )
+
+        namespace = os.environ.get("SPARK_TEST_NAMESPACE", "spark-test")
+
+        if USE_IN_CLUSTER and RUNNER_IMAGE:
+            self._run_example("batch_job_filesystem_uris.py", namespace)
+            return
+
+        stdout = self._run_example("batch_job_filesystem_uris.py", namespace)
+        assert "FILESYSTEM URI BATCH JOBS COMPLETE!" in stdout
     def test_batch_job_options_example(self):
         """EX07: Validate batch_job_options.py runs without errors."""
         namespace = os.environ.get("SPARK_TEST_NAMESPACE", "spark-test")
