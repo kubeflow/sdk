@@ -213,6 +213,33 @@ class SparkJob:
 
 
 @dataclass
+class SparkJobMetrics:
+    """Runtime metrics for a Spark batch job, sourced from the Spark REST API.
+
+    Metrics are only available while the SparkApplication driver's web UI
+    service is reachable. All fields are ``None`` if metrics could not be
+    retrieved, for example before the driver has started, after the
+    SparkApplication has been cleaned up, or if the Spark Operator was
+    deployed with the web UI service disabled.
+
+    Args:
+        num_executors: Number of executors reported by the Spark REST API.
+        active_tasks: Number of currently active tasks across all executors.
+        completed_tasks: Number of completed tasks across all executors.
+        failed_tasks: Number of failed tasks across all executors.
+        active_stages: Number of stages currently running.
+        completed_stages: Number of stages that have completed.
+    """
+
+    num_executors: int | None = None
+    active_tasks: int | None = None
+    completed_tasks: int | None = None
+    failed_tasks: int | None = None
+    active_stages: int | None = None
+    completed_stages: int | None = None
+
+
+@dataclass
 class FileJob:
     """Spark application referenced by a local or remote file source.
 

@@ -29,6 +29,7 @@ from kubeflow.spark.types.types import (
     FuncJob,
     SparkConnectInfo,
     SparkJob,
+    SparkJobMetrics,
     SparkJobStatus,
 )
 
@@ -312,3 +313,24 @@ class SparkClient:
             name=name,
             follow=follow,
         )
+
+    def get_job_metrics(self, name: str) -> SparkJobMetrics:
+        """Get runtime metrics for a Spark job.
+
+        Metrics are read from the Spark REST API exposed by the driver's web
+        UI service. They are only available while that service is reachable,
+        for example not before the driver has started, not after the
+        SparkApplication has been cleaned up, and not if the Spark Operator
+        was deployed with the web UI service disabled.
+
+        Args:
+            name: Name of the SparkApplication Kubernetes object, the same
+                name used by ``get_job`` and ``get_job_logs``. Not the Spark
+                application id used by the Spark REST API; that id is
+                resolved internally from the SparkApplication's status.
+
+        Returns:
+            SparkJobMetrics with the currently available metrics. Fields are
+            ``None`` if metrics could not be retrieved.
+        """
+        return self.backend.get_job_metrics(name)

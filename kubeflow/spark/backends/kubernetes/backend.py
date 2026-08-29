@@ -33,6 +33,7 @@ from typing import Any
 from kubeflow_spark_api import models
 from kubernetes import client, config
 from pyspark.sql import SparkSession
+import requests
 
 from kubeflow.common import constants as common_constants
 from kubeflow.common.types import KubernetesBackendConfig
@@ -58,6 +59,7 @@ from kubeflow.spark.types.types import (
     SparkConnectInfo,
     SparkConnectState,
     SparkJob,
+    SparkJobMetrics,
     SparkJobStatus,
 )
 
@@ -1225,3 +1227,211 @@ class KubernetesBackend(RuntimeBackend):
                 ) from e
 
         return _stream()
+
+    def get_job_metrics(self, name: str) -> SparkJobMetrics:
+        """Get runtime metrics for a Spark job from the Spark REST API.
+
+        Args:
+            name: Name of the SparkApplication Kubernetes object, the same
+                name used by ``get_job`` and ``get_job_logs``. This is not
+                the Spark application id used by the Spark REST API; that id
+                is read from the SparkApplication's status and resolved
+                internally.
+
+        Returns:
+            SparkJobMetrics with the currently available metrics. Fields are
+            ``None`` if metrics could not be retrieved, for example before the
+            driver has started, after the SparkApplication has been cleaned
+            up, or if the Spark Operator has the web UI service disabled.
+
+        Raises:
+            TimeoutError: If retrieving the SparkApplication times out.
+            RuntimeError: If the SparkApplication is not found.
+        """
+        try:
+            thread = self.custom_api.get_namespaced_custom_object(
+                group=constants.SPARK_APPLICATION_GROUP,
+                version=constants.SPARK_APPLICATION_VERSION,
+                namespace=self.namespace,
+                plural=constants.SPARK_APPLICATION_PLURAL,
+                name=name,
+                async_req=True,
+            )
+
+            response = thread.get(common_constants.DEFAULT_TIMEOUT)
+
+            spark_application = models.SparkV1beta2SparkApplication.from_dict(response)
+
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(f"Timeout to get Spark job: {self.namespace}/{name}") from e
+
+        except client.ApiException as e:
+            if e.status == 404:
+                raise RuntimeError(f"Spark job not found: {self.namespace}/{name}") from e
+
+            raise RuntimeError(f"Failed to get Spark job: {self.namespace}/{name}: {e}") from e
+
+        except Exception as e:
+            raise RuntimeError(f"Failed to get Spark job: {self.namespace}/{name}") from e
+
+        if spark_application is None:
+            raise RuntimeError(f"Failed to get Spark job: {self.namespace}/{name}")
+
+        app_id = spark_application.status.spark_application_id if spark_application.status else None
+        if not app_id:
+            logger.info(
+                "No Spark application id yet for %s/%s; metrics not available.",
+                self.namespace,
+                name,
+            )
+            return SparkJobMetrics()
+
+        service, port = self._get_web_ui_service(name)
+        if service is None:
+            logger.info(
+                "No web UI service found for %s/%s; metrics unavailable "
+                "(driver may not be running yet, the job may have been cleaned up, "
+                "or the Spark Operator may have the web UI service disabled).",
+                self.namespace,
+                name,
+            )
+            return SparkJobMetrics()
+
+        base_url, proc = self._get_metrics_base_url(service, port)
+        try:
+            return self._fetch_job_metrics(base_url, app_id, name)
+        finally:
+            if proc is not None:
+                proc.terminate()
+                with contextlib.suppress(Exception):
+                    proc.wait(timeout=5)
+
+    def _get_web_ui_service(self, name: str) -> tuple[client.V1Service | None, int]:
+        """Find the Spark Operator's driver web UI service for a job.
+
+        Looks the service up by the label the operator sets on every resource
+        it creates for a SparkApplication, rather than constructing the
+        service name, since the operator truncates and hashes names longer
+        than the 63 character Kubernetes DNS label limit.
+
+        Args:
+            name: Name of the SparkApplication.
+
+        Returns:
+            Tuple of (service, port). service is None if no web UI service
+            exists for this job.
+        """
+        try:
+            services = self.core_api.list_namespaced_service(
+                namespace=self.namespace,
+                label_selector=f"{constants.SPARK_APP_NAME_LABEL}={name}",
+            )
+        except client.ApiException as e:
+            logger.warning("Failed to list services for %s/%s: %s", self.namespace, name, e)
+            return None, constants.DEFAULT_SPARK_UI_PORT
+
+        if not services.items:
+            return None, constants.DEFAULT_SPARK_UI_PORT
+
+        service = services.items[0]
+        ports = service.spec.ports or []
+        matched_port = next((p for p in ports if p.name == constants.SPARK_UI_PORT_NAME), None)
+        if matched_port is not None:
+            port = matched_port.port
+        elif ports:
+            port = ports[0].port
+        else:
+            port = constants.DEFAULT_SPARK_UI_PORT
+
+        return service, port
+
+    def _get_metrics_base_url(
+        self, service: client.V1Service, port: int
+    ) -> tuple[str, subprocess.Popen | None]:
+        """Build a base URL for the driver web UI service.
+
+        When running in-cluster, the service is reachable directly. Outside
+        the cluster (local development, tests), starts a ``kubectl
+        port-forward`` to the service and returns a localhost URL.
+
+        Args:
+            service: The driver web UI service.
+            port: Port the service listens on.
+
+        Returns:
+            Tuple of (base_url, port_forward_process or None).
+
+        Raises:
+            RuntimeError: If the port-forward fails to become reachable.
+        """
+        service_name = service.metadata.name
+
+        if os.environ.get("KUBERNETES_SERVICE_HOST"):
+            url = f"http://{service_name}.{self.namespace}.svc:{port}"
+            return url, None
+
+        local_port = random.randint(14040, 15040)
+        cmd = [
+            "kubectl",
+            "port-forward",
+            f"svc/{service_name}",
+            f"{local_port}:{port}",
+            "-n",
+            self.namespace,
+        ]
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        time.sleep(3.0)
+
+        if proc.poll() is None and self._wait_for_connect_port(
+            "127.0.0.1", local_port, timeout_sec=30
+        ):
+            return f"http://127.0.0.1:{local_port}", proc
+
+        stderr = (proc.stderr and proc.stderr.read()) or b""
+        err_msg = stderr.decode("utf-8", errors="replace").strip() if stderr else ""
+        if proc.poll() is None:
+            proc.terminate()
+            with contextlib.suppress(Exception):
+                proc.wait(timeout=5)
+        raise RuntimeError(
+            f"Port-forward to service {service_name} failed for metrics collection: {err_msg}"
+        )
+
+    def _fetch_job_metrics(self, base_url: str, app_id: str, name: str) -> SparkJobMetrics:
+        """Fetch and aggregate metrics from the Spark REST API.
+
+        Args:
+            base_url: Base URL of the driver web UI (e.g. ``http://host:4040``).
+            app_id: Spark application id (distinct from the SparkApplication
+                Kubernetes object name).
+            name: Name of the SparkApplication, used for log messages only.
+
+        Returns:
+            SparkJobMetrics aggregated from the executors and stages
+            endpoints. Fields are ``None`` if the REST API could not be
+            reached.
+        """
+        try:
+            executors_resp = requests.get(
+                f"{base_url}/api/v1/applications/{app_id}/executors", timeout=10
+            )
+            executors_resp.raise_for_status()
+            stages_resp = requests.get(
+                f"{base_url}/api/v1/applications/{app_id}/stages", timeout=10
+            )
+            stages_resp.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            logger.warning("Failed to fetch Spark metrics for %s/%s: %s", self.namespace, name, e)
+            return SparkJobMetrics()
+
+        executors = executors_resp.json()
+        stages = stages_resp.json()
+
+        return SparkJobMetrics(
+            num_executors=len(executors),
+            active_tasks=sum(e.get("activeTasks", 0) for e in executors),
+            completed_tasks=sum(e.get("completedTasks", 0) for e in executors),
+            failed_tasks=sum(e.get("failedTasks", 0) for e in executors),
+            active_stages=sum(1 for s in stages if s.get("status") == "ACTIVE"),
+            completed_stages=sum(1 for s in stages if s.get("status") == "COMPLETE"),
+        )
