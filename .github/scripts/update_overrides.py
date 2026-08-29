@@ -93,8 +93,11 @@ def main():
         # Remove old override-dependencies section (handles both single-line and multi-line)
         # Single-line: override-dependencies = ["pkg==1.0"]
         # Multi-line: override-dependencies = [\n    "pkg",\n]
+        # Anchor the closing "]" to the end of a line so extras specs such as
+        # "celery[redis]==5.3.0" (whose inner "]" is never at a line end) do not
+        # terminate the match early and leave a dangling array fragment.
         content = re.sub(
-            r"^override-dependencies\s*=\s*\[.*?\]",
+            r"^override-dependencies\s*=\s*\[.*?\]\s*(?:#.*)?$",
             "",
             content,
             flags=re.MULTILINE | re.DOTALL,

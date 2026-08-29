@@ -305,6 +305,45 @@ override-dependencies = ["pkg1==1.0.0", "pkg2==2.0.0"]
         # Should not have duplicate override-dependencies
         assert updated.count("override-dependencies") == 1
 
+    def test_existing_override_with_extras(self):
+        """Existing override using extras (e.g. "celery[redis]==5.3.0") must not corrupt the array.
+
+        The "]" inside a PEP 508 extras spec must not terminate the removal regex
+        early, otherwise the rebuilt file gains a dangling array fragment and is no
+        longer valid TOML.
+        """
+        pyproject = """[project]
+name = 'test'
+
+[tool.uv]
+# Security overrides - Review periodically and remove if parent constraints allow natural upgrade
+override-dependencies = [
+    "celery[redis]==5.3.0",
+]  # Existing overrides
+"""
+        exit_code, updated = self.run_update(
+            pyproject, "requests", "requests==2.32.4", "2025-06-01", "https://advisory.com"
+        )
+
+        assert exit_code == 0
+        # The extras spec is preserved intact and exactly once (no dangling copy).
+        assert updated.count('"celery[redis]==5.3.0",') == 1
+        assert updated.count("==5.3.0") == 1
+        # The new package is added and there is a single override-dependencies array.
+        assert '"requests==2.32.4",' in updated
+        assert updated.count("override-dependencies") == 1
+
+        # The rebuilt file must still be valid TOML (tomllib is stdlib on Python 3.11+).
+        try:
+            import tomllib
+        except ModuleNotFoundError:
+            pytest.skip("tomllib requires Python 3.11+")
+        parsed = tomllib.loads(updated)
+        assert parsed["tool"]["uv"]["override-dependencies"] == [
+            "celery[redis]==5.3.0",
+            "requests==2.32.4",
+        ]
+
 
 if __name__ == "__main__":
     # Allow running with: python test_scripts.py
