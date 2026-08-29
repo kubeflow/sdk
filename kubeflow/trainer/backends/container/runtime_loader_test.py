@@ -640,3 +640,65 @@ def test_parse_runtime_yaml_extracts_image(test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="get existing runtime",
+            expected_status=SUCCESS,
+            config={
+                "requested_name": constants.DEFAULT_TRAINING_RUNTIME,
+            },
+        ),
+        TestCase(
+            name="get missing runtime raises value error",
+            expected_status=FAILED,
+            config={
+                "requested_name": "nonexistent-runtime",
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_get_training_runtime_from_sources(test_case):
+    """
+    Test getting a single runtime by name.
+
+    The sources are only scanned once, even when the runtime is not found, to
+    avoid duplicating the (potentially network-bound) source lookup for the
+    error message.
+    """
+    print("Executing test:", test_case.name)
+    available_runtime = base_types.Runtime(
+        name=constants.DEFAULT_TRAINING_RUNTIME,
+        kind=base_types.RuntimeKind.TRAINING_RUNTIME,
+        trainer=base_types.RuntimeTrainer(
+            trainer_type=base_types.TrainerType.CUSTOM_TRAINER,
+            framework="torch",
+            num_nodes=1,
+            image="example.com/container",
+        ),
+    )
+    try:
+        with patch(
+            "kubeflow.trainer.backends.container.runtime_loader.list_training_runtimes_from_sources"
+        ) as mock_list:
+            mock_list.return_value = [available_runtime]
+
+            runtime = runtime_loader.get_training_runtime_from_sources(
+                test_case.config["requested_name"], ["github://kubeflow/trainer"]
+            )
+
+            assert test_case.expected_status == SUCCESS
+            assert runtime.name == test_case.config["requested_name"]
+            # Sources are scanned exactly once on the found path.
+            assert mock_list.call_count == 1
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+        assert available_runtime.name in str(e)
+        # Sources must be scanned exactly once even on the not-found path.
+        assert mock_list.call_count == 1
+    print("test execution complete")
