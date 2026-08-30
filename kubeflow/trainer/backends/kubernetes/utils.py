@@ -501,11 +501,11 @@ def get_args_using_torchtune_config(
         args.append(f"dtype={fine_tuning_config.dtype.value}")
 
     # Override the batch size if it is provided.
-    if fine_tuning_config.batch_size:
+    if fine_tuning_config.batch_size is not None:
         args.append(f"batch_size={fine_tuning_config.batch_size}")
 
     # Override the epochs if it is provided.
-    if fine_tuning_config.epochs:
+    if fine_tuning_config.epochs is not None:
         args.append(f"epochs={fine_tuning_config.epochs}")
 
     # Override the loss if it is provided.
@@ -567,8 +567,7 @@ def get_args_from_peft_config(peft_config: types.LoraConfig) -> list[str]:
             args.append(f"{arg_name}={value}")
 
     # Override the LoRA attention modules if they are provided.
-    if peft_config.lora_attn_modules:
-        args.append(f"model.lora_attn_modules=[{','.join(peft_config.lora_attn_modules)}]")
+    args.append(f"model.lora_attn_modules=[{','.join(peft_config.lora_attn_modules)}]")
 
     return args
 

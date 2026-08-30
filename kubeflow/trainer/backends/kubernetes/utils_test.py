@@ -835,6 +835,16 @@ def test_get_model_initializer(test_case):
             ],
         ),
         TestCase(
+            name="lora_attn_modules empty list is not silently dropped",
+            expected_status=SUCCESS,
+            config={
+                "peft_config": types.LoraConfig(lora_attn_modules=[]),
+            },
+            expected_output=[
+                "model.lora_attn_modules=[]",
+            ],
+        ),
+        TestCase(
             name="invalid peft config type raises ValueError",
             expected_status=FAILED,
             config={
@@ -958,6 +968,30 @@ def _build_builtin_runtime() -> types.Runtime:
                 "batch_size=8",
                 "epochs=3",
                 "loss=torchtune.modules.loss.CEWithChunkedOutputLoss",
+            ],
+        ),
+        TestCase(
+            name="batch_size=0 is not silently dropped",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(
+                    batch_size=0,
+                ),
+            },
+            expected_output=[
+                "batch_size=0",
+            ],
+        ),
+        TestCase(
+            name="epochs=0 is not silently dropped",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(
+                    epochs=0,
+                ),
+            },
+            expected_output=[
+                "epochs=0",
             ],
         ),
         TestCase(
