@@ -525,7 +525,7 @@ def get_args_using_torchtune_config(
         parts = storage_uri_parsed.path.strip("/").split("/")
         relative_path = "/".join(parts[1:]) if len(parts) > 1 else "."
 
-        if relative_path != "." and "." in relative_path:
+        if relative_path != "." and "." in relative_path.split("/")[-1]:
             args.append(f"dataset.data_files={os.path.join(constants.DATASET_PATH, relative_path)}")
         else:
             args.append(f"dataset.data_dir={os.path.join(constants.DATASET_PATH, relative_path)}")
