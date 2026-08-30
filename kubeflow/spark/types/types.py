@@ -24,6 +24,55 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+class SparkApplicationType(str, Enum):
+    """SparkApplication ``spec.type`` values from the Spark Operator.
+
+    Mirrors ``SparkApplicationType`` in spark-operator ``api/v1beta2``. Generated
+    ``kubeflow_spark_api`` models currently expose these as plain strings; this enum
+    provides typed SDK usage and a single place to detect drift with upstream.
+    """
+
+    JAVA = "Java"
+    SCALA = "Scala"
+    PYTHON = "Python"
+    R = "R"
+
+
+class SparkApplicationDeployMode(str, Enum):
+    """SparkApplication ``spec.mode`` values from the Spark Operator.
+
+    Mirrors ``DeployMode`` in spark-operator ``api/v1beta2``.
+    """
+
+    CLUSTER = "cluster"
+    CLIENT = "client"
+    IN_CLUSTER_CLIENT = "in-cluster-client"
+
+
+class SparkApplicationState(str, Enum):
+    """SparkApplication ``status.applicationState.state`` values from the Spark Operator.
+
+    Mirrors ``ApplicationStateType`` in spark-operator ``api/v1beta2``. Generated
+    Python models currently type this field as ``StrictStr``; prefer this enum in the
+    SDK until ``kubeflow_spark_api`` exports an equivalent enum.
+    """
+
+    NEW = ""
+    SUBMITTED = "SUBMITTED"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    SUBMISSION_FAILED = "SUBMISSION_FAILED"
+    PENDING_RERUN = "PENDING_RERUN"
+    INVALIDATING = "INVALIDATING"
+    SUCCEEDING = "SUCCEEDING"
+    FAILING = "FAILING"
+    SUSPENDING = "SUSPENDING"
+    SUSPENDED = "SUSPENDED"
+    RESUMING = "RESUMING"
+    UNKNOWN = "UNKNOWN"
+
+
 class SparkConnectState(str, Enum):
     """State of a SparkConnect session."""
 
@@ -136,12 +185,13 @@ class SparkJobStatus(str, Enum):
     @classmethod
     def from_operator_state(
         cls,
-        raw_state: str | None,
+        raw_state: str | SparkApplicationState | None,
     ) -> "SparkJobStatus":
         """Map a SparkApplication state to a SparkJobStatus.
 
         Args:
-            raw_state: SparkApplication ``applicationState.state`` value.
+            raw_state: SparkApplication ``applicationState.state`` value. Accepts the
+                operator string, a :class:`SparkApplicationState` value, or ``None``.
 
         Returns:
             Corresponding SparkJobStatus.
@@ -150,39 +200,55 @@ class SparkJobStatus(str, Enum):
             Unknown SparkApplication states default to FAILED so newly
             introduced operator states are handled conservatively.
         """
-        normalized_state = (raw_state or "").upper()
+        if isinstance(raw_state, SparkApplicationState):
+            operator_state = raw_state
+        else:
+            normalized_state = raw_state or SparkApplicationState.NEW.value
+            try:
+                operator_state = SparkApplicationState(normalized_state)
+            except ValueError:
+                try:
+                    operator_state = SparkApplicationState(normalized_state.upper())
+                except ValueError:
+                    logger.warning(
+                        "Unknown SparkApplication state '%s'. Defaulting to FAILED.",
+                        raw_state,
+                    )
+                    return cls.FAILED
 
-        status = _SDK_STATE_BY_OPERATOR_STATE.get(normalized_state)
-
+        status = _SDK_STATE_BY_OPERATOR_STATE.get(operator_state)
         if status is None:
-            logger.warning("Unknown SparkApplication state '%s'. Defaulting to FAILED.", raw_state)
+            logger.warning(
+                "Unmapped SparkApplication state '%s'. Defaulting to FAILED.",
+                operator_state,
+            )
             return cls.FAILED
 
         return status
 
 
-_SDK_STATE_BY_OPERATOR_STATE: dict[str, SparkJobStatus] = {
+_SDK_STATE_BY_OPERATOR_STATE: dict[SparkApplicationState, SparkJobStatus] = {
     state: sdk_status
     for sdk_status, operator_states in {
         SparkJobStatus.CREATED: (
-            "",
-            "SUBMITTED",
+            SparkApplicationState.NEW,
+            SparkApplicationState.SUBMITTED,
         ),
         SparkJobStatus.RUNNING: (
-            "RUNNING",
-            "SUCCEEDING",
-            "SUSPENDING",
-            "SUSPENDED",
-            "RESUMING",
+            SparkApplicationState.RUNNING,
+            SparkApplicationState.SUCCEEDING,
+            SparkApplicationState.SUSPENDING,
+            SparkApplicationState.SUSPENDED,
+            SparkApplicationState.RESUMING,
         ),
-        SparkJobStatus.COMPLETED: ("COMPLETED",),
+        SparkJobStatus.COMPLETED: (SparkApplicationState.COMPLETED,),
         SparkJobStatus.FAILED: (
-            "FAILED",
-            "SUBMISSION_FAILED",
-            "FAILING",
-            "PENDING_RERUN",
-            "INVALIDATING",
-            "UNKNOWN",
+            SparkApplicationState.FAILED,
+            SparkApplicationState.SUBMISSION_FAILED,
+            SparkApplicationState.FAILING,
+            SparkApplicationState.PENDING_RERUN,
+            SparkApplicationState.INVALIDATING,
+            SparkApplicationState.UNKNOWN,
         ),
     }.items()
     for state in operator_states
