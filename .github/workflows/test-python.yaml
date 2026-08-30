@@ -21,6 +21,19 @@ jobs:
         with:
           extra_args: --all-files
 
+  boilerplate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Verify boilerplate headers
+        run: python hack/boilerplate/boilerplate.py --base-ref "${TARGET_BRANCH:-main}"
+
   test:
     runs-on: ubuntu-latest
     needs: pre-commit
