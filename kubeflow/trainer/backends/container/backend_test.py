@@ -895,6 +895,12 @@ def test_get_job_logs(container_backend, test_case):
             config={"wait_status": constants.TRAINJOB_COMPLETE, "container_exit_code": 1},
             expected_error=RuntimeError,
         ),
+        TestCase(
+            name="polling_interval equal to timeout raises ValueError",
+            expected_status=FAILED,
+            config={"wait_status": constants.TRAINJOB_COMPLETE},
+            expected_error=ValueError,
+        ),
     ],
 )
 def test_wait_for_job_status(container_backend, test_case):
@@ -934,6 +940,13 @@ def test_wait_for_job_status(container_backend, test_case):
 
             container_backend.wait_for_job_status(
                 job_name, status={test_case.config["wait_status"]}, timeout=5, polling_interval=1
+            )
+        elif test_case.name == "polling_interval equal to timeout raises ValueError":
+            container_backend.wait_for_job_status(
+                job_name,
+                status={test_case.config["wait_status"]},
+                timeout=5,
+                polling_interval=5,
             )
 
     except Exception as e:
