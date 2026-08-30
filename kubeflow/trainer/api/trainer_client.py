@@ -65,6 +65,21 @@ class TrainerClient:
         else:
             raise ValueError(f"Invalid backend config '{backend_config}'")
 
+    def close(self) -> None:
+        """Release resources owned by the client."""
+        close = getattr(self.backend, "close", None)
+        if callable(close):
+            close()
+
+    def __enter__(self) -> "TrainerClient":
+        """Enter the runtime context."""
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_tb) -> bool:
+        """Exit the runtime context."""
+        self.close()
+        return False
+
     def list_runtimes(self) -> list[types.Runtime]:
         """List the available training runtimes.
 
