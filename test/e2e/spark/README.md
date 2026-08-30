@@ -4,13 +4,21 @@ End-to-end tests that validate Spark examples execute correctly with Kubernetes 
 
 ## Test Files
 
-### **test_spark_examples.py** (3 tests)
+### **test_spark_examples.py**
 
-Validates that Spark example scripts execute successfully:
+Validates that Spark example scripts execute successfully, run as subprocesses
+against the ambient kubeconfig (no in-cluster Job execution):
 
+- `test_spark_connect_crd_smoke` - Smoke test that the SparkConnect CRD is accepted by the API server
 - `test_spark_connect_simple_example` - Validates spark_connect_simple.py runs without errors
 - `test_spark_advanced_options_example` - Validates spark_advanced_options.py runs without errors
-- `test_demo_existing_sparkconnect_example` - Validates demo_existing_sparkconnect.py structure (SKIPPED - requires manual port-forward)
+- `test_batch_job_lifecycle_example` - Validates batch_job_lifecycle.py runs without errors
+- `test_batch_failed_job_example` - Validates batch_failed_job.py handles failed Spark jobs
+- `test_batch_func_job_lifecycle_example` - Validates batch_func_job_lifecycle.py runs without errors
+- `test_batch_job_options_example` - Validates batch_job_options.py runs without errors
+
+A background cluster watcher (`cluster_watcher.py`) polls `SparkConnect`,
+`SparkApplication`, pods, and events for diagnostics on failure.
 
 ## Prerequisites
 
@@ -94,7 +102,7 @@ E2E tests are integrated into GitHub Actions and run automatically on pull reque
 - Manual workflow dispatch
 
 **Matrix:**
-- Kubernetes versions: 1.30.0, 1.31.0, 1.32.3
+- Kubernetes versions: 1.32.11, 1.33.7, 1.34.3, 1.35.0
 - Python version: 3.11
 
 **Tests:**

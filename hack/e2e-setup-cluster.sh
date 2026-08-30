@@ -17,7 +17,7 @@ set -euo pipefail
 
 CLUSTER_NAME="${SPARK_TEST_CLUSTER:-spark-test}"
 NAMESPACE="${SPARK_TEST_NAMESPACE:-spark-test}"
-SPARK_OPERATOR_VERSION="${SPARK_OPERATOR_VERSION:-2.1.0}"
+SPARK_OPERATOR_VERSION="${SPARK_OPERATOR_VERSION:-2.5.0}"
 SPARK_OPERATOR_IMAGE_TAG="${SPARK_OPERATOR_IMAGE_TAG:-latest}"
 K8S_VERSION="${K8S_VERSION:-1.32.0}"
 KIND_BIN="${KIND:-kind}"
@@ -136,6 +136,7 @@ install_spark_operator() {
         --set image.repository=kubeflow/spark-operator/controller
         --set "image.tag=$SPARK_OPERATOR_IMAGE_TAG"
         --set "spark.jobNamespaces[0]=$NAMESPACE"
+        --set "hook.upgradeCrd=true"
     )
     local helm_timeout="${HELM_TIMEOUT:-15m}"
     log_info "Helm may take up to $helm_timeout. 'context canceled' usually means the process was killed (external timeout or Ctrl+C)."
@@ -205,190 +206,24 @@ setup_test_namespace() {
     phase_end "setup_test_namespace"
 }
 
-# 1) Operator: grant Spark Operator controller permission to manage SparkConnect and pods in the test namespace.
-# 2) Driver: grant default SA in test namespace permission so the Spark Connect server (driver) can create/watch executor pods.
-# 3) ClusterRole for endpointslices: Helm chart may not grant discovery.k8s.io/endpointslices; bind to controller so Service/EndpointSlice updates succeed.
-ensure_sparkconnect_rbac() {
-    phase_start "ensure_sparkconnect_rbac"
-    log_info "Creating Role, RoleBinding, and ClusterRole for SparkConnect (namespace $NAMESPACE)"
-
-    kubectl apply -f - <<EOF
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: spark-operator-e2e-endpointslices
-rules:
-  - apiGroups: ["discovery.k8s.io"]
-    resources: ["endpointslices"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: [""]
-    resources: ["endpoints"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: spark-operator-e2e-endpointslices
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: spark-operator-e2e-endpointslices
-subjects:
-  - kind: ServiceAccount
-    name: spark-operator-controller
-    namespace: spark-operator
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: spark-operator-sparkconnect
-  namespace: $NAMESPACE
-rules:
-  - apiGroups: ["sparkoperator.k8s.io"]
-    resources: ["sparkconnects", "sparkconnects/status"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: [""]
-    resources: ["pods", "services", "configmaps", "endpoints"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["discovery.k8s.io"]
-    resources: ["endpointslices"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: spark-operator-sparkconnect
-  namespace: $NAMESPACE
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: spark-operator-sparkconnect
-subjects:
-  - kind: ServiceAccount
-    name: spark-operator-controller
-    namespace: spark-operator
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: spark-driver
-  namespace: $NAMESPACE
-rules:
-  - apiGroups: [""]
-    resources: ["pods", "services", "configmaps"]
-    verbs: ["get", "list", "watch", "create", "delete", "patch", "update"]
-  - apiGroups: [""]
-    resources: ["pods/log"]
-    verbs: ["get"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: spark-driver
-  namespace: $NAMESPACE
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: spark-driver
-subjects:
-  - kind: ServiceAccount
-    name: default
-    namespace: $NAMESPACE
----
-# E2E in-cluster runner: default SA can create/get SparkConnect so Job pods use in-cluster URL (no port-forward).
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: e2e-sparkconnect-client
-  namespace: $NAMESPACE
-rules:
-  - apiGroups: ["sparkoperator.k8s.io"]
-    resources: ["sparkconnects", "sparkconnects/status"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["sparkoperator.k8s.io"]
-    resources: ["sparkapplications", "sparkapplications/status"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: e2e-sparkconnect-client
-  namespace: $NAMESPACE
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: e2e-sparkconnect-client
-subjects:
-  - kind: ServiceAccount
-    name: default
-    namespace: $NAMESPACE
-EOF
-    phase_end "ensure_sparkconnect_rbac"
-}
-
-# Apply SparkConnect CRD from vendored hack/crds (Helm chart may not include it).
-apply_sparkconnect_crd() {
-    phase_start "apply_sparkconnect_crd"
-    local script_dir repo_root crd_file
-    script_dir="$(cd "$(dirname "$0")" && pwd)"
-    repo_root="$(cd "$script_dir/.." && pwd)"
-    crd_file="$repo_root/hack/crds/sparkoperator.k8s.io_sparkconnects.yaml"
-    if [[ -f "$crd_file" ]]; then
-        log_info "Applying SparkConnect CRD (controller requires it)"
-        kubectl apply -f "$crd_file"
-    else
-        log_warn "SparkConnect CRD not found at $crd_file; controller may CrashLoopBackOff"
-    fi
-    phase_end "apply_sparkconnect_crd"
-}
-
-apply_crd_only() {
-    phase_start "apply_crd_only"
-    kubectl config use-context "kind-${CLUSTER_NAME}" 2>/dev/null || true
-    local script_dir repo_root crds_dir
-    script_dir="$(cd "$(dirname "$0")" && pwd)"
-    repo_root="$(cd "$script_dir/.." && pwd)"
-    crds_dir="$repo_root/hack/crds"
-    if [[ ! -d "$crds_dir" ]]; then
-        log_error "CRDs dir not found: $crds_dir"
-        exit 1
-    fi
-    for f in "$crds_dir"/*.yaml; do
-        [[ -f "$f" ]] || continue
-        log_info "Applying CRD: $(basename "$f")"
-        kubectl apply -f "$f"
-    done
-    phase_end "apply_crd_only"
-}
-
 print_status() {
     echo ""
     log_info "=== Cluster Status ==="
     echo "Cluster: $CLUSTER_NAME"
     echo "Kubernetes version: $K8S_VERSION"
     echo "Test namespace: $NAMESPACE"
-    if [[ "${E2E_CRD_ONLY:-0}" == "1" ]]; then
-        echo "Mode: CRD-only (no Spark Operator controller)"
-        echo "CRDs:"
-        kubectl get crd | grep sparkoperator || true
-    else
-        echo "Spark Operator version: $SPARK_OPERATOR_VERSION"
-        echo "Image tag: $SPARK_OPERATOR_IMAGE_TAG"
-        echo ""
-        echo "Spark Operator Deployment:"
-        kubectl get deployment -n spark-operator 2>/dev/null || true
-    fi
+    echo "Spark Operator version: $SPARK_OPERATOR_VERSION"
+    echo "Image tag: $SPARK_OPERATOR_IMAGE_TAG"
+    echo ""
+    echo "Spark Operator Deployment:"
+    kubectl get deployment -n spark-operator 2>/dev/null || true
     echo ""
     echo "Test Namespace Pods:"
     kubectl get pods -n "$NAMESPACE" 2>/dev/null || echo "No pods yet"
     echo ""
     log_info "=== Usage ==="
-    if [[ "${E2E_CRD_ONLY:-0}" == "1" ]]; then
-        echo "Smoke test: uv run pytest test/e2e/spark/test_spark_examples.py -v -k smoke"
-    else
-        echo "To run E2E tests:"
-        echo "  python -m pytest test/e2e/spark/test_spark_examples.py -v"
-    fi
+    echo "To run E2E tests:"
+    echo "  python -m pytest test/e2e/spark/test_spark_examples.py -v"
     echo ""
     echo "To delete cluster:"
     echo "  make test-e2e-setup-cluster K8S_VERSION=$K8S_VERSION --delete"
@@ -406,19 +241,13 @@ main() {
     check_prerequisites
     create_cluster
     setup_test_namespace
-    if [[ "${E2E_CRD_ONLY:-0}" == "1" ]]; then
-        apply_crd_only
-    else
-        ensure_sparkconnect_rbac
-        apply_sparkconnect_crd
-        if [[ "$SPARK_OPERATOR_IMAGE_TAG" == "local" ]]; then
-            phase_start "kind_load_local_image"
-            log_info "Loading locally built controller image into Kind..."
-            "$KIND_BIN" load docker-image "ghcr.io/kubeflow/spark-operator/controller:local" --name "$CLUSTER_NAME"
-            phase_end "kind_load_local_image"
-        fi
-        install_spark_operator
+    if [[ "$SPARK_OPERATOR_IMAGE_TAG" == "local" ]]; then
+        phase_start "kind_load_local_image"
+        log_info "Loading locally built controller image into Kind..."
+        "$KIND_BIN" load docker-image "ghcr.io/kubeflow/spark-operator/controller:local" --name "$CLUSTER_NAME"
+        phase_end "kind_load_local_image"
     fi
+    install_spark_operator
     print_status
     local total_elapsed
     total_elapsed=$(($(date +%s) - main_start))
