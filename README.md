@@ -307,3 +307,20 @@ We couldn't have done it without these incredible people:
 <a href="https://github.com/kubeflow/sdk/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=kubeflow/sdk" />
 </a>
+
+
+Tutorials
+End-to-End Workflow Tutorial
+
+This tutorial demonstrates how to build a complete machine learning workflow using the Kubeflow SDK, including:
+
+Running a training job using TrainerClient
+
+Performing hyperparameter optimization using OptimizerClient
+
+(Optional) Registering and managing trained models
+
+The example supports both local development (via LocalProcessBackendConfig) and Kubernetes-based execution.
+
+📘 Full tutorial: docs\end_to_end_workflow_tutorial.md
+💻 Example script: examples/end_to_end_workflow.py
