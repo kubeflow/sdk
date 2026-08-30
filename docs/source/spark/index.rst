@@ -52,13 +52,11 @@ using ``num_executors`` and ``resources_per_executor``.
 
 .. note::
 
-   Batch job submission requires the ``spark-operator-spark`` ServiceAccount to
-   exist in the target namespace, with the required SparkApplication RBAC
-   permissions bound to it. Otherwise, ``submit_job()`` requests will fail.
-
-   This is a current Spark Operator requirement and is expected to be simplified
-   once `kubeflow/spark-operator#3049 <https://github.com/kubeflow/spark-operator/issues/3049>`_
-   is resolved.
+   Batch job submission relies on the Spark Operator's fallback ServiceAccount
+   (``spark-operator-spark`` with the standard Helm install) having the
+   required SparkApplication RBAC permissions in the target namespace.
+   ``SparkClient`` does not set a ServiceAccount on the driver spec, so this
+   operator-configured fallback is always used for batch jobs.
 
 Two Ways to Run Spark
 -----------------------

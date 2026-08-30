@@ -35,7 +35,7 @@ Install spark dependencies:
 uv pip install kubeflow[spark]
 ```
 
-The Spark examples run against a Kubernetes cluster with the Spark Operator installed. Batch job submission requires a `spark-operator-spark` ServiceAccount in the target namespace with the required SparkApplication RBAC permissions. See the [Spark SDK docs](https://sdk.kubeflow.org/en/latest/spark/index.html) for prerequisites.
+The Spark examples run against a Kubernetes cluster with the Spark Operator installed. Batch job submission relies on the Spark Operator's fallback ServiceAccount (`spark-operator-spark` by default with the standard Helm install) having the required SparkApplication RBAC permissions in the target namespace; the SDK does not set a ServiceAccount on the driver spec, so this operator-configured fallback is always used. See the [Spark SDK docs](https://sdk.kubeflow.org/en/latest/spark/index.html) for prerequisites.
 
 ## Running Examples
 
