@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from collections.abc import Iterator
 from datetime import datetime
 import logging
 import os
@@ -149,17 +150,29 @@ class LocalJob(threading.Thread):
     def returncode(self):
         return self._returncode
 
-    def logs(self, follow=False) -> list[str]:
+    def logs(self, follow: bool = False) -> Iterator[str]:
+        """Return log lines from the job's stdout.
+
+        Args:
+            follow: If True, stream lines in real-time as the job runs.
+                If False, return an eager snapshot of current stdout lines.
+
+        Returns:
+            An iterator of individual log lines without trailing newline characters.
+        """
         if not follow:
-            return self._stdout.splitlines()
+            # Take an eager snapshot of the current stdout contents.
+            with self._lock:
+                snapshot = self._stdout.splitlines()
+            return iter(snapshot)
 
-        try:
-            for chunk in self.stream_logs():
-                print(chunk, end="", flush=True)  # stream to console live
-        except StopIteration:
-            pass
+        # For streaming behavior, delegate to a separate generator helper.
+        return self._follow_logs()
 
-        return self._stdout.splitlines()
+    def _follow_logs(self) -> Iterator[str]:
+        """Generator that yields new output lines as they come in, line by line."""
+        for chunk in self.stream_logs():
+            yield from chunk.splitlines()
 
     def stream_logs(self):
         """Generator that yields new output lines as they come in."""
