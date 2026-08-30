@@ -26,7 +26,6 @@ import socket
 import subprocess
 import sys
 import textwrap
-import threading
 import time
 from typing import Any
 
@@ -49,6 +48,7 @@ from kubeflow.spark.backends.kubernetes.utils import (
     get_spark_application_info_from_cr,
     get_spark_connect_info_from_cr,
     read_pod_logs,
+    run_with_timeout,
 )
 from kubeflow.spark.types.types import (
     Driver,
@@ -586,44 +586,29 @@ class KubernetesBackend(RuntimeBackend):
             logger.warning("Port-forward died before connect, restarting...")
             connect_url, pf_proc = self.get_connect_url(info, local_port=local_port)
 
-        # Create SparkSession with timeout
-        result: list = []
-        exc_holder: list = []
-
-        def _get_or_create() -> None:
-            try:
-                session = SparkSession.builder.remote(connect_url).getOrCreate()
-                result.append(session)
-            except Exception as e:
-                exc_holder.append(e)
-
-        thread = threading.Thread(target=_get_or_create, daemon=True)
-        thread.start()
-        thread.join(timeout=connect_timeout)
-
-        if not thread.is_alive():
-            if exc_holder:
-                raise exc_holder[0]
-            if result:
-                return result[0]
-
-        # Connection timed out
-        base_msg = (
-            f"Spark Connect connection to {connect_url} did not complete "
-            f"within {connect_timeout}s. "
-            "Verify: (1) port-forward target is the Spark Connect server pod, "
-            "(2) PySpark and server Spark major.minor match, "
-            "(3) driver pod logs for gRPC/auth errors; "
-            "see Spark sql/connect for server config."
-        )
-        if pf_proc is not None and pf_proc.poll() is not None:
-            stderr_b = pf_proc.stderr.read() if pf_proc.stderr else b""
-            stderr_str = stderr_b.decode("utf-8", errors="replace").strip() if stderr_b else ""
-            base_msg += (
-                f" Port-forward process exited during connect "
-                f"(code={pf_proc.returncode}). stderr: {stderr_str}"
+        try:
+            return run_with_timeout(
+                lambda: SparkSession.builder.remote(connect_url).getOrCreate(),
+                connect_timeout,
             )
-        raise TimeoutError(base_msg)
+
+        except TimeoutError as e:
+            base_msg = (
+                f"Spark Connect connection to {connect_url} did not complete "
+                f"within {connect_timeout}s. "
+                "Verify: (1) port-forward target is the Spark Connect server pod, "
+                "(2) PySpark and server Spark major.minor match, "
+                "(3) driver pod logs for gRPC/auth errors; "
+                "see Spark sql/connect for server config."
+            )
+            if pf_proc is not None and pf_proc.poll() is not None:
+                stderr_b = pf_proc.stderr.read() if pf_proc.stderr else b""
+                stderr_str = stderr_b.decode("utf-8", errors="replace").strip() if stderr_b else ""
+                base_msg += (
+                    f" Port-forward process exited during connect "
+                    f"(code={pf_proc.returncode}). stderr: {stderr_str}"
+                )
+            raise TimeoutError(base_msg) from e
 
     def create_and_connect(
         self,

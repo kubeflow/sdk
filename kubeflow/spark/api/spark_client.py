@@ -21,7 +21,10 @@ from pyspark.sql import SparkSession
 from kubeflow.common.types import KubernetesBackendConfig
 import kubeflow.common.utils as common_utils
 from kubeflow.spark.backends.kubernetes import KubernetesBackend
-from kubeflow.spark.backends.kubernetes.utils import validate_spark_connect_url
+from kubeflow.spark.backends.kubernetes.utils import (
+    run_with_timeout,
+    validate_spark_connect_url,
+)
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
@@ -91,7 +94,7 @@ class SparkClient:
             options: List of configuration options (create mode only).
                 Use Name option for custom session name.
             timeout: Timeout in seconds to wait for session ready.
-            connect_timeout: Timeout in seconds for SparkSession.getOrCreate() (create mode only).
+            connect_timeout: Timeout in seconds for SparkSession.getOrCreate().
 
         Returns:
             SparkSession connected to Spark (self-managing).
@@ -110,7 +113,16 @@ class SparkClient:
             builder = SparkSession.builder.remote(base_url)
             if token:
                 builder = builder.config("spark.connect.authenticate.token", token)
-            return builder.getOrCreate()
+            try:
+                return run_with_timeout(
+                    builder.getOrCreate,
+                    connect_timeout,
+                )
+            except TimeoutError as e:
+                raise TimeoutError(
+                    f"Spark Connect connection to {base_url} did not complete "
+                    f"within {connect_timeout}s."
+                ) from e
 
         return self.backend.create_and_connect(
             num_executors=num_executors,

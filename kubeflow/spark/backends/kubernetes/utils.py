@@ -22,7 +22,8 @@ import multiprocessing
 import os
 import re
 import textwrap
-from typing import Any
+import threading
+from typing import Any, TypeVar
 from urllib.parse import urlparse
 import uuid
 
@@ -43,9 +44,47 @@ from kubeflow.spark.types.types import (
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar("T")
+
 # ----------------------------------------------------------------------
 # Shared utility functions
 # ----------------------------------------------------------------------
+
+
+def run_with_timeout(fn: Callable[[], T], timeout: float) -> T:
+    """Run a callable in a daemon thread with a timeout.
+
+    Args:
+        fn: Callable to execute.
+        timeout: Maximum time in seconds to wait.
+
+    Returns:
+        Result returned by the callable.
+
+    Raises:
+        TimeoutError: If the callable does not complete within the timeout.
+        Exception: Re-raises any exception raised by the callable.
+    """
+    result: list[T] = []
+    exc_holder: list[BaseException] = []
+
+    def _run() -> None:
+        try:
+            result.append(fn())
+        except Exception as e:
+            exc_holder.append(e)
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    thread.join(timeout=timeout)
+
+    if thread.is_alive():
+        raise TimeoutError(f"Operation did not complete within {timeout}s.")
+
+    if exc_holder:
+        raise exc_holder[0]
+
+    return result[0]
 
 
 def read_pod_logs(
