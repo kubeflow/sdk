@@ -22,7 +22,10 @@ import pytest
 
 from kubeflow.trainer.backends.localprocess.backend import LocalProcessBackend
 from kubeflow.trainer.backends.localprocess.constants import LOCAL_RUNTIME_IMAGE
+from kubeflow.trainer.backends.localprocess.job import LocalJob
 from kubeflow.trainer.backends.localprocess.types import (
+    LocalBackendJobs,
+    LocalBackendStep,
     LocalProcessBackendConfig,
     LocalRuntimeTrainer,
 )
@@ -409,6 +412,24 @@ def test_list_jobs(local_backend, test_case):
     runtime = test_case.config.get("runtime")
     jobs = local_backend.list_jobs(runtime=runtime)
     assert isinstance(jobs, list)
+
+
+def test_list_jobs_returns_overall_status(local_backend):
+    """Test that list_jobs returns the overall status for each job."""
+    runtime = local_backend.get_runtime(TORCH_RUNTIME)
+    job = LocalJob(name="test-job", command=[])
+    job._status = constants.TRAINJOB_COMPLETE
+    local_backend._LocalProcessBackend__local_jobs.append(
+        LocalBackendJobs(
+            name="test-job",
+            runtime=runtime,
+            steps=[LocalBackendStep(step_name="train", job=job)],
+        )
+    )
+
+    listed_job = local_backend.list_jobs()[0]
+
+    assert listed_job.status == constants.TRAINJOB_COMPLETE
 
 
 @pytest.mark.parametrize(
