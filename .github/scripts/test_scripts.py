@@ -15,6 +15,15 @@ import pytest
 SCRIPTS_DIR = Path(__file__).parent
 
 
+def _assert_valid_toml(content: str) -> None:
+    """Assert `content` parses as TOML. No-op on Python 3.10 (no stdlib tomllib)."""
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        return
+    tomllib.loads(content)
+
+
 class TestCompareVersions:
     """Tests for compare_versions.py"""
 
@@ -24,6 +33,7 @@ class TestCompareVersions:
             [sys.executable, SCRIPTS_DIR / "compare_versions.py", current, target],
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         return result.returncode
 
@@ -73,6 +83,7 @@ class TestCompareVersions:
             [sys.executable, SCRIPTS_DIR / "compare_versions.py", "invalid", "2.0.0"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         assert result.returncode == 2
         assert "Error" in result.stderr
@@ -83,6 +94,7 @@ class TestCompareVersions:
             [sys.executable, SCRIPTS_DIR / "compare_versions.py", "2.0.0"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         assert result.returncode == 2
 
@@ -97,6 +109,7 @@ class TestExtractVersion:
             input=tree_output,
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         return result.returncode, result.stdout.strip(), result.stderr.strip()
 
@@ -188,6 +201,7 @@ class TestUpdateOverrides:
                 ],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
             )
 
             updated_content = Path("pyproject.toml").read_text()
@@ -304,6 +318,37 @@ override-dependencies = ["pkg1==1.0.0", "pkg2==2.0.0"]
         assert "override-dependencies = [\n" in updated
         # Should not have duplicate override-dependencies
         assert updated.count("override-dependencies") == 1
+
+    def test_create_section_no_duplicate_key(self):
+        """Creating [tool.uv] from scratch emits exactly one override key"""
+        pyproject = "[project]\nname = 'test'\n"
+        exit_code, updated = self.run_update(
+            pyproject, "requests", "requests==2.31.0", "2025-01-15", "https://advisory.com"
+        )
+
+        assert exit_code == 0
+        assert updated.count("override-dependencies") == 1
+        _assert_valid_toml(updated)
+
+    def test_indented_override_dependencies(self):
+        """Indented override key is replaced, not duplicated"""
+        pyproject = (
+            "[project]\nname = 'test'\n\n[tool.uv]\n"
+            "  override-dependencies = [\n"
+            '      "flask==3.0.0",\n'
+            '      "requests==2.20.0",\n'
+            "  ]\n"
+        )
+        exit_code, updated = self.run_update(
+            pyproject, "requests", "requests==2.31.0", "2025-01-15", "https://advisory.com"
+        )
+
+        assert exit_code == 0
+        assert updated.count("override-dependencies") == 1
+        assert '"requests==2.31.0",' in updated
+        assert "2.20.0" not in updated  # old indented entry replaced
+        assert '"flask==3.0.0",' in updated  # sibling preserved
+        _assert_valid_toml(updated)
 
 
 if __name__ == "__main__":

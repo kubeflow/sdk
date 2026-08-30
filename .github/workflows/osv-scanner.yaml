@@ -26,8 +26,8 @@ jobs:
         # Bump cadence: check https://github.com/google/osv-scanner/releases monthly
         # Dependabot cannot bump curl-installed binaries — update version + checksum manually
         run: |
-          OSV_VERSION="2.3.8"
-          EXPECTED_SHA="bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc"
+          OSV_VERSION="2.5.0"
+          EXPECTED_SHA="edcfc41d257db36148f065055655fe3fcfc434b0b423ea67468a84c207524e0c"
           curl -fsSL "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64" -o osv-scanner
           ACTUAL_SHA=$(sha256sum osv-scanner | awk '{print $1}')
           if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
@@ -38,8 +38,6 @@ jobs:
           sudo mv osv-scanner /usr/local/bin/
 
       - name: Run OSV-Scanner (SARIF for Security Tab)
-        # continue-on-error so a SARIF failure doesn't block the JSON scan + auto-fix below
-        continue-on-error: true
         run: |
           rc=0
           osv-scanner scan \
@@ -60,6 +58,8 @@ jobs:
           category: kubeflow-sdk-osv-scanner
 
       - name: Run OSV-Scanner (JSON for auto-fix)
+        # always() so a crash in the SARIF step above still doesn't skip the independent JSON scan
+        if: always()
         run: |
           rc=0
           osv-scanner scan \
@@ -149,7 +149,7 @@ jobs:
               continue
             fi
             EXTRACT_RC=0
-            NATURAL_VER=$(echo "$TREE_OUTPUT" | uv run python3 .github/scripts/extract_version.py "$pkg") || EXTRACT_RC=$?
+            NATURAL_VER=$(printf '%s\n' "$TREE_OUTPUT" | uv run python3 .github/scripts/extract_version.py "$pkg") || EXTRACT_RC=$?
             if [ "$EXTRACT_RC" -ne 0 ]; then
               echo "Warning: Could not parse version for $pkg from uv tree output, skipping"
               continue
@@ -165,7 +165,7 @@ jobs:
             # Compare: does natural version meet the fix?
             # compare_versions.py exits: 0 = upgrade needed, 1 = sufficient, 2 = parse error
             CMP_EXIT=0
-            uv run python3 .github/scripts/compare_versions.py "$NATURAL_VER" "$fix_ver" || CMP_EXIT=$?
+            uv run --with packaging python3 .github/scripts/compare_versions.py "$NATURAL_VER" "$fix_ver" || CMP_EXIT=$?
 
             if [ "$CMP_EXIT" -eq 2 ]; then
               echo "Warning: Could not parse versions for $pkg ($NATURAL_VER vs $fix_ver), skipping"
@@ -180,11 +180,11 @@ jobs:
                 echo "Warning: uv lock failed after adding override for $pkg (exit code $LOCK_RC), skipping"
                 continue
               fi
-              printf '%s\n' "- ${pkg}==${fix_ver} (override) | [$advisory_id]($advisory_url)" >> applied_fixes.txt
+              printf '%s\n' "| ${pkg}==${fix_ver} (override) | [$advisory_id]($advisory_url) |" >> applied_fixes.txt
             else
               # NATURAL_VER >= fix_ver — natural upgrade worked
               echo "Natural upgrade sufficient ($NATURAL_VER >= $fix_ver)"
-              printf '%s\n' "- ${pkg}==${NATURAL_VER} (upgraded) | [$advisory_id]($advisory_url)" >> applied_fixes.txt
+              printf '%s\n' "| ${pkg}==${NATURAL_VER} (upgraded) | [$advisory_id]($advisory_url) |" >> applied_fixes.txt
             fi
           done <<< "$FIX_DATA"
 
@@ -232,4 +232,4 @@ jobs:
           branch: security-nightly-updates
           delete-branch: true
           labels: |
-            "area/security"
+            area/security
