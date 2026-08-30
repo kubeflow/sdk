@@ -433,8 +433,12 @@ class KubernetesBackend(RuntimeBackend):
             port = int(port_str) if port_str else random.randint(15002, 16002)
         # Prefer pod when available (bypasses Service/EndpointSlice); then try svc name
         candidates: list[tuple[str, str]] = []
+        for svc in [info.service_name, f"{info.name}-server", f"{info.name}-svc"]:
+            if svc and not any(c[1] == svc for c in candidates):
+                candidates.append(("svc", svc))
         if info.driver_pod_name:
             candidates.append(("pod", info.driver_pod_name))
+        seen: set[str] = set()
         if info.service_name:
             candidates.append(("svc", info.service_name))
         if not candidates:
@@ -450,6 +454,8 @@ class KubernetesBackend(RuntimeBackend):
             cmd = [
                 "kubectl",
                 "port-forward",
+                "--address",
+                "127.0.0.1",
                 key,
                 f"{port}:{constants.SPARK_CONNECT_PORT}",
                 "-n",
@@ -571,9 +577,19 @@ class KubernetesBackend(RuntimeBackend):
             while time.monotonic() - probe_start < delay_sec:
                 # Check if port-forward process died
                 if pf_proc is not None and pf_proc.poll() is not None:
-                    logger.warning("Port-forward died during gRPC ready wait, restarting...")
+                    stderr_b = pf_proc.stderr.read() if pf_proc.stderr else b""
+                    stderr_str = (
+                        stderr_b.decode("utf-8", errors="replace").strip() if stderr_b else ""
+                    )
+                    logger.warning(
+                        "Port-forward died during gRPC ready wait, restarting... "
+                        "(exit=%s, stderr=%s)",
+                        pf_proc.returncode,
+                        stderr_str,
+                    )
                     connect_url, pf_proc = self.get_connect_url(info, local_port=local_port)
                     local_port = int(connect_url.split(":")[-1]) if pf_proc else None
+                    time.sleep(2)  # Allow new port-forward to stabilize
                 # Verify port is still reachable
                 if local_port and not self._wait_for_connect_port(
                     "127.0.0.1", local_port, timeout_sec=1, interval_sec=0.5
