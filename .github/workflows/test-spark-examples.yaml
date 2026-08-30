@@ -26,7 +26,7 @@ jobs:
           df -h
 
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v7
@@ -49,7 +49,7 @@ jobs:
           curl -sSfL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
       - name: Checkout spark-operator
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: kubeflow/spark-operator
           path: spark-operator
