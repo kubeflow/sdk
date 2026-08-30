@@ -411,6 +411,28 @@ def test_list_jobs(local_backend, test_case):
     assert isinstance(jobs, list)
 
 
+def test_list_jobs_without_runtime_filter_preserves_stored_runtime(
+    local_backend, mock_train_environment
+):
+    """Test unfiltered job listings retain each job's runtime metadata."""
+    runtime = types.Runtime(
+        name=TORCH_RUNTIME,
+        trainer=types.RuntimeTrainer(
+            trainer_type=types.TrainerType.CUSTOM_TRAINER,
+            framework="torch",
+            image=LOCAL_RUNTIME_IMAGE,
+        ),
+        kind=types.RuntimeKind.TRAINING_RUNTIME,
+    )
+
+    local_backend.train(runtime=runtime, trainer=types.CustomTrainer(func=dummy_training_function))
+
+    jobs = local_backend.list_jobs()
+
+    assert len(jobs) == 1
+    assert jobs[0].runtime == runtime
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
