@@ -16,12 +16,17 @@
 Unit tests for the LocalProcessBackend class in the Kubeflow Trainer SDK.
 """
 
+import os
+import shutil
+import tempfile
+import threading
 from unittest.mock import Mock, patch
 
 import pytest
 
 from kubeflow.trainer.backends.localprocess.backend import LocalProcessBackend
 from kubeflow.trainer.backends.localprocess.constants import LOCAL_RUNTIME_IMAGE
+from kubeflow.trainer.backends.localprocess.job import LocalJob
 from kubeflow.trainer.backends.localprocess.types import (
     LocalProcessBackendConfig,
     LocalRuntimeTrainer,
@@ -583,3 +588,63 @@ def test_get_job_status(local_backend, test_case):
 
     status = local_backend._LocalProcessBackend__get_job_status(job)
     assert status == test_case.expected_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="concurrent localjobs do not mutate parent cwd",
+            expected_status=SUCCESS,
+            config={
+                "num_jobs": 5,
+                "sleep_command": ["python", "-c", "import time; time.sleep(1)"],
+            },
+            expected_output=None,
+        ),
+    ],
+)
+def test_concurrent_localjobs_do_not_change_cwd(test_case):
+    """Concurrent LocalJob threads must not mutate the parent process cwd."""
+
+    original_cwd = os.getcwd()
+    errors = []
+
+    def run_job(tmp_dir, barrier, command):
+        # Wait for all threads to be ready to start the subprocess
+        barrier.wait()
+
+        job = LocalJob(
+            name=f"test-job-{os.path.basename(tmp_dir)}",
+            command=command,
+            execution_dir=tmp_dir,
+        )
+        job.start()
+
+        # While the job is running in its thread, the main thread's cwd shouldn't change
+        if os.getcwd() != original_cwd:
+            errors.append(f"cwd changed to {os.getcwd()} during startup")
+
+        job.join()
+
+        if os.getcwd() != original_cwd:
+            errors.append(f"cwd changed to {os.getcwd()} after join")
+
+    num_jobs = test_case.config["num_jobs"]
+    command = test_case.config["sleep_command"]
+
+    dirs = [tempfile.mkdtemp() for _ in range(num_jobs)]
+    barrier = threading.Barrier(num_jobs)
+    threads = [threading.Thread(target=run_job, args=(d, barrier, command)) for d in dirs]
+
+    try:
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert os.getcwd() == original_cwd, f"cwd was mutated: {os.getcwd()}"
+        assert not errors, f"cwd changed in threads: {errors}"
+    finally:
+        for d in dirs:
+            shutil.rmtree(d, ignore_errors=True)

@@ -67,17 +67,14 @@ class LocalJob(threading.Thread):
                     self._stdout = f"Dependency {dep.name} failed. Skipping"
                 return
 
-        current_dir = os.getcwd()
         try:
             self._start_time = datetime.now()
             _c = " ".join(self.command)
             logger.debug(f"[{self.name}] Started at {self._start_time} with command: \n {_c}")
 
-            # change working directory to venv before executing script
-            os.chdir(self.execution_dir)
-
             self._process = subprocess.Popen(
                 self.command,
+                cwd=self.execution_dir,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -126,8 +123,6 @@ class LocalJob(threading.Thread):
                 self._stdout += f"Exception: {e}\n"
                 self._success = False
                 self._status = constants.TRAINJOB_FAILED
-        finally:
-            os.chdir(current_dir)
 
     @property
     def stdout(self):
