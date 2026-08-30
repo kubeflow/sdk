@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Cluster watcher for E2E tests: logs SparkConnect, pods, events, driver logs."""
+"""Cluster watcher for E2E tests: logs SparkConnect/SparkApplication, pods, events, driver logs."""
 
 import subprocess
 import threading
@@ -41,6 +41,8 @@ def _snapshot(namespace: str, elapsed_sec: float) -> list[str]:
     lines = [f"--- T+{elapsed_sec:.0f}s ---"]
     sc = _run_kubectl(["get", "sparkconnect", "-o", "wide"], namespace)
     lines.append(f"SparkConnect:\n{sc}" if sc else "SparkConnect: (none)")
+    sa = _run_kubectl(["get", "sparkapplication", "-o", "wide"], namespace)
+    lines.append(f"SparkApplication:\n{sa}" if sa else "SparkApplication: (none)")
     pods = _run_kubectl(["get", "pods", "-o", "wide"], namespace)
     lines.append(f"Pods:\n{pods}" if pods else "Pods: (none)")
     events = _run_kubectl(
@@ -58,15 +60,27 @@ def _snapshot(namespace: str, elapsed_sec: float) -> list[str]:
     return lines
 
 
-def _driver_pod_from_sparkconnect(namespace: str) -> str | None:
-    out = _run_kubectl(
+def _driver_pod_from_cluster(namespace: str) -> str | None:
+    """Resolve a driver pod name from either SparkConnect or SparkApplication status."""
+    sc_out = _run_kubectl(
         ["get", "sparkconnect", "-o", "jsonpath={.items[*].status.server.podName}"],
         namespace,
     )
-    if not out or out.startswith("(exit") or out.startswith("(error)"):
-        return None
-    pods = [p for p in out.strip().split() if p]
-    return pods[0] if pods else None
+    if sc_out and not sc_out.startswith("(exit") and not sc_out.startswith("(error)"):
+        pods = [p for p in sc_out.strip().split() if p]
+        if pods:
+            return pods[0]
+
+    sa_out = _run_kubectl(
+        ["get", "sparkapplication", "-o", "jsonpath={.items[*].status.driverInfo.podName}"],
+        namespace,
+    )
+    if sa_out and not sa_out.startswith("(exit") and not sa_out.startswith("(error)"):
+        pods = [p for p in sa_out.strip().split() if p]
+        if pods:
+            return pods[0]
+
+    return None
 
 
 def _driver_logs(namespace: str, pod_name: str, tail: int = 25) -> str:
@@ -83,9 +97,9 @@ def run_watcher(
 ) -> None:
     """Run cluster watcher until stop_event or max_duration; append to log_out.
 
-    Each interval: logs SparkConnect list, pods, events; when a driver pod
-    appears (from SparkConnect status), appends its logs so we see driver/
-    executor startup and where time is spent.
+    Each interval: logs SparkConnect/SparkApplication list, pods, events; when
+    a driver pod appears (from SparkConnect or SparkApplication status),
+    appends its logs so we see driver/executor startup and where time is spent.
     """
     start = time.monotonic()
     last_driver: str | None = None
@@ -96,7 +110,7 @@ def run_watcher(
             break
         for line in _snapshot(namespace, elapsed):
             log_out.append(line)
-        driver_pod = _driver_pod_from_sparkconnect(namespace)
+        driver_pod = _driver_pod_from_cluster(namespace)
         if driver_pod and (log_driver_when_ready or driver_pod != last_driver):
             last_driver = driver_pod
             dr_logs = _driver_logs(namespace, driver_pod)

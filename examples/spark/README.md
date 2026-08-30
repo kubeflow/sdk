@@ -16,7 +16,6 @@ For the full documentation, see [Interactive Sessions](https://sdk.kubeflow.org/
 - **spark_connect_simple.py** - Basic SparkClient usage with simple API
 - **spark_advanced_options.py** - Advanced configuration with Driver/Executor objects
 - **demo_existing_sparkconnect.py** - Connect to existing SparkConnect cluster
-- **connect_existing_session.py** - Connect to an existing Spark Connect session through `base_url`
 - **test_connect_url.py** - Test URL-based connection to Spark Connect
 
 ### Batch Jobs

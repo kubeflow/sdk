@@ -28,17 +28,12 @@ from kubeflow.spark.options import Name
 from kubeflow.spark.types.types import SparkConnectState
 
 from .cluster_watcher import run_watcher_in_thread
-from .run_in_cluster import run_example_in_cluster
 
 # Path to examples directory
 EXAMPLES_DIR = Path(__file__).parent.parent.parent.parent / "examples" / "spark"
 
 EXAMPLE_TIMEOUT_SEC = 600
 WATCHER_INTERVAL_SEC = 5.0
-
-# In-cluster: run example as K8s Job so client uses sc://...svc.cluster.local (no port-forward).
-USE_IN_CLUSTER = os.environ.get("SPARK_E2E_RUN_IN_CLUSTER") == "1"
-RUNNER_IMAGE = os.environ.get("SPARK_E2E_RUNNER_IMAGE", "")
 
 
 def _run_example_with_watcher(
@@ -133,7 +128,9 @@ class TestSparkExamples:
         """Build failure message with cluster watcher log and example output."""
         parts = [msg]
         if watcher_log:
-            parts.append("\n--- Cluster watcher (SparkConnect / pods / events / driver logs) ---")
+            parts.append(
+                "\n--- Cluster watcher (SparkConnect / SparkApplication / pods / events / driver logs) ---"
+            )
             parts.append("\n".join(watcher_log))
         parts.append("\n--- Example stdout ---")
         parts.append(stdout or "(empty)")
@@ -142,30 +139,7 @@ class TestSparkExamples:
         return "\n".join(parts)
 
     def _run_example(self, example_script_name: str, namespace: str):
-        """Run example: in-cluster Job if SPARK_E2E_RUN_IN_CLUSTER=1 and image set, else subprocess."""
-        if USE_IN_CLUSTER and RUNNER_IMAGE:
-            success, logs, job_desc = run_example_in_cluster(
-                example_script_name,
-                namespace,
-                image=RUNNER_IMAGE,
-                timeout_sec=EXAMPLE_TIMEOUT_SEC,
-            )
-            if not success:
-                fail_msg = (
-                    f"In-cluster example {example_script_name} failed.\n"
-                    f"--- Job describe ---\n{job_desc}\n--- Pod logs ---\n{logs or '(empty)'}"
-                )
-                assert success, fail_msg
-            assert (
-                "Session" in logs
-                or "complete" in logs.lower()
-                or "Level" in logs
-                or "Driver" in logs
-                or "Executor" in logs
-                or "EXAMPLE" in logs
-                or "E2E: Starting" in logs
-            ), f"In-cluster example produced no expected output. Logs:\n{logs or '(empty)'}"
-            return
+        """Run example as a subprocess against the ambient kubeconfig."""
         example_path = EXAMPLES_DIR / example_script_name
         assert example_path.exists(), f"Example not found: {example_path}"
         returncode, stdout, stderr, watcher_log = _run_example_with_watcher(
@@ -184,76 +158,35 @@ class TestSparkExamples:
     def test_spark_connect_simple_example(self):
         """EX01: Validate spark_connect_simple.py runs without errors."""
         namespace = os.environ.get("SPARK_TEST_NAMESPACE", "spark-test")
-        if USE_IN_CLUSTER and RUNNER_IMAGE:
-            self._run_example("spark_connect_simple.py", namespace)
-            return
         stdout = self._run_example("spark_connect_simple.py", namespace)
         assert "SparkConnect session created" in stdout or "Session" in stdout
 
     def test_spark_advanced_options_example(self):
         """EX02: Validate spark_advanced_options.py runs without errors."""
         namespace = os.environ.get("SPARK_TEST_NAMESPACE", "spark-test")
-        if USE_IN_CLUSTER and RUNNER_IMAGE:
-            self._run_example("spark_advanced_options.py", namespace)
-            return
         stdout = self._run_example("spark_advanced_options.py", namespace)
         assert "Driver" in stdout or "Executor" in stdout
-
-    def test_connect_existing_session_example(self):
-        """EX03: Validate connect_existing_session.py - base_url connect via two-client pattern.
-
-        Runs in-cluster only (K8s Job mode).
-        """
-        namespace = os.environ.get("SPARK_TEST_NAMESPACE", "spark-test")
-
-        if not (USE_IN_CLUSTER and RUNNER_IMAGE):
-            pytest.skip("Requires in-cluster execution (SPARK_E2E_RUN_IN_CLUSTER=1)")
-
-        self._run_example("connect_existing_session.py", namespace)
 
     def test_batch_job_lifecycle_example(self):
         """EX04: Validate batch_job_lifecycle.py runs without errors."""
         namespace = os.environ.get("SPARK_TEST_NAMESPACE", "spark-test")
-
-        if USE_IN_CLUSTER and RUNNER_IMAGE:
-            self._run_example("batch_job_lifecycle.py", namespace)
-            return
-
         stdout = self._run_example("batch_job_lifecycle.py", namespace)
-
         assert "BATCH JOB LIFECYCLE COMPLETE!" in stdout
 
     def test_batch_failed_job_example(self):
         """EX05: Validate batch_failed_job.py handles failed Spark jobs."""
         namespace = os.environ.get("SPARK_TEST_NAMESPACE", "spark-test")
-
-        if USE_IN_CLUSTER and RUNNER_IMAGE:
-            self._run_example("batch_failed_job.py", namespace)
-            return
-
         stdout = self._run_example("batch_failed_job.py", namespace)
         assert "Job failed as expected." in stdout
 
     def test_batch_func_job_lifecycle_example(self):
         """EX06: Validate batch_func_job_lifecycle.py runs without errors."""
         namespace = os.environ.get("SPARK_TEST_NAMESPACE", "spark-test")
-
-        if USE_IN_CLUSTER and RUNNER_IMAGE:
-            self._run_example("batch_func_job_lifecycle.py", namespace)
-            return
-
         stdout = self._run_example("batch_func_job_lifecycle.py", namespace)
-
         assert "FUNCJOB LIFECYCLE COMPLETE!" in stdout
 
     def test_batch_job_options_example(self):
         """EX07: Validate batch_job_options.py runs without errors."""
         namespace = os.environ.get("SPARK_TEST_NAMESPACE", "spark-test")
-
-        if USE_IN_CLUSTER and RUNNER_IMAGE:
-            self._run_example("batch_job_options.py", namespace)
-            return
-
         stdout = self._run_example("batch_job_options.py", namespace)
-
         assert "BATCH JOB OPTIONS COMPLETE!" in stdout
