@@ -185,6 +185,8 @@ def get_command_using_train_func(
     train_func_parameters: dict[str, Any] | None,
     venv_dir: str,
     train_job_name: str,
+    enable_profiler: bool = False,
+    profiler_dir: str = "/artifacts/profile",
 ) -> str:
     """
     Get the Trainer container command from the given training function and parameters.
@@ -212,9 +214,28 @@ def get_command_using_train_func(
     #     print('Start Training...')
     # train({'lr': 0.01})
     if train_func_parameters is None:
-        func_code = f"{func_code}\n{train_func.__name__}()\n"
+        func_call = f"{train_func.__name__}()"
     else:
-        func_code = f"{func_code}\n{train_func.__name__}({train_func_parameters})\n"
+        func_call = f"{train_func.__name__}(**{train_func_parameters})"
+
+    if enable_profiler:
+        profiler_code = textwrap.dedent(f"""\
+            import torch
+            from torch.profiler import profile, record_function, ProfilerActivity
+
+            with profile(
+                activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+                record_shapes=True,
+                profile_memory=True,
+                with_stack=True,
+                on_trace_ready=torch.profiler.tensorboard_trace_handler("{profiler_dir}")
+            ) as prof:
+                with record_function("model_training"):
+                    {func_call}
+            """)
+        func_code = f"{func_code}\n{profiler_code}\n"
+    else:
+        func_code = f"{func_code}\n{func_call}\n"
 
     with open(func_file, "w") as f:
         f.write(func_code)
@@ -284,6 +305,8 @@ def get_local_train_job_script(
         train_func=trainer.func,
         train_func_parameters=trainer.func_args,
         train_job_name=train_job_name,
+        enable_profiler=trainer.enable_profiler,
+        profiler_dir=trainer.profiler_dir,
     )
 
     cleanup_script = get_cleanup_venv_script(cleanup_venv=cleanup_venv, venv_dir=venv_dir)
