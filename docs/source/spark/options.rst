@@ -56,10 +56,6 @@ Constrain Spark pods to nodes with matching Kubernetes labels:
    client = SparkClient()
 
    spark = client.connect(
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 9656a1d (nit fix)
         num_executors=5,
         resources_per_executor={
             "cpu": "4",
@@ -74,17 +70,6 @@ Constrain Spark pods to nodes with matching Kubernetes labels:
             ),
         ],
     )
-<<<<<<< HEAD
-=======
-       num_executors=5,
-       resources_per_executor={"cpu": "4", "memory": "16Gi", "nvidia.com/gpu": "1"},
-       options=[
-           NodeSelector({"kubernetes.io/os": "linux", "node-pool": "batch",}),
-       ],
-   )
->>>>>>> 649ad90 (Addressed  feedback)
-=======
->>>>>>> 9656a1d (nit fix)
 
 Tolerations
 -----------
