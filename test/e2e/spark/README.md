@@ -4,13 +4,22 @@ End-to-end tests that validate Spark examples execute correctly with Kubernetes 
 
 ## Test Files
 
-### **test_spark_examples.py** (3 tests)
+### **test_spark_examples.py** (7 tests)
 
 Validates that Spark example scripts execute successfully:
 
+**Interactive Sessions**
 - `test_spark_connect_simple_example` - Validates spark_connect_simple.py runs without errors
 - `test_spark_advanced_options_example` - Validates spark_advanced_options.py runs without errors
-- `test_demo_existing_sparkconnect_example` - Validates demo_existing_sparkconnect.py structure (SKIPPED - requires manual port-forward)
+- `test_connect_existing_session_example` - Validates connect_existing_session.py (SKIPPED unless `SPARK_E2E_RUN_IN_CLUSTER=1`; requires in-cluster execution)
+
+**Batch Jobs**
+- `test_batch_job_lifecycle_example` - Validates batch_job_lifecycle.py: submits a `FileJob` (spark_job.py as the remote `file_source`), waits for `COMPLETED`, then exercises `get_job`, `list_jobs` (including a status filter), `get_job_logs`, and `delete_job`
+- `test_batch_func_job_lifecycle_example` - Validates batch_func_job_lifecycle.py: submits a `FuncJob` (a Python function run as the Spark app), waits for completion, then exercises the same lifecycle APIs as above
+- `test_batch_failed_job_example` - Validates batch_failed_job.py: submits a `FileJob` expected to fail, waits for `FAILED` status, and verifies `get_job`, `get_job_logs`, and `delete_job` still work against a failed job
+- `test_batch_job_options_example` - Validates batch_job_options.py: submits a `FileJob` with `Name`, `Labels`, `Annotations`, `NodeSelector`, and `Toleration` options, then verifies those options were applied to the underlying `SparkApplication` CR before deleting the job
+
+`spark_job.py` is not a standalone example — it's the simple Spark application used as the remote `file_source` for the batch job examples (`batch_job_lifecycle.py`, `batch_job_options.py`).
 
 ## Prerequisites
 
@@ -40,7 +49,18 @@ uv run pytest test/e2e/spark/test_spark_examples.py::TestSparkExamples::test_spa
 
 ### Quick Validation (No pytest)
 ```bash
+# Interactive sessions
 python3 examples/spark/spark_connect_simple.py
+python3 examples/spark/spark_advanced_options.py
+python3 examples/spark/demo_existing_sparkconnect.py  # requires manual port-forward
+python3 examples/spark/connect_existing_session.py     # requires an existing Spark Connect session
+python3 examples/spark/test_connect_url.py
+
+# Batch job lifecycle
+python3 examples/spark/batch_job_lifecycle.py
+python3 examples/spark/batch_func_job_lifecycle.py
+python3 examples/spark/batch_failed_job.py
+python3 examples/spark/batch_job_options.py
 ```
 
 ## Test Configuration
@@ -98,7 +118,8 @@ E2E tests are integrated into GitHub Actions and run automatically on pull reque
 - Python version: 3.11
 
 **Tests:**
-- Validates Spark examples execute successfully
+- Validates Spark interactive session examples execute successfully
+- Validates Spark batch job examples execute successfully
 - Creates Kind cluster with Spark Operator
 - Runs example validation tests
 - Collects logs on failure
