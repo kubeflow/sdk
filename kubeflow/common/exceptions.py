@@ -12,18 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .exceptions import (
-    KubeflowError,
-    NameResolutionError,
-    CompilationError,
-    RunFailedError,
-    KubeflowTimeoutError,
-)
+class KubeflowError(Exception):
+    """Base class for all Kubeflow SDK errors."""
+    pass
 
-__all__ = [
-    "KubeflowError",
-    "NameResolutionError",
-    "CompilationError",
-    "RunFailedError",
-    "KubeflowTimeoutError",
-]
+
+class NameResolutionError(KubeflowError):
+    """Raised when a resource cannot be found by name."""
+    pass
+
+
+class CompilationError(KubeflowError):
+    """Raised when pipeline or job compilation fails."""
+    pass
+
+
+class RunFailedError(KubeflowError):
+    """Raised when a run or job reaches a failed state."""
+    pass
+
+
+class KubeflowTimeoutError(KubeflowError, TimeoutError):
+    """Raised when a wait operation exceeds its timeout."""
+    pass
