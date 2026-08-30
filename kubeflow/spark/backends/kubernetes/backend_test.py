@@ -941,6 +941,37 @@ def test_create_and_connect(kubernetes_backend, test_case):
             },
             expected_error=ValueError,
         ),
+        TestCase(
+            name="valid jar file job",
+            expected_status=SUCCESS,
+            config={
+                "job": FileJob(
+                    file_source="s3a://bucket/app.jar",
+                    main_class="org.apache.spark.examples.SparkPi",
+                ),
+            },
+        ),
+        TestCase(
+            name="jar without main class",
+            expected_status=FAILED,
+            config={
+                "job": FileJob(
+                    file_source="s3a://bucket/app.jar",
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="python with main class",
+            expected_status=FAILED,
+            config={
+                "job": FileJob(
+                    file_source="s3a://bucket/job.py",
+                    main_class="org.apache.spark.examples.SparkPi",
+                ),
+            },
+            expected_error=ValueError,
+        ),
     ],
 )
 def test_validate_file_job(kubernetes_backend, test_case):

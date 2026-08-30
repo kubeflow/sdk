@@ -221,10 +221,13 @@ class FileJob:
             Supports local paths available to the Spark cluster as well as
             remote URIs such as s3a://, gs://, hdfs:// and https://.
         args: Optional command-line arguments passed to the application.
+        main_class: Main class for JVM/jar applications. Required for ``.jar``
+            sources and not supported for Python sources.
     """
 
     file_source: str
     args: list[str] | None = None
+    main_class: str | None = None
 
 
 @dataclass

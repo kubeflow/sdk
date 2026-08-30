@@ -402,6 +402,33 @@ def validate_spark_connect_url(url: str) -> bool:
     return True
 
 
+def validate_jar_main_class(file_source: str, main_class: str | None) -> None:
+    """Validate the ``main_class`` argument against a batch job's file source.
+
+    JVM applications packaged as a ``.jar`` require a ``main_class`` entry point,
+    while Python applications must not set one.
+
+    Args:
+        file_source: URI or path to the application file (e.g. "s3a://bucket/app.jar").
+        main_class: Main class for JVM/jar applications, or None.
+
+    Raises:
+        ValueError: If ``main_class`` is missing for a jar file, set for a Python
+            file, or is not a non-empty string when provided.
+    """
+    if main_class is not None and (not isinstance(main_class, str) or not main_class.strip()):
+        raise ValueError("`main_class` must be a non-empty string.")
+
+    source_path = urlparse(file_source).path or file_source
+    source_path = source_path.split("?", 1)[0].rstrip("/").lower()
+
+    if source_path.endswith(".jar") and main_class is None:
+        raise ValueError("`main_class` is required when submitting a jar application.")
+
+    if source_path.endswith((".py", ".python")) and main_class is not None:
+        raise ValueError("`main_class` is not supported for Python applications.")
+
+
 def build_service_url(info: SparkConnectInfo) -> str:
     """Build the in-cluster Spark Connect URL from session info.
 
@@ -801,6 +828,7 @@ def get_spark_application_cr_from_file_job(
     namespace: str,
     main_file: str,
     arguments: list[str] | None = None,
+    main_class: str | None = None,
     num_executors: int | None = None,
     resources_per_executor: dict[str, str] | None = None,
     options: list | None = None,
@@ -814,6 +842,7 @@ def get_spark_application_cr_from_file_job(
         namespace: Kubernetes namespace.
         main_file: Path or URI to the Spark application file.
         arguments: Command-line arguments passed to the Spark application.
+        main_class: Main class for JVM/jar applications.
         num_executors: Number of executor instances.
         resources_per_executor: Resource requirements for each executor.
         options: List of configuration options.
@@ -827,6 +856,11 @@ def get_spark_application_cr_from_file_job(
         ValueError:
             If the executor resource configuration is invalid.
     """
+    source_path = urlparse(main_file).path or main_file
+    source_path = source_path.split("?", 1)[0].rstrip("/").lower()
+    app_type = "Java" if source_path.endswith(".jar") else "Python"
+
+    return models.SparkV1beta2SparkApplication(
     spark_application = models.SparkV1beta2SparkApplication(
         api_version=f"{constants.SPARK_APPLICATION_GROUP}/{constants.SPARK_APPLICATION_VERSION}",
         kind=constants.SPARK_APPLICATION_KIND,
@@ -836,10 +870,11 @@ def get_spark_application_cr_from_file_job(
         ),
         spec=models.SparkV1beta2SparkApplicationSpec(
             spark_version=constants.DEFAULT_SPARK_VERSION,
-            type="Python",
+            type=app_type,
             mode="cluster",
             image=constants.DEFAULT_SPARK_IMAGE,
             main_application_file=main_file,
+            main_class=main_class,
             arguments=arguments or None,
             driver=get_spark_job_driver_spec(),
             executor=get_spark_job_executor_spec(
