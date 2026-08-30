@@ -214,7 +214,7 @@ def get_command_using_train_func(
     if train_func_parameters is None:
         func_code = f"{func_code}\n{train_func.__name__}()\n"
     else:
-        func_code = f"{func_code}\n{train_func.__name__}({train_func_parameters})\n"
+        func_code = f"{func_code}\n{train_func.__name__}(**{train_func_parameters})\n"
 
     with open(func_file, "w") as f:
         f.write(func_code)
