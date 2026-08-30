@@ -78,8 +78,9 @@ LOCAL_EXEC_JOB_TEMPLATE = textwrap.dedent(
     set -e
     $OS_PYTHON_BIN -m venv --without-pip $PYENV_LOCATION
     echo "Operating inside $PYENV_LOCATION"
-    source $PYENV_LOCATION/bin/activate
-    $PYENV_LOCATION/bin/python -m ensurepip --upgrade --default-pip
+    if [ -d "$PYENV_LOCATION/Scripts" ]; then VENV_BIN="$PYENV_LOCATION/Scripts"; else VENV_BIN="$PYENV_LOCATION/bin"; fi
+    source $VENV_BIN/activate
+    $VENV_BIN/python.exe -m ensurepip --upgrade --default-pip
     $DEPENDENCIES_SCRIPT
     $ENTRYPOINT
     $CLEANUP_SCRIPT

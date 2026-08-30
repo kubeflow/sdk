@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import shutil
 from string import Template
+import subprocess
 import textwrap
 from typing import Any
 
@@ -138,12 +139,16 @@ def get_local_runtime_trainer(
     )
 
     # set command to run from venv
-    venv_bin_dir = str(Path(venv_dir) / "bin")
+    venv_bin_dir = str(Path(venv_dir) / ("Scripts" if os.name == "nt" else "bin")).replace(
+        "\\", "/"
+    )
     default_cmd = [str(Path(venv_bin_dir) / local_exec_constants.DEFAULT_COMMAND)]
     # Set the Trainer entrypoint.
     if framework == local_exec_constants.TORCH_FRAMEWORK_TYPE:
-        _c = [os.path.join(venv_bin_dir, local_exec_constants.TORCH_COMMAND)]
-        trainer.set_command(tuple(_c))
+        torch_command = str(
+            Path(venv_bin_dir) / f"{local_exec_constants.TORCH_COMMAND}.exe"
+        ).replace("\\", "/")
+        trainer.set_command((torch_command,))
     else:
         trainer.set_command(tuple(default_cmd))
 
@@ -244,6 +249,38 @@ def get_cleanup_venv_script(venv_dir: str, cleanup_venv: bool = True) -> str:
     return t.substitute(**mapping)
 
 
+def _resolve_bash() -> str:
+    """Find a working bash executable, validating it actually runs."""
+    candidates = []
+    which_result = shutil.which("bash")
+    if which_result:
+        candidates.append(which_result)
+
+    candidates.extend(
+        [
+            r"C:\Program Files\Git\bin\bash.exe",
+            r"C:\Program Files\Git\usr\bin\bash.exe",
+            r"C:\Program Files (x86)\Git\bin\bash.exe",
+        ]
+    )
+
+    for candidate in candidates:
+        if not candidate or not os.path.isfile(candidate):
+            continue
+        try:
+            result = subprocess.run([candidate, "--version"], capture_output=True, timeout=5)
+            if result.returncode == 0:
+                return candidate
+        except Exception:
+            continue
+
+    raise RuntimeError(
+        "Could not find a working bash executable. On Windows, install Git "
+        "for Windows (https://git-scm.com/download/win), or ensure WSL is "
+        "properly configured and running."
+    )
+
+
 def get_local_train_job_script(
     train_job_name: str,
     venv_dir: str,
@@ -259,6 +296,10 @@ def get_local_train_job_script(
         python_bin = shutil.which("python3")
     if not python_bin:
         raise ValueError("No python executable found")
+    # Windows paths use backslashes which bash interprets as escape characters.
+
+    python_bin = python_bin.replace("\\", "/")
+    # Bash (including Git Bash on Windows) requires forward slashes;
 
     # workout if dependencies needs to be installed
     if isinstance(runtime.trainer, LocalRuntimeTrainer):
@@ -288,14 +329,17 @@ def get_local_train_job_script(
 
     cleanup_script = get_cleanup_venv_script(cleanup_venv=cleanup_venv, venv_dir=venv_dir)
 
+    venv_bin = f"{venv_dir}/Scripts" if os.name == "nt" else f"{venv_dir}/bin"
+
     mapping = {
         "OS_PYTHON_BIN": python_bin,
         "PYENV_LOCATION": venv_dir,
+        "VENV_BIN": venv_bin,
         "DEPENDENCIES_SCRIPT": dependency_script,
         "ENTRYPOINT": entrypoint,
         "CLEANUP_SCRIPT": cleanup_script,
     }
 
     command = t.safe_substitute(**mapping)
-
-    return "bash", "-c", command
+    bash_path = _resolve_bash()
+    return bash_path, "-c", command
