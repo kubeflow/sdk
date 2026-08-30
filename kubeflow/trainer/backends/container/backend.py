@@ -778,6 +778,7 @@ class ContainerBackend(RuntimeBackend):
         self,
         name: str,
         follow: bool = False,
+        tail_lines: int | None = None,
         step: str = constants.NODE + "-0",
     ) -> Iterator[str]:
         """Get logs for a training job by querying container runtime."""
@@ -798,7 +799,11 @@ class ContainerBackend(RuntimeBackend):
                 continue
 
             try:
-                yield from self._adapter.container_logs(container["id"], follow)
+                yield from self._adapter.container_logs(
+                    container["id"],
+                    follow,
+                    tail_lines,
+                )
             except Exception as e:
                 logger.warning(f"Failed to get logs for {container['name']}: {e}")
                 yield f"Error getting logs: {e}\n"
