@@ -79,7 +79,11 @@ class LocalProcessBackend(RuntimeBackend):
         options: list | None = None,
     ) -> str:
         if runtime is None:
-            raise ValueError("Runtime must be provided for LocalProcessBackend")
+            available_runtimes = [r.name for r in local_runtimes]
+            raise ValueError(
+                f"Runtime must be provided for LocalProcessBackend. "
+                f"Available runtimes are: {available_runtimes}."
+            )
         if isinstance(runtime, str):
             runtime = self.get_runtime(runtime)
 
