@@ -4,16 +4,15 @@ End-to-end tests that validate Spark examples execute correctly with Kubernetes 
 
 ## Test Files
 
-### **test_spark_examples.py** (3 tests)
+### **test_spark_examples.py** (7 tests)
 
 Validates that Spark example scripts execute successfully:
 
 **Interactive Sessions**
 - `test_spark_connect_simple_example` - Validates spark_connect_simple.py runs without errors
 - `test_spark_advanced_options_example` - Validates spark_advanced_options.py runs without errors
-- `test_demo_existing_sparkconnect_example` - Validates demo_existing_sparkconnect.py structure (SKIPPED - requires manual port-forward)
-- `connect_existing_session.py` - Connects to an existing Spark Connect session via `base_url` (not confirmed to have an automated test — likely requires a running session to connect to, similar to demo_existing_sparkconnect.py)
-- `test_connect_url.py` - Tests URL-based connection to Spark Connect (not confirmed to have an automated test)
+- `test_connect_existing_session_example` - Validates connect_existing_session.py (SKIPPED unless `SPARK_E2E_RUN_IN_CLUSTER=1`; requires in-cluster execution)
+
 **Batch Jobs**
 - `test_batch_job_lifecycle_example` - Validates batch_job_lifecycle.py: submits a `FileJob` (spark_job.py as the remote `file_source`), waits for `COMPLETED`, then exercises `get_job`, `list_jobs` (including a status filter), `get_job_logs`, and `delete_job`
 - `test_batch_func_job_lifecycle_example` - Validates batch_func_job_lifecycle.py: submits a `FuncJob` (a Python function run as the Spark app), waits for completion, then exercises the same lifecycle APIs as above
@@ -36,8 +35,6 @@ Validates that Spark example scripts execute successfully:
 
 3. Spark Operator running in the cluster
 
-4. For batch job examples: a `spark-operator-spark` ServiceAccount in the target namespace with the required `SparkApplication` RBAC permissions.
-
 ## Running Tests
 
 ### All E2E Tests
@@ -48,7 +45,6 @@ uv run pytest test/e2e/spark/ -v
 ### Specific Test
 ```bash
 uv run pytest test/e2e/spark/test_spark_examples.py::TestSparkExamples::test_spark_connect_simple_example -v
-uv run pytest test/e2e/spark/test_spark_examples.py::TestSparkExamples::test_batch_job_lifecycle_example -v
 ```
 
 ### Quick Validation (No pytest)
@@ -101,16 +97,6 @@ Verify cluster setup:
 ```bash
 kubectl get pods -n spark-operator
 kubectl get deployment spark-operator-controller -n spark-operator
-```
-
-### Batch job tests fail with RBAC or permission errors
-
-**Cause:** Batch job submission needs a `spark-operator-spark` ServiceAccount with `SparkApplication` RBAC permissions in the target namespace — this is separate from the interactive session prerequisites.
-
-**Solution:** Verify the ServiceAccount and role bindings exist in the test namespace:
-```bash
-kubectl get serviceaccount spark-operator-spark -n spark-test
-kubectl get rolebinding -n spark-test
 ```
 
 ## CI/CD Integration
