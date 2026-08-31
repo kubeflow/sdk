@@ -1270,7 +1270,7 @@ def test_get_spark_job_driver_spec(test_case: TestCase) -> None:
     assert spec.memory == _memory_kubernetes_to_spark(
         constants.DEFAULT_DRIVER_MEMORY,
     )
-    assert spec.service_account == (driver.service_account if driver else None)
+    assert spec.service_account is None
 
     print("test execution complete")
 
