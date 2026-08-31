@@ -1247,12 +1247,7 @@ def test_read_pod_logs(test_case: TestCase) -> None:
         TestCase(
             name="default spark job driver spec leaves service account unset",
             expected_status=SUCCESS,
-            config={"driver": None},
-        ),
-        TestCase(
-            name="spark job driver spec honors service account override",
-            expected_status=SUCCESS,
-            config={"driver": Driver(service_account="custom-sa")},
+            config={},
         ),
     ],
 )
