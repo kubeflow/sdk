@@ -1261,8 +1261,7 @@ def test_get_spark_job_driver_spec(test_case: TestCase) -> None:
 
     print("Executing test:", test_case.name)
 
-    driver = test_case.config["driver"]
-    spec = get_spark_job_driver_spec(driver=driver)
+    spec = get_spark_job_driver_spec()
 
     assert test_case.expected_status == SUCCESS
 
