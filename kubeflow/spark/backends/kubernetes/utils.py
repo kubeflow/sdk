@@ -30,6 +30,7 @@ from kubeflow_spark_api import models
 from kubernetes import client
 
 from kubeflow.common import constants as common_constants
+from kubeflow.common.utils import validate_python_function
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.types.types import (
     Driver,
@@ -771,10 +772,9 @@ def get_command_using_spark_func(
 
     Raises:
         ValueError:
-            If ``func`` is not callable.
+            If ``func`` is not a supported Python function.
     """
-    if not callable(func):
-        raise ValueError(f"Expected a callable function, got {type(func)}.")
+    validate_python_function(func)
 
     func_code = textwrap.dedent(
         inspect.getsource(func),
