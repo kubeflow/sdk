@@ -671,8 +671,7 @@ def get_spark_job_driver_spec(
     """Build DriverSpec for SparkApplication.
 
     The service account is intentionally left unset so that the Spark
-    Operator's fallback service account (configured cluster-wide by the
-    operator installation) is used unless overridden via `driver`.
+    Operator's configured fallback service account is used.
 
     Returns:
         SparkApplication DriverSpec model.
