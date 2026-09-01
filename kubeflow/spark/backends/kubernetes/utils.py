@@ -632,7 +632,7 @@ def get_spark_connect_info_from_cr(
         try:
             state = SparkConnectState(spark_connect_cr.status.state)
         except ValueError:
-            state = SparkConnectState.PROVISIONING
+            state = SparkConnectState.UNKNOWN
 
     # Extract server status
     server_status = None

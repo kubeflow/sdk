@@ -32,6 +32,7 @@ class SparkConnectState(str, Enum):
     RUNNING = "Running"  # Operator may set this when server is up; treated as ready
     NOT_READY = "NotReady"
     FAILED = "Failed"
+    UNKNOWN = "Unknown"
 
 
 @dataclass
