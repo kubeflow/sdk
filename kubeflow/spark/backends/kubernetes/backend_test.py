@@ -16,7 +16,7 @@
 
 from datetime import datetime
 import multiprocessing
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from kubeflow_spark_api import models
 from kubernetes import client
@@ -1941,3 +1941,24 @@ def test_get_job_logs(kubernetes_backend, test_case):
             raise
 
     print("test execution complete")
+
+
+def test_create_and_connect_cleanup_on_failure(kubernetes_backend):
+    """Test that create_and_connect cleans up session when connect fails."""
+    mock_info = MagicMock()
+    mock_info.name = "test-session"
+    mock_info.namespace = "default"
+
+    with (
+        patch.object(kubernetes_backend, "_create_session", return_value=mock_info),
+        patch.object(
+            kubernetes_backend,
+            "_wait_for_session_ready",
+            side_effect=RuntimeError("Wait failed"),
+        ),
+        patch.object(kubernetes_backend, "delete_session") as mock_delete,
+    ):
+        with pytest.raises(RuntimeError, match="Wait failed"):
+            kubernetes_backend.create_and_connect()
+
+        mock_delete.assert_called_once_with("test-session")
