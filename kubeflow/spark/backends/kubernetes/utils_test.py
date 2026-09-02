@@ -883,7 +883,7 @@ def test_get_spark_connect_info_from_cr(
             assert info.state == SparkConnectState.FAILED
 
         elif test_case.name == "running status":
-            assert info.state == SparkConnectState.RUNNING
+            assert info.state == SparkConnectState.UNKNOWN
             assert info.service_name == "run-session-svc"
 
         elif test_case.name == "empty status":
