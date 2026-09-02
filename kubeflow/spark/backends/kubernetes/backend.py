@@ -336,7 +336,7 @@ class KubernetesBackend(RuntimeBackend):
         while True:
             info = self.get_session(name)
 
-            if info.state in (SparkConnectState.READY, SparkConnectState.RUNNING):
+            if info.state == SparkConnectState.READY:
                 logger.info(
                     "Session ready: %s/%s state=%s serviceName=%s (%.0fs)",
                     self.namespace,
@@ -601,29 +601,36 @@ class KubernetesBackend(RuntimeBackend):
         thread.start()
         thread.join(timeout=connect_timeout)
 
-        if not thread.is_alive():
-            if exc_holder:
-                raise exc_holder[0]
-            if result:
-                return result[0]
+        try:
+            if not thread.is_alive():
+                if exc_holder:
+                    raise exc_holder[0]
+                if result:
+                    return result[0]
 
-        # Connection timed out
-        base_msg = (
-            f"Spark Connect connection to {connect_url} did not complete "
-            f"within {connect_timeout}s. "
-            "Verify: (1) port-forward target is the Spark Connect server pod, "
-            "(2) PySpark and server Spark major.minor match, "
-            "(3) driver pod logs for gRPC/auth errors; "
-            "see Spark sql/connect for server config."
-        )
-        if pf_proc is not None and pf_proc.poll() is not None:
-            stderr_b = pf_proc.stderr.read() if pf_proc.stderr else b""
-            stderr_str = stderr_b.decode("utf-8", errors="replace").strip() if stderr_b else ""
-            base_msg += (
-                f" Port-forward process exited during connect "
-                f"(code={pf_proc.returncode}). stderr: {stderr_str}"
+            # Connection timed out
+            base_msg = (
+                f"Spark Connect connection to {connect_url} did not complete "
+                f"within {connect_timeout}s. "
+                "Verify: (1) port-forward target is the Spark Connect server pod, "
+                "(2) PySpark and server Spark major.minor match, "
+                "(3) driver pod logs for gRPC/auth errors; "
+                "see Spark sql/connect for server config."
             )
-        raise TimeoutError(base_msg)
+            if pf_proc is not None and pf_proc.poll() is not None:
+                stderr_b = pf_proc.stderr.read() if pf_proc.stderr else b""
+                stderr_str = stderr_b.decode("utf-8", errors="replace").strip() if stderr_b else ""
+                base_msg += (
+                    f" Port-forward process exited during connect "
+                    f"(code={pf_proc.returncode}). stderr: {stderr_str}"
+                )
+            raise TimeoutError(base_msg)
+        except Exception:
+            if pf_proc is not None and pf_proc.poll() is None:
+                pf_proc.terminate()
+                with contextlib.suppress(Exception):
+                    pf_proc.wait(timeout=2)
+            raise
 
     def create_and_connect(
         self,
@@ -678,10 +685,21 @@ class KubernetesBackend(RuntimeBackend):
             timeout,
         )
 
-        info = self._wait_for_session_ready(info.name, timeout=timeout)
-        logger.info("Session ready, connecting (service_name=%s)", info.service_name)
-
-        return self.connect(info, connect_timeout=connect_timeout)
+        try:
+            info = self._wait_for_session_ready(info.name, timeout=timeout)
+            logger.info("Session ready, connecting (service_name=%s)", info.service_name)
+            return self.connect(info, connect_timeout=connect_timeout)
+        except Exception as e:
+            logger.warning(
+                "Failed to setup or connect to SparkConnect session %s/%s: %s. "
+                "Cleaning up SparkConnect session.",
+                info.namespace,
+                info.name,
+                e,
+            )
+            with contextlib.suppress(Exception):
+                self.delete_session(info.name)
+            raise
 
     def get_session_logs(
         self,

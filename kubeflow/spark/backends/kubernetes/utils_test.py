@@ -821,6 +821,19 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
             },
         ),
         TestCase(
+            name="unknown status",
+            expected_status=SUCCESS,
+            config={
+                "metadata": {
+                    "name": "unknown-session",
+                    "namespace": "default",
+                },
+                "status": models.SparkV1alpha1SparkConnectStatus(
+                    state="InvalidOrUnknownState",
+                ),
+            },
+        ),
+        TestCase(
             name="missing name",
             expected_status=FAILED,
             config={
@@ -870,12 +883,15 @@ def test_get_spark_connect_info_from_cr(
             assert info.state == SparkConnectState.FAILED
 
         elif test_case.name == "running status":
-            assert info.state == SparkConnectState.RUNNING
+            assert info.state == SparkConnectState.UNKNOWN
             assert info.service_name == "run-session-svc"
 
         elif test_case.name == "empty status":
             assert info.state == SparkConnectState.PROVISIONING
             assert info.driver_pod_name is None
+
+        elif test_case.name == "unknown status":
+            assert info.state == SparkConnectState.UNKNOWN
 
     else:
         with pytest.raises(
