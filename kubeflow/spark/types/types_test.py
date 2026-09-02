@@ -37,7 +37,6 @@ from kubeflow.trainer.test.common import SUCCESS, TestCase
     [
         (SparkConnectState.PROVISIONING, "Provisioning"),
         (SparkConnectState.READY, "Ready"),
-        (SparkConnectState.RUNNING, "Running"),
         (SparkConnectState.NOT_READY, "NotReady"),
         (SparkConnectState.FAILED, "Failed"),
     ],
@@ -52,7 +51,6 @@ def test_spark_connect_state_values(state, expected):
     [
         SparkConnectState.PROVISIONING,
         SparkConnectState.READY,
-        SparkConnectState.RUNNING,
         SparkConnectState.NOT_READY,
         SparkConnectState.FAILED,
     ],

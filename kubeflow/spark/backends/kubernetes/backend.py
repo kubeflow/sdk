@@ -336,7 +336,7 @@ class KubernetesBackend(RuntimeBackend):
         while True:
             info = self.get_session(name)
 
-            if info.state in (SparkConnectState.READY, SparkConnectState.RUNNING):
+            if info.state == SparkConnectState.READY:
                 logger.info(
                     "Session ready: %s/%s state=%s serviceName=%s (%.0fs)",
                     self.namespace,
