@@ -31,14 +31,14 @@ Paths not covered above. Component packages: see **Component context**.
 
 ## Component context
 
-Path-scoped rules in `.cursor/rules/` provide module detail when editing a component.
+Path-scoped rules in `.agents/rules/` provide module detail when editing a component.
 
 | Component | Rule | Scope |
 |-----------|------|-------|
-| Trainer | `.cursor/rules/kubeflow-trainer.mdc` | `kubeflow/trainer/**` |
-| Trainer K8s backend | `.cursor/rules/kubeflow-trainer-kubernetes.mdc` | `kubeflow/trainer/backends/kubernetes/**` |
-| Spark | `.cursor/rules/kubeflow-spark.mdc` | `kubeflow/spark/**` |
-| Optimizer | `.cursor/rules/kubeflow-optimizer.mdc` | `kubeflow/optimizer/**` |
+| Trainer | `.agents/rules/kubeflow-trainer.mdc` | `kubeflow/trainer/**` |
+| Trainer K8s backend | `.agents/rules/kubeflow-trainer-kubernetes.mdc` | `kubeflow/trainer/backends/kubernetes/**` |
+| Spark | `.agents/rules/kubeflow-spark.mdc` | `kubeflow/spark/**` |
+| Optimizer | `.agents/rules/kubeflow-optimizer.mdc` | `kubeflow/optimizer/**` |
 
 ## Environment & Tooling
 
@@ -119,7 +119,7 @@ Copy-modify from canonical files — details in [references/common-changes.md](r
 
 ## Skills
 
-On-demand procedural guides in `.cursor/skills/` for multi-step changes. `.agents/skills` symlinks here.
+On-demand procedural guides in `.agents/skills/` for multi-step changes.
 
 | Skill | Use when |
 |-------|----------|

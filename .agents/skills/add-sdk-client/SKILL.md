@@ -142,7 +142,7 @@ under `[project.optional-dependencies]`:
 
 ## Step 9: Add component context rule
 
-Create `.cursor/rules/kubeflow-<component>.mdc` (via `.agents/rules/`):
+Create `.agents/rules/kubeflow-<component>.mdc` (via `.agents/rules/`):
 
 ```markdown
 ---
@@ -181,7 +181,7 @@ make verify
 - [ ] Every `__init__.py` has license header and re-exports public symbols
 - [ ] Import-linter contract enforces component isolation
 - [ ] Optional dependency in `pyproject.toml` (if applicable)
-- [ ] `.cursor/rules/kubeflow-<component>.mdc` created
+- [ ] `.agents/rules/kubeflow-<component>.mdc` created
 - [ ] `AGENTS.md` Component context table updated
 - [ ] `openapi.yaml` and `surfaces.yaml` updated
 - [ ] All validation commands pass

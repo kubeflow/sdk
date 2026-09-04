@@ -15,7 +15,7 @@ Repeatable issues caught in review on AI-assisted PRs. Each row should graduate 
 | If the issue is… | Fix with… | Avoid… |
 |------------------|-----------|--------|
 | Objective, checkable | Lint / CI (`make verify`, `make lint-imports`, ruff) | Long `AGENTS.md` prose |
-| Scoped to one component | `.cursor/rules/kubeflow-*.mdc` | Global agent instructions |
+| Scoped to one component | `.agents/rules/kubeflow-*.mdc` | Global agent instructions |
 | Missing exemplar | `common-changes.md` + canonical `*_test.py` | Tutorial in `AGENTS.md` |
 | Architectural misunderstanding | `docs/design/` or `docs/adr/` | Duplicating in multiple files |
 | One-time mistake | PR comment only | Permanent rule |

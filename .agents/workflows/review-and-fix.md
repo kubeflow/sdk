@@ -35,7 +35,7 @@ lowest layer that prevents recurrence:
 | If the issue is... | Fix with... |
 |-------------------|-------------|
 | Objective, checkable | Lint / CI rule |
-| Scoped to one component | `.cursor/rules/kubeflow-*.mdc` |
+| Scoped to one component | `.agents/rules/kubeflow-*.mdc` |
 | Missing exemplar | `references/common-changes.md` + canonical test |
 | Architectural misunderstanding | `docs/design/` or `docs/adr/` |
 | One-time mistake | PR comment only |
