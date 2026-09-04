@@ -1,0 +1,80 @@
+# Machine-readable API surface index for AI agents.
+# This repository is a Python SDK — not an HTTP or gRPC server.
+# See .agents/api/README.md for validation commands.
+
+sdk_logical_api:
+  file: openapi.yaml
+  format: openapi-3.1
+  description: |
+    Public Python client operations (TrainerClient, SparkClient, …).
+    Paths name Class.method — not REST URLs.
+  validate: make verify-openapi  # openapi-spec-validator (Python dev dep)
+  python_packages:
+    trainer: kubeflow-trainer-api>=2.2.0
+    katib: kubeflow-katib-api>=0.19.0
+    spark: kubeflow-spark-api>=2.4.0
+
+crds:
+  vendored_dir: hack/crds/
+  resources:
+    - kind: SparkConnect
+      group: sparkoperator.k8s.io
+      version: v1alpha1
+      file: hack/crds/sparkoperator.k8s.io_sparkconnects.yaml
+      strategy: vendored
+      sdk_module: kubeflow.spark.backends.kubernetes
+    - kind: Experiment
+      group: kubeflow.org
+      version: v1beta1
+      plural: experiments
+      strategy: upstream
+      upstream_url: https://raw.githubusercontent.com/kubeflow/katib/v0.19.0/manifests/v1beta1/components/crd/experiment.yaml
+      sdk_module: kubeflow.optimizer.backends.kubernetes
+    - kind: TrainJob
+      group: trainer.kubeflow.org
+      version: v1alpha1
+      plural: trainjobs
+      strategy: upstream
+      upstream_url: https://raw.githubusercontent.com/kubeflow/trainer/v2.2.0/manifests/base/crds/trainer.kubeflow.org_trainjobs.yaml
+      sdk_module: kubeflow.trainer.backends.kubernetes
+    - kind: TrainingRuntime
+      group: trainer.kubeflow.org
+      version: v1alpha1
+      plural: trainingruntimes
+      strategy: upstream
+      upstream_url: https://raw.githubusercontent.com/kubeflow/trainer/v2.2.0/manifests/base/crds/trainer.kubeflow.org_trainingruntimes.yaml
+      sdk_module: kubeflow.trainer.backends.kubernetes
+    - kind: ClusterTrainingRuntime
+      group: trainer.kubeflow.org
+      version: v1alpha1
+      plural: clustertrainingruntimes
+      strategy: upstream
+      upstream_url: https://raw.githubusercontent.com/kubeflow/trainer/v2.2.0/manifests/base/crds/trainer.kubeflow.org_clustertrainingruntimes.yaml
+      sdk_module: kubeflow.trainer.backends.kubernetes
+      note: Read-only in SDK; list/get runtimes
+
+upstream_pins:
+  trainer:
+    repo: https://github.com/kubeflow/trainer
+    tag: v2.2.0
+    crd_base: manifests/base/crds
+    matches_pyproject: kubeflow-trainer-api>=2.2.0
+  katib:
+    repo: https://github.com/kubeflow/katib
+    tag: v0.19.0
+    crd_base: manifests/v1beta1/components/crd
+    matches_pyproject: kubeflow-katib-api>=0.19.0
+
+external_rest:
+  model_registry:
+    description: |
+      ModelRegistryClient wraps the external Kubeflow Hub / Model Registry REST API.
+      Not implemented in this repository.
+    upstream_openapi: https://raw.githubusercontent.com/kubeflow/hub/v0.3.9/api/openapi/model-registry.yaml
+    docs: https://www.kubeflow.org/docs/components/hub/reference/rest-api/
+    python_client: model_registry
+
+grpc:
+  note: |
+    No gRPC services are defined in this repository.
+    Spark Connect uses Apache Spark gRPC (pyspark-connect); SDK only sets spark.connect.grpc.* conf keys.

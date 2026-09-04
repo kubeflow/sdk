@@ -1,0 +1,26 @@
+{
+    "hooks": {
+        "PostToolUse": [
+            {
+                "matcher": "Edit|Write",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "FILE=$(jq -r '.tool_input.file_path // empty' < /dev/stdin); [[ \"$FILE\" == *.py ]] || exit 0; cd \"$CLAUDE_PROJECT_DIR\" && { uv run ruff check --fix \"$FILE\" 2>/dev/null || true; uv run ruff format \"$FILE\" 2>/dev/null || true; }"
+                    }
+                ]
+            }
+        ],
+        "PreToolUse": [
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "[[ -z \"$CLAUDE_TOOL_INPUT\" ]] && exit 0; echo \"$CLAUDE_TOOL_INPUT\" | grep -qP 'rm\\s+-(r|f|rf|fr|Rf|rF)\\b|DROP\\s+TABLE|git\\s+push\\s+.*--force(?!-with-lease)\\b|git\\s+reset\\s+--hard|git\\s+clean\\s+-[a-z]*f|git\\s+branch\\s+-D' && echo 'BLOCK: destructive command (best-effort guard)' >&2 && exit 2 || true"
+                    }
+                ]
+            }
+        ]
+    }
+}

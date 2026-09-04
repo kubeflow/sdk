@@ -39,8 +39,14 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Verify
+      - name: Verify (lint, format, type-check)
         run: make verify
+
+      - name: Lint import boundaries
+        run: make lint-imports
+
+      - name: Verify OpenAPI spec
+        run: make verify-openapi
 
       - name: Test GitHub Actions Scripts
         run: make test-scripts

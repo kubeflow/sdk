@@ -1,0 +1,1492 @@
+openapi: 3.1.0
+info:
+  title: Kubeflow SDK Public API
+  version: "0.4.1"
+  description: |
+    Machine-readable catalog of the Kubeflow Python SDK public surface.
+
+    **This repository does not implement a REST server.** Paths name SDK client
+    operations (`ClientClass.method`), not HTTP URLs. Agents should diff requirements
+    against these operation definitions and linked schemas.
+
+    - Surface index: `.agents/api/surfaces.yaml`
+    - Vendored CRD YAML: `hack/crds/` (SparkConnect only; other CRDs upstream in surfaces.yaml)
+    - Human API docs: `docs/source/` (Sphinx)
+    - Scope: all public TrainerClient, SparkClient, OptimizerClient, and ModelRegistryClient methods
+    - Rich examples: `train`, `list_jobs`, `connect`, `list_sessions` only; other operations are stubs
+  contact:
+    name: Kubeflow Authors
+    url: https://github.com/kubeflow/sdk
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+externalDocs:
+  description: Kubeflow SDK documentation
+  url: https://www.kubeflow.org/docs/components
+
+tags:
+  - name: trainer
+    description: TrainerClient — training job lifecycle
+  - name: spark
+    description: SparkClient — SparkConnect sessions on Kubernetes
+  - name: optimizer
+    description: OptimizerClient — Katib hyperparameter search
+  - name: hub
+    description: ModelRegistryClient — external model registry REST proxy
+
+paths:
+  /trainer/TrainerClient/train:
+    post:
+      tags: [trainer]
+      operationId: trainer_train
+      summary: Create a TrainJob
+      description: |
+        Python: `TrainerClient.train(runtime=..., initializer=..., trainer=..., options=...)`
+
+        Kubernetes backend creates a `trainer.kubeflow.org/v1alpha1` TrainJob custom resource.
+        Returns the generated job name.
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.trainer.api.trainer_client
+      x-kubeflow-crd:
+        group: trainer.kubeflow.org
+        version: v1alpha1
+        kind: TrainJob
+      security:
+        - KubernetesBearerToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrainerTrainRequest"
+            examples:
+              customTrainerMinimal:
+                summary: Single-node CustomTrainer on Kubernetes
+                value:
+                  trainer:
+                    func: {}
+                    num_nodes: 1
+                    resources_per_node:
+                      cpu: "1"
+                      memory: 2Gi
+                  options:
+                    - type: Name
+                      value: my-training-job
+      responses:
+        "200":
+          description: Generated TrainJob name
+          content:
+            application/json:
+              schema:
+                type: string
+              examples:
+                jobCreated:
+                  value: a1b2c3d4-my-training-job
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+      x-kubeflow-python-example: |
+        from kubeflow.trainer import CustomTrainer, KubernetesBackendConfig, TrainerClient
+
+        def train_fn():
+            print("training")
+
+        client = TrainerClient(backend_config=KubernetesBackendConfig(namespace="default"))
+        job_name = client.train(
+            trainer=CustomTrainer(
+                func=train_fn,
+                num_nodes=1,
+                resources_per_node={"cpu": "1", "memory": "2Gi"},
+            ),
+        )
+
+  /trainer/TrainerClient/list_jobs:
+    get:
+      tags: [trainer]
+      operationId: trainer_list_jobs
+      summary: List TrainJobs
+      description: |
+        Python: `TrainerClient.list_jobs(runtime=None)`
+
+        Returns TrainJobs in the configured namespace. When `runtime` is set, filters to jobs
+        for that runtime.
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.trainer.api.trainer_client
+      security:
+        - KubernetesBearerToken: []
+      parameters:
+        - name: runtime
+          in: query
+          required: false
+          description: Optional runtime name or Runtime object filter
+          schema:
+            oneOf:
+              - type: string
+              - $ref: "#/components/schemas/Runtime"
+      responses:
+        "200":
+          description: List of TrainJobs (empty list if none exist)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TrainJob"
+              examples:
+                jobsListed:
+                  value:
+                    - name: a1b2c3d4-my-training-job
+                      runtime:
+                        name: torch-distributed
+                        trainer:
+                          type: CUSTOM_TRAINER
+                      steps: []
+                      num_nodes: 1
+                      creation_timestamp: "2026-07-03T10:00:00Z"
+                      status: Running
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+      x-kubeflow-python-example: |
+        from kubeflow.trainer import KubernetesBackendConfig, TrainerClient
+
+        client = TrainerClient(backend_config=KubernetesBackendConfig(namespace="default"))
+        jobs = client.list_jobs()
+
+  /trainer/TrainerClient/delete_job:
+    delete:
+      tags: [trainer]
+      operationId: trainer_delete_job
+      summary: Delete a TrainJob
+      description: 'Python: `TrainerClient.delete_job(name)`'
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.trainer.api.trainer_client
+      security:
+        - KubernetesBearerToken: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: TrainJob deleted
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /trainer/TrainerClient/get_job:
+    get:
+      tags: [trainer]
+      operationId: trainer_get_job
+      summary: Get a TrainJob
+      description: 'Python: `TrainerClient.get_job(name)`'
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.trainer.api.trainer_client
+      security:
+        - KubernetesBearerToken: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: TrainJob
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrainJob"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /trainer/TrainerClient/get_job_events:
+    get:
+      tags: [trainer]
+      operationId: trainer_get_job_events
+      summary: Get TrainJob events
+      description: 'Python: `TrainerClient.get_job_events(name)`'
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.trainer.api.trainer_client
+      security:
+        - KubernetesBearerToken: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of Event objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EventRef"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /trainer/TrainerClient/get_job_logs:
+    get:
+      tags: [trainer]
+      operationId: trainer_get_job_logs
+      summary: Stream TrainJob step logs
+      description: 'Python: `TrainerClient.get_job_logs(name, step=..., follow=...)` — returns log line iterator'
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.trainer.api.trainer_client
+      security:
+        - KubernetesBearerToken: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: step
+          in: query
+          required: false
+          schema:
+            type: string
+            default: node-0
+        - name: follow
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Log line stream
+          content:
+            text/plain:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /trainer/TrainerClient/get_runtime:
+    get:
+      tags: [trainer]
+      operationId: trainer_get_runtime
+      summary: Get a TrainingRuntime
+      description: 'Python: `TrainerClient.get_runtime(name)`'
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.trainer.api.trainer_client
+      security:
+        - KubernetesBearerToken: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Runtime
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Runtime"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /trainer/TrainerClient/get_runtime_packages:
+    post:
+      tags: [trainer]
+      operationId: trainer_get_runtime_packages
+      summary: List packages for a runtime
+      description: 'Python: `TrainerClient.get_runtime_packages(runtime)`'
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.trainer.api.trainer_client
+      security:
+        - KubernetesBearerToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Runtime"
+      responses:
+        "200":
+          description: Package list from runtime image
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /trainer/TrainerClient/list_runtimes:
+    get:
+      tags: [trainer]
+      operationId: trainer_list_runtimes
+      summary: List TrainingRuntimes
+      description: 'Python: `TrainerClient.list_runtimes()`'
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.trainer.api.trainer_client
+      security:
+        - KubernetesBearerToken: []
+      responses:
+        "200":
+          description: List of Runtime objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Runtime"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /trainer/TrainerClient/wait_for_job_status:
+    post:
+      tags: [trainer]
+      operationId: trainer_wait_for_job_status
+      summary: Wait for TrainJob status
+      description: 'Python: `TrainerClient.wait_for_job_status(name, status=..., timeout=..., ...)`'
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.trainer.api.trainer_client
+      security:
+        - KubernetesBearerToken: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: array
+                  items:
+                    type: string
+                timeout:
+                  type: integer
+                polling_interval:
+                  type: integer
+      responses:
+        "200":
+          description: TrainJob at desired status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrainJob"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /spark/SparkClient/connect:
+    post:
+      tags: [spark]
+      operationId: spark_connect
+      summary: Connect to or create a SparkConnect session
+      description: |
+        Python: `SparkClient.connect(base_url=..., token=..., ...)`
+
+        **Connect mode** (`base_url` set): attach to an existing Spark Connect server.
+        **Create mode** (no `base_url`): create a `sparkoperator.k8s.io/v1alpha1` SparkConnect CR
+        and return a `SparkSession`.
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.spark.api.spark_client
+      x-kubeflow-crd:
+        group: sparkoperator.k8s.io
+        version: v1alpha1
+        kind: SparkConnect
+      security:
+        - KubernetesBearerToken: []
+        - SparkConnectToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SparkConnectRequest"
+            examples:
+              connectExisting:
+                summary: Connect to existing Spark Connect server
+                value:
+                  base_url: sc://spark-connect-server:15002
+                  token: optional-bearer-token
+              createSession:
+                summary: Create new SparkConnect session on Kubernetes
+                value:
+                  num_executors: 2
+                  resources_per_executor:
+                    cpu: "2"
+                    memory: 4Gi
+                  spark_conf:
+                    spark.sql.adaptive.enabled: "true"
+      responses:
+        "200":
+          description: Connected SparkSession (logical; PySpark object in Python)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SparkSessionRef"
+              examples:
+                sessionReady:
+                  value:
+                    connected: true
+                    mode: create
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+      x-kubeflow-python-example: |
+        from kubeflow.spark import KubernetesBackendConfig, SparkClient
+
+        client = SparkClient(backend_config=KubernetesBackendConfig(namespace="spark"))
+        spark = client.connect(
+            num_executors=2,
+            resources_per_executor={"cpu": "2", "memory": "4Gi"},
+        )
+
+  /spark/SparkClient/list_sessions:
+    get:
+      tags: [spark]
+      operationId: spark_list_sessions
+      summary: List SparkConnect sessions
+      description: |
+        Python: `SparkClient.list_sessions()`
+
+        Lists SparkConnect custom resources in the configured namespace.
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.spark.api.spark_client
+      security:
+        - KubernetesBearerToken: []
+      responses:
+        "200":
+          description: SparkConnect sessions in the namespace
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SparkConnectInfo"
+              examples:
+                sessionsListed:
+                  value:
+                    - name: spark-session-abc123
+                      namespace: spark
+                      state: Ready
+                      service_name: spark-session-abc123-connect
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+      x-kubeflow-python-example: |
+        from kubeflow.spark import KubernetesBackendConfig, SparkClient
+
+        client = SparkClient(backend_config=KubernetesBackendConfig(namespace="spark"))
+        sessions = client.list_sessions()
+
+  /spark/SparkClient/delete_session:
+    delete:
+      tags: [spark]
+      operationId: spark_delete_session
+      summary: Delete a SparkConnect session
+      description: 'Python: `SparkClient.delete_session(name)`'
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.spark.api.spark_client
+      security:
+        - KubernetesBearerToken: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Session deleted
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /spark/SparkClient/get_session:
+    get:
+      tags: [spark]
+      operationId: spark_get_session
+      summary: Get SparkConnect session info
+      description: 'Python: `SparkClient.get_session(name)`'
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.spark.api.spark_client
+      security:
+        - KubernetesBearerToken: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: SparkConnectInfo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SparkConnectInfo"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /spark/SparkClient/get_session_logs:
+    get:
+      tags: [spark]
+      operationId: spark_get_session_logs
+      summary: Stream SparkConnect session logs
+      description: 'Python: `SparkClient.get_session_logs(name, follow=...)` — returns log line iterator'
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.spark.api.spark_client
+      security:
+        - KubernetesBearerToken: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: follow
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Log line stream
+          content:
+            text/plain:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /optimizer/OptimizerClient/delete_job:
+    delete:
+      tags: [optimizer]
+      operationId: optimizer_delete_job
+      summary: Delete an OptimizationJob
+      description: 'Python: `OptimizerClient.delete_job(name)`'
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.optimizer.api.optimizer_client
+      security:
+        - KubernetesBearerToken: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OptimizationJob deleted
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /optimizer/OptimizerClient/get_best_results:
+    get:
+      tags: [optimizer]
+      operationId: optimizer_get_best_results
+      summary: Get best trial results
+      description: 'Python: `OptimizerClient.get_best_results(name)`'
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.optimizer.api.optimizer_client
+      security:
+        - KubernetesBearerToken: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Result or null if no best trial yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OptimizationResultRef"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /optimizer/OptimizerClient/get_job:
+    get:
+      tags: [optimizer]
+      operationId: optimizer_get_job
+      summary: Get an OptimizationJob
+      description: 'Python: `OptimizerClient.get_job(name)`'
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.optimizer.api.optimizer_client
+      security:
+        - KubernetesBearerToken: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OptimizationJob
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OptimizationJobRef"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /optimizer/OptimizerClient/get_job_events:
+    get:
+      tags: [optimizer]
+      operationId: optimizer_get_job_events
+      summary: Get OptimizationJob events
+      description: 'Python: `OptimizerClient.get_job_events(name)`'
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.optimizer.api.optimizer_client
+      security:
+        - KubernetesBearerToken: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of Event objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EventRef"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /optimizer/OptimizerClient/get_job_logs:
+    get:
+      tags: [optimizer]
+      operationId: optimizer_get_job_logs
+      summary: Stream OptimizationJob trial logs
+      description: 'Python: `OptimizerClient.get_job_logs(name, trial_name=..., follow=...)`'
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.optimizer.api.optimizer_client
+      security:
+        - KubernetesBearerToken: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: trial_name
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: follow
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Log line stream
+          content:
+            text/plain:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /optimizer/OptimizerClient/list_jobs:
+    get:
+      tags: [optimizer]
+      operationId: optimizer_list_jobs
+      summary: List OptimizationJobs
+      description: 'Python: `OptimizerClient.list_jobs()`'
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.optimizer.api.optimizer_client
+      security:
+        - KubernetesBearerToken: []
+      responses:
+        "200":
+          description: List of OptimizationJob objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OptimizationJobRef"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /optimizer/OptimizerClient/optimize:
+    post:
+      tags: [optimizer]
+      operationId: optimizer_optimize
+      summary: Create a Katib Experiment
+      description: 'Python: `OptimizerClient.optimize(trial_template, search_space=..., ...)`'
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.optimizer.api.optimizer_client
+      x-kubeflow-crd:
+        group: kubeflow.org
+        version: v1beta1
+        kind: Experiment
+      security:
+        - KubernetesBearerToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OptimizerOptimizeRequest"
+      responses:
+        "200":
+          description: Generated Experiment name
+          content:
+            application/json:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /optimizer/OptimizerClient/wait_for_job_status:
+    post:
+      tags: [optimizer]
+      operationId: optimizer_wait_for_job_status
+      summary: Wait for OptimizationJob status
+      description: 'Python: `OptimizerClient.wait_for_job_status(name, status=..., timeout=..., ...)`'
+      x-kubeflow-surface: python-sdk
+      x-kubeflow-module: kubeflow.optimizer.api.optimizer_client
+      security:
+        - KubernetesBearerToken: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: array
+                  items:
+                    type: string
+                timeout:
+                  type: integer
+                polling_interval:
+                  type: integer
+      responses:
+        "200":
+          description: OptimizationJob at desired status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OptimizationJobRef"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /hub/ModelRegistryClient/get_model:
+    get:
+      tags: [hub]
+      operationId: hub_get_model
+      summary: Get a registered model
+      description: 'Python: `ModelRegistryClient.get_model(name)` — proxies external Model Registry REST API'
+      x-kubeflow-surface: external-rest-proxy
+      x-kubeflow-module: kubeflow.hub.api.model_registry_client
+      security:
+        - ModelRegistryBearerToken: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: RegisteredModel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisteredModelRef"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /hub/ModelRegistryClient/get_model_artifact:
+    get:
+      tags: [hub]
+      operationId: hub_get_model_artifact
+      summary: Get a model artifact
+      description: 'Python: `ModelRegistryClient.get_model_artifact(name, version)`'
+      x-kubeflow-surface: external-rest-proxy
+      x-kubeflow-module: kubeflow.hub.api.model_registry_client
+      security:
+        - ModelRegistryBearerToken: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ModelArtifact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelArtifactRef"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /hub/ModelRegistryClient/get_model_version:
+    get:
+      tags: [hub]
+      operationId: hub_get_model_version
+      summary: Get a model version
+      description: 'Python: `ModelRegistryClient.get_model_version(name, version)`'
+      x-kubeflow-surface: external-rest-proxy
+      x-kubeflow-module: kubeflow.hub.api.model_registry_client
+      security:
+        - ModelRegistryBearerToken: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ModelVersion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelVersionRef"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /hub/ModelRegistryClient/list_model_versions:
+    get:
+      tags: [hub]
+      operationId: hub_list_model_versions
+      summary: List model versions
+      description: 'Python: `ModelRegistryClient.list_model_versions(name)` — iterator in Python'
+      x-kubeflow-surface: external-rest-proxy
+      x-kubeflow-module: kubeflow.hub.api.model_registry_client
+      security:
+        - ModelRegistryBearerToken: []
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ModelVersion stream
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ModelVersionRef"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /hub/ModelRegistryClient/list_models:
+    get:
+      tags: [hub]
+      operationId: hub_list_models
+      summary: List registered models
+      description: 'Python: `ModelRegistryClient.list_models()` — iterator in Python'
+      x-kubeflow-surface: external-rest-proxy
+      x-kubeflow-module: kubeflow.hub.api.model_registry_client
+      security:
+        - ModelRegistryBearerToken: []
+      responses:
+        "200":
+          description: RegisteredModel stream
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RegisteredModelRef"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /hub/ModelRegistryClient/register_model:
+    post:
+      tags: [hub]
+      operationId: hub_register_model
+      summary: Register a model
+      description: 'Python: `ModelRegistryClient.register_model(name, uri, version=..., ...)`'
+      x-kubeflow-surface: external-rest-proxy
+      x-kubeflow-module: kubeflow.hub.api.model_registry_client
+      security:
+        - ModelRegistryBearerToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HubRegisterModelRequest"
+      responses:
+        "200":
+          description: RegisteredModel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisteredModelRef"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /hub/ModelRegistryClient/update_model:
+    put:
+      tags: [hub]
+      operationId: hub_update_model
+      summary: Update a registered model
+      description: 'Python: `ModelRegistryClient.update_model(model)`'
+      x-kubeflow-surface: external-rest-proxy
+      x-kubeflow-module: kubeflow.hub.api.model_registry_client
+      security:
+        - ModelRegistryBearerToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisteredModelRef"
+      responses:
+        "200":
+          description: Updated RegisteredModel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisteredModelRef"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /hub/ModelRegistryClient/update_model_artifact:
+    put:
+      tags: [hub]
+      operationId: hub_update_model_artifact
+      summary: Update a model artifact
+      description: 'Python: `ModelRegistryClient.update_model_artifact(model_artifact)`'
+      x-kubeflow-surface: external-rest-proxy
+      x-kubeflow-module: kubeflow.hub.api.model_registry_client
+      security:
+        - ModelRegistryBearerToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModelArtifactRef"
+      responses:
+        "200":
+          description: Updated ModelArtifact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelArtifactRef"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+  /hub/ModelRegistryClient/update_model_version:
+    put:
+      tags: [hub]
+      operationId: hub_update_model_version
+      summary: Update a model version
+      description: 'Python: `ModelRegistryClient.update_model_version(model_version)`'
+      x-kubeflow-surface: external-rest-proxy
+      x-kubeflow-module: kubeflow.hub.api.model_registry_client
+      security:
+        - ModelRegistryBearerToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModelVersionRef"
+      responses:
+        "200":
+          description: Updated ModelVersion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelVersionRef"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/KubernetesAuthError"
+        "500":
+          $ref: "#/components/responses/RuntimeError"
+
+components:
+  securitySchemes:
+    KubernetesBearerToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Kubernetes API authentication via kubeconfig, in-cluster ServiceAccount, or
+        `KubernetesBackendConfig` (`config_file`, `context`, `client_configuration`).
+
+    SparkConnectToken:
+      type: http
+      scheme: bearer
+      description: |
+        Optional bearer token for Spark Connect (`SparkClient.connect(token=...)`).
+        Applied as `spark.connect.authenticate.token` when connecting to an existing server.
+
+    ModelRegistryBearerToken:
+      type: http
+      scheme: bearer
+      description: |
+        Model Registry REST authentication via `ModelRegistryClient(user_token=...)`.
+        The registry server is external to this repository; see `.agents/api/surfaces.yaml`.
+
+  schemas:
+    TrainerTrainRequest:
+      type: object
+      properties:
+        runtime:
+          oneOf:
+            - type: string
+            - $ref: "#/components/schemas/Runtime"
+          description: Runtime name or object; K8s default is torch-distributed when omitted
+        initializer:
+          $ref: "#/components/schemas/InitializerRef"
+        trainer:
+          oneOf:
+            - $ref: "#/components/schemas/CustomTrainer"
+            - $ref: "#/components/schemas/CustomTrainerContainer"
+            - $ref: "#/components/schemas/BuiltinTrainerRef"
+          description: |
+            Trainer configuration. Use CustomTrainer for user-defined functions,
+            CustomTrainerContainer for custom images, BuiltinTrainer for predefined trainers.
+        options:
+          type: array
+          description: Callable options from kubeflow.trainer.options
+          items:
+            type: object
+            additionalProperties: true
+
+    CustomTrainer:
+      type: object
+      description: Self-contained training function configuration
+      required: [func]
+      properties:
+        func:
+          type: object
+          description: Python callable (not JSON-serializable; reference only)
+        func_args:
+          type: object
+          additionalProperties: true
+        image:
+          type: string
+        packages_to_install:
+          type: array
+          items:
+            type: string
+        pip_index_urls:
+          type: array
+          items:
+            type: string
+        num_nodes:
+          type: integer
+          minimum: 1
+        resources_per_node:
+          type: object
+          additionalProperties:
+            type: string
+          example:
+            cpu: "2"
+            memory: 4Gi
+        env:
+          type: object
+          additionalProperties:
+            type: string
+
+    CustomTrainerContainer:
+      type: object
+      required: [image]
+      properties:
+        image:
+          type: string
+        num_nodes:
+          type: integer
+          minimum: 1
+        resources_per_node:
+          type: object
+          additionalProperties:
+            type: string
+        env:
+          type: object
+          additionalProperties:
+            type: string
+
+    BuiltinTrainerRef:
+      type: object
+      description: Builtin trainer parameters; see kubeflow.trainer.types.types.BuiltinTrainer
+      required: [trainer_type]
+      properties:
+        trainer_type:
+          type: string
+          example: BuiltinTrainer
+
+    InitializerRef:
+      type: object
+      description: Dataset/model initializer; see kubeflow.trainer.types.types.Initializer hierarchy
+
+    Runtime:
+      type: object
+      required: [name, trainer]
+      properties:
+        name:
+          type: string
+        trainer:
+          type: object
+          description: RuntimeTrainer configuration
+        pretrained_model:
+          type: string
+          nullable: true
+
+    TrainJob:
+      type: object
+      required: [name, runtime, steps, num_nodes, creation_timestamp]
+      properties:
+        name:
+          type: string
+        runtime:
+          $ref: "#/components/schemas/Runtime"
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrainJobStep"
+        num_nodes:
+          type: integer
+        creation_timestamp:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [Created, Running, Complete, Failed, Unknown]
+
+    TrainJobStep:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          nullable: true
+        pod_name:
+          type: string
+        device:
+          type: string
+        device_count:
+          type: string
+
+    SparkConnectRequest:
+      type: object
+      properties:
+        base_url:
+          type: string
+          description: Spark Connect URL (connect mode), e.g. sc://server:15002
+          example: sc://spark-connect-server:15002
+        token:
+          type: string
+          description: Optional authentication token (connect mode)
+        num_executors:
+          type: integer
+          minimum: 1
+          description: Create mode only
+        resources_per_executor:
+          type: object
+          additionalProperties:
+            type: string
+          example:
+            cpu: "2"
+            memory: 4Gi
+        spark_conf:
+          type: object
+          additionalProperties:
+            type: string
+        driver:
+          $ref: "#/components/schemas/Driver"
+        executor:
+          $ref: "#/components/schemas/Executor"
+        options:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        timeout:
+          type: integer
+          default: 300
+        connect_timeout:
+          type: integer
+          default: 120
+
+    Driver:
+      type: object
+      properties:
+        image:
+          type: string
+        resources:
+          type: object
+          additionalProperties:
+            type: string
+        java_options:
+          type: string
+        service_account:
+          type: string
+
+    Executor:
+      type: object
+      properties:
+        num_instances:
+          type: integer
+          minimum: 1
+        resources_per_executor:
+          type: object
+          additionalProperties:
+            type: string
+        image:
+          type: string
+
+    SparkConnectInfo:
+      type: object
+      required: [name, namespace, state]
+      properties:
+        name:
+          type: string
+        namespace:
+          type: string
+        state:
+          type: string
+          enum: [Provisioning, Ready, Running, NotReady, Failed]
+        driver_pod_name:
+          type: string
+          nullable: true
+        pod_ip:
+          type: string
+          nullable: true
+        service_name:
+          type: string
+          nullable: true
+        creation_timestamp:
+          type: string
+          format: date-time
+          nullable: true
+
+    SparkSessionRef:
+      type: object
+      description: Logical reference to a PySpark SparkSession (not serializable)
+      properties:
+        connected:
+          type: boolean
+        mode:
+          type: string
+          enum: [connect, create]
+
+    EventRef:
+      type: object
+      description: Event from kubeflow.trainer.types.types.Event
+
+    OptimizationJobRef:
+      type: object
+      description: OptimizationJob from kubeflow.optimizer.types.optimization_types
+
+    OptimizationResultRef:
+      type: object
+      description: Result from kubeflow.optimizer.types.optimization_types; nullable when no best trial
+
+    OptimizerOptimizeRequest:
+      type: object
+      required: [trial_template, search_space]
+      properties:
+        trial_template:
+          type: object
+          description: TrainJobTemplate from kubeflow.trainer.types.types
+        trial_config:
+          type: object
+          description: Optional TrialConfig
+        search_space:
+          type: object
+          additionalProperties: true
+          description: Parameter name to Search spec
+        objectives:
+          type: array
+          items:
+            type: object
+        algorithm:
+          type: object
+          description: BaseAlgorithm subclass
+
+    RegisteredModelRef:
+      type: object
+      description: model_registry.types.RegisteredModel
+
+    ModelVersionRef:
+      type: object
+      description: model_registry.types.ModelVersion
+
+    ModelArtifactRef:
+      type: object
+      description: model_registry.types.ModelArtifact
+
+    HubRegisterModelRequest:
+      type: object
+      required: [name, uri, version]
+      properties:
+        name:
+          type: string
+        uri:
+          type: string
+        version:
+          type: string
+        model_format_name:
+          type: string
+        model_format_version:
+          type: string
+        author:
+          type: string
+        owner:
+          type: string
+        version_description:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        storage_config:
+          type: object
+          description: kubeflow.hub.types.types.StorageConfig
+
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+  responses:
+    ValidationError:
+      description: Invalid arguments (Python ValueError)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            message: Invalid backend config or trainer type for selected backend
+    KubernetesAuthError:
+      description: Kubernetes authentication or authorization failure
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            message: Unable to authenticate with Kubernetes API
+    RuntimeError:
+      description: Backend operation failed (Python RuntimeError or TimeoutError)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            message: Failed to create TrainJob

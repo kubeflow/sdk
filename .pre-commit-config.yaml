@@ -1,3 +1,7 @@
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -15,4 +19,15 @@ repos:
         args: [--fix]
       # Format after fixes
       - id: ruff-format
-exclude: ^docs/images/
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args:
+          - feat
+          - fix
+          - chore
+          - revert
+          - --scopes
+          - ci,docs,deps,examples,hub,optimizer,scripts,test,trainer,spark

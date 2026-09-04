@@ -1,0 +1,51 @@
+[importlinter]
+root_packages =
+    kubeflow
+
+[importlinter:contract:spark-isolated]
+name = Spark does not import other Kubeflow components
+type = forbidden
+source_modules =
+    kubeflow.spark
+forbidden_modules =
+    kubeflow.trainer
+    kubeflow.optimizer
+    kubeflow.hub
+
+[importlinter:contract:hub-isolated]
+name = Hub does not import other Kubeflow components
+type = forbidden
+source_modules =
+    kubeflow.hub
+forbidden_modules =
+    kubeflow.trainer
+    kubeflow.spark
+    kubeflow.optimizer
+ignore_imports =
+    kubeflow.hub.** -> kubeflow.trainer.test.**
+unmatched_ignore_imports_alerting = warn
+
+[importlinter:contract:trainer-isolated]
+name = Trainer does not import other Kubeflow components
+type = forbidden
+source_modules =
+    kubeflow.trainer
+forbidden_modules =
+    kubeflow.spark
+    kubeflow.optimizer
+    kubeflow.hub
+
+[importlinter:contract:optimizer-trainer-limited]
+name = Optimizer imports trainer types and Kubernetes backend only
+type = forbidden
+source_modules =
+    kubeflow.optimizer
+forbidden_modules =
+    kubeflow.trainer.api
+    kubeflow.trainer.options
+    kubeflow.trainer.backends.container
+    kubeflow.trainer.backends.localprocess
+    kubeflow.trainer.backends.base
+    kubeflow.spark
+    kubeflow.hub
+allow_indirect_imports = True
