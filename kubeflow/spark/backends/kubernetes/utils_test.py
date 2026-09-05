@@ -1247,12 +1247,7 @@ def test_read_pod_logs(test_case: TestCase) -> None:
         TestCase(
             name="default spark job driver spec leaves service account unset",
             expected_status=SUCCESS,
-            config={"driver": None},
-        ),
-        TestCase(
-            name="spark job driver spec passes through configured service account",
-            expected_status=SUCCESS,
-            config={"driver": Driver(service_account="something")},
+            config={},
         ),
     ],
 )
@@ -1261,8 +1256,7 @@ def test_get_spark_job_driver_spec(test_case: TestCase) -> None:
 
     print("Executing test:", test_case.name)
 
-    driver = test_case.config["driver"]
-    spec = get_spark_job_driver_spec(driver)
+    spec = get_spark_job_driver_spec()
 
     assert test_case.expected_status == SUCCESS
 
@@ -1270,7 +1264,7 @@ def test_get_spark_job_driver_spec(test_case: TestCase) -> None:
     assert spec.memory == _memory_kubernetes_to_spark(
         constants.DEFAULT_DRIVER_MEMORY,
     )
-    assert spec.service_account == (driver.service_account if driver else None)
+    assert spec.service_account is None
 
     print("test execution complete")
 
