@@ -173,3 +173,158 @@ def test_submit_job_success(job, options):
             spark_conf=None,
             options=options,
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="get job by name",
+            expected_status=SUCCESS,
+            config={"job_name": "spark-job-123"},
+        ),
+    ],
+)
+def test_get_job(test_case: TestCase):
+    """Test get_job delegation to KubernetesBackend."""
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
+        backend = mock_backend.return_value
+        expected_job = SparkJob(
+            name=test_case.config["job_name"],
+            namespace="default",
+        )
+        backend.get_job.return_value = expected_job
+
+        client = SparkClient()
+        job = client.get_job(name=test_case.config["job_name"])
+
+        assert job == expected_job
+        backend.get_job.assert_called_once_with(test_case.config["job_name"])
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="list all jobs",
+            expected_status=SUCCESS,
+            config={"status": None},
+        ),
+        TestCase(
+            name="list jobs filtered by status",
+            expected_status=SUCCESS,
+            config={"status": "Running"},
+        ),
+    ],
+)
+def test_list_jobs(test_case: TestCase):
+    """Test list_jobs delegation to KubernetesBackend."""
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
+        backend = mock_backend.return_value
+        mock_jobs = [
+            SparkJob(name="job-1", namespace="default"),
+            SparkJob(name="job-2", namespace="default"),
+        ]
+        backend.list_jobs.return_value = mock_jobs
+
+        client = SparkClient()
+        jobs = client.list_jobs(status=test_case.config["status"])
+
+        assert jobs == mock_jobs
+        backend.list_jobs.assert_called_once_with(status=test_case.config["status"])
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="delete job by name",
+            expected_status=SUCCESS,
+            config={"job_name": "spark-job-123"},
+        ),
+    ],
+)
+def test_delete_job(test_case: TestCase):
+    """Test delete_job delegation to KubernetesBackend."""
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
+        backend = mock_backend.return_value
+
+        client = SparkClient()
+        client.delete_job(name=test_case.config["job_name"])
+
+        backend.delete_job.assert_called_once_with(test_case.config["job_name"])
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="wait for job status success",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-123",
+                "status": "Completed",
+                "timeout": 60,
+                "polling_interval": 2,
+            },
+        ),
+    ],
+)
+def test_wait_for_job_status(test_case: TestCase):
+    """Test wait_for_job_status delegation to KubernetesBackend."""
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
+        backend = mock_backend.return_value
+        backend.wait_for_job_status.return_value = True
+
+        client = SparkClient()
+        result = client.wait_for_job_status(
+            name=test_case.config["job_name"],
+            status=test_case.config["status"],
+            timeout=test_case.config["timeout"],
+        )
+
+        assert result is True
+        backend.wait_for_job_status.assert_called_once_with(
+            name=test_case.config["job_name"],
+            status=test_case.config["status"],
+            timeout=test_case.config["timeout"],
+            polling_interval=test_case.config["polling_interval"],
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="get job logs non-follow",
+            expected_status=SUCCESS,
+            config={"job_name": "spark-job-123", "follow": False},
+            expected_output=["log line 1", "log line 2"],
+        ),
+        TestCase(
+            name="get job logs follow",
+            expected_status=SUCCESS,
+            config={"job_name": "spark-job-123", "follow": True},
+            expected_output=["log stream 1", "log stream 2"],
+        ),
+    ],
+)
+def test_get_job_logs(test_case: TestCase):
+    """Test get_job_logs delegation to KubernetesBackend."""
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
+        backend = mock_backend.return_value
+        backend.get_job_logs.return_value = iter(test_case.expected_output)
+
+        client = SparkClient()
+        logs = list(
+            client.get_job_logs(
+                name=test_case.config["job_name"],
+                follow=test_case.config["follow"],
+            )
+        )
+
+        assert logs == test_case.expected_output
+        backend.get_job_logs.assert_called_once_with(
+            name=test_case.config["job_name"],
+            follow=test_case.config["follow"],
+        )
