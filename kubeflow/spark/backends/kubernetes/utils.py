@@ -136,7 +136,7 @@ def _resolve_driver_resources(
 def _resolve_executor_resources(
     executor: Executor | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str | int | float] | None = None,
+    resources_per_executor: dict[str, str | int] | None = None,
 ) -> tuple[int, int, str]:
     """Resolve executor configuration.
 
@@ -247,12 +247,8 @@ def _memory_kubernetes_to_spark(memory: str) -> str:
     return f"{math.ceil(total_bytes / (2**20))}m"
 
 
-def _validate_cpu_value(cpu: str | int | float | None) -> int:
+def _validate_cpu_value(cpu: str | int | None) -> int:
     """Validate and normalize CPU cores value.
-
-    Note:
-        Fractional CPU values (e.g., 1.5) are rounded upward to the nearest integer
-        core count (e.g., 2) for Spark executor cores.
 
     Args:
         cpu: CPU value provided by user.
@@ -268,9 +264,9 @@ def _validate_cpu_value(cpu: str | int | float | None) -> int:
         raise ValueError("CPU value cannot be None")
 
     if isinstance(cpu, bool):
-        raise TypeError("Invalid CPU type 'bool'. Expected str, int, or float.")
+        raise TypeError("Invalid CPU type 'bool'. Expected str or int.")
 
-    if isinstance(cpu, (int, float)):
+    if isinstance(cpu, int):
         cores = float(cpu)
 
     elif isinstance(cpu, str):
@@ -287,13 +283,19 @@ def _validate_cpu_value(cpu: str | int | float | None) -> int:
                     f"Invalid CPU value '{cpu}'. Decimal milli-CPU values are not supported."
                 )
 
-            cores = int(milli_cpu) / 1000
+            try:
+                cores = int(milli_cpu) / 1000
+            except ValueError as e:
+                raise ValueError(f"Invalid CPU value '{cpu}'.") from e
 
         else:
-            cores = float(cpu)
+            try:
+                cores = float(cpu)
+            except ValueError as e:
+                raise ValueError(f"Invalid CPU value '{cpu}'.") from e
 
     else:
-        raise TypeError(f"Invalid CPU type '{type(cpu).__name__}'. Expected str, int, or float.")
+        raise TypeError(f"Invalid CPU type '{type(cpu).__name__}'. Expected str or int.")
 
     if not math.isfinite(cores) or cores <= 0:
         raise ValueError(f"Invalid CPU value: {cpu!r}")
@@ -481,7 +483,7 @@ def get_spark_connect_driver_spec(
 def get_spark_connect_executor_spec(
     executor: Executor | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str | int | float] | None = None,
+    resources_per_executor: dict[str, str | int] | None = None,
 ) -> models.SparkV1alpha1ExecutorSpec:
     """Convert SDK Executor to API ExecutorSpec.
 
@@ -519,7 +521,7 @@ def build_spark_connect_cr(
     namespace: str,
     spark_version: str | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str | int | float] | None = None,
+    resources_per_executor: dict[str, str | int] | None = None,
     spark_conf: dict[str, str] | None = None,
     driver: Driver | None = None,
     executor: Executor | None = None,
@@ -696,7 +698,7 @@ def get_spark_job_driver_spec(
 
 def get_spark_job_executor_spec(
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str | int | float] | None = None,
+    resources_per_executor: dict[str, str | int] | None = None,
 ) -> models.SparkV1beta2ExecutorSpec:
     """Build ExecutorSpec for SparkApplication.
 
@@ -810,7 +812,7 @@ def get_spark_application_cr_from_file_job(
     main_file: str,
     arguments: list[str] | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str | int | float] | None = None,
+    resources_per_executor: dict[str, str | int] | None = None,
     options: list | None = None,
     backend: Any | None = None,
     spark_conf: dict[str, str] | None = None,
@@ -873,7 +875,7 @@ def get_spark_application_cr_from_func_job(
     func: Callable,
     func_args: dict[str, Any] | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str | int | float] | None = None,
+    resources_per_executor: dict[str, str | int] | None = None,
     options: list | None = None,
     backend: Any | None = None,
     spark_conf: dict[str, str] | None = None,

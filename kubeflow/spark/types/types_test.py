@@ -157,16 +157,6 @@ def test_spark_connect_info(test_case: TestCase):
                 "service_account": "spark-driver-prod",
             },
         ),
-        TestCase(
-            name="driver with float and int cpu resources",
-            expected_status=SUCCESS,
-            config={
-                "resources": {
-                    "cpu": 1.5,
-                    "memory": "4Gi",
-                },
-            },
-        ),
     ],
 )
 def test_driver(test_case: TestCase):
@@ -237,17 +227,6 @@ def test_driver(test_case: TestCase):
                     "cpu": "8",
                     "memory": "32Gi",
                     "nvidia.com/gpu": "2",
-                },
-            },
-        ),
-        TestCase(
-            name="executor with float and int cpu resources",
-            expected_status=SUCCESS,
-            config={
-                "num_instances": 3,
-                "resources_per_executor": {
-                    "cpu": 2.5,
-                    "memory": "8Gi",
                 },
             },
         ),

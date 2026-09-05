@@ -935,8 +935,6 @@ def test_generate_job_name(test_case: TestCase) -> None:
                     ("2500m", 3),
                     (" 1500m ", 2),
                     (2, 2),
-                    (1.5, 2),
-                    (2.0, 2),
                     (16, 16),
                 ],
             },
@@ -1902,12 +1900,6 @@ def test_get_spark_application_info_from_cr(
         assert job.driver_pod_name == "test-driver"
         assert job.creation_timestamp == creation_timestamp
         assert job.num_executors == 5
-
-
-def test_get_spark_connect_executor_spec_float_cpu():
-    """Verify that float CPU values round up to integer cores via public construction path."""
-    spec = get_spark_connect_executor_spec(resources_per_executor={"cpu": 1.5})
-    assert spec.cores == 2
 
 
 def test_get_spark_connect_executor_spec_bool_cpu_raises_type_error():
