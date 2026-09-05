@@ -39,6 +39,7 @@ from kubeflow.spark.backends.kubernetes.utils import (
     get_spark_application_cr_from_file_job,
     get_spark_application_cr_from_func_job,
     get_spark_application_info_from_cr,
+    get_spark_connect_executor_spec,
     get_spark_connect_info_from_cr,
     get_spark_job_driver_spec,
     get_spark_job_executor_spec,
@@ -97,11 +98,6 @@ def mock_k8s_backend():
     backend = Mock(spec=KubernetesBackend)
     backend.__class__ = KubernetesBackend
     return backend
-
-    def test_missing_hostname(self):
-        """U16: Missing hostname raises ValueError."""
-        with pytest.raises(ValueError, match="Host is required"):
-            validate_spark_connect_url("sc://:15002")
 
 
 @pytest.fixture
@@ -965,6 +961,19 @@ def test_generate_job_name(test_case: TestCase) -> None:
                 ],
             },
             expected_error=ValueError,
+        ),
+        TestCase(
+            name="invalid cpu types",
+            expected_status=FAILED,
+            config={
+                "cases": [
+                    True,
+                    False,
+                    [1],
+                    {"cpu": 1},
+                ],
+            },
+            expected_error=TypeError,
         ),
     ],
 )
@@ -1891,5 +1900,11 @@ def test_get_spark_application_info_from_cr(
         assert job.driver_pod_name == "test-driver"
         assert job.creation_timestamp == creation_timestamp
         assert job.num_executors == 5
+
+
+def test_get_spark_connect_executor_spec_bool_cpu_raises_type_error():
+    """Verify that boolean CPU values raise TypeError via public construction path."""
+    with pytest.raises(TypeError):
+        get_spark_connect_executor_spec(resources_per_executor={"cpu": True})
 
     print("test execution complete")
