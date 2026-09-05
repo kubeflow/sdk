@@ -113,3 +113,69 @@ def test_data_cache_initializer(test_case: TestCase):
         assert test_case.expected_status == FAILED
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid storage_uri with user and model",
+            expected_status=SUCCESS,
+            config={"storage_uri": "hf://user/model"},
+        ),
+        TestCase(
+            name="valid storage_uri with unscoped model",
+            expected_status=SUCCESS,
+            config={"storage_uri": "hf://model"},
+        ),
+    ],
+)
+def test_hugging_face_model_initializer(test_case: TestCase):
+    """Test HuggingFaceModelInitializer creation."""
+    print("Executing test:", test_case.name)
+
+    try:
+        initializer = types.HuggingFaceModelInitializer(
+            storage_uri=test_case.config["storage_uri"],
+        )
+
+        assert test_case.expected_status == SUCCESS
+        assert initializer.storage_uri == test_case.config["storage_uri"]
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid storage_uri with user and dataset",
+            expected_status=SUCCESS,
+            config={"storage_uri": "hf://user/dataset"},
+        ),
+        TestCase(
+            name="valid storage_uri with unscoped dataset",
+            expected_status=SUCCESS,
+            config={"storage_uri": "hf://dataset"},
+        ),
+    ],
+)
+def test_hugging_face_dataset_initializer(test_case: TestCase):
+    """Test HuggingFaceDatasetInitializer creation."""
+    print("Executing test:", test_case.name)
+
+    try:
+        initializer = types.HuggingFaceDatasetInitializer(
+            storage_uri=test_case.config["storage_uri"],
+        )
+
+        assert test_case.expected_status == SUCCESS
+        assert initializer.storage_uri == test_case.config["storage_uri"]
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert type(e) is test_case.expected_error
+    print("test execution complete")

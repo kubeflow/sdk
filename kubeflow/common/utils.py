@@ -11,7 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import ast
+from collections.abc import Callable
+import inspect
 import os
+import textwrap
 
 from kubernetes import config
 
@@ -37,3 +41,71 @@ def get_default_target_namespace(context: str | None = None) -> str:
             return constants.DEFAULT_NAMESPACE
     with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace") as f:
         return f.readline()
+
+
+def validate_wait_for_job_status(polling_interval: int, timeout: int) -> None:
+    """Validate polling_interval and timeout values used by wait_for_job_status methods.
+
+    Args:
+        polling_interval: The polling interval in seconds.
+        timeout: The timeout in seconds.
+
+    Raises:
+        ValueError: If polling_interval or timeout are not positive, or if polling_interval
+            is not strictly less than timeout.
+    """
+    if timeout <= 0:
+        raise ValueError(f"Timeout must be a positive number, got timeout={timeout}")
+    if polling_interval <= 0:
+        raise ValueError(
+            f"Polling interval must be a positive number, got polling_interval={polling_interval}"
+        )
+    if polling_interval >= timeout:
+        raise ValueError(
+            "Polling interval must be strictly less than timeout. "
+            f"Received polling_interval={polling_interval}, timeout={timeout}"
+        )
+
+
+def validate_python_function(func: Callable) -> None:
+    """Validate a Python function.
+
+    Args:
+        func: The Python function to validate.
+
+    Raises:
+        ValueError: If the function is not a Python function, is asynchronous,
+            is a lambda function, is decorated, or its source cannot be
+            inspected or parsed.
+    """
+    if not inspect.isfunction(func):
+        raise ValueError("Function must be a Python function.")
+
+    if inspect.iscoroutinefunction(func):
+        raise ValueError("Async functions are not supported.")
+
+    if func.__name__ == "<lambda>":
+        raise ValueError("Lambda functions are not supported.")
+
+    try:
+        func_source = textwrap.dedent(inspect.getsource(func))
+    except TypeError as e:
+        raise ValueError(
+            "Function must be a pure-Python function; built-in or "
+            "C-implemented callables are not supported."
+        ) from e
+    except OSError as e:
+        raise ValueError(
+            "Function source could not be read. Functions defined interactively are not supported."
+        ) from e
+
+    try:
+        func_tree = ast.parse(func_source)
+    except SyntaxError as e:
+        raise ValueError("Function source could not be parsed.") from e
+
+    if any(
+        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.decorator_list
+        for node in func_tree.body
+    ):
+        raise ValueError("Decorated functions are not supported.")

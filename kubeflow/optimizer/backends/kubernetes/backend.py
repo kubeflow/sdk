@@ -284,9 +284,14 @@ class KubernetesBackend(RuntimeBackend):
         if not status.issubset(job_statuses):
             raise ValueError(f"Expected status {status} must be a subset of {job_statuses}")
 
-        if polling_interval > timeout:
+        if polling_interval <= 0:
             raise ValueError(
-                f"Polling interval {polling_interval} must be less than timeout: {timeout}"
+                f"Polling interval must be a positive number, got polling_interval={polling_interval}"
+            )
+        if polling_interval >= timeout:
+            raise ValueError(
+                f"Polling interval must be strictly less than timeout. "
+                f"Received polling_interval={polling_interval}, timeout={timeout}"
             )
 
         for _ in range(round(timeout / polling_interval)):

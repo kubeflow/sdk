@@ -12,19 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from dataclasses import fields
+from datetime import datetime, timezone
 import inspect
+import logging
 import os
 import shlex
 import textwrap
-from typing import Any
+import threading
+import time
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from kubeflow_trainer_api import models
+import requests
 
+from kubeflow.common.utils import validate_python_function
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
+
+if TYPE_CHECKING:
+    from requests import Session
 
 
 def get_container_devices(
@@ -41,7 +52,6 @@ def get_container_devices(
     # TODO (andreyvelich): We should discuss how to get container device type.
     # Potentially, we can use the trainer.kubeflow.org/device label from the runtime or
     # node types.
-    # TODO (andreyvelich): Support other resource labels (e.g. NPUs).
     if constants.GPU_LABEL in resources.limits:
         device = constants.GPU_LABEL.split("/")[1]
         device_count = resources.limits[constants.GPU_LABEL].actual_instance
@@ -55,6 +65,13 @@ def get_container_devices(
         mig_key = mig_keys[0]
         device = mig_key.split("/")[1]
         device_count = resources.limits[mig_key].actual_instance
+    elif constants.NPU_LABEL in resources.limits:
+        # huawei.com/Ascend910 is the K8s extended resource key for Huawei's Ascend 910 NPU.
+        # Unlike GPU/TPU, the suffix ("Ascend910") doesn't generically describe the device
+        # type, so we explicitly return "npu" as the device string instead of deriving it
+        # from the key.
+        device = "npu"
+        device_count = resources.limits[constants.NPU_LABEL].actual_instance
     elif constants.CPU_LABEL in resources.limits:
         device = constants.CPU_LABEL
         device_count = resources.limits[constants.CPU_LABEL].actual_instance
@@ -226,7 +243,13 @@ def get_resources_per_node(
 
     # Convert only standard resource keys and aliases to lowercase.
     # Extended resources (e.g., "example.com/Custom-NPU") preserve their original case.
-    standard_resources = {constants.CPU_LABEL, "memory", "gpu", "storage", "ephemeral-storage"}
+    standard_resources = {
+        constants.CPU_LABEL,
+        "memory",
+        "gpu",
+        "storage",
+        "ephemeral-storage",
+    }
     resource_aliases = {"gpu": "nvidia.com/gpu", "storage": "ephemeral-storage"}
 
     resources = {}
@@ -330,10 +353,7 @@ def get_command_using_train_func(
         raise ValueError(f"Runtime must have a trainer: {runtime}")
 
     # Check if training function is callable.
-    if not callable(train_func):
-        raise ValueError(
-            f"Training function must be callable, got function type: {type(train_func)}"
-        )
+    validate_python_function(train_func)
 
     # Extract the function implementation.
     func_code = inspect.getsource(train_func)
@@ -458,7 +478,7 @@ def get_trainer_cr_from_builtin_trainer(
     trainer_cr.command = list(runtime.trainer.command)
     # Parse args in the TorchTuneConfig to the Trainer, preparing for the mutation of
     # the torchtune config in the runtime plugin.
-    # Ref:https://github.com/kubeflow/trainer/tree/master/docs/proposals/2401-llm-trainer-v2
+    # Ref:https://github.com/kubeflow/trainer/tree/master/proposals/2401-llm-trainer-v2
     trainer_cr.args = get_args_using_torchtune_config(trainer.config, initializer)
 
     return trainer_cr
@@ -478,7 +498,7 @@ def get_args_using_torchtune_config(
         if not isinstance(fine_tuning_config.dtype, types.DataType):
             raise ValueError(f"Invalid dtype: {fine_tuning_config.dtype}.")
 
-        args.append(f"dtype={fine_tuning_config.dtype}")
+        args.append(f"dtype={fine_tuning_config.dtype.value}")
 
     # Override the batch size if it is provided.
     if fine_tuning_config.batch_size:
@@ -490,7 +510,7 @@ def get_args_using_torchtune_config(
 
     # Override the loss if it is provided.
     if fine_tuning_config.loss:
-        args.append(f"loss={fine_tuning_config.loss}")
+        args.append(f"loss={fine_tuning_config.loss.value}")
 
     # Override the data dir or data files if it is provided.
     if isinstance(initializer, types.Initializer) and isinstance(
@@ -612,9 +632,11 @@ def get_optional_initializer_envs(
 
 
 def get_dataset_initializer(
-    dataset: types.HuggingFaceDatasetInitializer
-    | types.S3DatasetInitializer
-    | types.DataCacheInitializer,
+    dataset: (
+        types.HuggingFaceDatasetInitializer
+        | types.S3DatasetInitializer
+        | types.DataCacheInitializer
+    ),
 ) -> models.TrainerV1alpha1DatasetInitializer:
     """
     Get the TrainJob dataset initializer from the given config.
@@ -656,3 +678,232 @@ def get_model_initializer(
         )
 
     raise ValueError(f"Model initializer type is invalid: {type(model)}")
+
+
+# ---------------------------------------------------------------------------
+# TrainJob status reporting utilities
+# ---------------------------------------------------------------------------
+
+_logger = logging.getLogger(__name__)
+
+_ENV_SERVER_URL = "KUBEFLOW_TRAINER_SERVER_URL"
+_ENV_CA_CERT = "KUBEFLOW_TRAINER_SERVER_CA_CERT"
+_ENV_TOKEN_PATH = "KUBEFLOW_TRAINER_SERVER_TOKEN"
+
+_throttle_lock = threading.Lock()
+_token_lock = threading.Lock()
+_session_lock = threading.Lock()
+_last_update_time: float = 0.0
+_cached_token: str | None = None
+_token_read_time: float = 0.0
+_http_session: Session | None = None
+
+_MIN_UPDATE_INTERVAL_SECONDS = 5.0
+_TOKEN_CACHE_TTL_SECONDS = 300.0
+_MAX_METRICS_COUNT = 256
+
+
+def _get_status_session() -> Session:
+    global _http_session
+    with _session_lock:
+        if _http_session is None:
+            _http_session = requests.Session()
+        return _http_session
+
+
+def _get_cached_token(token_path: str | None) -> str | None:
+    global _cached_token, _token_read_time
+
+    now = time.monotonic()
+    with _token_lock:
+        if _cached_token and (now - _token_read_time) < _TOKEN_CACHE_TTL_SECONDS:
+            return _cached_token
+
+        if not token_path or not os.path.exists(token_path):
+            return None
+
+        try:
+            with open(token_path) as f:
+                _cached_token = f.read().strip()
+                _token_read_time = now
+                return _cached_token
+        except OSError as e:
+            _logger.warning("Unable to read token from %s: %s", token_path, e)
+            return None
+
+
+def _should_throttle() -> bool:
+    now = time.monotonic()
+    return (now - _last_update_time) < _MIN_UPDATE_INTERVAL_SECONDS
+
+
+def _update_last_time() -> None:
+    global _last_update_time
+    _last_update_time = time.monotonic()
+
+
+def update_trainjob_status(
+    progress_percent: int | None = None,
+    estimated_remaining_seconds: int | None = None,
+    metrics: dict[str, float | int | str] | None = None,
+) -> bool:
+    """Report training progress to Kubeflow Trainer controller.
+
+    Safe to call in any environment. Returns False silently if not running
+    inside a Kubeflow TrainJob. Never raises exceptions.
+
+    Includes automatic throttling (max 1 update per 5 seconds) to avoid
+    overwhelming the controller.
+
+    Environment variables (injected by controller when TrainJobStatus feature gate is enabled):
+        - KUBEFLOW_TRAINER_SERVER_URL: HTTPS endpoint URL for status updates
+        - KUBEFLOW_TRAINER_SERVER_CA_CERT: Path to CA certificate for TLS verification
+        - KUBEFLOW_TRAINER_SERVER_TOKEN: Path to projected service account token
+
+    Args:
+        progress_percent: Training completion percentage (0-100).
+        estimated_remaining_seconds: ETA in seconds.
+        metrics: Dict of metric name -> value. Values are converted to strings.
+            Truncated to 256 entries by the SDK to avoid oversized payloads.
+
+    Returns:
+        True if update was sent successfully, False otherwise.
+    """
+    try:
+        url = os.environ.get(_ENV_SERVER_URL)
+        if not url:
+            return False
+
+        with _throttle_lock:
+            if _should_throttle():
+                return False
+
+        ca_file = os.environ.get(_ENV_CA_CERT)
+        token_path = os.environ.get(_ENV_TOKEN_PATH)
+
+        token = _get_cached_token(token_path)
+        if not token:
+            _logger.debug("No authentication token available")
+            return False
+
+        trainer_status: dict = {
+            "lastUpdatedTime": datetime.now(timezone.utc).isoformat(),
+        }
+
+        if progress_percent is not None:
+            trainer_status["progressPercentage"] = max(0, min(100, progress_percent))
+
+        if estimated_remaining_seconds is not None:
+            trainer_status["estimatedRemainingSeconds"] = max(0, estimated_remaining_seconds)
+
+        if metrics:
+            if len(metrics) > _MAX_METRICS_COUNT:
+                _logger.warning(
+                    "metrics dict has %d entries, truncating to %d (SDK limit)",
+                    len(metrics),
+                    _MAX_METRICS_COUNT,
+                )
+                metrics = dict(list(metrics.items())[:_MAX_METRICS_COUNT])
+            trainer_status["metrics"] = [
+                {"name": str(k), "value": str(v)} for k, v in metrics.items()
+            ]
+
+        session = _get_status_session()
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+
+        verify: bool | str = True
+        if ca_file and os.path.exists(ca_file):
+            verify = ca_file
+
+        response = session.post(
+            url,
+            json={"trainerStatus": trainer_status},
+            headers=headers,
+            verify=verify,
+            timeout=5,
+        )
+
+        if response.status_code == 200:
+            _update_last_time()
+            _logger.debug("Status update sent: %s%%", progress_percent)
+            return True
+        else:
+            _logger.warning("Status update failed: HTTP %s", response.status_code)
+            _logger.debug("Response body: %.500s", response.text)
+            return False
+
+    except requests.RequestException as e:
+        _logger.warning("Failed to send status update: %s", e)
+        return False
+    except Exception as e:
+        _logger.warning("Unexpected error in update_trainjob_status: %s", e)
+        return False
+
+
+def get_tpu_num_nodes(num_slices: int, topology: str, chips_per_host: int = 4) -> int:
+    """
+    Compute the total number of nodes (hosts) required across all TPU slices.
+
+    This utility function assists in configuring multi-slice TPU TrainJobs where the
+    user wants to scale their training job across multiple physical TPU slices. It calculates
+    the aggregate `num_nodes` based on the slice count and physical TPU topology dimensions.
+
+    Args:
+        num_slices: The number of TPU slices.
+        topology: The TPU topology string (e.g., "2x2", "2x4", "2x2x2", "2x2x4", "4x4").
+        chips_per_host: The number of TPU chips per VM host node. Defaults to 4.
+            Note that this depends on the VM type: e.g., ct6e-standard-4t has 4 chips per host,
+            and ct6e-standard-8t has 8 chips per host.
+
+    Returns:
+        The total number of nodes (hosts) across all slices.
+
+    Raises:
+        ValueError: If topology is empty, improperly formatted, or if the total chips
+                    in a slice is not evenly divisible by the chips_per_host.
+    """
+    if num_slices <= 0:
+        raise ValueError(f"num_slices must be positive, got: {num_slices}")
+
+    if chips_per_host <= 0:
+        raise ValueError(f"chips_per_host must be positive, got: {chips_per_host}")
+
+    if not topology:
+        raise ValueError("TPU topology must be specified.")
+
+    # Parse the topology dimensions (e.g. "2x2" or "2x2x2")
+    try:
+        dims = [int(d) for d in topology.lower().split("x")]
+    except ValueError:
+        raise ValueError(
+            f"Invalid topology format: '{topology}'. Must be formatted as 'AxB' or 'AxBxC' (e.g. '2x2', '2x2x2')."
+        ) from None
+
+    if len(dims) not in (2, 3):
+        raise ValueError(
+            f"Invalid topology format: '{topology}'. Must contain exactly 2 or 3 dimensions (e.g. '2x2', '2x2x2')."
+        )
+
+    if any(dim <= 0 for dim in dims):
+        raise ValueError(f"TPU topology dimensions must be positive, got: '{topology}'.")
+
+    # Calculate total TPU chips in a single slice
+    chips_per_slice = 1
+    for dim in dims:
+        chips_per_slice *= dim
+
+    # Validate and compute hosts per slice
+    if chips_per_slice < chips_per_host:
+        hosts_per_slice = 1
+    else:
+        # Multi-host slice (or full single-host slice) must be cleanly divisible
+        if chips_per_slice % chips_per_host != 0:
+            raise ValueError(
+                f"Total TPU chips in slice ({chips_per_slice}) must be cleanly divisible by chips_per_host ({chips_per_host})."
+            )
+        hosts_per_slice = chips_per_slice // chips_per_host
+
+    return num_slices * hosts_per_slice

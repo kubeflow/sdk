@@ -54,10 +54,6 @@ uv: ## Install UV
 	  echo "✅ uv has been installed."; \
 	}
 
-.PHONY: ruff
-ruff: ## Install Ruff
-	@uv run ruff --help &> /dev/null || uv tool install ruff
-
 .PHONY: verify
 verify: install-dev  ## install all required tools
 	@uv lock --check
@@ -75,7 +71,7 @@ uv-venv:  ## Create uv virtual environment
 	fi
 
 .PHONY: release
-release: install-dev
+release: ## Create a release commit. Usage: make release VERSION=X.Y.Z GITHUB_TOKEN=<token>
 	@if [ -z "$(VERSION)" ] || ! echo "$(VERSION)" | grep -E -q '^[0-9]+\.[0-9]+\.[0-9]+(rc[0-9]+)?$$'; then \
 		echo "Error: VERSION must be set in X.Y.Z or X.Y.ZrcN format. Usage: make release VERSION=X.Y.Z[rcN]"; \
 		exit 1; \
@@ -84,17 +80,41 @@ release: install-dev
 	@if echo "$(VERSION)" | grep -E -q 'rc[0-9]+$$'; then \
 		echo "Skipping changelog generation for RC release $(VERSION)"; \
 	else \
+		git fetch upstream --tags --prune; \
 		MAJOR_MINOR=$$(echo "$(VERSION)" | cut -d. -f1,2); \
 		CHANGELOG_PATH="CHANGELOG/CHANGELOG-$$MAJOR_MINOR.md"; \
-		echo "Generating changelog for $(VERSION) (unreleased)"; \
-		CLIFF_CMD="uv run git-cliff --unreleased --tag $(VERSION)"; \
-		if [ -f "$$CHANGELOG_PATH" ]; then \
-			$$CLIFF_CMD --prepend "$$CHANGELOG_PATH"; \
-		else \
-			$$CLIFF_CMD -o "$$CHANGELOG_PATH"; \
+		RELEASE_BRANCH="release-$$MAJOR_MINOR"; \
+		RELEASE_SHA=$$(git rev-parse --verify --quiet "refs/remotes/upstream/$$RELEASE_BRANCH" || true); \
+		if [ -z "$$RELEASE_SHA" ]; then \
+			if [ -f "$$CHANGELOG_PATH" ]; then \
+				echo "Error: branch $$RELEASE_BRANCH not found on upstream, but $$CHANGELOG_PATH exists. Run: git fetch upstream $$RELEASE_BRANCH"; \
+				exit 1; \
+			fi; \
+			RELEASE_SHA=$$(git rev-parse HEAD); \
+			echo "Branch $$RELEASE_BRANCH does not exist yet (new release line $$MAJOR_MINOR, created by the release workflow); using HEAD"; \
 		fi; \
+		PATCH=$$(echo "$(VERSION)" | cut -d. -f3); \
+		if [ "$$PATCH" -gt 0 ]; then \
+			PREV_TAG="$$(echo "$(VERSION)" | cut -d. -f1,2).$$((PATCH - 1))"; \
+		else \
+			PREV_MINOR=$$(( $$(echo "$(VERSION)" | cut -d. -f2) - 1 )); \
+			PREV_TAG=$$(git tag --list "$$(echo "$(VERSION)" | cut -d. -f1).$$PREV_MINOR.*" | grep -vE -- '(rc)' | sort -t. -k3,3nr | head -1 || true); \
+		fi; \
+		if [ -z "$$PREV_TAG" ]; then \
+			echo "Error: cannot determine the previous release tag for $(VERSION)"; \
+			exit 1; \
+		fi; \
+		echo "Generating changelog for $(VERSION) (range: $$PREV_TAG..$$RELEASE_SHA)"; \
+		touch "$$CHANGELOG_PATH"; \
+		docker run --rm -u $$(id -u):$$(id -g) -e HOME=/tmp -e GITHUB_TOKEN \
+			-v $(PROJECT_DIR):/app -w /app ghcr.io/orhun/git-cliff/git-cliff:latest \
+			"$$PREV_TAG..$$RELEASE_SHA" --tag $(VERSION) --prepend "$$CHANGELOG_PATH"; \
 		echo "Changelog generated at $$CHANGELOG_PATH"; \
 	fi
+	@echo ""
+	@echo "Release commit for $(VERSION) is ready."
+	@echo "Review the changelog changes if needed, then commit with:"
+	@echo "git add -A && git commit -s -m 'Prepare Release $(VERSION)'"
 
 
  # make test-python will produce html coverage by default. Run with `make test-python report=xml` to produce xml report.
@@ -127,10 +147,10 @@ test-scripts: uv-venv  ## Run GitHub Actions script tests
 
 
 .PHONY: install-dev
-install-dev: uv uv-venv ruff  ## Install uv, create .venv, sync deps.
+install-dev: uv uv-venv  ## Install uv, create .venv, sync deps. Accepts extras="..." and groups="...".
 	@echo "Using virtual environment at: $(VENV_DIR)"
 	@echo "Syncing dependencies with uv..."
-	@uv sync
+	@uv sync $(addprefix --extra ,$(extras)) $(groups)
 	@echo "Environment is ready."
 
 ## Documentation

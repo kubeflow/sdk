@@ -23,6 +23,7 @@ from pathlib import Path
 import shlex
 
 from kubeflow.common.constants import UNKNOWN
+from kubeflow.common.utils import validate_python_function
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 
@@ -64,6 +65,7 @@ def get_training_script_code(trainer: types.CustomTrainer) -> str:
     import inspect
     import textwrap
 
+    validate_python_function(trainer.func)
     code = inspect.getsource(trainer.func)
     code = textwrap.dedent(code)
     if trainer.func_args is None:
@@ -158,7 +160,8 @@ def aggregate_status_from_containers(container_statuses: list[str]) -> str:
         return constants.TRAINJOB_FAILED
     if constants.TRAINJOB_RUNNING in container_statuses:
         return constants.TRAINJOB_RUNNING
-    if all(s == constants.TRAINJOB_COMPLETE for s in container_statuses if s != UNKNOWN):
+    known_statuses = [s for s in container_statuses if s != UNKNOWN]
+    if known_statuses and all(s == constants.TRAINJOB_COMPLETE for s in known_statuses):
         return constants.TRAINJOB_COMPLETE
     if any(s == constants.TRAINJOB_CREATED for s in container_statuses):
         return constants.TRAINJOB_CREATED

@@ -18,6 +18,7 @@ This module uses pytest and unittest.mock to simulate Kubernetes API interaction
 It tests KubernetesBackend's behavior across job listing, resource creation etc.
 """
 
+import copy
 from dataclasses import asdict
 import datetime
 import logging
@@ -36,6 +37,7 @@ from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
 import kubeflow.trainer.backends.kubernetes.utils as utils
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.options import (
+    ActiveDeadlineSeconds,
     Annotations,
     JobSetSpecPatch,
     JobSetTemplatePatch,
@@ -71,6 +73,7 @@ RUNTIME_DEVICES = "2"
 FAIL_LOGS = "fail_logs"
 LIST_RUNTIMES = "list_runtimes"
 BASIC_TRAIN_JOB_NAME = "basic-job"
+JOB_WITH_POD_RESTARTS = "job-with-pod-restarts"
 TRAIN_JOBS = "trainjobs"
 TRAIN_JOB_WITH_BUILT_IN_TRAINER = "train-job-with-built-in-trainer"
 TRAIN_JOB_WITH_CUSTOM_TRAINER = "train-job-with-custom-trainer"
@@ -79,6 +82,11 @@ TRAIN_JOB_WITH_CUSTOM_TRAINER = "train-job-with-custom-trainer"
 # --------------------------
 # Fixtures
 # --------------------------
+
+
+def sample_train_func() -> None:
+    """Sample training function."""
+    print("Hello World")
 
 
 @pytest.fixture
@@ -128,8 +136,13 @@ def conditional_error_handler(*args, **kwargs):
 
 
 def list_namespaced_pod_response(*args, **kwargs):
-    """Return mock pod list response."""
-    pod_list = get_mock_pod_list()
+    """Return a mock pod list response for the requested TrainJob."""
+    label_selector = kwargs.get("label_selector", "")
+    pod_list = (
+        get_mock_pod_list_with_restarts()
+        if JOB_WITH_POD_RESTARTS in label_selector
+        else get_mock_pod_list()
+    )
     mock_thread = Mock()
     mock_thread.get.return_value = pod_list
     return mock_thread
@@ -210,6 +223,43 @@ def get_mock_pod_list():
     )
 
 
+def get_mock_pod_list_with_restarts() -> models.IoK8sApiCoreV1PodList:
+    """Create Pods where newer replacements share the same TrainJob component roles."""
+    old_timestamp = datetime.datetime(2025, 6, 1, 10, 0, 0)
+    new_timestamp = datetime.datetime(2025, 6, 1, 11, 0, 0)
+    old_pods = get_mock_pod_list().items
+    node_0_pod = next(
+        pod
+        for pod in old_pods
+        if pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL] == constants.NODE
+    )
+    node_1_pod = copy.deepcopy(node_0_pod)
+    node_1_pod.metadata.name = "node-1-pod"
+    node_1_pod.metadata.labels[constants.JOB_INDEX_LABEL] = "1"
+    old_pods.append(node_1_pod)
+    restarted_pods = []
+
+    for old_pod in old_pods:
+        old_pod.metadata.creation_timestamp = old_timestamp
+        old_pod.metadata.labels[constants.JOBSET_NAME_LABEL] = JOB_WITH_POD_RESTARTS
+
+    dataset_initializer_pod = next(
+        pod
+        for pod in old_pods
+        if pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL] == constants.DATASET_INITIALIZER
+    )
+    dataset_initializer_pod.metadata.creation_timestamp = None
+
+    for old_pod in old_pods:
+        restarted_pod = copy.deepcopy(old_pod)
+        restarted_pod.metadata.name = f"{old_pod.metadata.name}-restarted"
+        restarted_pod.metadata.creation_timestamp = new_timestamp
+        restarted_pod.status.phase = constants.POD_PENDING
+        restarted_pods.append(restarted_pod)
+
+    return models.IoK8sApiCoreV1PodList(items=[*old_pods, *restarted_pods])
+
+
 def get_resource_requirements() -> models.IoK8sApiCoreV1ResourceRequirements:
     """Create a mock ResourceRequirements object for testing."""
     return models.IoK8sApiCoreV1ResourceRequirements(
@@ -245,8 +295,10 @@ def get_custom_trainer(
     # with torchrun as the entrypoint and a fixed lambda for deterministic tests.
     func_script = (
         "\nread -r -d '' SCRIPT << EOM\n\n"
-        'func=lambda: print("Hello World"),\n\n'
-        "<lambda>(**{'learning_rate': 0.001, 'batch_size': 32})\n\n"
+        "def sample_train_func() -> None:\n"
+        '    """Sample training function."""\n'
+        '    print("Hello World")\n\n'
+        "sample_train_func(**{'learning_rate': 0.001, 'batch_size': 32})\n\n"
         'EOM\nprintf "%s" "$SCRIPT" > "backend_test.py"\n'
         'torchrun "backend_test.py"'
     )
@@ -319,6 +371,8 @@ def get_train_job(
     labels: dict[str, str] | None = None,
     annotations: dict[str, str] | None = None,
     runtime_patches: list[models.TrainerV1alpha1RuntimePatch] | None = None,
+    runtime_kind: types.RuntimeKind = types.RuntimeKind.TRAINING_RUNTIME,
+    active_deadline_seconds: int | None = None,
 ) -> models.TrainerV1alpha1TrainJob:
     """
     Create a mock TrainJob object with optional trainer configurations.
@@ -332,9 +386,13 @@ def get_train_job(
             annotations=annotations,
         ),
         spec=models.TrainerV1alpha1TrainJobSpec(
-            runtimeRef=models.TrainerV1alpha1RuntimeRef(name=runtime_name),
+            runtimeRef=models.TrainerV1alpha1RuntimeRef(
+                name=runtime_name,
+                kind=runtime_kind.value,
+            ),
             trainer=train_job_trainer,
             runtimePatches=runtime_patches,
+            activeDeadlineSeconds=active_deadline_seconds,
         ),
     )
 
@@ -578,7 +636,9 @@ def create_train_job(
             creationTimestamp=datetime.datetime(2025, 6, 1, 10, 30, 0),
         ),
         spec=models.TrainerV1alpha1TrainJobSpec(
-            runtimeRef=models.TrainerV1alpha1RuntimeRef(name=TORCH_RUNTIME),
+            runtimeRef=models.TrainerV1alpha1RuntimeRef(
+                name=TORCH_RUNTIME, kind=types.RuntimeKind.TRAINING_RUNTIME.value
+            ),
             trainer=None,
             initializer=(
                 models.TrainerV1alpha1Initializer(
@@ -600,7 +660,7 @@ def create_cluster_training_runtime(
 
     return models.TrainerV1alpha1ClusterTrainingRuntime(
         apiVersion=constants.API_VERSION,
-        kind="ClusterTrainingRuntime",
+        kind=types.RuntimeKind.CLUSTER_TRAINING_RUNTIME.value,
         metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
             name=name,
             namespace=namespace,
@@ -629,7 +689,7 @@ def create_training_runtime(
     """Create a mock namespaced TrainingRuntime object (not cluster-scoped)."""
     return models.TrainerV1alpha1TrainingRuntime(
         apiVersion=constants.API_VERSION,
-        kind=constants.TRAINING_RUNTIME_KIND,
+        kind=types.RuntimeKind.TRAINING_RUNTIME.value,
         metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
             name=name,
             namespace=namespace,
@@ -679,6 +739,7 @@ def get_container() -> models.IoK8sApiCoreV1Container:
 
 def create_runtime_type(
     name: str,
+    kind: str | None = None,
 ) -> types.Runtime:
     """Create a mock Runtime object for testing."""
     trainer = types.RuntimeTrainer(
@@ -690,9 +751,19 @@ def create_runtime_type(
         image="example.com/test-runtime",
     )
     trainer.set_command(constants.TORCH_COMMAND)
-    # Namespaced TrainingRuntime objects and default torch runtime use namespace scope;
-    # other runtimes created as cluster-scoped use cluster scope.
-    return types.Runtime(name=name, trainer=trainer)
+
+    if kind is None:
+        kind = (
+            types.RuntimeKind.TRAINING_RUNTIME
+            if name in {TORCH_RUNTIME, "runtime-1", "ns-runtime-2"}
+            else types.RuntimeKind.CLUSTER_TRAINING_RUNTIME
+        )
+
+    return types.Runtime(
+        name=name,
+        trainer=trainer,
+        kind=kind,
+    )
 
 
 def get_train_job_data_type(
@@ -709,6 +780,7 @@ def get_train_job_data_type(
         num_nodes=2,
         image="example.com/test-runtime",
     )
+
     trainer.set_command(constants.TORCH_COMMAND)
     return types.TrainJob(
         name=train_job_name,
@@ -716,6 +788,7 @@ def get_train_job_data_type(
         runtime=types.Runtime(
             name=runtime_name,
             trainer=trainer,
+            kind=types.RuntimeKind.TRAINING_RUNTIME,
         ),
         steps=[
             types.Step(
@@ -743,6 +816,26 @@ def get_train_job_data_type(
         num_nodes=2,
         status="Complete",
     )
+
+
+def get_train_job_with_restarted_pods_data_type(
+    runtime_name: str,
+    train_job_name: str,
+) -> types.TrainJob:
+    """Create the expected TrainJob after newer replacement Pods are selected."""
+    train_job = get_train_job_data_type(runtime_name, train_job_name)
+
+    for step in train_job.steps:
+        step.pod_name = f"{step.pod_name}-restarted"
+        step.status = constants.POD_PENDING
+
+    node_0_step = next(step for step in train_job.steps if step.name == "node-0")
+    node_1_step = copy.deepcopy(node_0_step)
+    node_1_step.name = "node-1"
+    node_1_step.pod_name = "node-1-pod-restarted"
+    train_job.steps.append(node_1_step)
+
+    return train_job
 
 
 def _run_verify_backend_with_core_api(core_api: Mock) -> tuple[list[str], int]:
@@ -803,6 +896,7 @@ def _run_verify_backend_with_core_api(core_api: Mock) -> tuple[list[str], int]:
                     "Trainer control-plane version info is not available",
                     "kubeflow-trainer-public",
                     "ConfigMap not found",
+                    "KUBEFLOW_SYSTEM_NAMESPACE",
                 ],
             },
         ),
@@ -846,6 +940,15 @@ def test_verify_backend(test_case):
             config={"name": TORCH_RUNTIME},
             expected_output=create_runtime_type(
                 name=TORCH_RUNTIME,
+            ),
+        ),
+        TestCase(
+            name="prefer namespaced TrainingRuntime when both TrainingRuntime and ClusterTrainingRuntime exist",
+            expected_status=SUCCESS,
+            config={"name": "runtime-1"},
+            expected_output=create_runtime_type(
+                name="runtime-1",
+                kind=types.RuntimeKind.TRAINING_RUNTIME,
             ),
         ),
         TestCase(
@@ -923,7 +1026,11 @@ def test_get_runtime(kubernetes_backend, test_case):
                 "name": LIST_RUNTIMES,
             },
             expected_output=[
-                create_runtime_type(name="runtime-1"),
+                types.Runtime(
+                    name="runtime-1",
+                    trainer=create_runtime_type(name="runtime-1").trainer,
+                    kind=types.RuntimeKind.CLUSTER_TRAINING_RUNTIME,
+                ),
                 create_runtime_type(name="runtime-2"),
                 create_runtime_type(name="runtime-3"),
             ],
@@ -1030,6 +1137,7 @@ def test_list_runtimes(kubernetes_backend, test_case):
                         device_count="1",
                         image="example.com/image",
                     ),
+                    kind=types.RuntimeKind.TRAINING_RUNTIME,
                 )
             },
             expected_error=ValueError,
@@ -1040,10 +1148,18 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
     """Test KubernetesBackend.get_runtime_packages with basic success path."""
     print("Executing test:", test_case.name)
 
-    try:
-        kubernetes_backend.get_runtime_packages(**test_case.config)
-    except Exception as e:
-        assert type(e) is test_case.expected_error
+    if test_case.expected_status == SUCCESS:
+        # get_runtime_packages runs a TrainJob and streams its logs; it does not
+        # return a value, so a successful call completes without raising.
+        assert kubernetes_backend.get_runtime_packages(**test_case.config) is None
+    else:
+        with pytest.raises(test_case.expected_error):
+            kubernetes_backend.get_runtime_packages(**test_case.config)
+
+    if test_case.expected_status == SUCCESS:
+        kubernetes_backend.custom_api.delete_namespaced_custom_object.assert_called_once()
+    else:
+        kubernetes_backend.custom_api.delete_namespaced_custom_object.assert_not_called()
 
     print("test execution complete")
 
@@ -1058,6 +1174,16 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             expected_output=get_train_job(
                 runtime_name=TORCH_RUNTIME,
                 train_job_name=BASIC_TRAIN_JOB_NAME,
+            ),
+        ),
+        TestCase(
+            name="prefer namespaced TrainingRuntime when only namespaced TrainingRuntime exists",
+            expected_status=SUCCESS,
+            config={"runtime": "runtime-1"},
+            expected_output=get_train_job(
+                runtime_name="runtime-1",
+                train_job_name=BASIC_TRAIN_JOB_NAME,
+                runtime_kind=types.RuntimeKind.TRAINING_RUNTIME,
             ),
         ),
         TestCase(
@@ -1078,7 +1204,11 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                 runtime_name=TORCH_TUNE_RUNTIME,
                 train_job_name=TRAIN_JOB_WITH_BUILT_IN_TRAINER,
                 train_job_trainer=get_builtin_trainer(
-                    args=["batch_size=2", "epochs=2", "loss=Loss.CEWithChunkedOutputLoss"],
+                    args=[
+                        "batch_size=2",
+                        "epochs=2",
+                        "loss=torchtune.modules.loss.CEWithChunkedOutputLoss",
+                    ],
                 ),
             ),
         ),
@@ -1118,7 +1248,7 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             expected_status=SUCCESS,
             config={
                 "trainer": types.CustomTrainer(
-                    func=lambda: print("Hello World"),
+                    func=sample_train_func,
                     func_args={"learning_rate": 0.001, "batch_size": 32},
                     packages_to_install=["torch", "numpy"],
                     pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
@@ -1139,7 +1269,7 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             expected_status=SUCCESS,
             config={
                 "trainer": types.CustomTrainer(
-                    func=lambda: print("Hello World"),
+                    func=sample_train_func,
                     func_args={"learning_rate": 0.001, "batch_size": 32},
                     packages_to_install=["torch", "numpy"],
                     pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
@@ -1223,7 +1353,7 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             expected_status=FAILED,
             config={
                 "trainer": types.CustomTrainer(
-                    func=lambda: print("Hello World"),
+                    func=sample_train_func,
                     num_nodes=2,
                 ),
                 "runtime": TORCH_TUNE_RUNTIME,
@@ -1303,6 +1433,36 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                         ),
                     ),
                 ],
+            ),
+        ),
+        TestCase(
+            name="train with active deadline seconds",
+            expected_status=SUCCESS,
+            config={
+                "options": [
+                    ActiveDeadlineSeconds(seconds=3600),
+                ],
+            },
+            expected_output=get_train_job(
+                runtime_name=TORCH_RUNTIME,
+                train_job_name=BASIC_TRAIN_JOB_NAME,
+                active_deadline_seconds=3600,
+            ),
+        ),
+        TestCase(
+            name="train with active deadline seconds and labels",
+            expected_status=SUCCESS,
+            config={
+                "options": [
+                    ActiveDeadlineSeconds(seconds=600),
+                    Labels({"team": "ml-platform"}),
+                ],
+            },
+            expected_output=get_train_job(
+                runtime_name=TORCH_RUNTIME,
+                train_job_name=BASIC_TRAIN_JOB_NAME,
+                active_deadline_seconds=600,
+                labels={"team": "ml-platform"},
             ),
         ),
         TestCase(
@@ -1393,6 +1553,15 @@ def test_train(kubernetes_backend, test_case):
             expected_output=get_train_job_data_type(
                 runtime_name=TORCH_RUNTIME,
                 train_job_name=BASIC_TRAIN_JOB_NAME,
+            ),
+        ),
+        TestCase(
+            name="returns only the newest Pod for each TrainJob component",
+            expected_status=SUCCESS,
+            config={"name": JOB_WITH_POD_RESTARTS},
+            expected_output=get_train_job_with_restarted_pods_data_type(
+                runtime_name=TORCH_RUNTIME,
+                train_job_name=JOB_WITH_POD_RESTARTS,
             ),
         ),
         TestCase(
@@ -1566,6 +1735,24 @@ def test_get_job_logs(kubernetes_backend, test_case):
                 "timeout": 2,
             },
             expected_error=TimeoutError,
+        ),
+        TestCase(
+            name="polling_interval equal to timeout raises ValueError",
+            expected_status=FAILED,
+            config={"name": BASIC_TRAIN_JOB_NAME, "timeout": 10, "polling_interval": 10},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="zero polling_interval raises ValueError",
+            expected_status=FAILED,
+            config={"name": BASIC_TRAIN_JOB_NAME, "timeout": 10, "polling_interval": 0},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="negative polling_interval raises ValueError",
+            expected_status=FAILED,
+            config={"name": BASIC_TRAIN_JOB_NAME, "timeout": 10, "polling_interval": -1},
+            expected_error=ValueError,
         ),
     ],
 )

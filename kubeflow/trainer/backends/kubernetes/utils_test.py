@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import tempfile
+import time
+from unittest.mock import MagicMock, patch
+
 from kubeflow_trainer_api import models
 import pytest
 
@@ -19,6 +24,10 @@ import kubeflow.trainer.backends.kubernetes.utils as utils
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.types import types
+
+# --------------------------
+# Test Helpers
+# --------------------------
 
 
 def _build_runtime() -> types.Runtime:
@@ -30,7 +39,26 @@ def _build_runtime() -> types.Runtime:
         image="example.com/image",
     )
     runtime_trainer.set_command(constants.DEFAULT_COMMAND)
-    return types.Runtime(name="test-runtime", trainer=runtime_trainer)
+    return types.Runtime(
+        name="test-runtime",
+        trainer=runtime_trainer,
+        kind=types.RuntimeKind.TRAINING_RUNTIME,
+    )
+
+
+def sample_train_func() -> None:
+    """Sample training function."""
+    print("Hello World")
+
+
+def sample_train_func_kwargs(a: int, b: str, c: float) -> str:
+    """Sample training function with kwargs."""
+    return "ok"
+
+
+# --------------------------
+# Tests
+# --------------------------
 
 
 @pytest.mark.parametrize(
@@ -60,6 +88,18 @@ def _build_runtime() -> types.Runtime:
                 )
             },
             expected_error=ValueError,
+        ),
+        TestCase(
+            name="single NPU limit returns device and count",
+            expected_status=SUCCESS,
+            config={
+                "resources": models.IoK8sApiCoreV1ResourceRequirements(
+                    limits={
+                        constants.NPU_LABEL: models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                    }
+                )
+            },
+            expected_output=("npu", "2.0"),
         ),
     ],
 )
@@ -319,7 +359,11 @@ def test_get_resources_per_node(test_case: TestCase):
         TestCase(
             name="packages with extras notation",
             config={
-                "packages_to_install": ["datasets", "transformers[torch]", "cloudpathlib[all]"],
+                "packages_to_install": [
+                    "datasets",
+                    "transformers[torch]",
+                    "cloudpathlib[all]",
+                ],
                 "pip_index_urls": constants.DEFAULT_PIP_INDEX_URLS,
                 "is_mpi": False,
             },
@@ -365,7 +409,7 @@ def test_get_script_for_python_packages(test_case):
             name="with args dict always unpacks kwargs",
             expected_status=SUCCESS,
             config={
-                "func": (lambda: print("Hello World")),
+                "func": sample_train_func,
                 "func_args": {"batch_size": 128, "learning_rate": 0.001, "epochs": 20},
                 "runtime": _build_runtime(),
             },
@@ -374,8 +418,10 @@ def test_get_script_for_python_packages(test_case):
                 "-c",
                 (
                     "\nread -r -d '' SCRIPT << EOM\n\n"
-                    '"func": (lambda: print("Hello World")),\n\n'
-                    "<lambda>(**{'batch_size': 128, 'learning_rate': 0.001, 'epochs': 20})\n\n"
+                    "def sample_train_func() -> None:\n"
+                    '    """Sample training function."""\n'
+                    '    print("Hello World")\n\n'
+                    "sample_train_func(**{'batch_size': 128, 'learning_rate': 0.001, 'epochs': 20})\n\n"
                     "EOM\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
@@ -386,7 +432,7 @@ def test_get_script_for_python_packages(test_case):
             name="without args calls function with no params",
             expected_status=SUCCESS,
             config={
-                "func": (lambda: print("Hello World")),
+                "func": sample_train_func,
                 "func_args": None,
                 "runtime": _build_runtime(),
             },
@@ -395,8 +441,10 @@ def test_get_script_for_python_packages(test_case):
                 "-c",
                 (
                     "\nread -r -d '' SCRIPT << EOM\n\n"
-                    '"func": (lambda: print("Hello World")),\n\n'
-                    "<lambda>()\n\n"
+                    "def sample_train_func() -> None:\n"
+                    '    """Sample training function."""\n'
+                    '    print("Hello World")\n\n'
+                    "sample_train_func()\n\n"
                     "EOM\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
@@ -407,9 +455,13 @@ def test_get_script_for_python_packages(test_case):
             name="raises when runtime has no trainer",
             expected_status=FAILED,
             config={
-                "func": (lambda: print("Hello World")),
+                "func": sample_train_func,
                 "func_args": None,
-                "runtime": types.Runtime(name="no-trainer", trainer=None),
+                "runtime": types.Runtime(
+                    name="no-trainer",
+                    trainer=None,
+                    kind=types.RuntimeKind.TRAINING_RUNTIME,
+                ),
             },
             expected_error=ValueError,
         ),
@@ -427,7 +479,7 @@ def test_get_script_for_python_packages(test_case):
             name="single dict param also unpacks kwargs",
             expected_status=SUCCESS,
             config={
-                "func": (lambda: print("Hello World")),
+                "func": sample_train_func,
                 "func_args": {"a": 1, "b": 2},
                 "runtime": _build_runtime(),
             },
@@ -436,8 +488,10 @@ def test_get_script_for_python_packages(test_case):
                 "-c",
                 (
                     "\nread -r -d '' SCRIPT << EOM\n\n"
-                    '"func": (lambda: print("Hello World")),\n\n'
-                    "<lambda>(**{'a': 1, 'b': 2})\n\n"
+                    "def sample_train_func() -> None:\n"
+                    '    """Sample training function."""\n'
+                    '    print("Hello World")\n\n'
+                    "sample_train_func(**{'a': 1, 'b': 2})\n\n"
                     "EOM\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
@@ -448,7 +502,7 @@ def test_get_script_for_python_packages(test_case):
             name="multi-param function uses kwargs-unpacking",
             expected_status=SUCCESS,
             config={
-                "func": (lambda **kwargs: "ok"),
+                "func": sample_train_func_kwargs,
                 "func_args": {"a": 3, "b": "hi", "c": 0.2},
                 "runtime": _build_runtime(),
             },
@@ -457,8 +511,10 @@ def test_get_script_for_python_packages(test_case):
                 "-c",
                 (
                     "\nread -r -d '' SCRIPT << EOM\n\n"
-                    '"func": (lambda **kwargs: "ok"),\n\n'
-                    "<lambda>(**{'a': 3, 'b': 'hi', 'c': 0.2})\n\n"
+                    "def sample_train_func_kwargs(a: int, b: str, c: float) -> str:\n"
+                    '    """Sample training function with kwargs."""\n'
+                    '    return "ok"\n\n'
+                    "sample_train_func_kwargs(**{'a': 3, 'b': 'hi', 'c': 0.2})\n\n"
                     "EOM\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
@@ -469,7 +525,7 @@ def test_get_script_for_python_packages(test_case):
             name="with packages to install",
             expected_status=SUCCESS,
             config={
-                "func": (lambda: print("Hello World")),
+                "func": sample_train_func,
                 "func_args": None,
                 "runtime": _build_runtime(),
                 "packages_to_install": ["requests"],
@@ -499,8 +555,10 @@ def test_get_script_for_python_packages(test_case):
                     "    exit 1\n"
                     "fi\n\n"
                     "\nread -r -d '' SCRIPT << EOM\n\n"
-                    '"func": (lambda: print("Hello World")),\n\n'
-                    "<lambda>()\n\n"
+                    "def sample_train_func() -> None:\n"
+                    '    """Sample training function."""\n'
+                    '    print("Hello World")\n\n'
+                    "sample_train_func()\n\n"
                     "EOM\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
@@ -844,4 +902,824 @@ def test_get_args_from_dataset_preprocess_config(test_case: TestCase):
     except Exception as e:
         assert test_case.expected_status == FAILED
         assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+def _build_builtin_runtime() -> types.Runtime:
+    runtime_trainer = types.RuntimeTrainer(
+        trainer_type=types.TrainerType.BUILTIN_TRAINER,
+        framework="torchtune",
+        device="gpu",
+        device_count="1",
+        image="ghcr.io/kubeflow/trainer/torchtune",
+    )
+    runtime_trainer.set_command(constants.TORCH_TUNE_COMMAND)
+    return types.Runtime(
+        name="torchtune-llama3.2-1b",
+        trainer=runtime_trainer,
+        kind=types.RuntimeKind.TRAINING_RUNTIME,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="empty config produces empty args",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(),
+            },
+            expected_output=[],
+        ),
+        TestCase(
+            name="dtype only produces dtype arg",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(
+                    dtype=types.DataType.BF16,
+                ),
+            },
+            expected_output=["dtype=bf16"],
+        ),
+        TestCase(
+            name="all scalar fields produce correct args",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(
+                    dtype=types.DataType.FP32,
+                    batch_size=8,
+                    epochs=3,
+                    loss=types.Loss.CEWithChunkedOutputLoss,
+                ),
+            },
+            expected_output=[
+                "dtype=fp32",
+                "batch_size=8",
+                "epochs=3",
+                "loss=torchtune.modules.loss.CEWithChunkedOutputLoss",
+            ],
+        ),
+        TestCase(
+            name="config with peft appends lora args",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(
+                    peft_config=types.LoraConfig(
+                        lora_rank=32,
+                        lora_alpha=16,
+                    ),
+                ),
+            },
+            expected_output=[
+                "model.lora_rank=32",
+                "model.lora_alpha=16",
+                "model.lora_attn_modules=[q_proj,v_proj,output_proj]",
+            ],
+        ),
+        TestCase(
+            name="config with dataset preprocess appends dataset args",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(
+                    dataset_preprocess_config=types.TorchTuneInstructDataset(
+                        split="train",
+                    ),
+                ),
+            },
+            expected_output=[
+                f"dataset={constants.TORCH_TUNE_INSTRUCT_DATASET}",
+                "dataset.split=train",
+            ],
+        ),
+        TestCase(
+            name="initializer with directory dataset produces data_dir arg",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(
+                    dtype=types.DataType.BF16,
+                ),
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(
+                        storage_uri="hf://tatsu-lab/alpaca",
+                    ),
+                ),
+            },
+            expected_output=[
+                "dtype=bf16",
+                f"dataset.data_dir={os.path.join(constants.DATASET_PATH, '.')}",
+            ],
+        ),
+        TestCase(
+            name="initializer with file dataset produces data_files arg",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(),
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(
+                        storage_uri="hf://tatsu-lab/alpaca/data.json",
+                    ),
+                ),
+            },
+            expected_output=[
+                f"dataset.data_files={os.path.join(constants.DATASET_PATH, 'data.json')}",
+            ],
+        ),
+        TestCase(
+            name="nested directory dataset uri produces data_dir arg",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(),
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(
+                        storage_uri="hf://tatsu-lab/alpaca/train",
+                    ),
+                ),
+            },
+            expected_output=[
+                f"dataset.data_dir={os.path.join(constants.DATASET_PATH, 'train')}",
+            ],
+        ),
+        TestCase(
+            name="invalid dtype raises ValueError",
+            expected_status=FAILED,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(
+                    dtype="invalid",
+                ),
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_get_args_using_torchtune_config(test_case: TestCase):
+    print("Executing test:", test_case.name)
+    try:
+        args = utils.get_args_using_torchtune_config(
+            test_case.config["fine_tuning_config"],
+            test_case.config.get("initializer"),
+        )
+
+        assert test_case.expected_status == SUCCESS
+        assert args == test_case.expected_output
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid config with num_nodes and batch_size",
+            expected_status=SUCCESS,
+            config={
+                "runtime": _build_builtin_runtime(),
+                "trainer": types.BuiltinTrainer(
+                    config=types.TorchTuneConfig(
+                        num_nodes=2,
+                        batch_size=8,
+                    ),
+                ),
+            },
+            expected_output=models.TrainerV1alpha1Trainer(
+                command=["tune", "run"],
+                args=["batch_size=8"],
+                numNodes=2,
+            ),
+        ),
+        TestCase(
+            name="valid config with resources_per_node",
+            expected_status=SUCCESS,
+            config={
+                "runtime": _build_builtin_runtime(),
+                "trainer": types.BuiltinTrainer(
+                    config=types.TorchTuneConfig(
+                        resources_per_node={"gpu": 2},
+                    ),
+                ),
+            },
+            expected_output=models.TrainerV1alpha1Trainer(
+                command=["tune", "run"],
+                args=[],
+                resourcesPerNode=models.IoK8sApiCoreV1ResourceRequirements(
+                    limits={
+                        "nvidia.com/gpu": models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                    },
+                    requests={
+                        "nvidia.com/gpu": models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                    },
+                ),
+            ),
+        ),
+        TestCase(
+            name="empty config produces trainer with empty args",
+            expected_status=SUCCESS,
+            config={
+                "runtime": _build_builtin_runtime(),
+                "trainer": types.BuiltinTrainer(
+                    config=types.TorchTuneConfig(),
+                ),
+            },
+            expected_output=models.TrainerV1alpha1Trainer(
+                command=["tune", "run"],
+                args=[],
+            ),
+        ),
+        TestCase(
+            name="num_nodes=0 is treated as unset",
+            expected_status=SUCCESS,
+            config={
+                "runtime": _build_builtin_runtime(),
+                "trainer": types.BuiltinTrainer(
+                    config=types.TorchTuneConfig(
+                        num_nodes=0,
+                        batch_size=8,
+                    ),
+                ),
+            },
+            # numNodes is intentionally left unset: `if config.num_nodes:` is falsy for 0.
+            expected_output=models.TrainerV1alpha1Trainer(
+                command=["tune", "run"],
+                args=["batch_size=8"],
+            ),
+        ),
+        TestCase(
+            name="initializer threads dataset arg into trainer args",
+            expected_status=SUCCESS,
+            config={
+                "runtime": _build_builtin_runtime(),
+                "trainer": types.BuiltinTrainer(
+                    config=types.TorchTuneConfig(
+                        batch_size=8,
+                    ),
+                ),
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(
+                        storage_uri="hf://tatsu-lab/alpaca/data.json",
+                    ),
+                ),
+            },
+            expected_output=models.TrainerV1alpha1Trainer(
+                command=["tune", "run"],
+                args=[
+                    "batch_size=8",
+                    f"dataset.data_files={os.path.join(constants.DATASET_PATH, 'data.json')}",
+                ],
+            ),
+        ),
+        TestCase(
+            name="invalid config type raises ValueError",
+            expected_status=FAILED,
+            config={
+                "runtime": _build_builtin_runtime(),
+                "trainer": types.BuiltinTrainer(
+                    config="invalid_config",
+                ),
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_get_trainer_cr_from_builtin_trainer(test_case: TestCase):
+    print("Executing test:", test_case.name)
+    try:
+        trainer_cr = utils.get_trainer_cr_from_builtin_trainer(
+            test_case.config["runtime"],
+            test_case.config["trainer"],
+            test_case.config.get("initializer"),
+        )
+
+        assert test_case.expected_status == SUCCESS
+        assert trainer_cr == test_case.expected_output
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+# ---------------------------------------------------------------------------
+# Tests for update_trainjob_status
+# ---------------------------------------------------------------------------
+
+
+def _make_token_file() -> str:
+    """Create a temp token file and return its path. Caller must unlink."""
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".token") as f:
+        f.write("test-token")
+        return f.name
+
+
+def _make_ca_file() -> str:
+    """Create a temp CA cert file and return its path. Caller must unlink."""
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".crt") as f:
+        f.write("fake-cert")
+        return f.name
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="returns false when not running in kubeflow (no env vars)",
+            expected_status=SUCCESS,
+            config={"env": {}, "clear_env": True},
+            expected_output={"result": False, "post_called": False},
+        ),
+        TestCase(
+            name="returns false when token file does not exist",
+            expected_status=SUCCESS,
+            config={
+                "env": {
+                    "KUBEFLOW_TRAINER_SERVER_URL": "https://test",
+                    "KUBEFLOW_TRAINER_SERVER_TOKEN": "/nonexistent/token",
+                },
+                "clear_env": True,
+            },
+            expected_output={"result": False, "post_called": False},
+        ),
+        TestCase(
+            name="basic progress 50 percent",
+            expected_status=SUCCESS,
+            config={"progress_percent": 50},
+            expected_output={"result": True, "post_called": True, "progress": 50},
+        ),
+        TestCase(
+            name="progress clamped above 100",
+            expected_status=SUCCESS,
+            config={"progress_percent": 150},
+            expected_output={"result": True, "post_called": True, "progress": 100},
+        ),
+        TestCase(
+            name="progress clamped below 0",
+            expected_status=SUCCESS,
+            config={"progress_percent": -10},
+            expected_output={"result": True, "post_called": True, "progress": 0},
+        ),
+        TestCase(
+            name="ETA in seconds",
+            expected_status=SUCCESS,
+            config={"progress_percent": 50, "estimated_remaining_seconds": 3600},
+            expected_output={
+                "result": True,
+                "post_called": True,
+                "progress": 50,
+                "eta": 3600,
+            },
+        ),
+        TestCase(
+            name="negative ETA clamped to 0",
+            expected_status=SUCCESS,
+            config={"progress_percent": 50, "estimated_remaining_seconds": -30},
+            expected_output={
+                "result": True,
+                "post_called": True,
+                "progress": 50,
+                "eta": 0,
+            },
+        ),
+        TestCase(
+            name="metrics included with correct count",
+            expected_status=SUCCESS,
+            config={"progress_percent": 25, "metrics": {"loss": 0.5, "step": 100}},
+            expected_output={
+                "result": True,
+                "post_called": True,
+                "progress": 25,
+                "metrics_count": 2,
+            },
+        ),
+        TestCase(
+            name="empty metrics dict omits metrics key",
+            expected_status=SUCCESS,
+            config={"progress_percent": 75, "metrics": {}},
+            expected_output={
+                "result": True,
+                "post_called": True,
+                "progress": 75,
+                "no_metrics_key": True,
+            },
+        ),
+        TestCase(
+            name="None metrics omits metrics key",
+            expected_status=SUCCESS,
+            config={"progress_percent": 75},
+            expected_output={
+                "result": True,
+                "post_called": True,
+                "progress": 75,
+                "no_metrics_key": True,
+            },
+        ),
+        TestCase(
+            name="metric values are strings",
+            expected_status=SUCCESS,
+            config={"metrics": {"loss": 0.234, "step": 100, "accuracy": "0.95"}},
+            expected_output={
+                "result": True,
+                "post_called": True,
+                "all_metric_values_are_strings": True,
+            },
+        ),
+        TestCase(
+            name="metrics truncated at 256",
+            expected_status=SUCCESS,
+            config={"metrics": {f"metric_{i}": i for i in range(300)}},
+            expected_output={"result": True, "post_called": True, "metrics_count": 256},
+        ),
+        TestCase(
+            name="bearer token in authorization header",
+            expected_status=SUCCESS,
+            config={"progress_percent": 50},
+            expected_output={
+                "result": True,
+                "post_called": True,
+                "auth_header": "Bearer test-token",
+            },
+        ),
+        TestCase(
+            name="request URL matches env var",
+            expected_status=SUCCESS,
+            config={"progress_percent": 50},
+            expected_output={
+                "result": True,
+                "post_called": True,
+                "request_url": "https://trainer.example.com/status",
+            },
+        ),
+        TestCase(
+            name="CA cert used for TLS verification",
+            expected_status=SUCCESS,
+            config={"progress_percent": 50, "use_ca_cert": True},
+            expected_output={
+                "result": True,
+                "post_called": True,
+                "verify_is_ca_path": True,
+            },
+        ),
+        TestCase(
+            name="returns false on non-200 response",
+            expected_status=SUCCESS,
+            config={"progress_percent": 50, "mock_status_code": 422},
+            expected_output={"result": False, "post_called": True},
+        ),
+        TestCase(
+            name="returns false on network exception",
+            expected_status=SUCCESS,
+            config={
+                "progress_percent": 50,
+                "mock_exception": ConnectionError("timeout"),
+            },
+            expected_output={"result": False, "post_called": True},
+        ),
+        TestCase(
+            name="throttled call makes no HTTP post",
+            expected_status=SUCCESS,
+            config={"progress_percent": 10, "pre_send_progress": 50},
+            expected_output={"result": False, "post_count": 1},
+        ),
+        TestCase(
+            name="failed send does not consume throttle window",
+            expected_status=SUCCESS,
+            config={"progress_percent": 20, "pre_send_fails": True},
+            expected_output={"result": True, "post_count": 2},
+        ),
+        TestCase(
+            name="token cache hit avoids re-read",
+            expected_status=SUCCESS,
+            config={"test_token_cache_hit": True},
+            expected_output={"cached_token": "test-token"},
+        ),
+        TestCase(
+            name="token cache expires after TTL",
+            expected_status=SUCCESS,
+            config={"test_token_cache_expiry": True},
+            expected_output={"refreshed_token": "refreshed-token"},
+        ),
+        TestCase(
+            name="OSError on token read returns None",
+            expected_status=SUCCESS,
+            config={"test_token_oserror": True},
+            expected_output={"token_is_none": True},
+        ),
+    ],
+)
+def test_update_trainjob_status(test_case: TestCase):
+    print("Executing test:", test_case.name)
+    config = test_case.config
+    expected = test_case.expected_output
+
+    utils._last_update_time = 0.0
+    utils._cached_token = None
+    utils._token_read_time = 0.0
+    utils._http_session = None
+
+    if config.get("test_token_cache_hit"):
+        token_path = _make_token_file()
+        try:
+            token1 = utils._get_cached_token(token_path)
+            assert token1 == expected["cached_token"]
+            with open(token_path, "w") as f:
+                f.write("new-token")
+            token2 = utils._get_cached_token(token_path)
+            assert token2 == expected["cached_token"]
+        finally:
+            os.unlink(token_path)
+        print("test execution complete")
+        return
+
+    if config.get("test_token_cache_expiry"):
+        token_path = _make_token_file()
+        try:
+            utils._get_cached_token(token_path)
+            with open(token_path, "w") as f:
+                f.write("refreshed-token")
+            utils._token_read_time = time.monotonic() - utils._TOKEN_CACHE_TTL_SECONDS - 1
+            token = utils._get_cached_token(token_path)
+            assert token == expected["refreshed_token"]
+        finally:
+            os.unlink(token_path)
+        print("test execution complete")
+        return
+
+    if config.get("test_token_oserror"):
+        result = utils._get_cached_token("/nonexistent/path/token")
+        assert result is None
+        print("test execution complete")
+        return
+
+    if config.get("clear_env"):
+        with patch.dict(os.environ, config["env"], clear=True):
+            result = utils.update_trainjob_status(progress_percent=50)
+            assert result is expected["result"]
+        print("test execution complete")
+        return
+
+    token_path = _make_token_file()
+    ca_path = _make_ca_file() if config.get("use_ca_cert") else None
+
+    env = {
+        "KUBEFLOW_TRAINER_SERVER_URL": "https://trainer.example.com/status",
+        "KUBEFLOW_TRAINER_SERVER_TOKEN": token_path,
+    }
+    if ca_path:
+        env["KUBEFLOW_TRAINER_SERVER_CA_CERT"] = ca_path
+
+    try:
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch("kubeflow.trainer.backends.kubernetes.utils._get_status_session") as session_fn,
+        ):
+            mock_resp = MagicMock()
+            mock_resp.status_code = config.get("mock_status_code", 200)
+            mock_resp.text = ""
+
+            if config.get("mock_exception"):
+                session_fn.return_value.post.side_effect = config["mock_exception"]
+            else:
+                session_fn.return_value.post.return_value = mock_resp
+
+            if config.get("pre_send_progress") is not None:
+                utils.update_trainjob_status(progress_percent=config["pre_send_progress"])
+
+            if config.get("pre_send_fails"):
+                mock_resp.status_code = 500
+                mock_resp.text = "error"
+                session_fn.return_value.post.return_value = mock_resp
+                utils.update_trainjob_status(progress_percent=10)
+                mock_resp.status_code = 200
+                mock_resp.text = ""
+
+            result = utils.update_trainjob_status(
+                progress_percent=config.get("progress_percent"),
+                estimated_remaining_seconds=config.get("estimated_remaining_seconds"),
+                metrics=config.get("metrics"),
+            )
+            assert result is expected["result"]
+
+            if expected.get("post_called") and not config.get("mock_exception"):
+                call_kwargs = session_fn.return_value.post.call_args.kwargs
+                payload = call_kwargs["json"]
+                status = payload["trainerStatus"]
+
+                assert "lastUpdatedTime" in status
+
+                if "progress" in expected:
+                    assert status["progressPercentage"] == expected["progress"]
+
+                if "eta" in expected:
+                    assert status["estimatedRemainingSeconds"] == expected["eta"]
+
+                if "metrics_count" in expected:
+                    assert len(status["metrics"]) == expected["metrics_count"]
+
+                if expected.get("no_metrics_key"):
+                    assert "metrics" not in status
+
+                if expected.get("all_metric_values_are_strings"):
+                    for metric in status["metrics"]:
+                        assert isinstance(metric["value"], str)
+
+                if "auth_header" in expected:
+                    assert call_kwargs["headers"]["Authorization"] == expected["auth_header"]
+
+                if "request_url" in expected:
+                    call_args = session_fn.return_value.post.call_args
+                    assert call_args.args[0] == expected["request_url"]
+
+                if expected.get("verify_is_ca_path"):
+                    assert call_kwargs["verify"] == ca_path
+
+            if "post_count" in expected:
+                assert session_fn.return_value.post.call_count == expected["post_count"]
+
+    finally:
+        os.unlink(token_path)
+        if ca_path:
+            os.unlink(ca_path)
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="tpu v5e single-slice 2x2",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "2x2"},
+            expected_output=1,
+        ),
+        TestCase(
+            name="tpu v5e single-slice 2x4",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "2x4"},
+            expected_output=2,
+        ),
+        TestCase(
+            name="tpu v5e single-slice 4x4",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "4x4"},
+            expected_output=4,
+        ),
+        TestCase(
+            name="tpu v5e multi-slice 2x2",
+            expected_status=SUCCESS,
+            config={"num_slices": 2, "topology": "2x2"},
+            expected_output=2,
+        ),
+        TestCase(
+            name="tpu v5e multi-slice 2x4",
+            expected_status=SUCCESS,
+            config={"num_slices": 4, "topology": "2x4"},
+            expected_output=8,
+        ),
+        TestCase(
+            name="tpu v5e multi-slice 4x4",
+            expected_status=SUCCESS,
+            config={"num_slices": 2, "topology": "4x4"},
+            expected_output=8,
+        ),
+        TestCase(
+            name="tpu v4/v5p 3D single-slice 2x2x2",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "2x2x2"},
+            expected_output=2,
+        ),
+        TestCase(
+            name="tpu v4/v5p 3D multi-slice 2x2x2",
+            expected_status=SUCCESS,
+            config={"num_slices": 3, "topology": "2x2x2"},
+            expected_output=6,
+        ),
+        TestCase(
+            name="tpu v4/v5p 3D single-slice 2x2x4",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "2x2x4"},
+            expected_output=4,
+        ),
+        TestCase(
+            name="tpu v4/v5p 3D multi-slice 2x2x4",
+            expected_status=SUCCESS,
+            config={"num_slices": 2, "topology": "2x2x4"},
+            expected_output=8,
+        ),
+        TestCase(
+            name="case insensitivity 2D",
+            expected_status=SUCCESS,
+            config={"num_slices": 2, "topology": "2X4"},
+            expected_output=4,
+        ),
+        TestCase(
+            name="case insensitivity 3D",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "2X2X2"},
+            expected_output=2,
+        ),
+        TestCase(
+            name="custom chips per host override",
+            expected_status=SUCCESS,
+            config={"num_slices": 2, "topology": "4x4", "chips_per_host": 8},
+            expected_output=4,
+        ),
+        TestCase(
+            name="fractional TPU single-slice 1x1 on 4-chip host",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "1x1", "chips_per_host": 4},
+            expected_output=1,
+        ),
+        TestCase(
+            name="fractional TPU multi-slice 2x2 on 8-chip host",
+            expected_status=SUCCESS,
+            config={"num_slices": 2, "topology": "2x2", "chips_per_host": 8},
+            expected_output=2,
+        ),
+        TestCase(
+            name="empty topology raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": ""},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="invalid topology format raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "invalid-topo"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="incomplete topology format raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="indivisible topology layout raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x3"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="negative slices raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": -1, "topology": "2x2"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="zero slices raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 0, "topology": "2x2"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="negative chips per host raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x2", "chips_per_host": -4},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="zero chips per host raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x2", "chips_per_host": 0},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="4D topology dimensions raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x2x2x2"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="zero topology dimensions raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x0x2"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="negative topology dimensions raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x-2"},
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_get_tpu_num_nodes(test_case: TestCase):
+    print("Executing test:", test_case.name)
+    try:
+        kwargs = {
+            "num_slices": test_case.config["num_slices"],
+            "topology": test_case.config["topology"],
+        }
+        if "chips_per_host" in test_case.config:
+            kwargs["chips_per_host"] = test_case.config["chips_per_host"]
+
+        num_nodes = utils.get_tpu_num_nodes(**kwargs)
+
+        assert test_case.expected_status == SUCCESS
+        assert num_nodes == test_case.expected_output
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert isinstance(e, test_case.expected_error)
     print("test execution complete")

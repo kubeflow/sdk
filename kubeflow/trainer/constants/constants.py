@@ -20,14 +20,9 @@ GROUP = "trainer.kubeflow.org"
 VERSION = "v1alpha1"
 API_VERSION = f"{GROUP}/{VERSION}"
 
-# The Kind name for the ClusterTrainingRuntime.
-CLUSTER_TRAINING_RUNTIME_KIND = "ClusterTrainingRuntime"
 
 # The plural for the ClusterTrainingRuntime.
 CLUSTER_TRAINING_RUNTIME_PLURAL = "clustertrainingruntimes"
-
-# The Kind name for the TrainingRuntime.
-TRAINING_RUNTIME_KIND = "TrainingRuntime"
 
 # The plural for the TrainingRuntime.
 TRAINING_RUNTIME_PLURAL = "trainingruntimes"
@@ -103,6 +98,12 @@ GPU_MIG_PREFIX = "nvidia.com/mig-"
 
 # The label for TPU in the container resources.
 TPU_LABEL = "google.com/tpu"
+
+# The label for NPU in the container resources.
+# Unlike GPU (nvidia.com/gpu) and TPU (google.com/tpu), NPU vendors don't use
+# a consistent suffix that maps to device type, so we hardcode the full
+# Huawei Ascend 910 resource label until a general strategy is agreed upon.
+NPU_LABEL = "huawei.com/Ascend910"
 
 # The label key to identify the JobSet name of the Pod.
 JOBSET_NAME_LABEL = "jobset.sigs.k8s.io/jobset-name"
