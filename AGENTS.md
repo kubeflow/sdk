@@ -195,3 +195,162 @@ uv run pre-commit run --all-files           # Run all hooks
 - Focus on "why" rather than "what" in descriptions
 - Document all parameters, return values, and exceptions
 - Use Pydantic v2 models in `kubeflow.trainer.types` for schemas
+
+---
+
+## Client API Reference
+
+This section documents the three main clients in the Kubeflow SDK.
+
+---
+
+### TrainerClient
+
+The `TrainerClient` submits and manages distributed training jobs.
+
+**Import:**
+```python
+from kubeflow.trainer import TrainerClient
+```
+
+**Backend support:**
+
+| Backend config | Use case |
+|---|---|
+| `KubernetesBackendConfig` (default) | Production — runs TrainJobs on a Kubernetes cluster |
+| `LocalProcessBackendConfig` | Quick prototyping — runs training as a local subprocess |
+| `ContainerBackendConfig` | Local development — runs training inside Docker or Podman |
+
+**Key methods:**
+
+| Method | Description |
+|---|---|
+| `list_runtimes()` | List available training runtimes. Returns empty list if none exist. |
+| `get_runtime(name)` | Get a specific Runtime object by name. |
+| `get_runtime_packages(runtime)` | Get packages available in a runtime. |
+| `train(runtime, initializer, trainer, options)` | Create a TrainJob. `trainer` accepts `CustomTrainer`, `CustomTrainerContainer`, or `BuiltinTrainer`. Defaults to `torch-distributed` runtime. Returns job name. |
+| `get_job(name)` | Get a TrainJob object by name. |
+| `get_job_logs(name, step, follow)` | Get logs from a specific step. `step` defaults to `node-0`. Use `follow=True` for realtime streaming. |
+| `get_job_events(name)` | Get Kubernetes events for a TrainJob — useful when logs alone are insufficient for debugging. |
+| `wait_for_job_status(name, status, timeout, polling_interval, callbacks)` | Poll until job reaches desired status. Default timeout is 600s. Pass `callbacks` list for custom monitoring per interval. |
+| `delete_job(name)` | Delete a TrainJob. |
+
+**Quick example:**
+```python
+from kubeflow.trainer import TrainerClient
+from kubeflow.trainer import CustomTrainer
+
+client = TrainerClient()
+
+def train_fn():
+    import torch
+    # your training code here
+
+job_name = client.train(trainer=CustomTrainer(func=train_fn, num_nodes=2))
+client.wait_for_job_status(job_name, status={"Complete"})
+
+for line in client.get_job_logs(job_name, step="node-0", follow=False):
+    print(line)
+```
+
+---
+
+### OptimizerClient
+
+The `OptimizerClient` runs hyperparameter optimization experiments via Katib.
+
+**Import:**
+```python
+from kubeflow.optimizer import OptimizerClient
+```
+
+**Backend support:** `KubernetesBackendConfig` only (default).
+Pass `backend_config=KubernetesBackendConfig(namespace="my-ns")` to override the namespace.
+
+**Key methods:**
+
+| Method | Description |
+|---|---|
+| `optimize(trial_template, *, search_space, trial_config, objectives, algorithm)` | Create an OptimizationJob. Returns the job name. Algorithm defaults to RandomSearch. |
+| `list_jobs()` | List all OptimizationJobs. Returns empty list if none exist. |
+| `get_job(name)` | Get an OptimizationJob by name. |
+| `get_job_logs(name, trial_name, follow)` | Stream logs from a trial. Uses best trial if `trial_name` not provided; falls back to first trial if no best trial yet. |
+| `get_best_results(name)` | Get best hyperparameters and metrics. Returns `None` if no best trial yet. |
+| `get_job_events(name)` | Get Kubernetes events for an OptimizationJob. |
+| `wait_for_job_status(name, status, timeout, polling_interval, callbacks)` | Poll until job reaches desired status. Default timeout is 3600s, polling interval 2s. |
+| `delete_job(name)` | Delete an OptimizationJob. |
+
+**Quick example:**
+```python
+from kubeflow.optimizer import OptimizerClient, Objective, Search
+
+client = OptimizerClient()
+
+job_name = client.optimize(
+    trial_template=my_train_job_template,
+    search_space={
+        "lr": Search.loguniform(0.001, 0.1),
+        "batch_size": Search.choice([16, 32, 64]),
+    },
+    objectives=[Objective(name="loss", goal=0.01, type="minimize")],
+)
+
+client.wait_for_job_status(job_name, status={"Complete"})
+result = client.get_best_results(job_name)
+print(result)
+```
+
+---
+
+### ModelRegistryClient
+
+The `ModelRegistryClient` registers and retrieves trained models from a Kubeflow Model Registry server.
+
+Requires the hub extra: `pip install 'kubeflow[hub]'`
+
+**Import:**
+```python
+from kubeflow.hub import ModelRegistryClient
+```
+
+**Initialization:**
+```python
+client = ModelRegistryClient(
+    base_url="https://registry.example.com",
+    author="your-name",
+)
+```
+
+Port is inferred from URL scheme if not provided (`https` → 443, `http` → 8080).
+Pass `user_token` for authenticated registries, `custom_ca` for custom TLS certificates.
+
+**Key methods:**
+
+| Method | Description |
+|---|---|
+| `register_model(name, uri, *, version, model_format_name, ...)` | Register a model by URI with version and optional metadata. Model must be stored prior to registration. Returns `RegisteredModel`. |
+| `update_model(model)` | Update a registered model's metadata. Returns updated `RegisteredModel`. |
+| `update_model_version(model_version)` | Update a model version's metadata. Returns updated `ModelVersion`. |
+| `update_model_artifact(model_artifact)` | Update a model artifact's metadata. Returns updated `ModelArtifact`. |
+| `get_model(name)` | Get a `RegisteredModel` by name. |
+| `get_model_version(name, version)` | Get a specific `ModelVersion` by model name and version string. |
+| `get_model_artifact(name, version)` | Get the `ModelArtifact` for a model version. |
+| `list_models()` | Iterate over all registered models. Returns an `Iterator[RegisteredModel]`. |
+| `list_model_versions(name)` | Iterate over all versions of a registered model. Returns an `Iterator[ModelVersion]`. |
+
+**Quick example:**
+```python
+from kubeflow.hub import ModelRegistryClient
+
+client = ModelRegistryClient(base_url="https://registry.example.com", author="your-name")
+
+registered = client.register_model(
+    name="my-model",
+    uri="s3://my-bucket/my-model",
+    version="v1.0",
+    model_format_name="pytorch",
+)
+
+for model in client.list_models():
+    print(model.name)
+```
