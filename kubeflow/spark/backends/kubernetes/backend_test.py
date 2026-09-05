@@ -15,7 +15,6 @@
 """Unit tests for KubernetesBackend."""
 
 from datetime import datetime
-from functools import wraps
 import multiprocessing
 from unittest.mock import Mock, patch
 
@@ -372,11 +371,8 @@ def sample_func_with_args(
 
 
 def _decorator(func: callable) -> callable:
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        return func(*args, **kwargs)
-
-    return wrapper
+    """Pass-through decorator for testing."""
+    return func
 
 
 @_decorator
