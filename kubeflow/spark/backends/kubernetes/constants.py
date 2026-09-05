@@ -51,7 +51,6 @@ DEFAULT_DRIVER_CPU = 1
 DEFAULT_DRIVER_MEMORY = "512Mi"
 DEFAULT_EXECUTOR_CPU = 1
 DEFAULT_EXECUTOR_MEMORY = "512Mi"
-DEFAULT_SERVICE_ACCOUNT = "spark-operator-spark"
 
 # Function-based Spark job script
 FUNC_JOB_VOLUME_NAME = "spark-app-source"
