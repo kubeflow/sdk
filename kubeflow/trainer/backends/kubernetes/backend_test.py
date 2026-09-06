@@ -288,19 +288,28 @@ def get_custom_trainer(
     install_script = utils.get_script_for_python_packages(
         packages_to_install=packages_to_install,
         pip_index_urls=pip_index_urls,
-        install_log_file="pip_install.log",
+        install_log_file="/tmp/pip_install.log",
     )
 
     # Append the embedded training function script that matches EXEC_FUNC_SCRIPT
     # with torchrun as the entrypoint and a fixed lambda for deterministic tests.
     func_script = (
         "\nread -r -d '' SCRIPT << EOM\n\n"
+        "import os\n"
+        "import sys\n\n"
+        "_kubeflow_generated_script_directory = os.path.realpath(os.path.dirname(__file__))\n"
+        "_kubeflow_working_directory = os.getcwd()\n"
+        "if sys.path and os.path.realpath(sys.path[0]) == "
+        "_kubeflow_generated_script_directory:\n"
+        "    sys.path[0] = _kubeflow_working_directory\n"
+        'elif not getattr(sys.flags, "safe_path", False):\n'
+        "    sys.path.insert(0, _kubeflow_working_directory)\n\n"
         "def sample_train_func() -> None:\n"
         '    """Sample training function."""\n'
         '    print("Hello World")\n\n'
         "sample_train_func(**{'learning_rate': 0.001, 'batch_size': 32})\n\n"
-        'EOM\nprintf "%s" "$SCRIPT" > "backend_test.py"\n'
-        'torchrun "backend_test.py"'
+        'EOM\nprintf "%s" "$SCRIPT" > "/tmp/backend_test.py"\n'
+        'torchrun "/tmp/backend_test.py"'
     )
 
     full_command = install_script + func_script
