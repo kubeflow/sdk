@@ -27,6 +27,15 @@ from kubeflow.trainer.constants import constants
 from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.types import types as base_types
 
+
+@pytest.fixture(autouse=True)
+def clear_github_runtime_cache():
+    """`_load_from_github_url` is memoized, so results must not leak between tests."""
+    runtime_loader._load_from_github_url.cache_clear()
+    yield
+    runtime_loader._load_from_github_url.cache_clear()
+
+
 # Sample runtime YAML data for testing
 SAMPLE_RUNTIME_YAML = {
     "apiVersion": "trainer.kubeflow.org/v1alpha1",
@@ -228,6 +237,31 @@ def test_load_from_github_url(test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+def test_load_from_github_url_is_memoized():
+    """Repeated resolution of the same GitHub source must not re-hit the network."""
+    with (
+        patch(
+            "kubeflow.trainer.backends.container.runtime_loader._discover_github_runtime_files"
+        ) as mock_discover,
+        patch(
+            "kubeflow.trainer.backends.container.runtime_loader._fetch_runtime_from_github"
+        ) as mock_fetch,
+    ):
+        mock_discover.return_value = ["torch_distributed.yaml"]
+        mock_fetch.return_value = SAMPLE_RUNTIME_YAML
+
+        first = runtime_loader._load_from_github_url("kubeflow/trainer")
+        second = runtime_loader._load_from_github_url("kubeflow/trainer")
+
+        assert first is second
+        assert mock_discover.call_count == 1
+        assert mock_fetch.call_count == 1
+
+        # A different source is a different cache entry.
+        runtime_loader._load_from_github_url("myorg/myrepo")
+        assert mock_discover.call_count == 2
 
 
 @pytest.mark.parametrize(
