@@ -19,6 +19,7 @@ from unittest.mock import patch
 
 import pytest
 
+from kubeflow.common import constants as common_constants
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
@@ -353,7 +354,7 @@ def test_spark_job(test_case: TestCase):
         assert getattr(job, key) == value
 
     if test_case.name == "default spark job":
-        assert job.status is None
+        assert job.status == common_constants.UNKNOWN
         assert job.creation_timestamp is None
         assert job.num_executors is None
         assert job.driver_pod_name is None

@@ -21,6 +21,8 @@ from enum import Enum
 import logging
 from typing import Any
 
+import kubeflow.common.constants as common_constants
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,7 +33,6 @@ class SparkConnectState(str, Enum):
     READY = "Ready"
     NOT_READY = "NotReady"
     FAILED = "Failed"
-    UNKNOWN = "Unknown"
 
 
 @dataclass
@@ -51,7 +52,7 @@ class SparkConnectInfo:
 
     name: str
     namespace: str
-    state: SparkConnectState
+    state: str = common_constants.UNKNOWN
     driver_pod_name: str | None = None
     pod_ip: str | None = None
     service_name: str | None = None
@@ -206,7 +207,7 @@ class SparkJob:
 
     name: str
     namespace: str
-    status: SparkJobStatus | None = None
+    status: str = common_constants.UNKNOWN
     creation_timestamp: datetime | None = None
     num_executors: int | None = None
     driver_pod_name: str | None = None

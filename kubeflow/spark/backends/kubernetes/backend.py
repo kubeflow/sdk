@@ -329,48 +329,96 @@ class KubernetesBackend(RuntimeBackend):
 
             TimeoutError:
                 If the session does not become ready within the timeout.
+
+            Exception:
+                If getting the session fails with a non-transient error.
         """
         start_time = time.monotonic()
         last_log_time = start_time
+        deadline = start_time + timeout
 
         while True:
-            info = self.get_session(name)
-
-            if info.state == SparkConnectState.READY:
-                logger.info(
-                    "Session ready: %s/%s state=%s serviceName=%s (%.0fs)",
-                    self.namespace,
-                    name,
-                    info.state,
-                    info.service_name,
-                    time.monotonic() - start_time,
-                )
-                return info
-
-            if info.state == SparkConnectState.FAILED:
-                raise RuntimeError(
-                    f"{constants.SPARK_CONNECT_KIND} failed: {self.namespace}/{name}"
-                )
-
             now = time.monotonic()
-            if now - last_log_time >= 10.0:
-                logger.info(
-                    "Waiting for session: %s/%s state=%s serviceName=%s elapsed=%.0fs",
-                    self.namespace,
-                    name,
-                    info.state,
-                    info.service_name,
-                    now - start_time,
-                )
-                last_log_time = now
-
-            if now - start_time >= timeout:
+            if now >= deadline:
                 raise TimeoutError(
                     f"Timeout waiting for {constants.SPARK_CONNECT_KIND} to be ready: "
                     f"{self.namespace}/{name} (timeout: {timeout}s)"
                 )
 
-            time.sleep(polling_interval)
+            try:
+                info = self.get_session(name)
+            except TimeoutError as e:
+                # The request itself timed out. This is transient, so retry
+                # as long as the overall wait deadline has not expired.
+                logger.warning(
+                    "Timeout getting session %s/%s, retrying: %s",
+                    self.namespace,
+                    name,
+                    e,
+                )
+            except RuntimeError as e:
+                # get_session wraps ApiException in RuntimeError, so inspect the cause.
+                cause = e.__cause__
+                if not isinstance(cause, client.ApiException) or cause.status not in {
+                    429,
+                    500,
+                    502,
+                    503,
+                    504,
+                }:
+                    raise
+
+                logger.warning(
+                    "Transient HTTP %s getting session %s/%s, retrying: %s",
+                    cause.status,
+                    self.namespace,
+                    name,
+                    e,
+                )
+            else:
+                if info.state == SparkConnectState.READY:
+                    logger.info(
+                        "Session ready: %s/%s state=%s serviceName=%s (%.0fs)",
+                        self.namespace,
+                        name,
+                        info.state,
+                        info.service_name,
+                        time.monotonic() - start_time,
+                    )
+                    return info
+
+                if info.state == SparkConnectState.FAILED:
+                    raise RuntimeError(
+                        f"{constants.SPARK_CONNECT_KIND} failed: {self.namespace}/{name}"
+                    )
+
+                now = time.monotonic()
+                if now - last_log_time >= 10.0:
+                    logger.info(
+                        "Waiting for session: %s/%s state=%s serviceName=%s elapsed=%.0fs",
+                        self.namespace,
+                        name,
+                        info.state,
+                        info.service_name,
+                        now - start_time,
+                    )
+                    last_log_time = now
+
+                if now >= deadline:
+                    raise TimeoutError(
+                        f"Timeout waiting for {constants.SPARK_CONNECT_KIND} to be ready: "
+                        f"{self.namespace}/{name} (timeout: {timeout}s)"
+                    )
+
+            # Don't sleep beyond the overall deadline.
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError(
+                    f"Timeout waiting for {constants.SPARK_CONNECT_KIND} to be ready: "
+                    f"{self.namespace}/{name} (timeout: {timeout}s)"
+                )
+
+            time.sleep(min(polling_interval, remaining))
 
     def _wait_for_connect_port(
         self, host: str, port: int, timeout_sec: int = 60, interval_sec: float = 2.0
@@ -378,17 +426,10 @@ class KubernetesBackend(RuntimeBackend):
         """Wait until a Spark Connect server becomes reachable.
 
         Args:
-            host:
-                Hostname or IP address of the Spark Connect server.
-
-            port:
-                TCP port of the Spark Connect server.
-
-            timeout_sec:
-                Maximum time in seconds to wait.
-
-            interval_sec:
-                Time in seconds between connection attempts.
+            host: Hostname or IP address of the Spark Connect server.
+            port: TCP port of the Spark Connect server.
+            timeout_sec: Maximum time in seconds to wait.
+            interval_sec: Time in seconds between connection attempts.
 
         Returns:
             True if the server becomes reachable before the timeout, otherwise False.
@@ -685,21 +726,41 @@ class KubernetesBackend(RuntimeBackend):
             timeout,
         )
 
+        success = False
+
         try:
             info = self._wait_for_session_ready(info.name, timeout=timeout)
-            logger.info("Session ready, connecting (service_name=%s)", info.service_name)
-            return self.connect(info, connect_timeout=connect_timeout)
-        except Exception as e:
-            logger.warning(
-                "Failed to setup or connect to SparkConnect session %s/%s: %s. "
-                "Cleaning up SparkConnect session.",
-                info.namespace,
-                info.name,
-                e,
+
+            logger.info(
+                "Session ready, connecting (service_name=%s)",
+                info.service_name,
             )
-            with contextlib.suppress(Exception):
-                self.delete_session(info.name)
-            raise
+
+            session = self.connect(
+                info,
+                connect_timeout=connect_timeout,
+            )
+
+            success = True
+            return session
+
+        finally:
+            if not success:
+                logger.warning(
+                    "Failed to setup or connect to SparkConnect session %s/%s. "
+                    "Cleaning up SparkConnect session.",
+                    info.namespace,
+                    info.name,
+                )
+
+                try:
+                    self.delete_session(info.name)
+                except Exception:
+                    logger.exception(
+                        "Failed to clean up SparkConnect session %s/%s",
+                        info.namespace,
+                        info.name,
+                    )
 
     def get_session_logs(
         self,

@@ -21,6 +21,7 @@ from unittest.mock import Mock, patch
 from kubeflow_spark_api import models
 import pytest
 
+from kubeflow.common import constants as common_constants
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.spark.backends.kubernetes.utils import (
@@ -874,24 +875,23 @@ def test_get_spark_connect_info_from_cr(
             assert info.service_name == "my-session-svc"
             assert info.creation_timestamp is not None
 
-        elif test_case.name == "provisioning status":
-            assert info.name == "new-session"
-            assert info.namespace == "spark"
+        elif test_case.name == "empty status":
             assert info.state == SparkConnectState.PROVISIONING
+            assert info.driver_pod_name is None
 
         elif test_case.name == "failed status":
             assert info.state == SparkConnectState.FAILED
 
         elif test_case.name == "running status":
-            assert info.state == SparkConnectState.UNKNOWN
+            assert info.state == common_constants.UNKNOWN
             assert info.service_name == "run-session-svc"
-
-        elif test_case.name == "empty status":
+        elif test_case.name == "provisioning status":
+            assert info.name == "new-session"
+            assert info.namespace == "spark"
             assert info.state == SparkConnectState.PROVISIONING
-            assert info.driver_pod_name is None
 
         elif test_case.name == "unknown status":
-            assert info.state == SparkConnectState.UNKNOWN
+            assert info.state == common_constants.UNKNOWN
 
     else:
         with pytest.raises(
