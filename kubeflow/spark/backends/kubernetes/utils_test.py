@@ -21,7 +21,6 @@ from unittest.mock import Mock, patch
 from kubeflow_spark_api import models
 import pytest
 
-from kubeflow.common.testing import FAILED, SUCCESS, TestCase
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.spark.backends.kubernetes.utils import (
@@ -54,6 +53,7 @@ from kubeflow.spark.types.types import (
     SparkConnectState,
     SparkJobStatus,
 )
+from test.testing import FAILED, SUCCESS, TestCase
 
 # --------------------------
 # Fixtures

@@ -14,7 +14,7 @@
 import pytest
 
 from kubeflow.common import utils
-from kubeflow.common.testing import SUCCESS, TestCase
+from test.testing import SUCCESS, TestCase
 
 # --------------------------
 # Test Helpers

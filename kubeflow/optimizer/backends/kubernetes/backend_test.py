@@ -28,14 +28,6 @@ from unittest.mock import Mock, patch
 from kubeflow_katib_api import models
 import pytest
 
-from kubeflow.common.testing import (
-    DEFAULT_NAMESPACE,
-    FAILED,
-    RUNTIME,
-    SUCCESS,
-    TIMEOUT,
-    TestCase,
-)
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.optimizer.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.optimizer.constants import constants
@@ -64,6 +56,14 @@ from kubeflow.trainer.types.types import (
     TrainerType,
     TrainJob,
     TrainJobTemplate,
+)
+from test.testing import (
+    DEFAULT_NAMESPACE,
+    FAILED,
+    RUNTIME,
+    SUCCESS,
+    TIMEOUT,
+    TestCase,
 )
 
 T = TypeVar("T")

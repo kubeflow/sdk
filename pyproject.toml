@@ -142,7 +142,7 @@ ignore = [
 
 [tool.ruff.lint.isort]
 # Make import sorting deterministic and "first-party aware"
-known-first-party = ["kubeflow"]
+known-first-party = ["kubeflow", "test"]
 combine-as-imports = true
 force-sort-within-sections = true
 

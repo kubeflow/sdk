@@ -22,10 +22,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from kubeflow.common.testing import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.backends.container import runtime_loader
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types as base_types
+from test.testing import FAILED, SUCCESS, TestCase
 
 # Sample runtime YAML data for testing
 SAMPLE_RUNTIME_YAML = {

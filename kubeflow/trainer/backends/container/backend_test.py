@@ -28,7 +28,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from kubeflow.common.testing import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.backends.container.adapters.base import (
     BaseContainerClientAdapter,
 )
@@ -36,6 +35,7 @@ from kubeflow.trainer.backends.container.backend import ContainerBackend
 from kubeflow.trainer.backends.container.types import ContainerBackendConfig
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
+from test.testing import FAILED, SUCCESS, TestCase
 
 
 # Mock Container Adapter

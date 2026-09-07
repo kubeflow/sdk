@@ -19,7 +19,6 @@ from unittest.mock import patch
 
 import pytest
 
-from kubeflow.common.testing import SUCCESS, TestCase
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
@@ -30,6 +29,7 @@ from kubeflow.spark.types.types import (
     SparkJob,
     SparkJobStatus,
 )
+from test.testing import SUCCESS, TestCase
 
 
 @pytest.mark.parametrize(

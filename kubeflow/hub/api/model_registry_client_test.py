@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 
-from kubeflow.common.testing import FAILED, SUCCESS, TestCase
+from test.testing import FAILED, SUCCESS, TestCase
 
 
 @pytest.fixture(autouse=True)
