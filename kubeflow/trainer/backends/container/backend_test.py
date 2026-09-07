@@ -895,13 +895,25 @@ def test_get_job_logs(container_backend, test_case):
             config={"wait_status": constants.TRAINJOB_COMPLETE, "container_exit_code": 1},
             expected_error=RuntimeError,
         ),
+        TestCase(
+            name="unknown node blocks complete",
+            expected_status=FAILED,
+            config={
+                "wait_status": constants.TRAINJOB_COMPLETE,
+                "num_nodes": 2,
+                "timeout": 2,
+            },
+            expected_error=TimeoutError,
+        ),
     ],
 )
 def test_wait_for_job_status(container_backend, test_case):
     """Test waiting for job status."""
     print("Executing test:", test_case.name)
     try:
-        trainer = types.CustomTrainer(func=simple_train_func, num_nodes=1)
+        trainer = types.CustomTrainer(
+            func=simple_train_func, num_nodes=test_case.config.get("num_nodes", 1)
+        )
         runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
         job_name = container_backend.train(runtime=runtime, trainer=trainer)
 
@@ -935,6 +947,22 @@ def test_wait_for_job_status(container_backend, test_case):
             container_backend.wait_for_job_status(
                 job_name, status={test_case.config["wait_status"]}, timeout=5, polling_interval=1
             )
+
+        elif test_case.name == "unknown node blocks complete":
+            # node-0 finishes successfully, node-1 sits in a state that maps to
+            # Unknown. The job must not be reported Complete on node-0 alone.
+            node_0, node_1 = container_backend._adapter.containers_created[:2]
+            container_backend._adapter.set_container_status(node_0["id"], "exited", 0)
+            container_backend._adapter.set_container_status(node_1["id"], "paused")
+
+            container_backend.wait_for_job_status(
+                job_name,
+                status={test_case.config["wait_status"]},
+                timeout=test_case.config["timeout"],
+                polling_interval=1,
+            )
+
+            assert test_case.expected_status == SUCCESS
 
     except Exception as e:
         assert type(e) is test_case.expected_error
