@@ -16,6 +16,36 @@ import pytest
 from kubeflow.common import utils
 from kubeflow.trainer.test.common import SUCCESS, TestCase
 
+# --------------------------
+# Test Helpers
+# --------------------------
+
+
+def sample_function() -> None:
+    """Sample function for testing."""
+    print("Hello World")
+
+
+async def sample_async_function() -> None:
+    """Sample async function for testing."""
+    pass
+
+
+def sample_decorator(func):
+    """Pass-through decorator for testing."""
+    return func
+
+
+@sample_decorator
+def sample_decorated_function() -> None:
+    """Sample decorated function."""
+    pass
+
+
+# --------------------------
+# Tests
+# --------------------------
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -67,3 +97,54 @@ def test_validate_wait_for_job_status(test_case):
             utils.validate_wait_for_job_status(polling_interval, timeout)
     else:
         utils.validate_wait_for_job_status(polling_interval, timeout)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="valid function",
+            expected_status=SUCCESS,
+            config={"func": sample_function},
+        ),
+        TestCase(
+            name="not a function",
+            expected_status=SUCCESS,
+            config={"func": "not a function"},
+            expected_error=ValueError,
+            expected_output="Function must be a Python function.",
+        ),
+        TestCase(
+            name="lambda function",
+            expected_status=SUCCESS,
+            config={"func": lambda: None},
+            expected_error=ValueError,
+            expected_output="Lambda functions are not supported.",
+        ),
+        TestCase(
+            name="async function",
+            expected_status=SUCCESS,
+            config={"func": sample_async_function},
+            expected_error=ValueError,
+            expected_output="Async functions are not supported.",
+        ),
+        TestCase(
+            name="decorated function",
+            expected_status=SUCCESS,
+            config={"func": sample_decorated_function},
+            expected_error=ValueError,
+            expected_output="Decorated functions are not supported.",
+        ),
+    ],
+)
+def test_validate_python_function(test_case):
+    """Test validate_python_function with valid and invalid functions."""
+    print("Executing test:", test_case.name)
+
+    func = test_case.config["func"]
+
+    if test_case.expected_error:
+        with pytest.raises(test_case.expected_error, match=test_case.expected_output):
+            utils.validate_python_function(func)
+    else:
+        utils.validate_python_function(func)
