@@ -836,11 +836,12 @@ class KubernetesBackend(RuntimeBackend):
 
         # Ensure the function source does not contain the reserved heredoc delimiter.
         if any(
-            line.strip() == constants.FUNC_JOB_SCRIPT_DELIMITER for line in func_source.splitlines()
+            line.strip() == common_constants.EMBEDDED_PYTHON_SCRIPT_DELIMITER
+            for line in func_source.splitlines()
         ):
             raise ValueError(
                 "`job.func` source contains the reserved heredoc delimiter "
-                f"{constants.FUNC_JOB_SCRIPT_DELIMITER!r}, which is not supported."
+                f"{common_constants.EMBEDDED_PYTHON_SCRIPT_DELIMITER!r}, which is not supported."
             )
 
         if job.func_args is not None:

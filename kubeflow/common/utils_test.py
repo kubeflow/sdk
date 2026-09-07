@@ -148,3 +148,15 @@ def test_validate_python_function(test_case):
             utils.validate_python_function(func)
     else:
         utils.validate_python_function(func)
+
+
+def test_get_embedded_python_script() -> None:
+    func_code = 'print("$HOME")'
+    func_file = "/tmp/job.py"
+
+    result = utils.get_embedded_python_script(func_code, func_file)
+
+    assert "<< '__KUBEFLOW_FUNC_JOB_SCRIPT__'" in result
+    assert func_code in result
+    assert "\n__KUBEFLOW_FUNC_JOB_SCRIPT__\n" in result
+    assert f'"{func_file}"' in result
