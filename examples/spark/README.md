@@ -60,10 +60,10 @@ Demonstrates reading and writing Iceberg tables using MinIO as S3-compatible sto
 
 ### Setup
 
-Enable the Iceberg/MinIO services in the Spark e2e cluster bootstrap:
+After creating the Spark e2e cluster, install the optional Iceberg/MinIO fixtures:
 
 ```bash
-SPARK_E2E_ENABLE_ICEBERG_MINIO=1 make test-e2e-setup-cluster
+make test-e2e-setup-fixtures
 ```
 
 Wait for the setup to finish. The Spark dependency comes from `pyproject.toml` via `kubeflow[spark]`, so there is no separate PySpark install step.
@@ -93,10 +93,10 @@ The example can be configured via environment variables:
 
 | Variable | Default | Description |
 |---|---|---|
-| `MINIO_ENDPOINT` | `http://localhost:9000` | MinIO endpoint |
+| `MINIO_ENDPOINT` | `http://minio:9000` | MinIO endpoint |
 | `MINIO_ACCESS_KEY` | `minioadmin` | MinIO access key |
 | `MINIO_SECRET_KEY` | `minioadmin` | MinIO secret key |
-| `ICEBERG_REST_URI` | `http://localhost:8181` | Iceberg REST catalog URI |
+| `ICEBERG_REST_URI` | `http://iceberg-rest:8181` | Iceberg REST catalog URI |
 | `ICEBERG_WAREHOUSE` | `s3://warehouse/` | Warehouse location |
 
 The e2e setup also accepts overrides for `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`,

@@ -59,13 +59,13 @@ import uuid
 from pyspark.sql import SparkSession
 
 from kubeflow.common.types import KubernetesBackendConfig
-from kubeflow.spark import Name, SparkClient
+from kubeflow.spark import Name, PodTemplateOverride, SparkClient
 
 # MinIO / S3 credentials — replace with your own for production
-MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")
+MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "http://minio:9000")
 MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY", "minioadmin")
 MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "minioadmin")
-ICEBERG_REST_URI = os.environ.get("ICEBERG_REST_URI", "http://localhost:8181")
+ICEBERG_REST_URI = os.environ.get("ICEBERG_REST_URI", "http://iceberg-rest:8181")
 WAREHOUSE = os.environ.get("ICEBERG_WAREHOUSE", "s3://warehouse/")
 
 
@@ -109,9 +109,8 @@ def create_spark_session() -> tuple[SparkClient, SparkSession, str]:
             # Use direct JAR URLs so the server can fetch artifacts without
             # relying on Ivy/package resolution (helpful in air-gapped CI).
             "spark.jars": (
-                "https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-4.0_2.13/1.9.1/iceberg-spark-runtime-4.0_2.13-1.9.1.jar,"
-                "https://repo1.maven.org/maven2/software/amazon/awssdk/s3/2.26.24/s3-2.26.24.jar,"
-                "https://repo1.maven.org/maven2/software/amazon/awssdk/url-connection-client/2.26.24/url-connection-client-2.26.24.jar"
+                "https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-4.0_2.13/1.11.0/iceberg-spark-runtime-4.0_2.13-1.11.0.jar,"
+                "https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/1.11.0/iceberg-aws-bundle-1.11.0.jar"
             ),
             # Pass AWS region to driver JVM.
             "spark.driver.extraJavaOptions": "-Daws.region=us-east-1",
@@ -130,7 +129,22 @@ def create_spark_session() -> tuple[SparkClient, SparkSession, str]:
             "spark.sql.catalog.lakehouse.s3.path-style-access": "true",
             "spark.sql.catalog.lakehouse.s3.region": "us-east-1",
         },
-        options=[Name(session_name)],
+        options=[
+            Name(session_name),
+            PodTemplateOverride(
+                role="driver",
+                template={
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": "spark-connect-server",
+                                "envFrom": [{"secretRef": {"name": "minio-credentials"}}],
+                            }
+                        ]
+                    }
+                },
+            ),
+        ],
         timeout=180 if os.environ.get("SPARK_E2E_RUN_IN_CLUSTER") == "1" else 300,
         connect_timeout=60 if os.environ.get("SPARK_E2E_RUN_IN_CLUSTER") == "1" else 120,
     )
