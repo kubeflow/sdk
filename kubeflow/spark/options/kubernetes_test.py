@@ -28,7 +28,7 @@ from kubeflow.spark.options import (
     NodeSelector,
     Toleration,
 )
-from test.testing import FAILED, SUCCESS, TestCase
+from test.common import FAILED, SUCCESS, TestCase
 
 
 @pytest.fixture

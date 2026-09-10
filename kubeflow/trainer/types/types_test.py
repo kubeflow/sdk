@@ -15,7 +15,7 @@
 import pytest
 
 from kubeflow.trainer.types import types
-from test.testing import FAILED, SUCCESS, TestCase
+from test.common import FAILED, SUCCESS, TestCase
 
 
 @pytest.mark.parametrize(

@@ -51,7 +51,7 @@ from kubeflow.trainer.options import (
     TrainingRuntimeSpecPatch,
 )
 from kubeflow.trainer.types import types
-from test.testing import (
+from test.common import (
     DEFAULT_NAMESPACE,
     FAILED,
     RUNTIME,

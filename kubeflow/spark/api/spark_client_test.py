@@ -26,7 +26,7 @@ from kubeflow.spark.types.types import (
     FuncJob,
     SparkJob,
 )
-from test.testing import FAILED, SUCCESS, TestCase
+from test.common import FAILED, SUCCESS, TestCase
 
 
 @pytest.mark.parametrize(

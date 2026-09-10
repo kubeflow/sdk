@@ -29,7 +29,7 @@ from kubeflow.spark.types.types import (
     SparkJob,
     SparkJobStatus,
 )
-from test.testing import SUCCESS, TestCase
+from test.common import SUCCESS, TestCase
 
 
 @pytest.mark.parametrize(

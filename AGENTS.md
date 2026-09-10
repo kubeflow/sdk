@@ -37,7 +37,7 @@ docs/                            # Kubeflow SDK documentation
 examples/                        # Kubeflow SDK examples
 hack/                            # Scripts to manage CI/CD and installation
 proposals/                       # Kubeflow Enhancement Proposals (KEPs)
-test/                            # Top-level end-to-end tests and shared test helpers (testing.py)
+test/                            # Top-level end-to-end tests and shared test helpers (common.py)
 kubeflow/                        # Main Python package
 ├── common/                        # Shared utilities, types, and constants across all projects
 │
@@ -177,7 +177,7 @@ uv run pre-commit run --all-files           # Run all hooks
 - Every new feature or bugfix MUST be covered by unit tests
 - Unit tests: `kubeflow/trainer/**/*_test.py` (no network calls allowed)
 - Use `pytest` with `TestCase` dataclass for parametrized tests (see `kubeflow/trainer/backends/kubernetes/backend_test.py` for the reference pattern)
-- See `test/testing.py` for shared fixtures and patterns
+- See `test/common.py` for shared fixtures and patterns
 
 ### 4. Security
 

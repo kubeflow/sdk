@@ -34,7 +34,7 @@ from kubeflow.trainer.options import (
     RuntimePatch,
 )
 from kubeflow.trainer.types import types
-from test.testing import FAILED, SUCCESS, TestCase
+from test.common import FAILED, SUCCESS, TestCase
 
 # Test constants
 TORCH_RUNTIME = constants.DEFAULT_TRAINING_RUNTIME
