@@ -18,6 +18,7 @@ For the full documentation, see [Interactive Sessions](https://sdk.kubeflow.org/
 - **demo_existing_sparkconnect.py** - Connect to existing SparkConnect cluster
 - **connect_existing_session.py** - Connect to an existing Spark Connect session through `base_url`
 - **test_connect_url.py** - Test URL-based connection to Spark Connect
+- **batch_job_filesystem_uris.py** - Submit batch jobs via `s3a://`, `gs://`, or `hdfs://` URIs
 
 ### Batch Jobs
 
