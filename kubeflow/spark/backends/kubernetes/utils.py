@@ -670,9 +670,6 @@ def get_spark_job_driver_spec(
 ) -> models.SparkV1beta2DriverSpec:
     """Build DriverSpec for SparkApplication.
 
-    The service account is intentionally left unset so that the Spark
-    Operator's configured fallback service account is used.
-
     Returns:
         SparkApplication DriverSpec model.
 
