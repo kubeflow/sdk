@@ -417,12 +417,12 @@ def test_get_script_for_python_packages(test_case):
                 "bash",
                 "-c",
                 (
-                    "\nread -r -d '' SCRIPT << '__KUBEFLOW_FUNC_JOB_SCRIPT__'\n"
+                    "\nread -r -d '' SCRIPT << '__KUBEFLOW_EMBEDDED_SCRIPT__'\n"
                     "def sample_train_func() -> None:\n"
                     '    """Sample training function."""\n'
                     '    print("Hello World")\n\n'
                     "sample_train_func(**{'batch_size': 128, 'learning_rate': 0.001, 'epochs': 20})\n\n"
-                    "__KUBEFLOW_FUNC_JOB_SCRIPT__\n\n"
+                    "__KUBEFLOW_EMBEDDED_SCRIPT__\n\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
                 ),
@@ -440,12 +440,12 @@ def test_get_script_for_python_packages(test_case):
                 "bash",
                 "-c",
                 (
-                    "\nread -r -d '' SCRIPT << '__KUBEFLOW_FUNC_JOB_SCRIPT__'\n"
+                    "\nread -r -d '' SCRIPT << '__KUBEFLOW_EMBEDDED_SCRIPT__'\n"
                     "def sample_train_func() -> None:\n"
                     '    """Sample training function."""\n'
                     '    print("Hello World")\n\n'
                     "sample_train_func()\n\n"
-                    "__KUBEFLOW_FUNC_JOB_SCRIPT__\n\n"
+                    "__KUBEFLOW_EMBEDDED_SCRIPT__\n\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
                 ),
@@ -487,12 +487,12 @@ def test_get_script_for_python_packages(test_case):
                 "bash",
                 "-c",
                 (
-                    "\nread -r -d '' SCRIPT << '__KUBEFLOW_FUNC_JOB_SCRIPT__'\n"
+                    "\nread -r -d '' SCRIPT << '__KUBEFLOW_EMBEDDED_SCRIPT__'\n"
                     "def sample_train_func() -> None:\n"
                     '    """Sample training function."""\n'
                     '    print("Hello World")\n\n'
                     "sample_train_func(**{'a': 1, 'b': 2})\n\n"
-                    "__KUBEFLOW_FUNC_JOB_SCRIPT__\n\n"
+                    "__KUBEFLOW_EMBEDDED_SCRIPT__\n\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
                 ),
@@ -510,12 +510,12 @@ def test_get_script_for_python_packages(test_case):
                 "bash",
                 "-c",
                 (
-                    "\nread -r -d '' SCRIPT << '__KUBEFLOW_FUNC_JOB_SCRIPT__'\n"
+                    "\nread -r -d '' SCRIPT << '__KUBEFLOW_EMBEDDED_SCRIPT__'\n"
                     "def sample_train_func_kwargs(a: int, b: str, c: float) -> str:\n"
                     '    """Sample training function with kwargs."""\n'
                     '    return "ok"\n\n'
                     "sample_train_func_kwargs(**{'a': 3, 'b': 'hi', 'c': 0.2})\n\n"
-                    "__KUBEFLOW_FUNC_JOB_SCRIPT__\n\n"
+                    "__KUBEFLOW_EMBEDDED_SCRIPT__\n\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
                 ),
@@ -554,12 +554,12 @@ def test_get_script_for_python_packages(test_case):
                     '    cat "$LOG_FILE" >&2\n'
                     "    exit 1\n"
                     "fi\n\n"
-                    "\nread -r -d '' SCRIPT << '__KUBEFLOW_FUNC_JOB_SCRIPT__'\n"
+                    "\nread -r -d '' SCRIPT << '__KUBEFLOW_EMBEDDED_SCRIPT__'\n"
                     "def sample_train_func() -> None:\n"
                     '    """Sample training function."""\n'
                     '    print("Hello World")\n\n'
                     "sample_train_func()\n\n"
-                    "__KUBEFLOW_FUNC_JOB_SCRIPT__\n\n"
+                    "__KUBEFLOW_EMBEDDED_SCRIPT__\n\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
                 ),

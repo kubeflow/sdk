@@ -22,4 +22,4 @@ DEFAULT_TIMEOUT = 120
 UNKNOWN = "Unknown"
 
 # Delimiter used when embedding Python source code in a shell heredoc.
-EMBEDDED_PYTHON_SCRIPT_DELIMITER = "__KUBEFLOW_FUNC_JOB_SCRIPT__"
+EMBEDDED_PYTHON_SCRIPT_DELIMITER = "__KUBEFLOW_EMBEDDED_SCRIPT__"

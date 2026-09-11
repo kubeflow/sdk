@@ -156,7 +156,7 @@ def test_get_embedded_python_script() -> None:
 
     result = utils.get_embedded_python_script(func_code, func_file)
 
-    assert "<< '__KUBEFLOW_FUNC_JOB_SCRIPT__'" in result
+    assert "<< '__KUBEFLOW_EMBEDDED_SCRIPT__'" in result
     assert func_code in result
-    assert "\n__KUBEFLOW_FUNC_JOB_SCRIPT__\n" in result
+    assert "\n__KUBEFLOW_EMBEDDED_SCRIPT__\n" in result
     assert f'"{func_file}"' in result
