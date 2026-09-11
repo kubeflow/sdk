@@ -294,12 +294,13 @@ def get_custom_trainer(
     # Append the embedded training function script that matches EXEC_FUNC_SCRIPT
     # with torchrun as the entrypoint and a fixed lambda for deterministic tests.
     func_script = (
-        "\nread -r -d '' SCRIPT << EOM\n\n"
+        "\nread -r -d '' SCRIPT << '__KUBEFLOW_EMBEDDED_SCRIPT__'\n"
         "def sample_train_func() -> None:\n"
         '    """Sample training function."""\n'
         '    print("Hello World")\n\n'
         "sample_train_func(**{'learning_rate': 0.001, 'batch_size': 32})\n\n"
-        'EOM\nprintf "%s" "$SCRIPT" > "backend_test.py"\n'
+        "__KUBEFLOW_EMBEDDED_SCRIPT__\n\n"
+        'printf "%s" "$SCRIPT" > "backend_test.py"\n'
         'torchrun "backend_test.py"'
     )
 
