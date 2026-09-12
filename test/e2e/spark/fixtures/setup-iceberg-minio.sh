@@ -108,7 +108,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: mc
-          image: quay.io/minio/mc:RELEASE.2024-06-13T22-53-53Z
+          image: quay.io/minio/mc:RELEASE.2024-11-21T17-21-54Z
           command: [/bin/sh, -c]
           args:
             - mc alias set local http://minio:9000 "\$MINIO_ACCESS_KEY" "\$MINIO_SECRET_KEY" && mc mb local/warehouse --ignore-existing
