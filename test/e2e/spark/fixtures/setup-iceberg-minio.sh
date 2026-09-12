@@ -54,7 +54,7 @@ spec:
       containers:
         - name: minio
           image: minio/minio
-          args: [server, /data, --console-address, :9001]
+          args: [server, /data, --console-address, ":9001"]
           env:
             - {name: MINIO_ROOT_USER, valueFrom: {secretKeyRef: {name: minio-credentials, key: MINIO_ACCESS_KEY}}}
             - {name: MINIO_ROOT_PASSWORD, valueFrom: {secretKeyRef: {name: minio-credentials, key: MINIO_SECRET_KEY}}}
@@ -104,9 +104,9 @@ spec:
           envFrom: [{secretRef: {name: minio-credentials}}]
           env:
             - {name: AWS_REGION, value: us-east-1}
-            - {name: CATALOG_WAREHOUSE, value: s3://warehouse/}
+            - {name: CATALOG_WAREHOUSE, value: "s3://warehouse/"}
             - {name: CATALOG_IO__IMPL, value: org.apache.iceberg.aws.s3.S3FileIO}
-            - {name: CATALOG_S3_ENDPOINT, value: http://minio:9000}
+            - {name: CATALOG_S3_ENDPOINT, value: "http://minio:9000"}
             - {name: CATALOG_S3_PATH__STYLE__ACCESS, value: "true"}
           ports: [{containerPort: 8181}]
 EOF
