@@ -60,24 +60,6 @@ spec:
             - {name: MINIO_ROOT_PASSWORD, valueFrom: {secretKeyRef: {name: minio-credentials, key: MINIO_SECRET_KEY}}}
           ports: [{containerPort: 9000}, {containerPort: 9001}]
 ---
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: minio-init
-  namespace: $NAMESPACE
-spec:
-  backoffLimit: 0
-  template:
-    spec:
-      restartPolicy: Never
-      containers:
-        - name: mc
-          image: quay.io/minio/mc:RELEASE.2024-06-13T22-53-53Z
-          command: [/bin/sh, -c]
-          args:
-            - until mc alias set local http://minio:9000 "\$MINIO_ACCESS_KEY" "\$MINIO_SECRET_KEY"; do sleep 2; done; mc mb local/warehouse --ignore-existing
-          envFrom: [{secretRef: {name: minio-credentials}}]
----
 apiVersion: v1
 kind: Service
 metadata:
@@ -112,5 +94,26 @@ spec:
 EOF
 
 kubectl rollout status deployment/minio -n "$NAMESPACE" --timeout=180s
+
+kubectl apply -f - <<EOF
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-init
+  namespace: $NAMESPACE
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: mc
+          image: quay.io/minio/mc:RELEASE.2024-06-13T22-53-53Z
+          command: [/bin/sh, -c]
+          args:
+            - mc alias set local http://minio:9000 "\$MINIO_ACCESS_KEY" "\$MINIO_SECRET_KEY" && mc mb local/warehouse --ignore-existing
+          envFrom: [{secretRef: {name: minio-credentials}}]
+EOF
+
 kubectl wait --for=condition=complete job/minio-init -n "$NAMESPACE" --timeout=180s
 kubectl rollout status deployment/iceberg-rest -n "$NAMESPACE" --timeout=180s
