@@ -59,7 +59,7 @@ import uuid
 from pyspark.sql import SparkSession
 
 from kubeflow.common.types import KubernetesBackendConfig
-from kubeflow.spark import Name, PodTemplateOverride, SparkClient
+from kubeflow.spark import Name, SparkClient
 
 # MinIO / S3 credentials — replace with your own for production
 MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "http://minio:9000")
@@ -129,22 +129,7 @@ def create_spark_session() -> tuple[SparkClient, SparkSession, str]:
             "spark.sql.catalog.lakehouse.s3.path-style-access": "true",
             "spark.sql.catalog.lakehouse.s3.region": "us-east-1",
         },
-        options=[
-            Name(session_name),
-            PodTemplateOverride(
-                role="driver",
-                template={
-                    "spec": {
-                        "containers": [
-                            {
-                                "name": "spark-connect-server",
-                                "envFrom": [{"secretRef": {"name": "minio-credentials"}}],
-                            }
-                        ]
-                    }
-                },
-            ),
-        ],
+        options=[Name(session_name)],
         timeout=180 if os.environ.get("SPARK_E2E_RUN_IN_CLUSTER") == "1" else 300,
         connect_timeout=60 if os.environ.get("SPARK_E2E_RUN_IN_CLUSTER") == "1" else 120,
     )
