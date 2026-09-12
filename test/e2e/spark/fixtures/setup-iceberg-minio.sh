@@ -53,7 +53,7 @@ spec:
     spec:
       containers:
         - name: minio
-          image: minio/minio
+          image: quay.io/minio/minio:RELEASE.2024-06-13T22-53-53Z
           args: [server, /data, --console-address, ":9001"]
           env:
             - {name: MINIO_ROOT_USER, valueFrom: {secretKeyRef: {name: minio-credentials, key: MINIO_ACCESS_KEY}}}
@@ -72,7 +72,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: mc
-          image: minio/mc
+          image: quay.io/minio/mc:RELEASE.2024-06-13T22-53-53Z
           command: [/bin/sh, -c]
           args:
             - until mc alias set local http://minio:9000 "\$MINIO_ACCESS_KEY" "\$MINIO_SECRET_KEY"; do sleep 2; done; mc mb local/warehouse --ignore-existing
