@@ -14,7 +14,6 @@
 
 """Kubernetes backend for Spark operations."""
 
-import ast
 from collections.abc import Iterator
 import contextlib
 import inspect
@@ -37,6 +36,7 @@ from pyspark.sql import SparkSession
 
 from kubeflow.common import constants as common_constants
 from kubeflow.common.types import KubernetesBackendConfig
+from kubeflow.common.utils import validate_python_function
 from kubeflow.spark.backends.base import RuntimeBackend
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.utils import (
@@ -50,7 +50,6 @@ from kubeflow.spark.backends.kubernetes.utils import (
     get_spark_connect_info_from_cr,
     read_pod_logs,
 )
-from kubeflow.spark.types.options import Name
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
@@ -119,35 +118,6 @@ class KubernetesBackend(RuntimeBackend):
     # Spark Connect sessions
     # ------------------------------------------------------------------
 
-    def _extract_name_option(self, options: list | None) -> tuple[str, list]:
-        """Extract Name option from options list, or generate name if absent.
-
-        Args:
-            options: List of option objects (Labels, Annotations, etc.).
-
-        Returns:
-            Tuple of (session_name, filtered_options):
-            - session_name: Name from Name option, or auto-generated name
-            - filtered_options: Options list with Name option removed
-        """
-        if not options:
-            return generate_session_name(), []
-
-        name_from_option = None
-        filtered_options = []
-
-        for option in options:
-            if isinstance(option, Name):
-                name_from_option = option.name
-                # Don't add Name option to filtered list
-            else:
-                filtered_options.append(option)
-
-        # Use Name option if provided, otherwise auto-generate
-        session_name = name_from_option if name_from_option else generate_session_name()
-
-        return session_name, filtered_options
-
     def _create_session(
         self,
         num_executors: int | None = None,
@@ -176,8 +146,7 @@ class KubernetesBackend(RuntimeBackend):
             RuntimeError:
                 If the SparkConnect resource cannot be created.
         """
-        # Extract Name option if present, or auto-generate
-        name, filtered_options = self._extract_name_option(options)
+        name = generate_session_name()
 
         spark_connect = build_spark_connect_cr(
             name=name,
@@ -187,7 +156,7 @@ class KubernetesBackend(RuntimeBackend):
             spark_conf=spark_conf,
             driver=driver,
             executor=executor,
-            options=filtered_options,  # Use filtered list
+            options=options,
             backend=self,  # Pass backend for option validation
         )
 
@@ -448,6 +417,11 @@ class KubernetesBackend(RuntimeBackend):
         Returns:
             (connect_url, port_forward_process or None). Caller may keep process reference;
             process exits when the Python process exits.
+
+        Raises:
+            RuntimeError: If the session reports no port-forward target, if
+                build_service_url cannot resolve an in-cluster host, or if
+                port-forward fails for every candidate.
         """
         if os.environ.get("KUBERNETES_SERVICE_HOST"):
             url = build_service_url(info)
@@ -457,19 +431,20 @@ class KubernetesBackend(RuntimeBackend):
         if port is None:
             port_str = os.environ.get("SPARK_CONNECT_LOCAL_PORT")
             port = int(port_str) if port_str else random.randint(15002, 16002)
-        # Prefer pod when available (bypasses Service/EndpointSlice); then try svc names
+        # Prefer pod when available (bypasses Service/EndpointSlice); then try svc name
         candidates: list[tuple[str, str]] = []
         if info.driver_pod_name:
             candidates.append(("pod", info.driver_pod_name))
-        for svc in [f"{info.name}-svc", info.service_name, f"{info.name}-server"]:
-            if svc and not any(c[0] == "svc" and c[1] == svc for c in candidates):
-                candidates.append(("svc", svc))
-        seen: set[str] = set()
+        if info.service_name:
+            candidates.append(("svc", info.service_name))
+        if not candidates:
+            raise RuntimeError(
+                f"No port-forward target for {info.namespace}/{info.name}: neither "
+                "status.server.podName nor status.server.serviceName is populated. "
+                "The session is not ready."
+            )
         for kind, target in candidates:
             key = f"{kind}/{target}"
-            if key in seen:
-                continue
-            seen.add(key)
             # Use 127.0.0.1 instead of localhost to force IPv4 (gRPC may prefer IPv6 which can fail)
             url = f"sc://127.0.0.1:{port}"
             cmd = [
@@ -853,29 +828,13 @@ class KubernetesBackend(RuntimeBackend):
                 If the function or function arguments are invalid.
         """
 
-        if not inspect.isfunction(job.func):
-            raise ValueError("`job.func` must be a Python function.")
+        # Validate generic Python function properties.
+        validate_python_function(job.func)
 
-        if inspect.iscoroutinefunction(job.func):
-            raise ValueError("Async functions are not supported.")
+        # Get the function source for Spark-specific validation.
+        func_source = textwrap.dedent(inspect.getsource(job.func))
 
-        if job.func.__name__ == "<lambda>":
-            raise ValueError("Lambda functions are not supported.")
-
-        try:
-            func_source = textwrap.dedent(inspect.getsource(job.func))
-        except TypeError as e:
-            raise ValueError(
-                "`job.func` must be a pure-Python function; built-in or "
-                "C-implemented callables are not supported."
-            ) from e
-        except OSError as e:
-            raise ValueError(
-                "`job.func` source could not be read. Functions defined "
-                "interactively (REPL/Jupyter) or generated dynamically are "
-                "not supported; define it in a Python module."
-            ) from e
-
+        # Ensure the function source does not contain the reserved heredoc delimiter.
         if any(
             line.strip() == constants.FUNC_JOB_SCRIPT_DELIMITER for line in func_source.splitlines()
         ):
@@ -883,17 +842,6 @@ class KubernetesBackend(RuntimeBackend):
                 "`job.func` source contains the reserved heredoc delimiter "
                 f"{constants.FUNC_JOB_SCRIPT_DELIMITER!r}, which is not supported."
             )
-
-        try:
-            func_tree = ast.parse(func_source)
-        except SyntaxError as e:
-            raise ValueError("`job.func` source could not be parsed.") from e
-
-        if any(
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.decorator_list
-            for node in func_tree.body
-        ):
-            raise ValueError("Decorated functions are not supported.")
 
         if job.func_args is not None:
             if not isinstance(job.func_args, dict):
@@ -917,6 +865,8 @@ class KubernetesBackend(RuntimeBackend):
         job: FileJob | FuncJob,
         num_executors: int | None = None,
         resources_per_executor: dict[str, str] | None = None,
+        options: list | None = None,
+        spark_conf: dict[str, str] | None = None,
     ) -> SparkJob:
         """Submit a SparkApplication for batch execution.
 
@@ -929,6 +879,11 @@ class KubernetesBackend(RuntimeBackend):
 
             resources_per_executor:
                 Resource requirements per executor.
+
+            options:
+                List of additional Spark configuration options.
+            spark_conf:
+                Spark configuration properties to set on the SparkApplication.
 
         Returns:
             SparkJob information object.
@@ -947,11 +902,6 @@ class KubernetesBackend(RuntimeBackend):
 
         job_name = generate_job_name()
 
-        logger.info(
-            "Submitting SparkApplication '%s'",
-            job_name,
-        )
-
         if isinstance(job, FileJob):
             spark_application = get_spark_application_cr_from_file_job(
                 name=job_name,
@@ -960,6 +910,9 @@ class KubernetesBackend(RuntimeBackend):
                 arguments=job.args,
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
+                options=options,
+                backend=self,
+                spark_conf=spark_conf,
             )
 
         else:
@@ -970,7 +923,18 @@ class KubernetesBackend(RuntimeBackend):
                 func_args=job.func_args,
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
+                options=options,
+                backend=self,
+                spark_conf=spark_conf,
             )
+
+        # The Name option may override the auto-generated name.
+        job_name = spark_application.metadata.name
+
+        logger.info(
+            "Submitting SparkApplication '%s'",
+            job_name,
+        )
 
         try:
             thread = self.custom_api.create_namespaced_custom_object(

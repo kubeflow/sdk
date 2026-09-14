@@ -136,6 +136,9 @@ html_title = "Kubeflow SDK"
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 
+# Don't let every autodoc'd class/function bloat the sidebar's local TOC
+toc_object_entries = False
+
 # Furo theme options with top navigation
 html_theme_options = {
     "sidebar_hide_name": False,

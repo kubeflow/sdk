@@ -30,6 +30,7 @@ from urllib.parse import urlparse
 from kubeflow_trainer_api import models
 import requests
 
+from kubeflow.common.utils import validate_python_function
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 
@@ -352,10 +353,7 @@ def get_command_using_train_func(
         raise ValueError(f"Runtime must have a trainer: {runtime}")
 
     # Check if training function is callable.
-    if not callable(train_func):
-        raise ValueError(
-            f"Training function must be callable, got function type: {type(train_func)}"
-        )
+    validate_python_function(train_func)
 
     # Extract the function implementation.
     func_code = inspect.getsource(train_func)

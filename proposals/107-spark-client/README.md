@@ -253,7 +253,7 @@ spark.stop()
 - **Resource configuration**: Dictionary-based resources (e.g., `{"cpu": "5", "memory": "10Gi"}`)
 - **S3/Storage integration**: SeaweedFS, MinIO, and AWS S3 support via `s3_config()` and `seaweedfs_config()`
 - **Spark configuration**: Any Spark config via `spark_conf()` and `spark_confs()`
-- **Kubernetes features**: Advanced configs via `options` parameter (Labels, Annotations, PodTemplateOverrides)
+- **Kubernetes features**: Advanced configs via `options` parameter (Labels, Annotations)
 
 ---
 
@@ -338,12 +338,11 @@ class FuncJob:
 Advanced Kubernetes configurations are provided via `options` parameter:
 
 ```python
-from kubeflow.spark.options import Labels, Annotations, PodTemplateOverrides
+from kubeflow.spark.options import Labels, Annotations
 
 options = [
     Labels({"app": "spark"}),
     Annotations({"description": "ETL job"}),
-    PodTemplateOverrides(...)
 ]
 ```
 

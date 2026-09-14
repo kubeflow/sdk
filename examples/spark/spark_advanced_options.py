@@ -24,7 +24,6 @@ from kubeflow.spark import (
     Labels,
     Name,
     NodeSelector,
-    PodTemplateOverride,
     SparkClient,
     Toleration,
 )
@@ -172,64 +171,6 @@ def example_tolerations():
     print("\nExample complete.\n")
 
 
-def example_pod_template_override():
-    """Example 4: Full control with pod template overrides.
-
-    Pod template overrides provide complete control over pod specifications.
-    Use for advanced cases like security contexts, volumes, or sidecars.
-
-    Warning: Can conflict with SDK-managed settings. Use with caution.
-    """
-    print("=" * 70)
-    print("EXAMPLE 4: Pod Template Override (Advanced)")
-    print("=" * 70)
-
-    client = SparkClient(backend_config=_backend_config())
-
-    spark = client.connect(
-        driver=Driver(resources={"cpu": "2", "memory": "4Gi"}),
-        executor=Executor(
-            num_instances=5,
-            resources_per_executor={"cpu": "4", "memory": "8Gi"},
-        ),
-        spark_conf={"spark.serializer": "org.apache.spark.serializer.KryoSerializer"},
-        options=[
-            # Add security context to executors
-            PodTemplateOverride(
-                role="executor",
-                template={
-                    "spec": {
-                        "securityContext": {
-                            "runAsUser": 1000,
-                            "runAsGroup": 1000,
-                            "fsGroup": 1000,
-                            "runAsNonRoot": True,
-                        },
-                        "containers": [
-                            {
-                                "name": "spark-executor",
-                                "securityContext": {
-                                    "allowPrivilegeEscalation": False,
-                                    "capabilities": {"drop": ["ALL"]},
-                                },
-                            }
-                        ],
-                    }
-                },
-            ),
-        ],
-    )
-
-    print("\nSpark executors running with restricted security context.")
-    print("  Meets security requirements for sensitive data workloads")
-
-    df = spark.range(5000)
-    print(f"\nProcessed {df.count()} rows with enhanced security")
-
-    spark.stop()
-    print("\nExample complete.\n")
-
-
 def example_name_option():
     """Example: Set session name via Name option.
 
@@ -359,7 +300,6 @@ def main():
         if os.environ.get("SPARK_E2E_RUN_IN_CLUSTER") != "1":
             example_node_selection()
             example_tolerations()
-            example_pod_template_override()
             example_name_option()
             example_combined_options()
 

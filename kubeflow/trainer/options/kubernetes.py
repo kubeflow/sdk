@@ -477,3 +477,57 @@ class TrainerArgs:
         spec = job_spec.setdefault("spec", {})
         trainer_spec = spec.setdefault("trainer", {})
         trainer_spec["args"] = self.args
+
+
+@dataclass
+class ActiveDeadlineSeconds:
+    """Set the active deadline on the TrainJob (.spec.activeDeadlineSeconds).
+
+    Specifies the duration in seconds relative to the TrainJob creation time
+    that the TrainJob may be active before the system tries to terminate it.
+    Once reached, all running Pods are terminated and the TrainJob status
+    becomes Failed with reason: DeadlineExceeded.
+
+    This value overrides any default set in the referenced Runtime. The field
+    is immutable, so it cannot be changed after the TrainJob is created.
+
+    Supported backends:
+        - Kubernetes
+
+    Args:
+        seconds: Duration in seconds. Must be a positive integer (minimum 1).
+    """
+
+    seconds: int
+
+    def __post_init__(self):
+        """Validate the active deadline seconds configuration."""
+        if type(self.seconds) is not int or self.seconds < 1:
+            raise ValueError("activeDeadlineSeconds must be a positive integer (minimum 1)")
+
+    def __call__(
+        self,
+        job_spec: dict[str, Any],
+        trainer: CustomTrainer | BuiltinTrainer | None,
+        backend: RuntimeBackend,
+    ) -> None:
+        """Apply active deadline seconds to the job specification.
+
+        Args:
+            job_spec: Job specification dictionary to modify.
+            trainer: Optional trainer instance for context.
+            backend: Backend instance for validation.
+
+        Raises:
+            ValueError: If backend does not support active deadline.
+        """
+        from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
+
+        if not isinstance(backend, KubernetesBackend):
+            raise ValueError(
+                f"ActiveDeadlineSeconds option is not compatible with {type(backend).__name__}. "
+                f"Supported backends: KubernetesBackend"
+            )
+
+        spec = job_spec.setdefault("spec", {})
+        spec["activeDeadlineSeconds"] = self.seconds
