@@ -17,39 +17,33 @@ jobs:
   welcome:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/first-interaction@v3
+      - uses: actions/github-script@v7
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          issue_message: |
-            🎉 **Welcome to the Kubeflow SDK!** 🎉
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const isPr = !!context.payload.pull_request;
+            const creator = context.payload.sender.login;
 
-            Thanks for opening your first issue! We're happy to have you as part of our community 🚀
+            const { data: items } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              creator: creator,
+              state: 'all',
+              per_page: 100
+            });
+            
+            const matchingItems = items.filter(item => isPr ? item.pull_request : !item.pull_request);
+            const olderItems = matchingItems.filter(item => item.number < context.issue.number);
+            
+            if (olderItems.length === 0) {
+              const issueMsg = `🎉 **Welcome to the Kubeflow SDK!** 🎉\n\nThanks for opening your first issue! We're happy to have you as part of our community 🚀\n\n**Here's what happens next:**\n\n- Our team will review your issue soon! cc @kubeflow/kubeflow-sdk-team\n- If you'd like to contribute to this issue, check out our [Contributing Guide](https://github.com/kubeflow/sdk/blob/main/CONTRIBUTING.md) for repo-specific guidelines and the [Kubeflow Contributor Guide](https://www.kubeflow.org/docs/about/contributing/) for general community standards\n\n**Join the community:**\n- **Slack**: Join our [#kubeflow-ml-experience](https://www.kubeflow.org/docs/about/community/#kubeflow-slack-channels) and [#kubeflow-trainer](https://www.kubeflow.org/docs/about/community/#kubeflow-slack-channels) Slack channels\n- **Meetings**: Attend the [Kubeflow SDK and ML Experience](https://bit.ly/kf-ml-experience) bi-weekly meetings\n\nFeel free to ask questions in the comments if you need any help or clarification!\nThanks again for contributing to Kubeflow! 🙏`;
 
-            **Here's what happens next:**
+              const prMsg = `🎉 **Welcome to the Kubeflow SDK!** 🎉\n\nThanks for opening your first PR! We're happy to have you as part of our community 🚀\n\n**Here's what happens next:**\n\n- If you haven't already, please check out our [Contributing Guide](https://github.com/kubeflow/sdk/blob/main/CONTRIBUTING.md) for repo-specific guidelines and the [Kubeflow Contributor Guide](https://www.kubeflow.org/docs/about/contributing/) for general community standards\n- Our team will review your PR soon! cc @kubeflow/kubeflow-sdk-team\n\n**Join the community:**\n- **Slack**: Join our [#kubeflow-ml-experience](https://www.kubeflow.org/docs/about/community/#kubeflow-slack-channels) and [#kubeflow-trainer](https://www.kubeflow.org/docs/about/community/#kubeflow-slack-channels) Slack channels\n- **Meetings**: Attend the [Kubeflow SDK and ML Experience](https://bit.ly/kf-ml-experience) bi-weekly meetings\n\nFeel free to ask questions in the comments if you need any help or clarification!\nThanks again for contributing to Kubeflow! 🙏`;
 
-            - Our team will review your issue soon! cc @kubeflow/kubeflow-sdk-team
-            - If you'd like to contribute to this issue, check out our [Contributing Guide](https://github.com/kubeflow/sdk/blob/main/CONTRIBUTING.md) for repo-specific guidelines and the [Kubeflow Contributor Guide](https://www.kubeflow.org/docs/about/contributing/) for general community standards
-
-            **Join the community:**
-            - **Slack**: Join our [#kubeflow-ml-experience](https://www.kubeflow.org/docs/about/community/#kubeflow-slack-channels) and [#kubeflow-trainer](https://www.kubeflow.org/docs/about/community/#kubeflow-slack-channels) Slack channels
-            - **Meetings**: Attend the [Kubeflow SDK and ML Experience](https://bit.ly/kf-ml-experience) bi-weekly meetings
-
-            Feel free to ask questions in the comments if you need any help or clarification!
-            Thanks again for contributing to Kubeflow! 🙏
-
-          pr_message: |
-            🎉 **Welcome to the Kubeflow SDK!** 🎉
-
-            Thanks for opening your first PR! We're happy to have you as part of our community 🚀
-
-            **Here's what happens next:**
-
-            - If you haven't already, please check out our [Contributing Guide](https://github.com/kubeflow/sdk/blob/main/CONTRIBUTING.md) for repo-specific guidelines and the [Kubeflow Contributor Guide](https://www.kubeflow.org/docs/about/contributing/) for general community standards
-            - Our team will review your PR soon! cc @kubeflow/kubeflow-sdk-team
-
-            **Join the community:**
-            - **Slack**: Join our [#kubeflow-ml-experience](https://www.kubeflow.org/docs/about/community/#kubeflow-slack-channels) and [#kubeflow-trainer](https://www.kubeflow.org/docs/about/community/#kubeflow-slack-channels) Slack channels
-            - **Meetings**: Attend the [Kubeflow SDK and ML Experience](https://bit.ly/kf-ml-experience) bi-weekly meetings
-
-            Feel free to ask questions in the comments if you need any help or clarification!
-            Thanks again for contributing to Kubeflow! 🙏
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: isPr ? prMsg : issueMsg
+              });
+            }
