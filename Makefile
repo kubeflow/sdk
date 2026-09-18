@@ -140,6 +140,13 @@ test-e2e-setup-cluster:  ## Setup Kind cluster for Spark E2E tests
 	 SPARK_OPERATOR_VERSION=$(SPARK_OPERATOR_VERSION) \
 	 KIND=$(KIND) \
 	 ./hack/e2e-setup-cluster.sh
+
+.PHONY: test-e2e-setup-fixtures
+test-e2e-setup-fixtures:  ## Setup optional Spark E2E fixtures
+	@SPARK_TEST_NAMESPACE=$(SPARK_TEST_NAMESPACE) \
+	 MINIO_ROOT_USER=$(MINIO_ROOT_USER) \
+	 MINIO_ROOT_PASSWORD=$(MINIO_ROOT_PASSWORD) \
+	 ./test/e2e/spark/fixtures/setup-iceberg-minio.sh
 .PHONY: test-scripts
 test-scripts: uv-venv  ## Run GitHub Actions script tests
 	@uv sync

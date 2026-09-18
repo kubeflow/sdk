@@ -4,13 +4,14 @@ End-to-end tests that validate Spark examples execute correctly with Kubernetes 
 
 ## Test Files
 
-### **test_spark_examples.py** (3 tests)
+### **test_spark_examples.py** (4 tests)
 
 Validates that Spark example scripts execute successfully:
 
 - `test_spark_connect_simple_example` - Validates spark_connect_simple.py runs without errors
 - `test_spark_advanced_options_example` - Validates spark_advanced_options.py runs without errors
-- `test_demo_existing_sparkconnect_example` - Validates demo_existing_sparkconnect.py structure (SKIPPED - requires manual port-forward)
+- `test_connect_existing_session_example` - Validates connect_existing_session.py structure (SKIPPED - requires manual port-forward)
+- `test_iceberg_minio_example` - Validates the Iceberg/MinIO Spark SDK example when the optional e2e setup is enabled
 
 ## Prerequisites
 
@@ -26,6 +27,14 @@ Validates that Spark example scripts execute successfully:
 
 3. Spark Operator running in the cluster
 
+4. Optional Iceberg/MinIO services for the Iceberg example. Enable them with:
+   ```bash
+   SPARK_E2E_ENABLE_ICEBERG_MINIO=1 make test-e2e-setup-cluster
+   ```
+
+   When enabled, the setup script deploys MinIO and the Iceberg REST catalog into the test namespace,
+   and `test_spark_examples.py` uses the in-cluster service endpoints automatically.
+
 ## Running Tests
 
 ### All E2E Tests
@@ -36,6 +45,13 @@ uv run pytest test/e2e/spark/ -v
 ### Specific Test
 ```bash
 uv run pytest test/e2e/spark/test_spark_examples.py::TestSparkExamples::test_spark_connect_simple_example -v
+```
+
+### Iceberg/MinIO Example
+```bash
+SPARK_E2E_ENABLE_ICEBERG_MINIO=1 make test-e2e-setup-cluster
+SPARK_E2E_RUN_IN_CLUSTER=1 SPARK_E2E_RUNNER_IMAGE=spark-e2e-runner:local \
+   uv run pytest test/e2e/spark/test_spark_examples.py::TestSparkExamples::test_iceberg_minio_example -v
 ```
 
 ### Quick Validation (No pytest)

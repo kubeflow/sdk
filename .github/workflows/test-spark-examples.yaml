@@ -69,6 +69,12 @@ jobs:
           SPARK_OPERATOR_IMAGE_TAG: local
         timeout-minutes: 15
 
+      - name: Setup Spark E2E fixtures
+        run: make test-e2e-setup-fixtures
+        env:
+          SPARK_TEST_NAMESPACE: spark-test
+        timeout-minutes: 5
+
       - name: Build and load Spark E2E runner image (in-cluster)
         run: |
           docker build -f hack/Dockerfile.spark-e2e-runner -t spark-e2e-runner:local .
@@ -83,6 +89,7 @@ jobs:
           SPARK_E2E_DEBUG: "1"
           SPARK_E2E_RUN_IN_CLUSTER: "1"
           SPARK_E2E_RUNNER_IMAGE: spark-e2e-runner:local
+          SPARK_E2E_ENABLE_ICEBERG_MINIO: "1"
         timeout-minutes: 15
 
       - name: Collect logs on failure
