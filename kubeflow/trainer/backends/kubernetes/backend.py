@@ -771,7 +771,7 @@ class KubernetesBackend(RuntimeBackend):
                     and c.status == "True"
                 ):
                     trainjob.status = c.type
-        else:
+        if trainjob.status == constants.TRAINJOB_CREATED:
             # The TrainJob running status is defined when all training node (e.g. Pods) are
             # running or succeeded.
             num_running_nodes = sum(
