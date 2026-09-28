@@ -18,6 +18,7 @@ import contextlib
 import os
 import subprocess
 import tempfile
+import time
 
 
 def run_example_in_cluster(
@@ -90,26 +91,17 @@ spec:
         err = (apply_result.stderr or "").strip() or (apply_result.stdout or "").strip()
         return False, "", f"Failed to create Job: {err or apply_result.returncode}"
 
-    wait_result = subprocess.run(
-        [
-            "kubectl",
-            "wait",
-            "--for=condition=complete",
-            f"job/{job_name}",
-            "-n",
-            namespace,
-            f"--timeout={timeout_sec}s",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=timeout_sec + 30,
-    )
-    wait_stderr = (wait_result.stderr or "").strip()
-    if wait_result.returncode != 0:
-        succeeded = False
-        failed = True
-    else:
-        result = subprocess.run(
+    # Poll the Job's .status.succeeded/.status.failed fields directly rather than
+    # `kubectl wait --for=condition=complete`: with backoffLimit=0, a failed pod
+    # sets .status.failed almost immediately, but `kubectl wait --for=condition=complete`
+    # only returns on the Complete condition and otherwise blocks for the full
+    # --timeout even after the Job has clearly failed.
+    wait_stderr = ""
+    succeeded = False
+    failed = False
+    deadline = time.monotonic() + timeout_sec
+    while time.monotonic() < deadline:
+        status_result = subprocess.run(
             [
                 "kubectl",
                 "get",
@@ -124,10 +116,18 @@ spec:
             text=True,
             timeout=10,
         )
-        out = (result.stdout or "").strip() if result.returncode == 0 else "0,0"
+        if status_result.returncode != 0:
+            wait_stderr = (status_result.stderr or "").strip()
+            break
+        out = (status_result.stdout or "").strip()
         parts = out.split(",")
         succeeded = (parts[0] or "0") == "1"
-        failed = (parts[1] or "0") != "0"
+        failed = (parts[1] or "0") not in ("", "0")
+        if succeeded or failed:
+            break
+        time.sleep(2)
+    else:
+        wait_stderr = f"Timed out after {timeout_sec}s waiting for job/{job_name} to complete."
 
     # Get logs from the Job pod
     pod_result = subprocess.run(

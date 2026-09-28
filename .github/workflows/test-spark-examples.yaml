@@ -79,6 +79,37 @@ jobs:
           kubectl create namespace spark-test --dry-run=client -o yaml | kubectl apply -f -
           kubectl label namespace spark-test spark=enabled --overwrite
 
+      # The in-cluster e2e runner Jobs (below) act as SparkClient from inside the
+      # cluster, under the namespace's "default" ServiceAccount. That's an SDK-test
+      # client concern, not a Spark Operator install concern: the operator's own
+      # default chart RBAC only covers its controller ServiceAccount, so the runner
+      # pods need their own grant to call the SparkConnect/SparkApplication APIs.
+      - name: Grant e2e runner RBAC for SparkConnect/SparkApplication
+        run: |
+          kubectl apply -n spark-test -f - <<'EOF'
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: Role
+          metadata:
+            name: e2e-sparkconnect-client
+          rules:
+            - apiGroups: ["sparkoperator.k8s.io"]
+              resources: ["sparkconnects", "sparkconnects/status", "sparkapplications", "sparkapplications/status"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
+          metadata:
+            name: e2e-sparkconnect-client
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: Role
+            name: e2e-sparkconnect-client
+          subjects:
+            - kind: ServiceAccount
+              name: default
+              namespace: spark-test
+          EOF
+
       - name: Build and load Spark E2E runner image (in-cluster)
         run: |
           docker build -f hack/Dockerfile.spark-e2e-runner -t spark-e2e-runner:local .
