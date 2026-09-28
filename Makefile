@@ -169,3 +169,12 @@ docs-serve:  ## Build and serve docs with live reload
 	@uv sync --group docs
 	@uv pip install sphinx-autobuild
 	@uv run sphinx-autobuild docs/source docs/_build/html
+
+# Input and output location for Notebooks executed with Papermill.
+NOTEBOOK_INPUT=$(PROJECT_DIR)/examples/spark/spark_connect_simple.ipynb
+NOTEBOOK_OUTPUT=$(PROJECT_DIR)/artifacts/notebooks/out.ipynb
+PAPERMILL_PARAMS=
+PAPERMILL_TIMEOUT=900
+.PHONY: test-e2e-notebook
+test-e2e-notebook: ## Run Jupyter Notebook with Papermill.
+	NOTEBOOK_INPUT=$(NOTEBOOK_INPUT) NOTEBOOK_OUTPUT=$(NOTEBOOK_OUTPUT) PAPERMILL_PARAMS="$(PAPERMILL_PARAMS)" PAPERMILL_TIMEOUT=$(PAPERMILL_TIMEOUT) ./hack/e2e-run-notebook.sh
