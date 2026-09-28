@@ -14,7 +14,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kubernetes-version: ["1.32.0"]
+        kubernetes-version: ["1.32.11", "1.33.7", "1.34.3", "1.35.0"]
+        spark-operator-ref: ["master"]
 
     steps:
       - name: Free disk space (Ubuntu runner)
@@ -25,13 +26,25 @@ jobs:
           docker system prune -af || true
           df -h
 
-      - name: Checkout repository
+      - name: Checkout Kubeflow SDK repository
         uses: actions/checkout@v6
+
+      - name: Checkout Kubeflow Spark Operator repository
+        uses: actions/checkout@v6
+        with:
+          repository: kubeflow/spark-operator
+          ref: ${{ matrix.spark-operator-ref }}
+          path: spark-operator
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v7
         with:
           python-version: '3.11'
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: spark-operator/go.mod
 
       - name: Install uv and dependencies
         uses: astral-sh/setup-uv@v7
@@ -42,43 +55,129 @@ jobs:
           uv sync --extra spark
           uv pip install pytest pytest-timeout
 
-      - name: Install Kind, kubectl, and Helm
+      - name: Install kubectl
         run: |
-          curl -Lo ./kind "https://kind.sigs.k8s.io/dl/v0.26.0/kind-linux-amd64" && chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind
           curl -Lo ./kubectl "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && chmod +x ./kubectl && sudo mv ./kubectl /usr/local/bin/kubectl
-          curl -sSfL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
-      - name: Checkout spark-operator
-        uses: actions/checkout@v6
-        with:
-          repository: kubeflow/spark-operator
-          path: spark-operator
-          fetch-depth: 1
-
-      - name: Build Spark Operator image
+      # Cluster lifecycle (kind create, image load, Spark Operator deploy) is
+      # owned by the kubeflow/spark-operator repo, not the SDK: we check it out
+      # above and delegate to its own Makefile targets (kind-create-cluster,
+      # kind-load-image, kind-load-spark-image, deploy) instead of hand-rolling
+      # cluster setup here. This keeps client-side (SDK) and server-side
+      # (Spark Operator) testing reproducible against the same upstream tooling.
+      - name: Setup Kind cluster and deploy Spark Operator (delegated to spark-operator Makefile)
+        working-directory: spark-operator
         run: |
-          docker build -t ghcr.io/kubeflow/spark-operator/controller:local ./spark-operator
-        timeout-minutes: 10
-
-      - name: Setup Kind cluster with Spark Operator
-        run: |
-          make test-e2e-setup-cluster K8S_VERSION=${{ matrix.kubernetes-version }}
-        env:
-          SPARK_TEST_CLUSTER: spark-test
-          SPARK_TEST_NAMESPACE: spark-test
-          SPARK_OPERATOR_IMAGE_TAG: local
+          make deploy KIND_CLUSTER_NAME=spark-test KIND_K8S_VERSION=v${{ matrix.kubernetes-version }}
+          echo "KUBECONFIG=$PWD/.kube/config" >> "$GITHUB_ENV"
         timeout-minutes: 15
+
+      # Labeling the namespace "spark=enabled" only makes the controller watch
+      # SparkConnect/SparkApplication CRs there (spark.jobNamespaceSelector).
+      # The chart's per-namespace "spark-operator-spark" ServiceAccount + Role
+      # that driver pods run as (needed to create executor pods/services) is
+      # only rendered for namespaces literally listed in spark.jobNamespaces at
+      # install time, so spark-test must be added to that list via `helm
+      # upgrade`, not just labeled, or driver pods fail to start in it.
+      #
+      # SparkApplication drivers work with just that, because the SDK sets
+      # spec.driver.serviceAccount to "spark-operator-spark" explicitly
+      # (kubeflow/spark/backends/kubernetes/constants.py DEFAULT_SERVICE_ACCOUNT).
+      # SparkConnect server pods get no such default from the SDK or the CR,
+      # so without controller.defaultServiceAccount they fall back to the
+      # namespace's bare "default" ServiceAccount, which has no RBAC to create
+      # its own executor pods/services and never becomes Ready. Point that
+      # chart fallback at the same "spark-operator-spark" account so both
+      # workload types share one properly-provisioned identity.
+      - name: Create Spark test namespace and register it with Spark Operator
+        working-directory: spark-operator
+        run: |
+          kubectl create namespace spark-test --dry-run=client -o yaml | kubectl apply -f -
+          HELM_BIN="$(make -s print-HELM | cut -d= -f2)"
+          "$HELM_BIN" upgrade --install spark-operator ./charts/spark-operator-chart/ \
+            -f charts/spark-operator-chart/ci/ci-values.yaml \
+            --set 'spark.jobNamespaces[0]=default' \
+            --set 'spark.jobNamespaces[1]=spark-test' \
+            --set 'controller.defaultServiceAccount=spark-operator-spark'
+
+      # The in-cluster e2e runner Jobs (below) act as SparkClient from inside the
+      # cluster, under the namespace's "default" ServiceAccount. That's an SDK-test
+      # client concern, not a Spark Operator install concern: the operator's own
+      # default chart RBAC only covers its controller ServiceAccount, so the runner
+      # pods need their own grant to call the SparkConnect/SparkApplication APIs
+      # and read driver pod logs.
+      - name: Grant e2e runner RBAC for SparkConnect/SparkApplication
+        run: |
+          kubectl apply -n spark-test -f - <<'EOF'
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: Role
+          metadata:
+            name: e2e-sparkconnect-client
+          rules:
+            - apiGroups: ["sparkoperator.k8s.io"]
+              resources: ["sparkconnects", "sparkconnects/status", "sparkapplications", "sparkapplications/status"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+            - apiGroups: [""]
+              resources: ["pods/log"]
+              verbs: ["get"]
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
+          metadata:
+            name: e2e-sparkconnect-client
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: Role
+            name: e2e-sparkconnect-client
+          subjects:
+            - kind: ServiceAccount
+              name: default
+              namespace: spark-test
+          EOF
+
+      # The chart's controller policyRules (charts/spark-operator-chart/templates/controller/_helpers.tpl)
+      # grant pods/configmaps/services but not endpoints/endpointslices, which
+      # SparkConnect's Service management needs. Without this the SparkConnect
+      # server pod/Service is created but the resource never reports Ready.
+      - name: Grant Spark Operator controller RBAC for endpoints/endpointslices
+        run: |
+          kubectl apply -f - <<'EOF'
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRole
+          metadata:
+            name: spark-operator-e2e-endpointslices
+          rules:
+            - apiGroups: [""]
+              resources: ["endpoints"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+            - apiGroups: ["discovery.k8s.io"]
+              resources: ["endpointslices"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: spark-operator-e2e-endpointslices
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: spark-operator-e2e-endpointslices
+          subjects:
+            - kind: ServiceAccount
+              name: spark-operator-controller
+              namespace: default
+          EOF
 
       - name: Build and load Spark E2E runner image (in-cluster)
         run: |
           docker build -f hack/Dockerfile.spark-e2e-runner -t spark-e2e-runner:local .
-          kind load docker-image spark-e2e-runner:local --name spark-test
+          KIND_BIN="$(make -s -C spark-operator print-KIND | cut -d= -f2)"
+          "$KIND_BIN" load docker-image spark-e2e-runner:local --name spark-test
         timeout-minutes: 5
 
       - name: Run example validation tests
         run: uv run pytest test/e2e/spark/test_spark_examples.py -v --tb=short
         env:
-          SPARK_TEST_CLUSTER: spark-test
           SPARK_TEST_NAMESPACE: spark-test
           SPARK_E2E_DEBUG: "1"
           SPARK_E2E_RUN_IN_CLUSTER: "1"
@@ -89,5 +188,13 @@ jobs:
         if: failure()
         run: |
           kubectl get pods -n spark-test
-          kubectl get sparkconnect -n spark-test 2>/dev/null || true
+          kubectl get sparkconnect -n spark-test -o yaml 2>/dev/null || true
+          kubectl get sparkapplication -n spark-test -o yaml 2>/dev/null || true
           kubectl logs -n spark-test -l app.kubernetes.io/component=server --tail=100 || true
+          echo "--- Spark Operator controller logs ---"
+          kubectl logs -n default -l app.kubernetes.io/component=controller --tail=200 || true
+
+      - name: Delete Kind cluster (delegated to spark-operator Makefile)
+        if: always()
+        working-directory: spark-operator
+        run: make kind-delete-cluster KIND_CLUSTER_NAME=spark-test

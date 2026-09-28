@@ -133,7 +133,9 @@ class TestSparkExamples:
         """Build failure message with cluster watcher log and example output."""
         parts = [msg]
         if watcher_log:
-            parts.append("\n--- Cluster watcher (SparkConnect / pods / events / driver logs) ---")
+            parts.append(
+                "\n--- Cluster watcher (SparkConnect / SparkApplication / pods / events / driver logs) ---"
+            )
             parts.append("\n".join(watcher_log))
         parts.append("\n--- Example stdout ---")
         parts.append(stdout or "(empty)")

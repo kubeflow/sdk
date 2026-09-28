@@ -130,16 +130,13 @@ else
 endif
 
 ##@ E2E Testing
+#
+# Spark E2E cluster lifecycle (kind cluster create/delete, image load, Spark
+# Operator deploy) is owned by the kubeflow/spark-operator repo's own Makefile,
+# not by this SDK. See .github/workflows/test-spark-examples.yaml, which
+# checks out kubeflow/spark-operator and calls its `make deploy` /
+# `make kind-delete-cluster` targets directly.
 
-.PHONY: test-e2e-setup-cluster
-test-e2e-setup-cluster:  ## Setup Kind cluster for Spark E2E tests
-	@echo "Setting up E2E test cluster..."
-	@K8S_VERSION=$(K8S_VERSION) \
-	 SPARK_TEST_CLUSTER=$(SPARK_TEST_CLUSTER) \
-	 SPARK_TEST_NAMESPACE=$(SPARK_TEST_NAMESPACE) \
-	 SPARK_OPERATOR_VERSION=$(SPARK_OPERATOR_VERSION) \
-	 KIND=$(KIND) \
-	 ./hack/e2e-setup-cluster.sh
 .PHONY: test-scripts
 test-scripts: uv-venv  ## Run GitHub Actions script tests
 	@uv sync
