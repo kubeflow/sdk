@@ -79,6 +79,16 @@ jobs:
       # only rendered for namespaces literally listed in spark.jobNamespaces at
       # install time, so spark-test must be added to that list via `helm
       # upgrade`, not just labeled, or driver pods fail to start in it.
+      #
+      # SparkApplication drivers work with just that, because the SDK sets
+      # spec.driver.serviceAccount to "spark-operator-spark" explicitly
+      # (kubeflow/spark/backends/kubernetes/constants.py DEFAULT_SERVICE_ACCOUNT).
+      # SparkConnect server pods get no such default from the SDK or the CR,
+      # so without controller.defaultServiceAccount they fall back to the
+      # namespace's bare "default" ServiceAccount, which has no RBAC to create
+      # its own executor pods/services and never becomes Ready. Point that
+      # chart fallback at the same "spark-operator-spark" account so both
+      # workload types share one properly-provisioned identity.
       - name: Create Spark test namespace and register it with Spark Operator
         working-directory: spark-operator
         run: |
@@ -87,7 +97,8 @@ jobs:
           "$HELM_BIN" upgrade --install spark-operator ./charts/spark-operator-chart/ \
             -f charts/spark-operator-chart/ci/ci-values.yaml \
             --set 'spark.jobNamespaces[0]=default' \
-            --set 'spark.jobNamespaces[1]=spark-test'
+            --set 'spark.jobNamespaces[1]=spark-test' \
+            --set 'controller.defaultServiceAccount=spark-operator-spark'
 
       # The in-cluster e2e runner Jobs (below) act as SparkClient from inside the
       # cluster, under the namespace's "default" ServiceAccount. That's an SDK-test
