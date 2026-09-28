@@ -28,10 +28,9 @@ A background cluster watcher (`cluster_watcher.py`) polls `SparkConnect`,
 Cluster lifecycle (Kind cluster create/delete, image loading, Spark Operator
 deploy) is not owned by the SDK. It's delegated to the
 [kubeflow/spark-operator](https://github.com/kubeflow/spark-operator) repo's
-own Makefile, the same way `test-e2e.yaml` delegates Trainer cluster setup to
-the `kubeflow/trainer` repo's Makefile. This keeps the SDK from hand-rolling
-setup for a control plane it doesn't ship, and keeps client-side and
-server-side testing reproducible against the same upstream tooling.
+own Makefile. This keeps the SDK from hand-rolling setup for a control plane
+it doesn't ship, and keeps client-side and server-side testing reproducible
+against the same upstream tooling.
 
 1. Check out `kubeflow/spark-operator` alongside this repo and deploy it to a
    Kind cluster using its own Makefile:

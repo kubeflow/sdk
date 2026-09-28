@@ -64,9 +64,7 @@ jobs:
       # above and delegate to its own Makefile targets (kind-create-cluster,
       # kind-load-image, kind-load-spark-image, deploy) instead of hand-rolling
       # cluster setup here. This keeps client-side (SDK) and server-side
-      # (Spark Operator) testing reproducible against the same upstream
-      # tooling, mirroring how test-e2e.yaml delegates Trainer cluster setup
-      # to the kubeflow/trainer repo's Makefile.
+      # (Spark Operator) testing reproducible against the same upstream tooling.
       - name: Setup Kind cluster and deploy Spark Operator (delegated to spark-operator Makefile)
         working-directory: spark-operator
         run: |

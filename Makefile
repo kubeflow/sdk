@@ -135,9 +135,7 @@ endif
 # Operator deploy) is owned by the kubeflow/spark-operator repo's own Makefile,
 # not by this SDK. See .github/workflows/test-spark-examples.yaml, which
 # checks out kubeflow/spark-operator and calls its `make deploy` /
-# `make kind-delete-cluster` targets directly, mirroring how
-# .github/workflows/test-e2e.yaml delegates Trainer cluster setup to the
-# kubeflow/trainer repo's Makefile.
+# `make kind-delete-cluster` targets directly.
 
 .PHONY: test-scripts
 test-scripts: uv-venv  ## Run GitHub Actions script tests
