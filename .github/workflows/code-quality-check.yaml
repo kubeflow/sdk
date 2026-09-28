@@ -43,10 +43,13 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Check shell script formatting
         run: make shell-fmt-check
 
       - name: Run shellcheck
         run: make shell-lint
+
+      - name: Run actionlint
+        run: make actionlint

@@ -1,0 +1,4 @@
+# Self-hosted runner labels used in workflow files.
+self-hosted-runner:
+  labels:
+    - oracle-vm-16cpu-64gb-x86-64
