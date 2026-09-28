@@ -25,10 +25,12 @@ LOCALBIN := $(PROJECT_DIR)/bin
 ## Tool versions
 SHFMT_VERSION ?= v3.13.1
 SHELLCHECK_VERSION ?= v0.11.0
+ACTIONLINT_VERSION ?= v1.7.12
 
 ## Tool binaries
 SHFMT ?= $(LOCALBIN)/shfmt-$(SHFMT_VERSION)
 SHELLCHECK ?= $(LOCALBIN)/shellcheck-$(SHELLCHECK_VERSION)
+ACTIONLINT ?= $(LOCALBIN)/actionlint-$(ACTIONLINT_VERSION)
 
 # Setting SED for compatibility with macos
 ifeq ($(shell command -v gsed 2>/dev/null),)
@@ -149,6 +151,10 @@ SHFMT_OPTIONS ?= --indent 2 --case-indent --space-redirects
 # Extra shellcheck options, e.g. set SHELLCHECK_OPTIONS=--severity=warning to only fail on warnings.
 SHELLCHECK_OPTIONS ?=
 
+# ponytail: actionlint embeds shellcheck on workflow run: scripts; severity=error avoids failing on
+# pre-existing style/info findings across unrelated workflows until those are cleaned up separately.
+ACTIONLINT_SHELLCHECK_OPTS ?= --severity=error
+
 .PHONY: shell-fmt
 shell-fmt: $(SHFMT) ## Format shell scripts with shfmt.
 	@if [ -z "$(SHELL_SCRIPTS)" ]; then echo "No shell scripts found (not a git repo?)" >&2; exit 1; fi
@@ -166,6 +172,11 @@ shell-lint: $(SHELLCHECK) ## Lint shell scripts with shellcheck.
 	@if [ -z "$(SHELL_SCRIPTS)" ]; then echo "No shell scripts found (not a git repo?)" >&2; exit 1; fi
 	@echo "Running shellcheck..."
 	@$(SHELLCHECK) $(SHELLCHECK_OPTIONS) $(SHELL_SCRIPTS)
+
+.PHONY: actionlint
+actionlint: $(ACTIONLINT) $(SHELLCHECK) ## Lint GitHub Actions workflows (including run: shell).
+	@echo "Running actionlint..."
+	@SHELLCHECK_OPTS="$(ACTIONLINT_SHELLCHECK_OPTS)" $(ACTIONLINT) -shellcheck="$(SHELLCHECK)"
 
 $(LOCALBIN):
 	@mkdir -p $(LOCALBIN)
@@ -210,6 +221,30 @@ $(SHELLCHECK): | $(LOCALBIN)
 	chmod +x "$${extracted}"; \
 	"$${extracted}" --version > /dev/null 2>&1 || { echo "Downloaded shellcheck binary is corrupt" >&2; exit 1; }; \
 	mv "$${extracted}" "$(SHELLCHECK)"; \
+	}
+
+$(ACTIONLINT): | $(LOCALBIN)
+	@[ -f "$(ACTIONLINT)" ] || { \
+	set -e; \
+	os=$$(uname -s | tr '[:upper:]' '[:lower:]'); \
+	arch=$$(uname -m); \
+	case "$$arch" in \
+	  x86_64|amd64) arch=amd64 ;; \
+	  arm64|aarch64) arch=arm64 ;; \
+	  *) echo "Unsupported architecture: $$arch" >&2; exit 1 ;; \
+	esac; \
+	ver="$(ACTIONLINT_VERSION)"; \
+	ver=$${ver#v}; \
+	url="https://github.com/rhysd/actionlint/releases/download/$(ACTIONLINT_VERSION)/actionlint_$${ver}_$${os}_$${arch}.tar.gz"; \
+	echo "Downloading $${url}"; \
+	tmp=$$(mktemp -d); \
+	trap "rm -rf $${tmp}" EXIT; \
+	curl -fsSL "$${url}" | tar -xz -C "$${tmp}"; \
+	extracted="$${tmp}/actionlint"; \
+	[ -f "$${extracted}" ] || { echo "actionlint binary not found in archive" >&2; exit 1; }; \
+	chmod +x "$${extracted}"; \
+	"$${extracted}" -version > /dev/null 2>&1 || { echo "Downloaded actionlint binary is corrupt" >&2; exit 1; }; \
+	mv "$${extracted}" "$(ACTIONLINT)"; \
 	}
 
 ##@ E2E Testing
