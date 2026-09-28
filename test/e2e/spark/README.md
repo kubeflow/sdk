@@ -42,14 +42,50 @@ against the same upstream tooling.
    cd -
    ```
 
-2. Create and label the test namespace (the chart's `charts/spark-operator-chart/ci/ci-values.yaml`
-   watches the `default` namespace plus any namespace labeled `spark=enabled`):
+2. Create the test namespace and register it with the operator. The chart only
+   renders the per-namespace `spark-operator-spark` ServiceAccount/Role that
+   driver pods run as (needed to create executor pods/services) for namespaces
+   literally listed in `spark.jobNamespaces` — a namespace label alone isn't
+   enough, so add `spark-test` to that list with a follow-up `helm upgrade`:
    ```bash
    kubectl create namespace spark-test
-   kubectl label namespace spark-test spark=enabled
+   helm upgrade --install spark-operator ./charts/spark-operator-chart/ \
+     -f charts/spark-operator-chart/ci/ci-values.yaml \
+     --set 'spark.jobNamespaces[0]=default' \
+     --set 'spark.jobNamespaces[1]=spark-test'
    ```
 
-3. Spark Operator running in the cluster
+3. Grant the `default` ServiceAccount in `spark-test` permission to manage
+   `SparkConnect`/`SparkApplication` CRs. This is only needed if you run the
+   examples in-cluster (`SPARK_E2E_RUN_IN_CLUSTER=1`), since the SDK client
+   then authenticates as that ServiceAccount instead of your kubeconfig:
+   ```bash
+   kubectl apply -n spark-test -f - <<'EOF'
+   apiVersion: rbac.authorization.k8s.io/v1
+   kind: Role
+   metadata:
+     name: e2e-sparkconnect-client
+   rules:
+     - apiGroups: ["sparkoperator.k8s.io"]
+       resources: ["sparkconnects", "sparkconnects/status", "sparkapplications", "sparkapplications/status"]
+       verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+   ---
+   apiVersion: rbac.authorization.k8s.io/v1
+   kind: RoleBinding
+   metadata:
+     name: e2e-sparkconnect-client
+   roleRef:
+     apiGroup: rbac.authorization.k8s.io
+     kind: Role
+     name: e2e-sparkconnect-client
+   subjects:
+     - kind: ServiceAccount
+       name: default
+       namespace: spark-test
+   EOF
+   ```
+
+4. Spark Operator running in the cluster
 
 ## Running Tests
 
@@ -145,12 +181,15 @@ gh run view <run-id> --log --repo kubeflow/sdk
 Run the same tests locally before submitting PR:
 
 ```bash
-# Setup test cluster (see Prerequisites above)
+# Setup test cluster (see Prerequisites above for the full explanation)
 git clone https://github.com/kubeflow/spark-operator ../spark-operator
 (cd ../spark-operator && make deploy KIND_CLUSTER_NAME=spark-test KIND_K8S_VERSION=v1.32.11)
 export KUBECONFIG="$PWD/../spark-operator/.kube/config"
 kubectl create namespace spark-test
-kubectl label namespace spark-test spark=enabled
+(cd ../spark-operator && helm upgrade --install spark-operator ./charts/spark-operator-chart/ \
+  -f charts/spark-operator-chart/ci/ci-values.yaml \
+  --set 'spark.jobNamespaces[0]=default' \
+  --set 'spark.jobNamespaces[1]=spark-test')
 
 # Run example validation tests
 python -m pytest test/e2e/spark/test_spark_examples.py -v

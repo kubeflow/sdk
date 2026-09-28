@@ -72,12 +72,22 @@ jobs:
           echo "KUBECONFIG=$PWD/.kube/config" >> "$GITHUB_ENV"
         timeout-minutes: 15
 
-      - name: Create Spark test namespace
+      # Labeling the namespace "spark=enabled" only makes the controller watch
+      # SparkConnect/SparkApplication CRs there (spark.jobNamespaceSelector).
+      # The chart's per-namespace "spark-operator-spark" ServiceAccount + Role
+      # that driver pods run as (needed to create executor pods/services) is
+      # only rendered for namespaces literally listed in spark.jobNamespaces at
+      # install time, so spark-test must be added to that list via `helm
+      # upgrade`, not just labeled, or driver pods fail to start in it.
+      - name: Create Spark test namespace and register it with Spark Operator
+        working-directory: spark-operator
         run: |
-          # spark-operator's ci-values.yaml watches the "default" namespace plus
-          # any namespace labeled "spark=enabled" (see charts/spark-operator-chart/ci/ci-values.yaml).
           kubectl create namespace spark-test --dry-run=client -o yaml | kubectl apply -f -
-          kubectl label namespace spark-test spark=enabled --overwrite
+          HELM_BIN="$(make -s print-HELM | cut -d= -f2)"
+          "$HELM_BIN" upgrade --install spark-operator ./charts/spark-operator-chart/ \
+            -f charts/spark-operator-chart/ci/ci-values.yaml \
+            --set 'spark.jobNamespaces[0]=default' \
+            --set 'spark.jobNamespaces[1]=spark-test'
 
       # The in-cluster e2e runner Jobs (below) act as SparkClient from inside the
       # cluster, under the namespace's "default" ServiceAccount. That's an SDK-test
