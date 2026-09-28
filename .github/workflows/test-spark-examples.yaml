@@ -93,7 +93,8 @@ jobs:
       # cluster, under the namespace's "default" ServiceAccount. That's an SDK-test
       # client concern, not a Spark Operator install concern: the operator's own
       # default chart RBAC only covers its controller ServiceAccount, so the runner
-      # pods need their own grant to call the SparkConnect/SparkApplication APIs.
+      # pods need their own grant to call the SparkConnect/SparkApplication APIs
+      # and read driver pod logs.
       - name: Grant e2e runner RBAC for SparkConnect/SparkApplication
         run: |
           kubectl apply -n spark-test -f - <<'EOF'
@@ -105,6 +106,9 @@ jobs:
             - apiGroups: ["sparkoperator.k8s.io"]
               resources: ["sparkconnects", "sparkconnects/status", "sparkapplications", "sparkapplications/status"]
               verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+            - apiGroups: [""]
+              resources: ["pods/log"]
+              verbs: ["get"]
           ---
           apiVersion: rbac.authorization.k8s.io/v1
           kind: RoleBinding
@@ -118,6 +122,39 @@ jobs:
             - kind: ServiceAccount
               name: default
               namespace: spark-test
+          EOF
+
+      # The chart's controller policyRules (charts/spark-operator-chart/templates/controller/_helpers.tpl)
+      # grant pods/configmaps/services but not endpoints/endpointslices, which
+      # SparkConnect's Service management needs. Without this the SparkConnect
+      # server pod/Service is created but the resource never reports Ready.
+      - name: Grant Spark Operator controller RBAC for endpoints/endpointslices
+        run: |
+          kubectl apply -f - <<'EOF'
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRole
+          metadata:
+            name: spark-operator-e2e-endpointslices
+          rules:
+            - apiGroups: [""]
+              resources: ["endpoints"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+            - apiGroups: ["discovery.k8s.io"]
+              resources: ["endpointslices"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: spark-operator-e2e-endpointslices
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: spark-operator-e2e-endpointslices
+          subjects:
+            - kind: ServiceAccount
+              name: spark-operator-controller
+              namespace: default
           EOF
 
       - name: Build and load Spark E2E runner image (in-cluster)
@@ -140,9 +177,11 @@ jobs:
         if: failure()
         run: |
           kubectl get pods -n spark-test
-          kubectl get sparkconnect -n spark-test 2>/dev/null || true
-          kubectl get sparkapplication -n spark-test 2>/dev/null || true
+          kubectl get sparkconnect -n spark-test -o yaml 2>/dev/null || true
+          kubectl get sparkapplication -n spark-test -o yaml 2>/dev/null || true
           kubectl logs -n spark-test -l app.kubernetes.io/component=server --tail=100 || true
+          echo "--- Spark Operator controller logs ---"
+          kubectl logs -n default -l app.kubernetes.io/component=controller --tail=200 || true
 
       - name: Delete Kind cluster (delegated to spark-operator Makefile)
         if: always()
