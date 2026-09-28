@@ -15,6 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         kubernetes-version: ["1.32.11", "1.33.7", "1.34.3", "1.35.0"]
+        spark-operator-ref: ["master"]
 
     steps:
       - name: Free disk space (Ubuntu runner)
@@ -25,13 +26,25 @@ jobs:
           docker system prune -af || true
           df -h
 
-      - name: Checkout repository
+      - name: Checkout Kubeflow SDK repository
         uses: actions/checkout@v6
+
+      - name: Checkout Kubeflow Spark Operator repository
+        uses: actions/checkout@v6
+        with:
+          repository: kubeflow/spark-operator
+          ref: ${{ matrix.spark-operator-ref }}
+          path: spark-operator
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v7
         with:
           python-version: '3.11'
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: spark-operator/go.mod
 
       - name: Install uv and dependencies
         uses: astral-sh/setup-uv@v7
@@ -42,26 +55,46 @@ jobs:
           uv sync --extra spark
           uv pip install pytest pytest-timeout
 
-      - name: Install Kind, kubectl, and Helm
+      - name: Install kubectl
         run: |
-          curl -Lo ./kind "https://kind.sigs.k8s.io/dl/v0.26.0/kind-linux-amd64" && chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind
           curl -Lo ./kubectl "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && chmod +x ./kubectl && sudo mv ./kubectl /usr/local/bin/kubectl
-          curl -sSfL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
-      - name: Setup Kind cluster with Spark Operator
+      # Cluster lifecycle (kind create, image load, Spark Operator deploy) is
+      # owned by the kubeflow/spark-operator repo, not the SDK: we check it out
+      # above and delegate to its own Makefile targets (kind-create-cluster,
+      # kind-load-image, kind-load-spark-image, deploy) instead of hand-rolling
+      # cluster setup here. This keeps client-side (SDK) and server-side
+      # (Spark Operator) testing reproducible against the same upstream
+      # tooling, mirroring how test-e2e.yaml delegates Trainer cluster setup
+      # to the kubeflow/trainer repo's Makefile.
+      - name: Setup Kind cluster and deploy Spark Operator (delegated to spark-operator Makefile)
+        working-directory: spark-operator
         run: |
-          make test-e2e-setup-cluster K8S_VERSION=${{ matrix.kubernetes-version }}
-        env:
-          SPARK_TEST_CLUSTER: spark-test
-          SPARK_TEST_NAMESPACE: spark-test
+          make deploy KIND_CLUSTER_NAME=spark-test KIND_K8S_VERSION=v${{ matrix.kubernetes-version }}
+          echo "KUBECONFIG=$PWD/.kube/config" >> "$GITHUB_ENV"
         timeout-minutes: 15
+
+      - name: Create Spark test namespace
+        run: |
+          # spark-operator's ci-values.yaml watches the "default" namespace plus
+          # any namespace labeled "spark=enabled" (see charts/spark-operator-chart/ci/ci-values.yaml).
+          kubectl create namespace spark-test --dry-run=client -o yaml | kubectl apply -f -
+          kubectl label namespace spark-test spark=enabled --overwrite
+
+      - name: Build and load Spark E2E runner image (in-cluster)
+        run: |
+          docker build -f hack/Dockerfile.spark-e2e-runner -t spark-e2e-runner:local .
+          KIND_BIN="$(make -s -C spark-operator print-KIND | cut -d= -f2)"
+          "$KIND_BIN" load docker-image spark-e2e-runner:local --name spark-test
+        timeout-minutes: 5
 
       - name: Run example validation tests
         run: uv run pytest test/e2e/spark/test_spark_examples.py -v --tb=short
         env:
-          SPARK_TEST_CLUSTER: spark-test
           SPARK_TEST_NAMESPACE: spark-test
           SPARK_E2E_DEBUG: "1"
+          SPARK_E2E_RUN_IN_CLUSTER: "1"
+          SPARK_E2E_RUNNER_IMAGE: spark-e2e-runner:local
         timeout-minutes: 15
 
       - name: Collect logs on failure
@@ -71,3 +104,8 @@ jobs:
           kubectl get sparkconnect -n spark-test 2>/dev/null || true
           kubectl get sparkapplication -n spark-test 2>/dev/null || true
           kubectl logs -n spark-test -l app.kubernetes.io/component=server --tail=100 || true
+
+      - name: Delete Kind cluster (delegated to spark-operator Makefile)
+        if: always()
+        working-directory: spark-operator
+        run: make kind-delete-cluster KIND_CLUSTER_NAME=spark-test
