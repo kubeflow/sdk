@@ -309,6 +309,7 @@ class KubernetesBackend(RuntimeBackend):
         name = None
         trainer_overrides = {}
         runtime_patches = None
+        active_deadline_seconds = None
 
         if options:
             for option in options:
@@ -323,6 +324,7 @@ class KubernetesBackend(RuntimeBackend):
             spec_section = job_spec.get("spec", {})
             trainer_overrides = spec_section.get("trainer", {})
             runtime_patches = spec_section.get("runtimePatches")
+            active_deadline_seconds = spec_section.get("activeDeadlineSeconds")
 
         # Generate unique name for the TrainJob if not provided
         train_job_name = name or (
@@ -337,6 +339,7 @@ class KubernetesBackend(RuntimeBackend):
             trainer=trainer,
             trainer_overrides=trainer_overrides,
             runtime_patches=runtime_patches,
+            active_deadline_seconds=active_deadline_seconds,
         )
 
         # Build the TrainJob.
@@ -698,14 +701,32 @@ class KubernetesBackend(RuntimeBackend):
             if not pod_list:
                 return trainjob
 
-            for pod in pod_list.items:
+            sorted_pods = sorted(
+                pod_list.items,
+                key=lambda pod: (
+                    pod.metadata is not None and pod.metadata.creation_timestamp is not None,
+                    pod.metadata.creation_timestamp if pod.metadata else None,
+                ),
+                reverse=True,
+            )
+            seen_step_keys: set[str] = set()
+            for pod in sorted_pods:
                 # Pod must have labels to detect the TrainJob step.
                 # Every Pod always has a single TrainJob step.
                 if not (pod.metadata and pod.metadata.name and pod.metadata.labels and pod.spec):
                     raise Exception(f"TrainJob Pod is invalid: {pod}")
 
+                role = pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL]
+                step_key = role
+                if role in {constants.LAUNCHER, constants.NODE}:
+                    step_key = f"{role}-{pod.metadata.labels[constants.JOB_INDEX_LABEL]}"
+
+                if step_key in seen_step_keys:
+                    continue
+                seen_step_keys.add(step_key)
+
                 # Get the Initializer step.
-                if pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL] in {
+                if role in {
                     constants.DATASET_INITIALIZER,
                     constants.MODEL_INITIALIZER,
                 }:
@@ -717,7 +738,7 @@ class KubernetesBackend(RuntimeBackend):
                         )
                     )
                 # Get the Node step.
-                elif pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL] in {
+                elif role in {
                     constants.LAUNCHER,
                     constants.NODE,
                 }:
@@ -727,7 +748,7 @@ class KubernetesBackend(RuntimeBackend):
                             pod.spec,
                             pod.status,
                             trainjob.runtime,
-                            pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL],
+                            role,
                             int(pod.metadata.labels[constants.JOB_INDEX_LABEL]),
                         )
                     )
@@ -778,6 +799,7 @@ class KubernetesBackend(RuntimeBackend):
         | None = None,
         trainer_overrides: dict[str, Any] | None = None,
         runtime_patches: list[dict[str, Any]] | None = None,
+        active_deadline_seconds: int | None = None,
     ) -> models.TrainerV1alpha1TrainJobSpec:
         """Get TrainJob spec from the given parameters."""
 
@@ -828,6 +850,7 @@ class KubernetesBackend(RuntimeBackend):
             runtimeRef=models.TrainerV1alpha1RuntimeRef(name=runtime.name, kind=runtime.kind.value),
             trainer=trainer_cr if trainer_cr != models.TrainerV1alpha1Trainer() else None,
             runtimePatches=runtime_patch_models,
+            activeDeadlineSeconds=active_deadline_seconds,
         )
 
         # Add initializer if users define it.

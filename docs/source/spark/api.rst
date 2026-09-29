@@ -10,3 +10,19 @@ Spark Client
    :members:
    :undoc-members:
    :show-inheritance:
+
+Types
+-----
+
+.. automodule:: kubeflow.spark.types.types
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Kubernetes Options
+-------------------
+
+.. automodule:: kubeflow.spark.options.kubernetes
+   :members:
+   :undoc-members:
+   :show-inheritance:

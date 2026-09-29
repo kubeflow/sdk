@@ -25,6 +25,10 @@ from kubeflow.trainer.constants import constants
 from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.types import types
 
+# --------------------------
+# Test Helpers
+# --------------------------
+
 
 def _build_runtime() -> types.Runtime:
     runtime_trainer = types.RuntimeTrainer(
@@ -40,6 +44,21 @@ def _build_runtime() -> types.Runtime:
         trainer=runtime_trainer,
         kind=types.RuntimeKind.TRAINING_RUNTIME,
     )
+
+
+def sample_train_func() -> None:
+    """Sample training function."""
+    print("Hello World")
+
+
+def sample_train_func_kwargs(a: int, b: str, c: float) -> str:
+    """Sample training function with kwargs."""
+    return "ok"
+
+
+# --------------------------
+# Tests
+# --------------------------
 
 
 @pytest.mark.parametrize(
@@ -340,7 +359,11 @@ def test_get_resources_per_node(test_case: TestCase):
         TestCase(
             name="packages with extras notation",
             config={
-                "packages_to_install": ["datasets", "transformers[torch]", "cloudpathlib[all]"],
+                "packages_to_install": [
+                    "datasets",
+                    "transformers[torch]",
+                    "cloudpathlib[all]",
+                ],
                 "pip_index_urls": constants.DEFAULT_PIP_INDEX_URLS,
                 "is_mpi": False,
             },
@@ -386,7 +409,7 @@ def test_get_script_for_python_packages(test_case):
             name="with args dict always unpacks kwargs",
             expected_status=SUCCESS,
             config={
-                "func": (lambda: print("Hello World")),
+                "func": sample_train_func,
                 "func_args": {"batch_size": 128, "learning_rate": 0.001, "epochs": 20},
                 "runtime": _build_runtime(),
             },
@@ -395,8 +418,10 @@ def test_get_script_for_python_packages(test_case):
                 "-c",
                 (
                     "\nread -r -d '' SCRIPT << EOM\n\n"
-                    '"func": (lambda: print("Hello World")),\n\n'
-                    "<lambda>(**{'batch_size': 128, 'learning_rate': 0.001, 'epochs': 20})\n\n"
+                    "def sample_train_func() -> None:\n"
+                    '    """Sample training function."""\n'
+                    '    print("Hello World")\n\n'
+                    "sample_train_func(**{'batch_size': 128, 'learning_rate': 0.001, 'epochs': 20})\n\n"
                     "EOM\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
@@ -407,7 +432,7 @@ def test_get_script_for_python_packages(test_case):
             name="without args calls function with no params",
             expected_status=SUCCESS,
             config={
-                "func": (lambda: print("Hello World")),
+                "func": sample_train_func,
                 "func_args": None,
                 "runtime": _build_runtime(),
             },
@@ -416,8 +441,10 @@ def test_get_script_for_python_packages(test_case):
                 "-c",
                 (
                     "\nread -r -d '' SCRIPT << EOM\n\n"
-                    '"func": (lambda: print("Hello World")),\n\n'
-                    "<lambda>()\n\n"
+                    "def sample_train_func() -> None:\n"
+                    '    """Sample training function."""\n'
+                    '    print("Hello World")\n\n'
+                    "sample_train_func()\n\n"
                     "EOM\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
@@ -428,7 +455,7 @@ def test_get_script_for_python_packages(test_case):
             name="raises when runtime has no trainer",
             expected_status=FAILED,
             config={
-                "func": (lambda: print("Hello World")),
+                "func": sample_train_func,
                 "func_args": None,
                 "runtime": types.Runtime(
                     name="no-trainer",
@@ -452,7 +479,7 @@ def test_get_script_for_python_packages(test_case):
             name="single dict param also unpacks kwargs",
             expected_status=SUCCESS,
             config={
-                "func": (lambda: print("Hello World")),
+                "func": sample_train_func,
                 "func_args": {"a": 1, "b": 2},
                 "runtime": _build_runtime(),
             },
@@ -461,8 +488,10 @@ def test_get_script_for_python_packages(test_case):
                 "-c",
                 (
                     "\nread -r -d '' SCRIPT << EOM\n\n"
-                    '"func": (lambda: print("Hello World")),\n\n'
-                    "<lambda>(**{'a': 1, 'b': 2})\n\n"
+                    "def sample_train_func() -> None:\n"
+                    '    """Sample training function."""\n'
+                    '    print("Hello World")\n\n'
+                    "sample_train_func(**{'a': 1, 'b': 2})\n\n"
                     "EOM\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
@@ -473,7 +502,7 @@ def test_get_script_for_python_packages(test_case):
             name="multi-param function uses kwargs-unpacking",
             expected_status=SUCCESS,
             config={
-                "func": (lambda **kwargs: "ok"),
+                "func": sample_train_func_kwargs,
                 "func_args": {"a": 3, "b": "hi", "c": 0.2},
                 "runtime": _build_runtime(),
             },
@@ -482,8 +511,10 @@ def test_get_script_for_python_packages(test_case):
                 "-c",
                 (
                     "\nread -r -d '' SCRIPT << EOM\n\n"
-                    '"func": (lambda **kwargs: "ok"),\n\n'
-                    "<lambda>(**{'a': 3, 'b': 'hi', 'c': 0.2})\n\n"
+                    "def sample_train_func_kwargs(a: int, b: str, c: float) -> str:\n"
+                    '    """Sample training function with kwargs."""\n'
+                    '    return "ok"\n\n'
+                    "sample_train_func_kwargs(**{'a': 3, 'b': 'hi', 'c': 0.2})\n\n"
                     "EOM\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
@@ -494,7 +525,7 @@ def test_get_script_for_python_packages(test_case):
             name="with packages to install",
             expected_status=SUCCESS,
             config={
-                "func": (lambda: print("Hello World")),
+                "func": sample_train_func,
                 "func_args": None,
                 "runtime": _build_runtime(),
                 "packages_to_install": ["requests"],
@@ -524,8 +555,10 @@ def test_get_script_for_python_packages(test_case):
                     "    exit 1\n"
                     "fi\n\n"
                     "\nread -r -d '' SCRIPT << EOM\n\n"
-                    '"func": (lambda: print("Hello World")),\n\n'
-                    "<lambda>()\n\n"
+                    "def sample_train_func() -> None:\n"
+                    '    """Sample training function."""\n'
+                    '    print("Hello World")\n\n'
+                    "sample_train_func()\n\n"
                     "EOM\n"
                     'printf "%s" "$SCRIPT" > "utils_test.py"\n'
                     'python "utils_test.py"'
@@ -1230,13 +1263,23 @@ def _make_ca_file() -> str:
             name="ETA in seconds",
             expected_status=SUCCESS,
             config={"progress_percent": 50, "estimated_remaining_seconds": 3600},
-            expected_output={"result": True, "post_called": True, "progress": 50, "eta": 3600},
+            expected_output={
+                "result": True,
+                "post_called": True,
+                "progress": 50,
+                "eta": 3600,
+            },
         ),
         TestCase(
             name="negative ETA clamped to 0",
             expected_status=SUCCESS,
             config={"progress_percent": 50, "estimated_remaining_seconds": -30},
-            expected_output={"result": True, "post_called": True, "progress": 50, "eta": 0},
+            expected_output={
+                "result": True,
+                "post_called": True,
+                "progress": 50,
+                "eta": 0,
+            },
         ),
         TestCase(
             name="metrics included with correct count",
@@ -1311,7 +1354,11 @@ def _make_ca_file() -> str:
             name="CA cert used for TLS verification",
             expected_status=SUCCESS,
             config={"progress_percent": 50, "use_ca_cert": True},
-            expected_output={"result": True, "post_called": True, "verify_is_ca_path": True},
+            expected_output={
+                "result": True,
+                "post_called": True,
+                "verify_is_ca_path": True,
+            },
         ),
         TestCase(
             name="returns false on non-200 response",
@@ -1322,7 +1369,10 @@ def _make_ca_file() -> str:
         TestCase(
             name="returns false on network exception",
             expected_status=SUCCESS,
-            config={"progress_percent": 50, "mock_exception": ConnectionError("timeout")},
+            config={
+                "progress_percent": 50,
+                "mock_exception": ConnectionError("timeout"),
+            },
             expected_output={"result": False, "post_called": True},
         ),
         TestCase(
@@ -1490,4 +1540,186 @@ def test_update_trainjob_status(test_case: TestCase):
         os.unlink(token_path)
         if ca_path:
             os.unlink(ca_path)
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="tpu v5e single-slice 2x2",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "2x2"},
+            expected_output=1,
+        ),
+        TestCase(
+            name="tpu v5e single-slice 2x4",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "2x4"},
+            expected_output=2,
+        ),
+        TestCase(
+            name="tpu v5e single-slice 4x4",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "4x4"},
+            expected_output=4,
+        ),
+        TestCase(
+            name="tpu v5e multi-slice 2x2",
+            expected_status=SUCCESS,
+            config={"num_slices": 2, "topology": "2x2"},
+            expected_output=2,
+        ),
+        TestCase(
+            name="tpu v5e multi-slice 2x4",
+            expected_status=SUCCESS,
+            config={"num_slices": 4, "topology": "2x4"},
+            expected_output=8,
+        ),
+        TestCase(
+            name="tpu v5e multi-slice 4x4",
+            expected_status=SUCCESS,
+            config={"num_slices": 2, "topology": "4x4"},
+            expected_output=8,
+        ),
+        TestCase(
+            name="tpu v4/v5p 3D single-slice 2x2x2",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "2x2x2"},
+            expected_output=2,
+        ),
+        TestCase(
+            name="tpu v4/v5p 3D multi-slice 2x2x2",
+            expected_status=SUCCESS,
+            config={"num_slices": 3, "topology": "2x2x2"},
+            expected_output=6,
+        ),
+        TestCase(
+            name="tpu v4/v5p 3D single-slice 2x2x4",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "2x2x4"},
+            expected_output=4,
+        ),
+        TestCase(
+            name="tpu v4/v5p 3D multi-slice 2x2x4",
+            expected_status=SUCCESS,
+            config={"num_slices": 2, "topology": "2x2x4"},
+            expected_output=8,
+        ),
+        TestCase(
+            name="case insensitivity 2D",
+            expected_status=SUCCESS,
+            config={"num_slices": 2, "topology": "2X4"},
+            expected_output=4,
+        ),
+        TestCase(
+            name="case insensitivity 3D",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "2X2X2"},
+            expected_output=2,
+        ),
+        TestCase(
+            name="custom chips per host override",
+            expected_status=SUCCESS,
+            config={"num_slices": 2, "topology": "4x4", "chips_per_host": 8},
+            expected_output=4,
+        ),
+        TestCase(
+            name="fractional TPU single-slice 1x1 on 4-chip host",
+            expected_status=SUCCESS,
+            config={"num_slices": 1, "topology": "1x1", "chips_per_host": 4},
+            expected_output=1,
+        ),
+        TestCase(
+            name="fractional TPU multi-slice 2x2 on 8-chip host",
+            expected_status=SUCCESS,
+            config={"num_slices": 2, "topology": "2x2", "chips_per_host": 8},
+            expected_output=2,
+        ),
+        TestCase(
+            name="empty topology raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": ""},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="invalid topology format raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "invalid-topo"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="incomplete topology format raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="indivisible topology layout raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x3"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="negative slices raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": -1, "topology": "2x2"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="zero slices raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 0, "topology": "2x2"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="negative chips per host raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x2", "chips_per_host": -4},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="zero chips per host raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x2", "chips_per_host": 0},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="4D topology dimensions raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x2x2x2"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="zero topology dimensions raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x0x2"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="negative topology dimensions raises ValueError",
+            expected_status=FAILED,
+            config={"num_slices": 1, "topology": "2x-2"},
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_get_tpu_num_nodes(test_case: TestCase):
+    print("Executing test:", test_case.name)
+    try:
+        kwargs = {
+            "num_slices": test_case.config["num_slices"],
+            "topology": test_case.config["topology"],
+        }
+        if "chips_per_host" in test_case.config:
+            kwargs["chips_per_host"] = test_case.config["chips_per_host"]
+
+        num_nodes = utils.get_tpu_num_nodes(**kwargs)
+
+        assert test_case.expected_status == SUCCESS
+        assert num_nodes == test_case.expected_output
+
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert isinstance(e, test_case.expected_error)
     print("test execution complete")
