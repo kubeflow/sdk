@@ -140,6 +140,11 @@ test-e2e-setup-cluster:  ## Setup Kind cluster for Spark E2E tests
 	 SPARK_OPERATOR_VERSION=$(SPARK_OPERATOR_VERSION) \
 	 KIND=$(KIND) \
 	 ./hack/e2e-setup-cluster.sh
+
+.PHONY: test-e2e-notebook-in-cluster
+test-e2e-notebook-in-cluster: ## Run a Spark notebook in-cluster via K8s Job
+	@./hack/e2e-run-notebook-in-cluster.sh
+
 .PHONY: test-scripts
 test-scripts: uv-venv  ## Run GitHub Actions script tests
 	@uv sync
