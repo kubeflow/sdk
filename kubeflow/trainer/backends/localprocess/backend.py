@@ -103,6 +103,10 @@ class LocalProcessBackend(RuntimeBackend):
         if not isinstance(trainer, types.CustomTrainer):
             raise ValueError("CustomTrainer must be set with LocalProcessBackend")
 
+        # Reject duplicates before starting anything, since only one train step is tracked per job.
+        if any(j.name == trainjob_name for j in self.__local_jobs):
+            raise ValueError(f"TrainJob with name '{trainjob_name}' already exists")
+
         # create temp dir
         venv_dir = tempfile.mkdtemp(prefix=trainjob_name)
         logger.debug(f"operating in {venv_dir}")
