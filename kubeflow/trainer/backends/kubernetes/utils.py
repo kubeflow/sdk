@@ -30,6 +30,7 @@ from urllib.parse import urlparse
 from kubeflow_trainer_api import models
 import requests
 
+import kubeflow.common.constants as common_constants
 from kubeflow.common.utils import validate_python_function
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
@@ -119,8 +120,17 @@ def get_runtime_trainer(
 
     trainer_container = get_runtime_trainer_container(replicated_jobs)
 
-    if not (trainer_container and trainer_container.image):
+    if not trainer_container:
         raise Exception(f"Runtime doesn't have trainer container {replicated_jobs}")
+
+    image_set = types.is_trainer_image_set(trainer_container.image)
+    # BuiltinTrainer has no job-level image override; runtime must define a concrete image.
+    if framework == types.TORCH_TUNE and not image_set:
+        raise ValueError("BuiltinTrainer runtimes require a container image on the TrainingRuntime")
+
+    # Custom trainer runtimes may omit image; callers supply it via CustomTrainer /
+    # CustomTrainerContainer at TrainJob creation time.
+    image = trainer_container.image if image_set else common_constants.UNKNOWN
 
     trainer = types.RuntimeTrainer(
         trainer_type=(
@@ -129,7 +139,7 @@ def get_runtime_trainer(
             else types.TrainerType.CUSTOM_TRAINER
         ),
         framework=framework,
-        image=trainer_container.image,
+        image=image,
     )
 
     # Get the container devices.
@@ -441,9 +451,8 @@ def get_trainer_cr_from_custom_trainer(
             trainer.packages_to_install,
         )
 
-    # Set the TrainJob trainer image if that is set.
-    if trainer.image:
-        trainer_cr.image = trainer.image
+    # Set the TrainJob trainer image from trainer override or runtime default.
+    trainer_cr.image = types.resolve_trainer_image(runtime, trainer)
 
     # Add environment variables to the Trainer.
     if trainer.env:
@@ -464,6 +473,12 @@ def get_trainer_cr_from_builtin_trainer(
     """
     if not isinstance(trainer.config, types.TorchTuneConfig):
         raise ValueError(f"The BuiltinTrainer config is invalid: {trainer.config}")
+
+    if not types.is_trainer_image_set(runtime.trainer.image):
+        raise ValueError(
+            "BuiltinTrainer requires a container image on the TrainingRuntime / "
+            "ClusterTrainingRuntime."
+        )
 
     trainer_cr = models.TrainerV1alpha1Trainer()
 

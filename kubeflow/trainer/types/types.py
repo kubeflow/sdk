@@ -255,7 +255,9 @@ class TrainerType(Enum):
 class RuntimeTrainer:
     trainer_type: TrainerType
     framework: str
-    image: str
+    # Image may be Unknown when the runtime CR omits it; TrainJob creation must
+    # resolve image from CustomTrainer / CustomTrainerContainer or fail.
+    image: str = common_constants.UNKNOWN
     num_nodes: int = 1  # The default value is set in the APIs.
     device: str = common_constants.UNKNOWN
     device_count: str = common_constants.UNKNOWN
@@ -276,6 +278,39 @@ class Runtime:
     trainer: RuntimeTrainer
     kind: RuntimeKind
     pretrained_model: str | None = None
+
+
+def is_trainer_image_set(image: str | None) -> bool:
+    """Return True when image is a concrete container image (not unset/Unknown)."""
+    return bool(image) and image != common_constants.UNKNOWN
+
+
+def resolve_trainer_image(
+    runtime: Runtime,
+    trainer: CustomTrainer | CustomTrainerContainer,
+) -> str:
+    """Resolve the TrainJob image from trainer override or runtime default.
+
+    Args:
+        runtime: Parsed training runtime.
+        trainer: Job trainer that may supply an image override.
+
+    Returns:
+        Concrete container image to use for the TrainJob.
+
+    Raises:
+        ValueError: If neither the trainer nor the runtime provides an image.
+    """
+    if is_trainer_image_set(trainer.image):
+        return trainer.image
+
+    if is_trainer_image_set(runtime.trainer.image):
+        return runtime.trainer.image
+
+    raise ValueError(
+        "Trainer image is required. Set CustomTrainer.image or CustomTrainerContainer.image, "
+        "or configure an image on the TrainingRuntime / ClusterTrainingRuntime."
+    )
 
 
 # Representation for the TrainJob steps.

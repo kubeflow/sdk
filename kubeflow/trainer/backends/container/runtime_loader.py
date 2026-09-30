@@ -36,6 +36,7 @@ import urllib.request
 
 import yaml
 
+import kubeflow.common.constants as common_constants
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types as base_types
 
@@ -403,10 +404,9 @@ def _parse_runtime_yaml(data: dict[str, Any], source: str = "unknown") -> base_t
                 image = container.get("image")
                 break
 
+    # Runtime image is optional; TrainJob creation must supply one via the trainer if unset.
     if not image:
-        raise ValueError(
-            f"Runtime {name} from {source} 'node' must specify an image in at least one container"
-        )
+        image = common_constants.UNKNOWN
 
     return base_types.Runtime(
         name=name,

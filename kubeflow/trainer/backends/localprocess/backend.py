@@ -62,6 +62,9 @@ class LocalProcessBackend(RuntimeBackend):
         return runtime
 
     def get_runtime_packages(self, runtime: types.Runtime):
+        if not types.is_trainer_image_set(runtime.trainer.image):
+            raise ValueError("Cannot get Runtime packages: runtime image is unset")
+
         local_runtime = next((rt for rt in local_runtimes if rt.name == runtime.name), None)
         if not local_runtime:
             raise ValueError(f"Runtime '{runtime.name}' not found.")
