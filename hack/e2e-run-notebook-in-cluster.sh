@@ -51,6 +51,8 @@ echo "================================================================="
 # Clean up any existing job with the same name
 kubectl delete job "$JOB_NAME" -n "$SPARK_TEST_NAMESPACE" --ignore-not-found=true
 
+SERVICE_ACCOUNT=${SERVICE_ACCOUNT:-spark}
+
 # Create the Job manifest and apply it
 cat <<EOF | kubectl apply -f -
 apiVersion: batch/v1
@@ -64,10 +66,12 @@ spec:
   template:
     spec:
       restartPolicy: Never
+      serviceAccountName: ${SERVICE_ACCOUNT}
       containers:
         - name: runner
           image: ${RUNNER_IMAGE}
           imagePullPolicy: IfNotPresent
+          workingDir: /app
           command:
             - papermill
             - "${NOTEBOOK_INPUT}"
@@ -104,10 +108,13 @@ kubectl logs -f "$POD_NAME" -n "$SPARK_TEST_NAMESPACE" || true
 # Wait for Job completion condition
 echo "Waiting for Job to complete..."
 JOB_STATUS=0
-kubectl wait --for=condition=complete "job/$JOB_NAME" -n "$SPARK_TEST_NAMESPACE" --timeout=30s || JOB_STATUS=$?
+kubectl wait --for=condition=complete job "$JOB_NAME" -n "$SPARK_TEST_NAMESPACE" --timeout=30s || JOB_STATUS=$?
 
-if [ $JOB_STATUS -ne 0 ]; then
+if [ "${JOB_STATUS:-0}" -ne 0 ]; then
   echo "Error: Job $JOB_NAME failed or timed out."
+  echo "==================== POD LOGS (CONTAINER: runner) ===================="
+  kubectl logs "$POD_NAME" -n "$SPARK_TEST_NAMESPACE" -c runner || true
+  echo "======================================================================"
   kubectl describe job "$JOB_NAME" -n "$SPARK_TEST_NAMESPACE"
   kubectl describe pod "$POD_NAME" -n "$SPARK_TEST_NAMESPACE"
   exit 1
