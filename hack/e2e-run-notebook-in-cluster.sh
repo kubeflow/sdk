@@ -80,12 +80,14 @@ spec:
           imagePullPolicy: IfNotPresent
           workingDir: /app
           command:
-            - papermill
-            - "${NOTEBOOK_INPUT}"
-            - "/output/${NOTEBOOK_NAME}.ipynb"
-            - "--log-output"
-            - "--execution-timeout"
-            - "${PAPERMILL_TIMEOUT}"
+            - /bin/sh
+            - -c
+            - |
+              papermill "${NOTEBOOK_INPUT}" "/output/${NOTEBOOK_NAME}.ipynb" --log-output --execution-timeout "${PAPERMILL_TIMEOUT}"
+              echo "===NOTEBOOK_BASE64_START==="
+              base64 -w 0 "/output/${NOTEBOOK_NAME}.ipynb"
+              echo ""
+              echo "===NOTEBOOK_BASE64_END==="
           env:
             - name: SPARK_TEST_NAMESPACE
               value: "${SPARK_TEST_NAMESPACE}"
@@ -127,8 +129,11 @@ if [ "${JOB_STATUS:-0}" -ne 0 ]; then
   exit 1
 fi
 
-echo "Job completed successfully. Copying output notebook to $NOTEBOOK_OUTPUT..."
-kubectl cp "${SPARK_TEST_NAMESPACE}/${POD_NAME}:/output/${NOTEBOOK_NAME}.ipynb" "$NOTEBOOK_OUTPUT"
+echo "Job completed successfully. Extracting output notebook to $NOTEBOOK_OUTPUT..."
+kubectl logs "$POD_NAME" -n "$SPARK_TEST_NAMESPACE" -c runner \
+  | sed -n '/===NOTEBOOK_BASE64_START===/,/===NOTEBOOK_BASE64_END===/p' \
+  | grep -v '===NOTEBOOK_BASE64_' \
+  | base64 -d > "$NOTEBOOK_OUTPUT"
 
 # Clean up Job
 kubectl delete job "$JOB_NAME" -n "$SPARK_TEST_NAMESPACE" --ignore-not-found=true
