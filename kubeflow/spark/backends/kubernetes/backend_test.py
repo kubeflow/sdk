@@ -15,7 +15,6 @@
 """Unit tests for KubernetesBackend."""
 
 from datetime import datetime
-from functools import wraps
 import multiprocessing
 from unittest.mock import Mock, patch
 
@@ -372,11 +371,8 @@ def sample_func_with_args(
 
 
 def _decorator(func: callable) -> callable:
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        return func(*args, **kwargs)
-
-    return wrapper
+    """Pass-through decorator for testing."""
+    return func
 
 
 @_decorator
@@ -815,6 +811,18 @@ def test_wait_for_connect_port(kubernetes_backend, test_case):
             name="invalid empty url error",
             expected_status=FAILED,
             config={"url": ""},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="missing hostname error",
+            expected_status=FAILED,
+            config={"url": "sc://:15002"},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="missing hostname and malformed port error",
+            expected_status=FAILED,
+            config={"url": "sc://:abc"},
             expected_error=ValueError,
         ),
     ],
