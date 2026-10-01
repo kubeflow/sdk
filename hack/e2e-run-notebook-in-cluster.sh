@@ -53,6 +53,13 @@ kubectl delete job "$JOB_NAME" -n "$SPARK_TEST_NAMESPACE" --ignore-not-found=tru
 
 SERVICE_ACCOUNT=${SERVICE_ACCOUNT:-spark}
 
+# Create the ServiceAccount and grant it cluster-admin rights
+kubectl create serviceaccount "${SERVICE_ACCOUNT}" -n "${SPARK_TEST_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+kubectl create clusterrolebinding "${SERVICE_ACCOUNT}-runner-binding" \
+  --clusterrole=cluster-admin \
+  --serviceaccount="${SPARK_TEST_NAMESPACE}:${SERVICE_ACCOUNT}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
 # Create the Job manifest and apply it
 cat <<EOF | kubectl apply -f -
 apiVersion: batch/v1
