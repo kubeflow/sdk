@@ -16,7 +16,7 @@
 
 from datetime import datetime
 import multiprocessing
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from kubeflow_spark_api import models
 from kubernetes import client
@@ -1939,5 +1939,84 @@ def test_get_job_logs(kubernetes_backend, test_case):
             assert type(e) is test_case.expected_error
         else:
             raise
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="create succeeds, connect succeeds",
+            expected_status=SUCCESS,
+            config={"session_name": "test-session"},
+        ),
+        TestCase(
+            name="create succeeds, wait fails",
+            expected_status=FAILED,
+            config={"session_name": "test-session", "wait_error": RuntimeError("Wait failed")},
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="create succeeds, connect fails",
+            expected_status=FAILED,
+            config={
+                "session_name": "test-session",
+                "connect_error": RuntimeError("Connect failed"),
+            },
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="create itself fails",
+            expected_status=FAILED,
+            config={"session_name": "test-session", "create_error": RuntimeError("Create failed")},
+            expected_error=RuntimeError,
+        ),
+    ],
+)
+def test_create_and_connect_cleanup_on_failure(kubernetes_backend, test_case):
+    """Test create_and_connect cleans up session on failure but not on success or create failure."""
+    print("Executing test:", test_case.name)
+
+    mock_info = MagicMock()
+    mock_info.name = test_case.config["session_name"]
+    mock_info.namespace = DEFAULT_NAMESPACE
+
+    create_error = test_case.config.get("create_error")
+    wait_error = test_case.config.get("wait_error")
+    connect_error = test_case.config.get("connect_error")
+
+    with (
+        patch.object(
+            kubernetes_backend,
+            "_create_session",
+            side_effect=create_error if create_error else None,
+            return_value=mock_info,
+        ),
+        patch.object(
+            kubernetes_backend,
+            "_wait_for_session_ready",
+            side_effect=wait_error if wait_error else None,
+            return_value=mock_info,
+        ),
+        patch.object(
+            kubernetes_backend,
+            "connect",
+            side_effect=connect_error if connect_error else None,
+            return_value=MagicMock(),
+        ),
+        patch.object(kubernetes_backend, "delete_session") as mock_delete,
+    ):
+        try:
+            kubernetes_backend.create_and_connect()
+            assert test_case.expected_status == SUCCESS
+            mock_delete.assert_not_called()
+        except Exception as e:
+            assert type(e) is test_case.expected_error
+            if create_error:
+                # nothing was created, no cleanup expected
+                mock_delete.assert_not_called()
+            else:
+                mock_delete.assert_called_once_with(test_case.config["session_name"])
 
     print("test execution complete")
