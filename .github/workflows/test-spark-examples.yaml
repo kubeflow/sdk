@@ -37,10 +37,11 @@ jobs:
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-      - name: Install project and test deps
+
+      - name: Install project dependencies
         run: |
           uv sync --extra spark
-          uv pip install pytest pytest-timeout
+
 
       - name: Install Kind, kubectl, and Helm
         run: |
@@ -75,19 +76,47 @@ jobs:
           kind load docker-image spark-e2e-runner:local --name spark-test
         timeout-minutes: 5
 
-      - name: Run example validation tests
-        run: uv run pytest test/e2e/spark/test_spark_examples.py -v --tb=short
-        env:
-          SPARK_TEST_CLUSTER: spark-test
-          SPARK_TEST_NAMESPACE: spark-test
-          SPARK_E2E_DEBUG: "1"
-          SPARK_E2E_RUN_IN_CLUSTER: "1"
-          SPARK_E2E_RUNNER_IMAGE: spark-e2e-runner:local
-        timeout-minutes: 15
-
-      - name: Collect logs on failure
-        if: failure()
+      - name: Run Spark example notebooks (in-cluster)
         run: |
-          kubectl get pods -n spark-test
-          kubectl get sparkconnect -n spark-test 2>/dev/null || true
-          kubectl logs -n spark-test -l app.kubernetes.io/component=server --tail=100 || true
+          mkdir -p artifacts/notebooks
+          make test-e2e-notebook-in-cluster \
+            NOTEBOOK_INPUT=examples/spark/spark_connect_simple.ipynb \
+            NOTEBOOK_OUTPUT=artifacts/notebooks/spark_connect_simple.ipynb \
+            PAPERMILL_TIMEOUT=900
+          make test-e2e-notebook-in-cluster \
+            NOTEBOOK_INPUT=examples/spark/spark_advanced_options.ipynb \
+            NOTEBOOK_OUTPUT=artifacts/notebooks/spark_advanced_options.ipynb \
+            PAPERMILL_TIMEOUT=900
+          make test-e2e-notebook-in-cluster \
+            NOTEBOOK_INPUT=examples/spark/connect_existing_session.ipynb \
+            NOTEBOOK_OUTPUT=artifacts/notebooks/connect_existing_session.ipynb \
+            PAPERMILL_TIMEOUT=900
+          make test-e2e-notebook-in-cluster \
+            NOTEBOOK_INPUT=examples/spark/demo_existing_sparkconnect.ipynb \
+            NOTEBOOK_OUTPUT=artifacts/notebooks/demo_existing_sparkconnect.ipynb \
+            PAPERMILL_TIMEOUT=900
+          make test-e2e-notebook-in-cluster \
+            NOTEBOOK_INPUT=examples/spark/batch_job_lifecycle.ipynb \
+            NOTEBOOK_OUTPUT=artifacts/notebooks/batch_job_lifecycle.ipynb \
+            PAPERMILL_TIMEOUT=900
+          make test-e2e-notebook-in-cluster \
+            NOTEBOOK_INPUT=examples/spark/batch_func_job_lifecycle.ipynb \
+            NOTEBOOK_OUTPUT=artifacts/notebooks/batch_func_job_lifecycle.ipynb \
+            PAPERMILL_TIMEOUT=900
+          make test-e2e-notebook-in-cluster \
+            NOTEBOOK_INPUT=examples/spark/batch_job_options.ipynb \
+            NOTEBOOK_OUTPUT=artifacts/notebooks/batch_job_options.ipynb \
+            PAPERMILL_TIMEOUT=900
+          make test-e2e-notebook-in-cluster \
+            NOTEBOOK_INPUT=examples/spark/batch_failed_job.ipynb \
+            NOTEBOOK_OUTPUT=artifacts/notebooks/batch_failed_job.ipynb \
+            PAPERMILL_TIMEOUT=900
+        timeout-minutes: 35
+
+      - name: Upload Artifacts to GitHub
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: ${{ matrix.kubernetes-version }}
+          path: ./artifacts/notebooks/*
+          retention-days: 1

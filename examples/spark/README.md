@@ -13,18 +13,18 @@ For the full documentation, see [Interactive Sessions](https://sdk.kubeflow.org/
 
 ### Interactive Sessions
 
-- **spark_connect_simple.py** - Basic SparkClient usage with simple API
-- **spark_advanced_options.py** - Advanced configuration with Driver/Executor objects
-- **demo_existing_sparkconnect.py** - Connect to existing SparkConnect cluster
-- **connect_existing_session.py** - Connect to an existing Spark Connect session through `base_url`
+- **spark_connect_simple.ipynb** - Basic SparkClient usage with simple API
+- **spark_advanced_options.ipynb** - Advanced configuration with Driver/Executor objects
+- **demo_existing_sparkconnect.ipynb** - Connect to existing SparkConnect cluster
+- **connect_existing_session.ipynb** - Connect to an existing Spark Connect session through `base_url`
 - **test_connect_url.py** - Test URL-based connection to Spark Connect
 
 ### Batch Jobs
 
-- **batch_job_lifecycle.py** - Submit a `FileJob` and exercise the batch job lifecycle (`get_job`, `list_jobs`, `get_job_logs`, `delete_job`)
-- **batch_func_job_lifecycle.py** - Submit a `FuncJob` and exercise the batch job lifecycle
-- **batch_failed_job.py** - Submit a `FileJob` expected to fail and inspect the `FAILED` state
-- **batch_job_options.py** - Submit a batch job with Kubernetes options (labels, annotations, node selector, tolerations, custom name)
+- **batch_job_lifecycle.ipynb** - Submit a `FileJob` and exercise the batch job lifecycle (`get_job`, `list_jobs`, `get_job_logs`, `delete_job`)
+- **batch_func_job_lifecycle.ipynb** - Submit a `FuncJob` and exercise the batch job lifecycle
+- **batch_failed_job.ipynb** - Submit a `FileJob` expected to fail and inspect the `FAILED` state
+- **batch_job_options.ipynb** - Submit a batch job with Kubernetes options (labels, annotations, node selector, tolerations, custom name)
   See the [Options Reference](https://sdk.kubeflow.org/en/latest/spark/options.html) for details on Kubernetes options.
 - **spark_job.py** - A simple Spark application used as the remote `file_source` for the batch job examples
 
@@ -37,16 +37,17 @@ uv pip install kubeflow[spark]
 
 The Spark examples run against a Kubernetes cluster with the Spark Operator installed. Batch job submission requires a `spark-operator-spark` ServiceAccount in the target namespace with the required SparkApplication RBAC permissions. See the [Spark SDK docs](https://sdk.kubeflow.org/en/latest/spark/index.html) for prerequisites.
 
+
 ## Running Examples
 
 ```bash
 # Run from repository root
 
-# Run an interactive session example
-uv run python examples/spark/spark_connect_simple.py
+# Launch Jupyter to explore and run the interactive notebooks:
+jupyter lab examples/spark/
 
-# Run a batch job lifecycle example
-uv run python examples/spark/batch_job_lifecycle.py
+# Or execute headlessly with papermill:
+uv run papermill examples/spark/spark_connect_simple.ipynb /dev/null
 ```
 
 ## Interactive Session APIs

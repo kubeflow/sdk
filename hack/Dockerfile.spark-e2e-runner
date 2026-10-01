@@ -1,5 +1,5 @@
-# Copyright 2025 The Kubeflow Authors.
-# In-cluster E2E runner: runs Spark example scripts inside the cluster so
+# Copyright 2026 The Kubeflow Authors.
+# In-cluster E2E runner: runs Spark example notebooks inside the cluster so
 # SparkClient uses the in-cluster URL (sc://...svc.cluster.local) and no port-forward.
 FROM python:3.11-slim
 
@@ -9,10 +9,12 @@ COPY pyproject.toml README.md LICENSE ./
 COPY kubeflow/ kubeflow/
 COPY examples/ examples/
 
-RUN pip install --no-cache-dir .[spark]
+RUN pip install --no-cache-dir .[spark] "papermill>=2.6.0" "ipykernel>=6.29.5" && \
+    python -m ipykernel install --name python3 --user && \
+    mkdir -p /output
 
 ENV SPARK_TEST_NAMESPACE=spark-test
 ENV PYTHONUNBUFFERED=1
 
-# Override with args to run a different example (e.g. spark_advanced_options.py)
-CMD ["python", "examples/spark/spark_connect_simple.py"]
+# Default command can be overridden by Job args
+CMD ["papermill", "examples/spark/spark_connect_simple.ipynb", "/output/spark_connect_simple.ipynb", "--log-output"]
