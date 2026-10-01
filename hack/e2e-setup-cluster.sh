@@ -294,34 +294,6 @@ subjects:
   - kind: ServiceAccount
     name: default
     namespace: $NAMESPACE
----
-# E2E in-cluster runner: default SA can create/get SparkConnect so Job pods use in-cluster URL (no port-forward).
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: e2e-sparkconnect-client
-  namespace: $NAMESPACE
-rules:
-  - apiGroups: ["sparkoperator.k8s.io"]
-    resources: ["sparkconnects", "sparkconnects/status"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["sparkoperator.k8s.io"]
-    resources: ["sparkapplications", "sparkapplications/status"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: e2e-sparkconnect-client
-  namespace: $NAMESPACE
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: e2e-sparkconnect-client
-subjects:
-  - kind: ServiceAccount
-    name: default
-    namespace: $NAMESPACE
 EOF
     phase_end "ensure_sparkconnect_rbac"
 }
@@ -367,28 +339,18 @@ print_status() {
     echo "Cluster: $CLUSTER_NAME"
     echo "Kubernetes version: $K8S_VERSION"
     echo "Test namespace: $NAMESPACE"
-    if [[ "${E2E_CRD_ONLY:-0}" == "1" ]]; then
-        echo "Mode: CRD-only (no Spark Operator controller)"
-        echo "CRDs:"
-        kubectl get crd | grep sparkoperator || true
-    else
-        echo "Spark Operator version: $SPARK_OPERATOR_VERSION"
-        echo "Image tag: $SPARK_OPERATOR_IMAGE_TAG"
-        echo ""
-        echo "Spark Operator Deployment:"
-        kubectl get deployment -n spark-operator 2>/dev/null || true
-    fi
+    echo "Spark Operator version: $SPARK_OPERATOR_VERSION"
+    echo "Image tag: $SPARK_OPERATOR_IMAGE_TAG"
+    echo ""
+    echo "Spark Operator Deployment:"
+    kubectl get deployment -n spark-operator 2>/dev/null || true
     echo ""
     echo "Test Namespace Pods:"
     kubectl get pods -n "$NAMESPACE" 2>/dev/null || echo "No pods yet"
     echo ""
     log_info "=== Usage ==="
-    if [[ "${E2E_CRD_ONLY:-0}" == "1" ]]; then
-        echo "Smoke test: uv run pytest test/e2e/spark/test_spark_examples.py -v -k smoke"
-    else
-        echo "To run E2E tests:"
-        echo "  python -m pytest test/e2e/spark/test_spark_examples.py -v"
-    fi
+    echo "To run E2E notebook tests:"
+    echo "  ./hack/e2e-run-notebook.sh"
     echo ""
     echo "To delete cluster:"
     echo "  make test-e2e-setup-cluster K8S_VERSION=$K8S_VERSION --delete"
@@ -406,19 +368,15 @@ main() {
     check_prerequisites
     create_cluster
     setup_test_namespace
-    if [[ "${E2E_CRD_ONLY:-0}" == "1" ]]; then
-        apply_crd_only
-    else
-        ensure_sparkconnect_rbac
-        apply_sparkconnect_crd
-        if [[ "$SPARK_OPERATOR_IMAGE_TAG" == "local" ]]; then
-            phase_start "kind_load_local_image"
-            log_info "Loading locally built controller image into Kind..."
-            "$KIND_BIN" load docker-image "ghcr.io/kubeflow/spark-operator/controller:local" --name "$CLUSTER_NAME"
-            phase_end "kind_load_local_image"
-        fi
-        install_spark_operator
+    ensure_sparkconnect_rbac
+    apply_sparkconnect_crd
+    if [[ "$SPARK_OPERATOR_IMAGE_TAG" == "local" ]]; then
+        phase_start "kind_load_local_image"
+        log_info "Loading locally built controller image into Kind..."
+        "$KIND_BIN" load docker-image "ghcr.io/kubeflow/spark-operator/controller:local" --name "$CLUSTER_NAME"
+        phase_end "kind_load_local_image"
     fi
+    install_spark_operator
     print_status
     local total_elapsed
     total_elapsed=$(($(date +%s) - main_start))

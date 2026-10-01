@@ -42,6 +42,7 @@ jobs:
         run: |
           uv sync --extra spark
 
+
       - name: Install Kind, kubectl, and Helm
         run: |
           curl -Lo ./kind "https://kind.sigs.k8s.io/dl/v0.26.0/kind-linux-amd64" && chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind
@@ -91,6 +92,10 @@ jobs:
             NOTEBOOK_OUTPUT=artifacts/notebooks/connect_existing_session.ipynb \
             PAPERMILL_TIMEOUT=900
           make test-e2e-notebook-in-cluster \
+            NOTEBOOK_INPUT=examples/spark/demo_existing_sparkconnect.ipynb \
+            NOTEBOOK_OUTPUT=artifacts/notebooks/demo_existing_sparkconnect.ipynb \
+            PAPERMILL_TIMEOUT=900
+          make test-e2e-notebook-in-cluster \
             NOTEBOOK_INPUT=examples/spark/batch_job_lifecycle.ipynb \
             NOTEBOOK_OUTPUT=artifacts/notebooks/batch_job_lifecycle.ipynb \
             PAPERMILL_TIMEOUT=900
@@ -102,18 +107,16 @@ jobs:
             NOTEBOOK_INPUT=examples/spark/batch_job_options.ipynb \
             NOTEBOOK_OUTPUT=artifacts/notebooks/batch_job_options.ipynb \
             PAPERMILL_TIMEOUT=900
-        timeout-minutes: 25
+          make test-e2e-notebook-in-cluster \
+            NOTEBOOK_INPUT=examples/spark/batch_failed_job.ipynb \
+            NOTEBOOK_OUTPUT=artifacts/notebooks/batch_failed_job.ipynb \
+            PAPERMILL_TIMEOUT=900
+        timeout-minutes: 35
 
-      - name: Upload Notebook Artifacts
+      - name: Upload Artifacts to GitHub
         uses: actions/upload-artifact@v6
         if: always()
         with:
-          name: spark-e2e-in-cluster-notebooks
-          path: artifacts/notebooks/
-
-      - name: Collect logs on failure
-        if: failure()
-        run: |
-          kubectl get pods -n spark-test
-          kubectl get sparkconnect -n spark-test 2>/dev/null || true
-          kubectl logs -n spark-test -l app.kubernetes.io/component=server --tail=100 || true
+          name: ${{ matrix.kubernetes-version }}
+          path: ./artifacts/notebooks/*
+          retention-days: 1

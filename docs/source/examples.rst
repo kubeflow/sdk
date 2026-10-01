@@ -98,20 +98,40 @@ Spark Examples
    * - Task
      - Example
      - Description
-     - Code
+     - Notebook
    * - Basic Spark Client
      - SparkClient API
      - Basic ``SparkClient`` usage with a simple API
-     - `View Example <https://github.com/kubeflow/sdk/blob/main/examples/spark/spark_connect_simple.py>`_
+     - `Open Notebook <https://github.com/kubeflow/sdk/blob/main/examples/spark/spark_connect_simple.ipynb>`_
    * - Advanced Spark Configuration
      - Driver / Executor Configuration
      - Configure Spark jobs using Driver and Executor objects
-     - `View Example <https://github.com/kubeflow/sdk/blob/main/examples/spark/spark_advanced_options.py>`_
+     - `Open Notebook <https://github.com/kubeflow/sdk/blob/main/examples/spark/spark_advanced_options.ipynb>`_
    * - Connect to Existing Spark Cluster
      - Existing Spark Connect Session
      - Connect to an already running Spark Connect cluster
-     - `View Example <https://github.com/kubeflow/sdk/blob/main/examples/spark/connect_existing_session.py>`_
+     - `Open Notebook <https://github.com/kubeflow/sdk/blob/main/examples/spark/connect_existing_session.ipynb>`_
    * - URL-based Connection
      - Spark Connect URL
      - Connect to Spark Connect using a connection URL
      - `View Example <https://github.com/kubeflow/sdk/blob/main/examples/spark/test_connect_url.py>`_
+   * - Interactive Spark Connect
+     - Live SparkConnect Demo
+     - Provision, inspect, and manage SparkConnect sessions
+     - `Open Notebook <https://github.com/kubeflow/sdk/blob/main/examples/spark/demo_existing_sparkconnect.ipynb>`_
+   * - Batch Job Lifecycle
+     - Spark Batch Job
+     - Submit, monitor, inspect logs, and delete Spark batch jobs
+     - `Open Notebook <https://github.com/kubeflow/sdk/blob/main/examples/spark/batch_job_lifecycle.ipynb>`_
+   * - Python Function Job Lifecycle
+     - Spark FuncJob
+     - Run standalone Python functions as distributed Spark jobs
+     - `Open Notebook <https://github.com/kubeflow/sdk/blob/main/examples/spark/batch_func_job_lifecycle.ipynb>`_
+   * - Batch Job Options
+     - Advanced Batch Configuration
+     - Configure batch jobs with labels, annotations, and node selectors
+     - `Open Notebook <https://github.com/kubeflow/sdk/blob/main/examples/spark/batch_job_options.ipynb>`_
+   * - Failed Batch Job Handling
+     - Error Diagnostics & Logs
+     - Inspect failure statuses and driver pod logs for failed batch jobs
+     - `Open Notebook <https://github.com/kubeflow/sdk/blob/main/examples/spark/batch_failed_job.ipynb>`_
