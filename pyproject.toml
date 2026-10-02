@@ -96,6 +96,10 @@ build-backend = "hatchling.build"
 [tool.hatch.metadata]
 allow-direct-references = true
 
+[tool.hatch.build.targets.wheel]
+packages = ["kubeflow"]
+exclude = ["**/*_test.py"]
+
 # ruff configuration
 [tool.ruff]
 # Formatting + lint coordination
@@ -142,7 +146,7 @@ ignore = [
 
 [tool.ruff.lint.isort]
 # Make import sorting deterministic and "first-party aware"
-known-first-party = ["kubeflow"]
+known-first-party = ["kubeflow", "test"]
 combine-as-imports = true
 force-sort-within-sections = true
 

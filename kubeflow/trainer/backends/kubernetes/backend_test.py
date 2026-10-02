@@ -50,7 +50,8 @@ from kubeflow.trainer.options import (
     RuntimePatch,
     TrainingRuntimeSpecPatch,
 )
-from kubeflow.trainer.test.common import (
+from kubeflow.trainer.types import types
+from test.common import (
     DEFAULT_NAMESPACE,
     FAILED,
     RUNTIME,
@@ -58,7 +59,6 @@ from kubeflow.trainer.test.common import (
     TIMEOUT,
     TestCase,
 )
-from kubeflow.trainer.types import types
 
 NOT_FOUND = "not_found"
 FORBIDDEN = "forbidden"

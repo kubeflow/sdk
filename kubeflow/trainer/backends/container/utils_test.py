@@ -17,8 +17,8 @@ import pytest
 from kubeflow.common.constants import UNKNOWN
 from kubeflow.trainer.backends.container import utils as container_utils
 from kubeflow.trainer.constants import constants
-from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.types import types
+from test.common import FAILED, SUCCESS, TestCase
 
 
 def simple_train_func():
