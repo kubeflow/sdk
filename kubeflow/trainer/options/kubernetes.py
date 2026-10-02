@@ -45,6 +45,9 @@ class ContainerPatch:
         if not self.name or not self.name.strip():
             raise ValueError("Container name must be a non-empty string")
 
+        if self.security_context is not None and not isinstance(self.security_context, dict):
+            raise ValueError("security_context must be a dictionary")
+
         if self.env is not None:
             if not isinstance(self.env, list):
                 raise ValueError("env must be a list of dictionaries")
@@ -116,6 +119,23 @@ class PodSpecPatch:
     affinity: dict | None = None
     tolerations: list[dict] | None = None
     scheduling_gates: list[dict] | None = None
+
+    def __post_init__(self):
+        """Validate pod spec patch configuration."""
+        if self.security_context is not None and not isinstance(self.security_context, dict):
+            raise ValueError("security_context must be a dictionary")
+        if self.node_selector is not None and not isinstance(self.node_selector, dict):
+            raise ValueError("node_selector must be a dictionary")
+        if self.affinity is not None and not isinstance(self.affinity, dict):
+            raise ValueError("affinity must be a dictionary")
+        if self.volumes is not None and not isinstance(self.volumes, list):
+            raise ValueError("volumes must be a list of dictionaries")
+        if self.image_pull_secrets is not None and not isinstance(self.image_pull_secrets, list):
+            raise ValueError("image_pull_secrets must be a list of dictionaries")
+        if self.tolerations is not None and not isinstance(self.tolerations, list):
+            raise ValueError("tolerations must be a list of dictionaries")
+        if self.scheduling_gates is not None and not isinstance(self.scheduling_gates, list):
+            raise ValueError("scheduling_gates must be a list of dictionaries")
 
 
 @dataclass

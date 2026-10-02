@@ -235,12 +235,59 @@ class TestContainerPatch:
                 {"name": "trainer", "volume_mounts": [{"name": "vol"}]},
                 "Each volume_mounts entry must have a 'mountPath' key",
             ),
+            (
+                {"name": "trainer", "security_context": "invalid_type"},
+                "security_context must be a dictionary",
+            ),
         ],
     )
     def test_container_patch_validation(self, kwargs, expected_error):
         """Test ContainerPatch validates inputs correctly."""
         with pytest.raises(ValueError) as exc_info:
             ContainerPatch(**kwargs)
+        assert expected_error in str(exc_info.value)
+
+
+class TestPodSpecPatch:
+    """Test PodSpecPatch validation."""
+
+    @pytest.mark.parametrize(
+        "kwargs,expected_error",
+        [
+            (
+                {"security_context": "invalid_type"},
+                "security_context must be a dictionary",
+            ),
+            (
+                {"node_selector": "invalid_type"},
+                "node_selector must be a dictionary",
+            ),
+            (
+                {"affinity": "invalid_type"},
+                "affinity must be a dictionary",
+            ),
+            (
+                {"volumes": "invalid_type"},
+                "volumes must be a list of dictionaries",
+            ),
+            (
+                {"image_pull_secrets": "invalid_type"},
+                "image_pull_secrets must be a list of dictionaries",
+            ),
+            (
+                {"tolerations": "invalid_type"},
+                "tolerations must be a list of dictionaries",
+            ),
+            (
+                {"scheduling_gates": "invalid_type"},
+                "scheduling_gates must be a list of dictionaries",
+            ),
+        ],
+    )
+    def test_pod_spec_patch_validation(self, kwargs, expected_error):
+        """Test PodSpecPatch validates field types correctly."""
+        with pytest.raises(ValueError) as exc_info:
+            PodSpecPatch(**kwargs)
         assert expected_error in str(exc_info.value)
 
 
@@ -327,7 +374,7 @@ class TestRuntimePatchApplication:
                                                         "spec": {
                                                             "nodeSelector": {
                                                                 "node-type": "gpu-a100"
-                                                            },
+                                                            }
                                                         },
                                                     },
                                                 },
