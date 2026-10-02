@@ -228,7 +228,7 @@ def example_combined_options():
     print("EXAMPLE 5: Combined Options (Production Pattern)")
     print("=" * 70)
 
-    client = SparkClient(backend_config=_backend_config("spark-production"))
+    client = SparkClient(backend_config=_backend_config())
 
     spark = client.connect(
         driver=Driver(
