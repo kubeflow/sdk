@@ -624,10 +624,10 @@ def get_training_runtime_from_sources(name: str, sources: list[str]) -> base_typ
     Raises:
         ValueError: If the runtime is not found
     """
-    for rt in list_training_runtimes_from_sources(sources):
+    runtimes = list_training_runtimes_from_sources(sources)
+    for rt in runtimes:
         if rt.name == name:
             return rt
     raise ValueError(
-        f"Runtime '{name}' not found. Available runtimes: "
-        f"{[rt.name for rt in list_training_runtimes_from_sources(sources)]}"
+        f"Runtime '{name}' not found. Available runtimes: {[rt.name for rt in runtimes]}"
     )
