@@ -12,15 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-blank_issues_enabled: true
+name: Code Quality Checks
 
-contact_links:
-  - name: Kubeflow Documentation
-    url: https://www.kubeflow.org/docs/
-    about: Much help can be found in the docs
-  - name: Kubeflow Trainer Slack Channel
-    url: https://www.kubeflow.org/docs/about/community/#kubeflow-slack-channels
-    about: Ask the Kubeflow Trainer community on CNCF Slack
-  - name: Kubeflow Training and AutoML WG Community Meeting
-    url: https://bit.ly/2PWVCkV
-    about: Join the Kubeflow Training working group meeting
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  boilerplate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify boilerplate headers
+        uses: kubeflow/testing/.github/actions/verify-boilerplate@master

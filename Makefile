@@ -144,8 +144,6 @@ test-e2e-setup-cluster:  ## Setup Kind cluster for Spark E2E tests
 test-scripts: uv-venv  ## Run GitHub Actions script tests
 	@uv sync
 	@uv run pytest .github/scripts/test_scripts.py -v
-
-
 .PHONY: install-dev
 install-dev: uv uv-venv  ## Install uv, create .venv, sync deps. Accepts extras="..." and groups="...".
 	@echo "Using virtual environment at: $(VENV_DIR)"
