@@ -28,9 +28,6 @@ SPARK_CONNECT_PORT = 15002
 # Session name prefix
 SESSION_NAME_PREFIX = "spark-connect"
 
-# Spark Connect Maven package (required for Connect server main class on classpath)
-SPARK_CONNECT_PACKAGE_SCALA_VERSION = "2.13"
-
 # Spark job name prefix
 JOB_NAME_PREFIX = "spark-job"
 

@@ -519,6 +519,7 @@ def test_build_service_url(test_case: TestCase) -> None:
             config={
                 "spark_conf": {
                     "spark.sql.adaptive.enabled": "true",
+                    "spark.jars": "local:///opt/spark/jars/my.jar",
                 },
             },
         ),
@@ -679,6 +680,7 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.server.cores == constants.DEFAULT_DRIVER_CPU
         assert spark_connect.spec.server.memory == "512m"
         assert spark_connect.spec.spark_conf["spark.connect.grpc.binding.address"] == "0.0.0.0"
+        assert "spark.jars" not in spark_connect.spec.spark_conf
 
     elif test_case.name == "spark connect cr with num executors":
         assert spark_connect.spec.executor.instances == 3
@@ -688,10 +690,7 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.executor.memory == "4g"
 
     elif test_case.name == "spark connect cr with spark conf":
-        assert spark_connect.spec.spark_conf["spark.jars"].endswith(
-            f"spark-connect_{constants.SPARK_CONNECT_PACKAGE_SCALA_VERSION}-"
-            f"{constants.DEFAULT_SPARK_VERSION}.jar"
-        )
+        assert spark_connect.spec.spark_conf["spark.jars"] == "local:///opt/spark/jars/my.jar"
         assert spark_connect.spec.spark_conf["spark.sql.adaptive.enabled"] == "true"
 
     elif test_case.name == "spark conf overrides grpc binding address":
@@ -713,10 +712,6 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.executor.memory == "8g"
 
     elif test_case.name == "spark connect cr with app name":
-        assert spark_connect.spec.spark_conf["spark.jars"].endswith(
-            f"spark-connect_{constants.SPARK_CONNECT_PACKAGE_SCALA_VERSION}-"
-            f"{constants.DEFAULT_SPARK_VERSION}.jar"
-        )
         assert spark_connect.spec.spark_conf["spark.app.name"] == "my-spark-app"
 
     elif test_case.name == "executor config overrides num executors":
