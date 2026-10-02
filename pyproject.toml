@@ -37,11 +37,11 @@ dependencies = [
 docker = ["docker>=6.1.3"]
 podman = ["podman>=5.6.0"]
 spark = [
-  # pyspark-connect is Apache Spark Python API with Spark Connect by default
-  # Match major.minor of pyspark-connect to Spark constants declared in kubeflow.spark.backends.kubernetes.constants
-  # Ensure pyspark-connect and the spark image align with the Spark version used in the Spark operator image
+  # pyspark-client is Apache Spark Python API with Spark Connect by default
+  # Match major.minor of pyspark-client to Spark constants declared in kubeflow.spark.backends.kubernetes.constants
+  # Ensure pyspark-client and the spark image align with the Spark version used in the Spark operator image
   # https://github.com/kubeflow/spark-operator/blob/master/Dockerfile#L17
-  "pyspark-connect==4.2.0",
+  "pyspark-client==4.0.4",
   "kubeflow-spark-api>=2.4.0,<2.5",
 ]
 hub = ["model-registry>=0.3.14,<0.4"]
