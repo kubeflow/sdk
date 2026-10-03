@@ -1142,6 +1142,24 @@ def test_list_runtimes(kubernetes_backend, test_case):
             },
             expected_error=ValueError,
         ),
+        TestCase(
+            name="value error when runtime image is unset",
+            expected_status=FAILED,
+            config={
+                "runtime": types.Runtime(
+                    name="minimal-runtime",
+                    trainer=types.RuntimeTrainer(
+                        trainer_type=types.TrainerType.CUSTOM_TRAINER,
+                        framework="torch",
+                        num_nodes=1,
+                        device="cpu",
+                        device_count="1",
+                    ),
+                    kind=types.RuntimeKind.TRAINING_RUNTIME,
+                )
+            },
+            expected_error=ValueError,
+        ),
     ],
 )
 def test_get_runtime_packages(kubernetes_backend, test_case):
@@ -1261,6 +1279,7 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                 train_job_trainer=get_custom_trainer(
                     pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
                     packages_to_install=["torch", "numpy"],
+                    image="example.com/test-runtime",
                 ),
             ),
         ),
@@ -1357,6 +1376,25 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                     num_nodes=2,
                 ),
                 "runtime": TORCH_TUNE_RUNTIME,
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="value error when trainer omitted and runtime image unset",
+            expected_status=FAILED,
+            config={
+                "trainer": None,
+                "runtime": types.Runtime(
+                    name="minimal-runtime",
+                    trainer=types.RuntimeTrainer(
+                        trainer_type=types.TrainerType.CUSTOM_TRAINER,
+                        framework="torch",
+                        num_nodes=1,
+                        device="cpu",
+                        device_count="1",
+                    ),
+                    kind=types.RuntimeKind.TRAINING_RUNTIME,
+                ),
             },
             expected_error=ValueError,
         ),
@@ -1513,7 +1551,12 @@ def test_train(kubernetes_backend, test_case):
     print("Executing test:", test_case.name)
     try:
         kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
-        runtime = kubernetes_backend.get_runtime(test_case.config.get("runtime", TORCH_RUNTIME))
+        runtime_cfg = test_case.config.get("runtime", TORCH_RUNTIME)
+        runtime = (
+            runtime_cfg
+            if isinstance(runtime_cfg, types.Runtime)
+            else kubernetes_backend.get_runtime(runtime_cfg)
+        )
 
         options = test_case.config.get("options", [])
 

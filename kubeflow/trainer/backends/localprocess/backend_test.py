@@ -176,6 +176,22 @@ def test_get_runtime(local_backend, test_case):
             },
             expected_error=ValueError,
         ),
+        TestCase(
+            name="get_packages_when_runtime_image_unset",
+            expected_status=FAILED,
+            config={
+                "runtime": types.Runtime(
+                    name=TORCH_RUNTIME,
+                    trainer=types.RuntimeTrainer(
+                        trainer_type=types.TrainerType.CUSTOM_TRAINER,
+                        framework="torch",
+                        num_nodes=1,
+                    ),
+                    kind=types.RuntimeKind.TRAINING_RUNTIME,
+                ),
+            },
+            expected_error=ValueError,
+        ),
     ],
 )
 def test_get_runtime_packages(local_backend, test_case):

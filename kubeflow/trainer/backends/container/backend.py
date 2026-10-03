@@ -240,6 +240,9 @@ class ContainerBackend(RuntimeBackend):
         """
         Spawn a short-lived container to report Python version, pip list, and nvidia-smi.
         """
+        if not types.is_trainer_image_set(runtime.trainer.image):
+            raise ValueError("Cannot get Runtime packages: runtime image is unset")
+
         container_utils.maybe_pull_image(self._adapter, runtime.trainer.image, self.cfg.pull_policy)
 
         command = [
@@ -280,6 +283,9 @@ class ContainerBackend(RuntimeBackend):
 
         if not isinstance(trainer, types.CustomTrainer):
             raise ValueError(f"{self.__class__.__name__} supports only CustomTrainer in v1")
+
+        # Resolve image before allocating workdir/network so invalid BYOI configs fail early.
+        image = types.resolve_trainer_image(runtime, trainer)
 
         # Generate train job name if not provided via options
         trainjob_name = name or (
@@ -326,8 +332,6 @@ class ContainerBackend(RuntimeBackend):
             training_script_code = container_utils.get_training_script_code(trainer)
             logger.debug("Generated training script code")
 
-            # Get the image from the trainer or runtime.
-            image = trainer.image if trainer.image else runtime.trainer.image
             logger.debug(f"Using image: {image}")
 
             container_utils.maybe_pull_image(self._adapter, image, self.cfg.pull_policy)

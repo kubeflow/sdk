@@ -20,6 +20,7 @@ from unittest.mock import MagicMock, patch
 from kubeflow_trainer_api import models
 import pytest
 
+import kubeflow.common.constants as common_constants
 import kubeflow.trainer.backends.kubernetes.utils as utils
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
@@ -582,6 +583,154 @@ def test_get_command_using_train_func(test_case: TestCase):
 
     except Exception as e:
         assert type(e) is test_case.expected_error
+
+
+def _build_replicated_job(*, image: str | None = "example.com/image"):
+    container = models.IoK8sApiCoreV1Container(
+        name=constants.NODE,
+        command=["echo", "hello"],
+    )
+    if image is not None:
+        container.image = image
+    return models.JobsetV1alpha2ReplicatedJob(
+        name="node",
+        replicas=1,
+        template=models.IoK8sApiBatchV1JobTemplateSpec(
+            metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                labels={constants.TRAINJOB_ANCESTOR_LABEL: "trainer"}
+            ),
+            spec=models.IoK8sApiBatchV1JobSpec(
+                template=models.IoK8sApiCoreV1PodTemplateSpec(
+                    spec=models.IoK8sApiCoreV1PodSpec(containers=[container])
+                )
+            ),
+        ),
+    )
+
+
+def _build_runtime_without_image() -> types.Runtime:
+    runtime_trainer = types.RuntimeTrainer(
+        trainer_type=types.TrainerType.CUSTOM_TRAINER,
+        framework="torch",
+        device="cpu",
+        device_count="1",
+    )
+    runtime_trainer.set_command(constants.DEFAULT_COMMAND)
+    return types.Runtime(
+        name="minimal-runtime",
+        trainer=runtime_trainer,
+        kind=types.RuntimeKind.TRAINING_RUNTIME,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="runtime with image sets RuntimeTrainer.image",
+            expected_status=SUCCESS,
+            config={
+                "framework": "torch",
+                "replicated_jobs": [_build_replicated_job(image="example.com/runtime")],
+                "ml_policy": models.TrainerV1alpha1MLPolicy(torch={}, numNodes=1),
+            },
+            expected_output="example.com/runtime",
+        ),
+        TestCase(
+            name="runtime without image defaults to Unknown",
+            expected_status=SUCCESS,
+            config={
+                "framework": "torch",
+                "replicated_jobs": [_build_replicated_job(image=None)],
+                "ml_policy": models.TrainerV1alpha1MLPolicy(torch={}, numNodes=1),
+            },
+            expected_output=common_constants.UNKNOWN,
+        ),
+        TestCase(
+            name="builtin trainer runtime without image raises ValueError",
+            expected_status=FAILED,
+            config={
+                "framework": types.TORCH_TUNE,
+                "replicated_jobs": [_build_replicated_job(image=None)],
+                "ml_policy": models.TrainerV1alpha1MLPolicy(numNodes=1),
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_get_runtime_trainer_image(test_case: TestCase):
+    print("Executing test:", test_case.name)
+    try:
+        trainer = utils.get_runtime_trainer(
+            framework=test_case.config["framework"],
+            replicated_jobs=test_case.config["replicated_jobs"],
+            ml_policy=test_case.config["ml_policy"],
+        )
+        assert test_case.expected_status == SUCCESS
+        assert trainer.image == test_case.expected_output
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="custom trainer image overrides unknown runtime image",
+            expected_status=SUCCESS,
+            config={
+                "runtime": _build_runtime_without_image(),
+                "trainer": types.CustomTrainer(
+                    func=sample_train_func,
+                    image="my-registry.io/train:v1",
+                ),
+            },
+            expected_output="my-registry.io/train:v1",
+        ),
+        TestCase(
+            name="custom trainer container image with unknown runtime image",
+            expected_status=SUCCESS,
+            config={
+                "runtime": _build_runtime_without_image(),
+                "trainer": types.CustomTrainerContainer(image="my-registry.io/train:v2"),
+            },
+            expected_output="my-registry.io/train:v2",
+        ),
+        TestCase(
+            name="runtime image used when custom trainer image unset",
+            expected_status=SUCCESS,
+            config={
+                "runtime": _build_runtime(),
+                "trainer": types.CustomTrainer(func=sample_train_func),
+            },
+            expected_output="example.com/image",
+        ),
+        TestCase(
+            name="missing trainer and runtime image raises ValueError",
+            expected_status=FAILED,
+            config={
+                "runtime": _build_runtime_without_image(),
+                "trainer": types.CustomTrainer(func=sample_train_func),
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_get_trainer_cr_from_custom_trainer_image(test_case: TestCase):
+    print("Executing test:", test_case.name)
+    try:
+        trainer_cr = utils.get_trainer_cr_from_custom_trainer(
+            test_case.config["runtime"],
+            test_case.config["trainer"],
+        )
+        assert test_case.expected_status == SUCCESS
+        assert trainer_cr.image == test_case.expected_output
+    except Exception as e:
+        assert test_case.expected_status == FAILED
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
 
 
 @pytest.mark.parametrize(
@@ -1177,6 +1326,17 @@ def test_get_args_using_torchtune_config(test_case: TestCase):
                 "runtime": _build_builtin_runtime(),
                 "trainer": types.BuiltinTrainer(
                     config="invalid_config",
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="builtin trainer with unset runtime image raises ValueError",
+            expected_status=FAILED,
+            config={
+                "runtime": _build_runtime_without_image(),
+                "trainer": types.BuiltinTrainer(
+                    config=types.TorchTuneConfig(batch_size=8),
                 ),
             },
             expected_error=ValueError,

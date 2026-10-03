@@ -235,6 +235,9 @@ class KubernetesBackend(RuntimeBackend):
         if runtime.trainer.trainer_type == types.TrainerType.BUILTIN_TRAINER:
             raise ValueError("Cannot get Runtime packages for BuiltinTrainer")
 
+        if not types.is_trainer_image_set(runtime.trainer.image):
+            raise ValueError("Cannot get Runtime packages: runtime image is unset")
+
         # Create a deepcopy of the runtime to avoid modifying the original command.
         runtime_copy = copy.deepcopy(runtime)
 
@@ -831,6 +834,13 @@ class KubernetesBackend(RuntimeBackend):
                     f"The trainer type {type(trainer)} is not supported. "
                     "Please use CustomTrainer, CustomTrainerContainer, or BuiltinTrainer."
                 )
+        elif not types.is_trainer_image_set(runtime.trainer.image):
+            # No trainer override — TrainJob relies on the runtime template image.
+            raise ValueError(
+                "Trainer image is required. Provide CustomTrainer or CustomTrainerContainer "
+                "with an image, or configure an image on the TrainingRuntime / "
+                "ClusterTrainingRuntime."
+            )
 
         # Apply trainer overrides if trainer was not provided but overrides exist
         if trainer_overrides:

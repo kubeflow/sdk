@@ -22,6 +22,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import kubeflow.common.constants as common_constants
 from kubeflow.trainer.backends.container import runtime_loader
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
@@ -572,6 +573,16 @@ def test_fetch_runtime_from_github(test_case):
                 "multiple_containers": True,
             },
         ),
+        TestCase(
+            name="parse runtime yaml without image defaults to Unknown",
+            expected_status=SUCCESS,
+            config={
+                "custom_image": None,
+                "runtime_name": "minimal-torch-runtime",
+                "framework": "torch",
+                "num_nodes": 1,
+            },
+        ),
     ],
 )
 def test_parse_runtime_yaml_extracts_image(test_case):
@@ -594,6 +605,8 @@ def test_parse_runtime_yaml_extracts_image(test_case):
                     "image": test_case.config["custom_image"],
                 },
             ]
+        elif test_case.config.get("custom_image") is None:
+            containers = [{"name": "node"}]
         else:
             # Single container test case
             containers = [
@@ -633,7 +646,12 @@ def test_parse_runtime_yaml_extracts_image(test_case):
         assert runtime.name == test_case.config["runtime_name"]
         assert runtime.trainer.framework == test_case.config["framework"]
         assert runtime.trainer.num_nodes == test_case.config["num_nodes"]
-        assert runtime.trainer.image == test_case.config["custom_image"]
+        expected_image = (
+            common_constants.UNKNOWN
+            if test_case.config["custom_image"] is None
+            else test_case.config["custom_image"]
+        )
+        assert runtime.trainer.image == expected_image
 
         assert test_case.expected_status == SUCCESS
 
