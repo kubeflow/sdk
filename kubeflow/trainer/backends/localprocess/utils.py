@@ -280,7 +280,7 @@ def get_local_train_job_script(
     else:
         raise ValueError("Invalid Runtime Trainer type: {type(runtime.trainer)}")
     dependency_script = "\n"
-    if trainer.packages_to_install:
+    if runtime_trainer.packages or trainer.packages_to_install:
         dependency_script = get_dependencies_command(
             pip_index_urls=(
                 trainer.pip_index_urls
@@ -288,7 +288,7 @@ def get_local_train_job_script(
                 else constants.DEFAULT_PIP_INDEX_URLS
             ),
             runtime_packages=runtime_trainer.packages,
-            trainer_packages=trainer.packages_to_install,
+            trainer_packages=trainer.packages_to_install or [],
             quiet=False,
         )
 
