@@ -52,13 +52,28 @@ using ``num_executors`` and ``resources_per_executor``.
 
 .. note::
 
-   Batch job submission requires the ``spark-operator-spark`` ServiceAccount to
-   exist in the target namespace, with the required SparkApplication RBAC
-   permissions bound to it. Otherwise, ``submit_job()`` requests will fail.
+   ``SparkClient`` does not set a ServiceAccount on the driver spec. Both
+   interactive sessions and batch jobs need the driver to run as a
+   ServiceAccount with permission to create executor pods in the target
+   namespace. That ServiceAccount is provisioned and selected by the platform,
+   not by the SDK.
 
-   This is a current Spark Operator requirement and is expected to be simplified
-   once `kubeflow/spark-operator#3049 <https://github.com/kubeflow/spark-operator/issues/3049>`_
-   is resolved.
+   On a Kubeflow Platform install, the Profile controller creates a
+   ``default-editor`` ServiceAccount in every profile namespace and binds it to
+   the ``kubeflow-edit`` ClusterRole, which covers pods and services
+   in-namespace. Set ``controller.defaultServiceAccount=default-editor`` in the
+   Spark Operator Helm chart so the operator falls back to it. On a standalone
+   Spark Operator install, set it to a ServiceAccount that exists in every
+   namespace where you submit jobs — for example the ``<release>-spark``
+   account the chart creates in the namespaces listed under
+   ``spark.jobNamespaces``.
+
+   When ``controller.defaultServiceAccount`` is unset, the driver runs as the
+   namespace's ``default`` ServiceAccount and the job fails with a
+   ``403 Forbidden`` error when the driver tries to create executor pods.
+
+   Interactive sessions can override the ServiceAccount per session with
+   ``Driver(service_account=...)``; batch jobs have no per-job override.
 
 Two Ways to Run Spark
 -----------------------
