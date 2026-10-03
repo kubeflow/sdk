@@ -149,6 +149,27 @@ def test_hugging_face_model_initializer(test_case: TestCase):
 
 
 @pytest.mark.parametrize(
+    "initializer_cls,storage_uri",
+    [
+        (types.HuggingFaceModelInitializer, "hf://user/model"),
+        (types.S3ModelInitializer, "s3://bucket/model"),
+    ],
+)
+def test_model_initializer_ignore_patterns_are_independent(initializer_cls, storage_uri):
+    """Each model initializer instance gets its own ignore_patterns list."""
+    first = initializer_cls(storage_uri=storage_uri)
+    second = initializer_cls(storage_uri=storage_uri)
+
+    assert first.ignore_patterns is not second.ignore_patterns
+    assert first.ignore_patterns == second.ignore_patterns
+
+    first.ignore_patterns.append("*.custom")
+
+    assert "*.custom" in first.ignore_patterns
+    assert "*.custom" not in second.ignore_patterns
+
+
+@pytest.mark.parametrize(
     "test_case",
     [
         TestCase(
