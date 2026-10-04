@@ -14,6 +14,7 @@
 
 import os
 import tempfile
+import threading
 import time
 from unittest.mock import MagicMock, patch
 
@@ -1540,6 +1541,73 @@ def test_update_trainjob_status(test_case: TestCase):
         os.unlink(token_path)
         if ca_path:
             os.unlink(ca_path)
+    print("test execution complete")
+
+
+def test_update_trainjob_status_concurrent_calls_are_throttled():
+    """Concurrent callers within the throttle window must produce exactly one POST."""
+    utils._last_update_time = 0.0
+    utils._cached_token = None
+    utils._token_read_time = 0.0
+    utils._http_session = None
+
+    token_path = _make_token_file()
+    env = {
+        "KUBEFLOW_TRAINER_SERVER_URL": "https://trainer.example.com/status",
+        "KUBEFLOW_TRAINER_SERVER_TOKEN": token_path,
+    }
+
+    try:
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch("kubeflow.trainer.backends.kubernetes.utils._get_status_session") as session_fn,
+        ):
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.text = ""
+            session_fn.return_value.post.return_value = mock_resp
+
+            results = []
+            threads = [
+                threading.Thread(
+                    target=lambda: results.append(utils.update_trainjob_status(progress_percent=50))
+                )
+                for _ in range(10)
+            ]
+
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+            assert session_fn.return_value.post.call_count == 1
+            assert results.count(True) == 1
+            assert results.count(False) == 9
+    finally:
+        os.unlink(token_path)
+    print("test execution complete")
+
+
+def test_update_trainjob_status_rollback_does_not_clobber_newer_reservation():
+    """A late rollback from an older request must not erase a newer valid reservation."""
+    utils._last_update_time = 0.0
+
+    older_reservation = utils._reserve_throttle_slot()
+    assert older_reservation is not None
+
+    # Simulate a newer request winning the next reservation a moment later.
+    # Using a distinct offset (rather than a second real timestamp) keeps the
+    # test deterministic regardless of the platform's clock resolution.
+    newer_reservation = older_reservation + 1.0
+    utils._last_update_time = newer_reservation
+
+    # The older request's failure handling now rolls back its own reservation.
+    utils._release_throttle_slot(older_reservation)
+
+    # The newer reservation must survive, since it did not match what the
+    # older request tried to roll back.
+    assert utils._last_update_time == newer_reservation
+    assert utils._should_throttle()
     print("test execution complete")
 
 
