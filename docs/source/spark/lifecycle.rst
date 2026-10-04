@@ -140,6 +140,22 @@ Lifecycle APIs
    exists — if it has been deleted (for example, due to TTL-based cleanup),
    logs may no longer be available.
 
+**View the job's Spark UI:**
+
+.. code-block:: python
+
+   ui_url, port_forward_process = client.get_job_ui_url(job_name)
+   print(f"Spark UI: {ui_url}")
+   # port_forward_process is None when running in-cluster; outside the
+   # cluster it's the kubectl port-forward process backing ui_url, keep a
+   # reference to it for as long as you need the UI reachable.
+
+.. note::
+   The Spark Operator creates a web UI Service for every job by default, so
+   this works without any extra configuration on ``submit_job()``. It only
+   fails if the operator was deployed with ``--enable-ui-service=false``, or
+   the job has already been cleaned up.
+
 **Delete a job:**
 
 .. code-block:: python
@@ -147,10 +163,10 @@ Lifecycle APIs
    client.delete_job(job_name)
 
 .. note::
-   ``get_job_logs()`` above covers raw pod logs. Structured metrics, job health,
-   event streaming, and Spark UI access are planned as a dedicated
-   **Observability** guide that builds on the job model defined here — watch
-   this page's "See also" once that lands.
+   ``get_job_logs()`` and ``get_job_ui_url()`` above cover raw logs and the
+   Spark UI. Structured metrics and event streaming are planned as a
+   dedicated **Observability** guide that builds on the job model defined
+   here — watch this page's "See also" once that lands.
 
 Common Patterns
 ----------------
