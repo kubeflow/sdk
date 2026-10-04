@@ -583,3 +583,37 @@ def test_get_job_status(local_backend, test_case):
 
     status = local_backend._LocalProcessBackend__get_job_status(job)
     assert status == test_case.expected_output
+
+
+def test_concurrent_localjobs_do_not_change_cwd():
+    """Concurrent LocalJob threads must not mutate the parent process cwd."""
+    import os
+    import threading
+
+    from kubeflow.trainer.backends.localprocess.job import LocalJob
+
+    original_cwd = os.getcwd()
+    errors = []
+
+    def run_job(tmp_dir):
+        job = LocalJob(
+            name=f"test-job-{tmp_dir}",
+            command=["echo", "hello"],
+            execution_dir=tmp_dir,
+        )
+        job.start()
+        job.join()
+        if os.getcwd() != original_cwd:
+            errors.append(f"cwd changed to {os.getcwd()}")
+
+    import tempfile
+
+    dirs = [tempfile.mkdtemp() for _ in range(5)]
+    threads = [threading.Thread(target=run_job, args=(d,)) for d in dirs]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert os.getcwd() == original_cwd, f"cwd was mutated: {os.getcwd()}"
+    assert not errors, f"cwd changed in threads: {errors}"
