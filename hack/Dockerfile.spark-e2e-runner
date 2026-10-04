@@ -1,6 +1,6 @@
 # Copyright 2025 The Kubeflow Authors.
 # In-cluster E2E runner: runs Spark example scripts inside the cluster so
-# SparkClient uses the in-cluster URL (sc://...svc.cluster.local) and no port-forward.
+# SparkClient uses the in-cluster URL (sc://...svc) and no port-forward.
 FROM python:3.11-slim
 
 WORKDIR /app

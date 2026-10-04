@@ -411,10 +411,6 @@ def build_service_url(info: SparkConnectInfo) -> str:
     for readiness (wait_for_ready), by which point the operator has populated
     this field in the same atomic status write that set the Ready state.
 
-    The ".svc" short form is resolved through the pod's DNS search path, so it
-    works unchanged on clusters that use a cluster domain other than the default
-    "cluster.local".
-
     Args:
         info: SparkConnectInfo with service details.
 
