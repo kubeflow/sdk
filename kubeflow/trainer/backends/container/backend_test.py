@@ -697,6 +697,110 @@ def test_train(container_backend, test_case):
     "test_case",
     [
         TestCase(
+            name="network creation fails",
+            expected_status=FAILED,
+            config={
+                "fail_at": "create_network",
+                "expected_containers_removed": [],
+                "expected_network_deleted": False,
+            },
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="image pull fails after network creation",
+            expected_status=FAILED,
+            config={
+                "fail_at": "pull_image",
+                "expected_containers_removed": [],
+                "expected_network_deleted": True,
+            },
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="container creation fails after some containers were created",
+            expected_status=FAILED,
+            config={
+                "fail_at": "create_container",
+                "num_nodes": 3,
+                "expected_containers_removed": ["container-0", "container-1"],
+                "expected_network_deleted": True,
+            },
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="cleanup failure preserves original error",
+            expected_status=FAILED,
+            config={"fail_at": "cleanup"},
+            expected_error=RuntimeError,
+        ),
+    ],
+)
+def test_train_cleanup_on_failure(container_backend, tmp_path, test_case):
+    """Test that train() cleans up created resources and re-raises the setup error."""
+    print("Executing test:", test_case.name)
+    adapter = container_backend._adapter
+    workdir = tmp_path / "job"
+    workdir.mkdir()
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("setup failed")
+
+    fail_at = test_case.config["fail_at"]
+    if fail_at == "create_network":
+        adapter.create_network = fail
+    elif fail_at in ("pull_image", "cleanup"):
+        container_backend.cfg.pull_policy = "Always"
+        adapter.pull_image = fail
+    elif fail_at == "create_container":
+        original_create = adapter.create_and_start_container
+
+        def create_then_fail(*args, **kwargs):
+            if len(adapter.containers_created) == 2:
+                raise RuntimeError("setup failed")
+            return original_create(*args, **kwargs)
+
+        adapter.create_and_start_container = create_then_fail
+
+    trainer = types.CustomTrainer(
+        func=simple_train_func, num_nodes=test_case.config.get("num_nodes", 1)
+    )
+    runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
+
+    with (
+        patch(
+            "kubeflow.trainer.backends.container.utils.create_workdir",
+            return_value=str(workdir),
+        ),
+        patch.object(
+            container_backend,
+            "_cleanup_container_resources",
+            side_effect=RuntimeError("cleanup failed"),
+        )
+        if fail_at == "cleanup"
+        else nullcontext(),
+        pytest.raises(test_case.expected_error, match="setup failed"),
+    ):
+        container_backend.train(runtime=runtime, trainer=trainer)
+
+    if fail_at == "cleanup":
+        return
+
+    expected_removed = test_case.config["expected_containers_removed"]
+    assert len(adapter.containers_created) == len(expected_removed)
+    assert adapter.containers_stopped == expected_removed
+    assert adapter.containers_removed == expected_removed
+    if test_case.config["expected_network_deleted"]:
+        assert adapter.networks_deleted == [adapter.networks_created[0]["id"]]
+    else:
+        assert adapter.networks_deleted == []
+    assert not workdir.exists()
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
             name="list all jobs",
             expected_status=SUCCESS,
             config={"num_jobs": 2},
