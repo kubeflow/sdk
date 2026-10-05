@@ -37,7 +37,7 @@ from kubeflow.spark.types.types import (
     SparkConnectState,
     SparkJobStatus,
 )
-from test.common import (
+from kubeflow.test.common import (
     DEFAULT_NAMESPACE,
     FAILED,
     RUNTIME,

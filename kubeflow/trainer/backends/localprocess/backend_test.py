@@ -20,6 +20,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from kubeflow.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.backends.localprocess.backend import LocalProcessBackend
 from kubeflow.trainer.backends.localprocess.constants import LOCAL_RUNTIME_IMAGE
 from kubeflow.trainer.backends.localprocess.types import (
@@ -34,7 +35,6 @@ from kubeflow.trainer.options import (
     RuntimePatch,
 )
 from kubeflow.trainer.types import types
-from test.common import FAILED, SUCCESS, TestCase
 
 # Test constants
 TORCH_RUNTIME = constants.DEFAULT_TRAINING_RUNTIME

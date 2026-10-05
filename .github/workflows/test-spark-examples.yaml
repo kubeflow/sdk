@@ -90,7 +90,7 @@ jobs:
         timeout-minutes: 5
 
       - name: Run example validation tests
-        run: uv run pytest test/e2e/spark/test_spark_examples.py -v --tb=short
+        run: uv run pytest kubeflow/test/e2e/spark/test_spark_examples.py -v --tb=short
         env:
           SPARK_TEST_CLUSTER: spark-test
           SPARK_TEST_NAMESPACE: spark-test

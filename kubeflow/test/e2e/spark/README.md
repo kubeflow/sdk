@@ -39,12 +39,12 @@ Validates that Spark example scripts execute successfully:
 
 ### All E2E Tests
 ```bash
-uv run pytest test/e2e/spark/ -v
+uv run pytest kubeflow/test/e2e/spark/ -v
 ```
 
 ### Specific Test
 ```bash
-uv run pytest test/e2e/spark/test_spark_examples.py::TestSparkExamples::test_spark_connect_simple_example -v
+uv run pytest kubeflow/test/e2e/spark/test_spark_examples.py::TestSparkExamples::test_spark_connect_simple_example -v
 ```
 
 ### Quick Validation (No pytest)
@@ -89,7 +89,7 @@ ls -la examples/spark/
 
 **Solution:** Run with debug logging to see where it stops:
 ```bash
-SPARK_E2E_DEBUG=1 uv run pytest test/e2e/spark/test_spark_examples.py -v --tb=short -s
+SPARK_E2E_DEBUG=1 uv run pytest kubeflow/test/e2e/spark/test_spark_examples.py -v --tb=short -s
 ```
 `-s` shows stderr from the example subprocess (session wait, port-forward URL, connect URL). Logs include: "Waiting for session...", "Session ready...", "Port-forward svc/...", "Connecting SparkSession to sc://...".
 
@@ -145,7 +145,7 @@ Run the same tests locally before submitting PR:
 bash hack/e2e-setup-cluster.sh
 
 # Run example validation tests
-python -m pytest test/e2e/spark/test_spark_examples.py -v
+python -m pytest kubeflow/test/e2e/spark/test_spark_examples.py -v
 
 # Cleanup
 bash hack/e2e-setup-cluster.sh --delete

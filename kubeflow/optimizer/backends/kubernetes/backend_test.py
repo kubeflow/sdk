@@ -45,6 +45,14 @@ from kubeflow.optimizer.types.search_types import (
     Distribution,
     Search,
 )
+from kubeflow.test.common import (
+    DEFAULT_NAMESPACE,
+    FAILED,
+    RUNTIME,
+    SUCCESS,
+    TIMEOUT,
+    TestCase,
+)
 import kubeflow.trainer.constants.constants as trainer_constants
 from kubeflow.trainer.types import types as trainer_types
 from kubeflow.trainer.types.types import (
@@ -56,14 +64,6 @@ from kubeflow.trainer.types.types import (
     TrainerType,
     TrainJob,
     TrainJobTemplate,
-)
-from test.common import (
-    DEFAULT_NAMESPACE,
-    FAILED,
-    RUNTIME,
-    SUCCESS,
-    TIMEOUT,
-    TestCase,
 )
 
 T = TypeVar("T")

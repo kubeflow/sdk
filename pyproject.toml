@@ -98,7 +98,7 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["kubeflow"]
-exclude = ["**/*_test.py"]
+exclude = ["**/*_test.py", "kubeflow/test/**"]
 
 # ruff configuration
 [tool.ruff]
@@ -146,7 +146,7 @@ ignore = [
 
 [tool.ruff.lint.isort]
 # Make import sorting deterministic and "first-party aware"
-known-first-party = ["kubeflow", "test"]
+known-first-party = ["kubeflow"]
 combine-as-imports = true
 force-sort-within-sections = true
 

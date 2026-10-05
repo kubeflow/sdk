@@ -53,7 +53,7 @@ from kubeflow.spark.types.types import (
     SparkConnectState,
     SparkJobStatus,
 )
-from test.common import FAILED, SUCCESS, TestCase
+from kubeflow.test.common import FAILED, SUCCESS, TestCase
 
 # --------------------------
 # Fixtures
