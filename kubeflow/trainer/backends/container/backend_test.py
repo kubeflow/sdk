@@ -746,7 +746,7 @@ def test_list_jobs(container_backend, test_case):
             name="get nonexistent job",
             expected_status=FAILED,
             config={"job_name": "nonexistent-job"},
-            expected_error=ValueError,
+            expected_error=RuntimeError,
         ),
     ],
 )

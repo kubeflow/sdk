@@ -57,14 +57,14 @@ class LocalProcessBackend(RuntimeBackend):
             None,
         )
         if not runtime:
-            raise ValueError(f"Runtime '{name}' not found.")
+            raise RuntimeError(f"Runtime '{name}' not found.")
 
         return runtime
 
     def get_runtime_packages(self, runtime: types.Runtime):
         local_runtime = next((rt for rt in local_runtimes if rt.name == runtime.name), None)
         if not local_runtime:
-            raise ValueError(f"Runtime '{runtime.name}' not found.")
+            raise RuntimeError(f"Runtime '{runtime.name}' not found.")
 
         return local_runtime.trainer.packages
 
@@ -169,7 +169,7 @@ class LocalProcessBackend(RuntimeBackend):
     def get_job(self, name: str) -> types.TrainJob:
         _job = next((j for j in self.__local_jobs if j.name == name), None)
         if _job is None:
-            raise ValueError(f"No TrainJob with name {name}")
+            raise RuntimeError(f"No TrainJob with name {name}")
 
         # check and set the correct job status to match `TrainerClient` supported statuses
         status = self.__get_job_status(_job)
@@ -198,7 +198,7 @@ class LocalProcessBackend(RuntimeBackend):
     ) -> Iterator[str]:
         _job = [j for j in self.__local_jobs if j.name == name]
         if not _job:
-            raise ValueError(f"No TrainJob with name {name}")
+            raise RuntimeError(f"No TrainJob with name {name}")
 
         want_all_steps = step == constants.NODE + "-0"
 
@@ -234,7 +234,7 @@ class LocalProcessBackend(RuntimeBackend):
         _job = next((_job for _job in self.__local_jobs if _job.name == name), None)
 
         if _job is None:
-            raise ValueError(f"No TrainJob with name {name}")
+            raise RuntimeError(f"No TrainJob with name {name}")
 
         for _ in range(round(timeout / polling_interval)):
             # Get current job status
@@ -258,7 +258,7 @@ class LocalProcessBackend(RuntimeBackend):
         # find job first.
         _job = next((j for j in self.__local_jobs if j.name == name), None)
         if _job is None:
-            raise ValueError(f"No TrainJob with name {name}")
+            raise RuntimeError(f"No TrainJob with name {name}")
 
         # cancel all nested step jobs in target job
         _ = [step.job.cancel() for step in _job.steps]
