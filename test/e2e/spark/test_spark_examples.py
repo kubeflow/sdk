@@ -1,4 +1,4 @@
-# Copyright The Kubeflow Authors.
+# Copyright 2025 The Kubeflow Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ from .cluster_watcher import run_watcher_in_thread
 from .run_in_cluster import run_example_in_cluster
 
 # Path to examples directory
-EXAMPLES_DIR = Path(__file__).parents[4] / "examples" / "spark"
+EXAMPLES_DIR = Path(__file__).parent.parent.parent.parent / "examples" / "spark"
 
 EXAMPLE_TIMEOUT_SEC = 600
 WATCHER_INTERVAL_SEC = 5.0

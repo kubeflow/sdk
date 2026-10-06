@@ -37,6 +37,7 @@ docs/                            # Kubeflow SDK documentation
 examples/                        # Kubeflow SDK examples
 hack/                            # Scripts to manage CI/CD and installation
 proposals/                       # Kubeflow Enhancement Proposals (KEPs)
+test/                            # Top-level end-to-end tests
 kubeflow/                        # Main Python package
 ├── common/                        # Shared utilities, types, and constants across all projects
 │
@@ -68,8 +69,7 @@ kubeflow/                        # Main Python package
 │   ├── api/                         # ModelRegistryClient - main user interface
 │   └── types/                       # Hub types
 │
-└── test/                          # Shared test helpers (common.py) and end-to-end tests
-    └── e2e/                          # End-to-end tests (e.g. Spark)
+└── test/                          # Shared test helpers (common.py)
 ```
 
 ## Environment & Tooling

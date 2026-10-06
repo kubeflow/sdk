@@ -384,10 +384,10 @@ print_status() {
     echo ""
     log_info "=== Usage ==="
     if [[ "${E2E_CRD_ONLY:-0}" == "1" ]]; then
-        echo "Smoke test: uv run pytest kubeflow/test/e2e/spark/test_spark_examples.py -v -k smoke"
+        echo "Smoke test: uv run pytest test/e2e/spark/test_spark_examples.py -v -k smoke"
     else
         echo "To run E2E tests:"
-        echo "  python -m pytest kubeflow/test/e2e/spark/test_spark_examples.py -v"
+        echo "  python -m pytest test/e2e/spark/test_spark_examples.py -v"
     fi
     echo ""
     echo "To delete cluster:"

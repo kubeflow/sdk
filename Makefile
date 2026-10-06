@@ -121,7 +121,7 @@ release: ## Create a release commit. Usage: make release VERSION=X.Y.Z GITHUB_TO
 .PHONY: test-python
 test-python: uv-venv  ## Run Python unit tests
 	@uv sync --extra spark
-	@uv run coverage run --source=kubeflow -m pytest ./kubeflow/ --ignore=kubeflow/test/e2e
+	@uv run coverage run --source=kubeflow -m pytest ./kubeflow/
 	@uv run coverage report --omit='*_test.py' --skip-covered --skip-empty
 ifeq ($(report),xml)
 	@uv run coverage xml
