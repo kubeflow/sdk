@@ -30,17 +30,6 @@ from kubeflow.spark.backends.kubernetes.utils import (
     validate_spark_connect_url,
 )
 from kubeflow.spark.options import Labels, Name
-from kubeflow.spark.test.common import (
-    DEFAULT_NAMESPACE,
-    FAILED,
-    RUNTIME,
-    SPARK_CONNECT_FAILED,
-    SPARK_CONNECT_PROVISIONING,
-    SPARK_CONNECT_READY,
-    SUCCESS,
-    TIMEOUT,
-    TestCase,
-)
 from kubeflow.spark.types.types import (
     FileJob,
     FuncJob,
@@ -48,6 +37,19 @@ from kubeflow.spark.types.types import (
     SparkConnectState,
     SparkJobStatus,
 )
+from kubeflow.test.common import (
+    DEFAULT_NAMESPACE,
+    FAILED,
+    RUNTIME,
+    SUCCESS,
+    TIMEOUT,
+    TestCase,
+)
+
+# SparkConnect states for mocking
+SPARK_CONNECT_READY = "spark-connect-ready"
+SPARK_CONNECT_PROVISIONING = "spark-connect-provisioning"
+SPARK_CONNECT_FAILED = "spark-connect-failed"
 
 # --------------------------
 # Fixtures

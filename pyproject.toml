@@ -96,6 +96,10 @@ build-backend = "hatchling.build"
 [tool.hatch.metadata]
 allow-direct-references = true
 
+[tool.hatch.build.targets.wheel]
+packages = ["kubeflow"]
+exclude = ["**/*_test.py", "kubeflow/test/**"]
+
 # ruff configuration
 [tool.ruff]
 # Formatting + lint coordination

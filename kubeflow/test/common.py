@@ -12,25 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Shared test utilities and types for Kubeflow Trainer tests.
+"""Shared test utilities and types for Kubeflow SDK tests."""
 
 from dataclasses import dataclass, field
 from typing import Any
 
 # Common status constants
 SUCCESS = "success"
-FAILED = "Failed"
-DEFAULT_NAMESPACE = "default"
+FAILED = "failed"
 TIMEOUT = "timeout"
 RUNTIME = "runtime"
+DEFAULT_NAMESPACE = "default"
 
 
 @dataclass
 class TestCase:
+    """Test case dataclass for parametrized tests."""
+
     name: str
     expected_status: str = SUCCESS
     config: dict[str, Any] = field(default_factory=dict)
     expected_output: Any | None = None
     expected_error: type[Exception] | None = None
-    # Prevent pytest from collecting this dataclass as a test
     __test__ = False
