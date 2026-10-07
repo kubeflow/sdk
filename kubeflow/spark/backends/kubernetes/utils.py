@@ -671,7 +671,6 @@ def get_spark_job_driver_spec(
     return models.SparkV1beta2DriverSpec(
         cores=cores,
         memory=memory,
-        service_account=constants.DEFAULT_SERVICE_ACCOUNT,
     )
 
 
