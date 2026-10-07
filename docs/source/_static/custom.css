@@ -1,6 +1,11 @@
 /* ============================================
    Color Palette
    ============================================ */
+/*=============================================
+This file is a custom CSS theme override for 
+the Kubeflow SDK documentation site, which is 
+built with SPHINX using the FURO theme.
+==============================================*/
 
 :root {
     /* Primary colors */
@@ -163,6 +168,7 @@ body[data-theme="dark"] {
     .top-nav-links {
         display: none;
     }
+
     .top-nav {
         justify-content: center;
     }
@@ -186,7 +192,12 @@ body[data-theme="dark"] {
    HEADINGS - Grey with blue accents
    ============================================ */
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
     font-weight: 600;
     color: var(--kf-heading);
 }
@@ -234,9 +245,9 @@ a:hover {
 .sidebar-tree a,
 .sidebar-tree .reference,
 .sidebar-drawer a,
-.toctree-l1 > a,
-.toctree-l2 > a,
-.toctree-l3 > a,
+.toctree-l1>a,
+.toctree-l2>a,
+.toctree-l3>a,
 .caption-text {
     color: var(--kf-text) !important;
     transition: color 0.15s;
@@ -247,8 +258,8 @@ a:hover {
     color: var(--kf-blue) !important;
 }
 
-.sidebar-tree .current > .reference,
-.sidebar-tree .current-page > .reference {
+.sidebar-tree .current>.reference,
+.sidebar-tree .current-page>.reference {
     color: var(--kf-blue-dark) !important;
     font-weight: 600;
 }
@@ -290,8 +301,8 @@ dl.py dd:hover {
 }
 
 /* Class/function signature header */
-dl.py.class > dt.sig,
-dl.py.function > dt.sig {
+dl.py.class>dt.sig,
+dl.py.function>dt.sig {
     font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
     font-size: 1rem;
     color: var(--kf-api-text) !important;
@@ -307,7 +318,7 @@ dl.py dt.sig .sig-name {
 }
 
 /* Method signature */
-dl.py.method > dt.sig,
+dl.py.method>dt.sig,
 dl.py.method dt.sig {
     font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
     font-size: 0.9rem !important;
@@ -332,19 +343,19 @@ dl.py dt.sig .p,
 }
 
 /* Description body */
-dl.py.class > dd,
-dl.py.function > dd {
+dl.py.class>dd,
+dl.py.function>dd {
     margin: 0 !important;
     padding: 0.75rem 0;
 }
 
-dl.py.method > dd {
+dl.py.method>dd {
     margin: 0 !important;
     padding: 0.5rem 0 !important;
 }
 
 /* All docstring text */
-dl.py dd > p,
+dl.py dd>p,
 dl.py dd p {
     color: var(--kf-api-text) !important;
     font-size: 1rem !important;
@@ -363,7 +374,7 @@ dl.field-list {
 }
 
 /* Section headers (Parameters, Returns, Raises) - bold */
-dl.field-list > dt,
+dl.field-list>dt,
 dl.field-list dt.field-odd,
 dl.field-list dt.field-even {
     font-weight: 700 !important;
@@ -374,7 +385,7 @@ dl.field-list dt.field-even {
     margin-top: 0.75rem;
 }
 
-dl.field-list > dd,
+dl.field-list>dd,
 dl.field-list dd.field-odd,
 dl.field-list dd.field-even {
     margin-left: 0 !important;
@@ -498,15 +509,15 @@ table.autosummary td:last-child {
 }
 
 /* Property/attribute styling */
-dl.py.property > dt.sig,
-dl.py.attribute > dt.sig {
+dl.py.property>dt.sig,
+dl.py.attribute>dt.sig {
     font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
     font-size: 0.88rem;
     padding: 0.5rem 0;
 }
 
 /* "Bases:" inheritance line styling */
-.class dd > p:first-child {
+.class dd>p:first-child {
     font-size: 0.85rem;
     color: var(--kf-text-light);
     margin-bottom: 1rem;
@@ -562,19 +573,81 @@ pre code {
     color: #d4d4d4 !important;
 }
 
-.highlight .k, .highlight .kn, .highlight .kd { color: #569cd6 !important; } /* keywords */
-.highlight .n, .highlight .nn { color: #d4d4d4 !important; } /* names */
-.highlight .s, .highlight .s1, .highlight .s2 { color: #ce9178 !important; } /* strings */
-.highlight .c, .highlight .c1, .highlight .cm { color: #6a9955 !important; } /* comments */
-.highlight .o { color: #d4d4d4 !important; } /* operators */
-.highlight .p { color: #d4d4d4 !important; } /* punctuation */
-.highlight .mi, .highlight .mf { color: #b5cea8 !important; } /* numbers */
-.highlight .nb, .highlight .bp { color: #4ec9b0 !important; } /* builtins */
-.highlight .nf, .highlight .fm { color: #dcdcaa !important; } /* functions */
-.highlight .nc { color: #4ec9b0 !important; } /* classes */
-.highlight .ow { color: #569cd6 !important; } /* operator word */
-.highlight .gp { color: #6a9955 !important; } /* prompt */
-.highlight .w { color: #d4d4d4 !important; } /* whitespace */
+.highlight .k,
+.highlight .kn,
+.highlight .kd {
+    color: #569cd6 !important;
+}
+
+/* keywords */
+.highlight .n,
+.highlight .nn {
+    color: #d4d4d4 !important;
+}
+
+/* names */
+.highlight .s,
+.highlight .s1,
+.highlight .s2 {
+    color: #ce9178 !important;
+}
+
+/* strings */
+.highlight .c,
+.highlight .c1,
+.highlight .cm {
+    color: #6a9955 !important;
+}
+
+/* comments */
+.highlight .o {
+    color: #d4d4d4 !important;
+}
+
+/* operators */
+.highlight .p {
+    color: #d4d4d4 !important;
+}
+
+/* punctuation */
+.highlight .mi,
+.highlight .mf {
+    color: #b5cea8 !important;
+}
+
+/* numbers */
+.highlight .nb,
+.highlight .bp {
+    color: #4ec9b0 !important;
+}
+
+/* builtins */
+.highlight .nf,
+.highlight .fm {
+    color: #dcdcaa !important;
+}
+
+/* functions */
+.highlight .nc {
+    color: #4ec9b0 !important;
+}
+
+/* classes */
+.highlight .ow {
+    color: #569cd6 !important;
+}
+
+/* operator word */
+.highlight .gp {
+    color: #6a9955 !important;
+}
+
+/* prompt */
+.highlight .w {
+    color: #d4d4d4 !important;
+}
+
+/* whitespace */
 
 /* Inline code - keep light */
 code {
@@ -672,14 +745,14 @@ li::marker {
    ============================================ */
 
 /* Hero tagline styling */
-article > section > p:first-of-type {
+article>section>p:first-of-type {
     font-size: 1.2rem;
     color: var(--kf-text);
 }
 
 /* Section descriptions (italic text after h2) */
-h2 + p > em:only-child,
-section > p > em:only-child {
+h2+p>em:only-child,
+section>p>em:only-child {
     display: block;
     font-size: 1rem;
     color: var(--kf-text-light);
@@ -717,6 +790,6 @@ hr {
 }
 
 /* Quick start section code blocks */
-.highlight-bash + .highlight-python {
+.highlight-bash+.highlight-python {
     margin-top: -0.5rem;
 }
