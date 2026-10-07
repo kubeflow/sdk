@@ -1130,3 +1130,69 @@ def test_create_adapter_error_message_format():
         # Guard the patch target: the failure must come from the mocked adapter, not from
         # a genuinely unavailable Docker daemon.
         assert mock_docker.called
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="network cleaned up when training script generation fails",
+            expected_status=SUCCESS,
+            config={"failure_stage": "training_script"},
+        ),
+        TestCase(
+            name="network cleaned up when image preparation fails",
+            expected_status=SUCCESS,
+            config={"failure_stage": "image_preparation"},
+        ),
+        TestCase(
+            name="network cleaned up when environment construction fails",
+            expected_status=SUCCESS,
+            config={"failure_stage": "environment"},
+        ),
+    ],
+)
+def test_train_cleans_up_network_on_early_setup_failure(container_backend, test_case):
+    """Network must be deleted even if setup fails before containers are created."""
+    print("Executing test:", test_case.name)
+    try:
+        trainer = types.CustomTrainer(func=simple_train_func, num_nodes=1)
+        runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
+
+        failure_stage = test_case.config["failure_stage"]
+
+        patches = []
+        if failure_stage == "training_script":
+            patches.append(
+                patch(
+                    "kubeflow.trainer.backends.container.backend."
+                    "container_utils.get_training_script_code",
+                    side_effect=RuntimeError("setup failed"),
+                )
+            )
+        elif failure_stage == "image_preparation":
+            patches.append(
+                patch(
+                    "kubeflow.trainer.backends.container.backend.container_utils.maybe_pull_image",
+                    side_effect=RuntimeError("setup failed"),
+                )
+            )
+        elif failure_stage == "environment":
+            patches.append(
+                patch(
+                    "kubeflow.trainer.backends.container.backend.container_utils.build_environment",
+                    side_effect=RuntimeError("setup failed"),
+                )
+            )
+
+        with pytest.raises(RuntimeError, match="setup failed"), patches[0]:
+            container_backend.train(runtime=runtime, trainer=trainer)
+
+        # Network must be cleaned up even though no containers were created.
+        assert len(container_backend._adapter.networks_created) == 1
+        assert len(container_backend._adapter.networks_deleted) == 1
+        assert len(container_backend._adapter.containers_created) == 0
+
+    except Exception as e:
+        assert type(e) is test_case.expected_error
+    print("test execution complete")

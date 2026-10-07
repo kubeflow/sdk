@@ -288,6 +288,12 @@ class ContainerBackend(RuntimeBackend):
         )
 
         logger.debug(f"Starting training job: {trainjob_name}")
+
+        # Initialize resource trackers before the try so cleanup can always find them.
+        workdir = None
+        network_id = None
+        container_ids: list[str] = []
+
         try:
             # Create per-job working directory on host (for outputs, checkpoints, etc.)
             workdir = container_utils.create_workdir(trainjob_name)
@@ -310,17 +316,8 @@ class ContainerBackend(RuntimeBackend):
             # Run initializers if configured
             if initializer:
                 logger.debug("Running initializers")
-                try:
-                    self._run_initializers(trainjob_name, initializer, workdir, network_id)
-                    logger.debug("Initializers completed successfully")
-                except Exception as e:
-                    # Clean up network if initializers fail
-                    logger.error(f"Initializer failed, cleaning up network: {e}")
-                    try:  # noqa: SIM105
-                        self._adapter.delete_network(network_id)
-                    except Exception:
-                        pass
-                    raise
+                self._run_initializers(trainjob_name, initializer, workdir, network_id)
+                logger.debug("Initializers completed successfully")
 
             # Generate training script code (inline, not written to disk)
             training_script_code = container_utils.get_training_script_code(trainer)
@@ -356,7 +353,6 @@ class ContainerBackend(RuntimeBackend):
                 logger.debug("No GPU specified, using 1 process per node")
 
             # Create N containers (one per node)
-            container_ids: list[str] = []
             master_container_id = None
             master_ip = None
 
@@ -469,24 +465,18 @@ class ContainerBackend(RuntimeBackend):
             # Clean up on failure
             logger.error(f"Failed to create training job {trainjob_name}: {e}")
             logger.exception("Full traceback:")
-
-            # Try to clean up any resources that were created
+            # Try to clean up any resources that were created.
             try:
-                # Stop and remove any containers that were created
-                if "container_ids" in locals():
-                    self._cleanup_container_resources(
-                        container_ids=container_ids,
-                        network_id=network_id if "network_id" in locals() else None,
-                        stop_timeout=5,
-                    )
-
+                self._cleanup_container_resources(
+                    container_ids=container_ids,
+                    network_id=network_id,
+                    stop_timeout=5,
+                )
                 # Remove working directory if it was created
-                if "workdir" in locals() and os.path.isdir(workdir):
+                if workdir is not None and os.path.isdir(workdir):
                     shutil.rmtree(workdir, ignore_errors=True)
-
             except Exception as cleanup_error:
                 logger.error(f"Error during cleanup: {cleanup_error}")
-
             # Re-raise the original exception
             raise
 
