@@ -294,7 +294,8 @@ class KubernetesBackend(RuntimeBackend):
                 f"Received polling_interval={polling_interval}, timeout={timeout}"
             )
 
-        for _ in range(round(timeout / polling_interval)):
+        end_time = time.time() + timeout
+        while time.time() < end_time:
             optimization_job = self.get_job(name)
             logger.debug(
                 f"{constants.OPTIMIZATION_JOB_KIND} {name}, status {optimization_job.status}"

@@ -1088,6 +1088,45 @@ def test_wait_for_job_status(optimizer_backend, test_case):
     print("test execution complete")
 
 
+def test_wait_for_job_status_polls_for_full_timeout(optimizer_backend):
+    """Test KubernetesBackend.wait_for_job_status polls until timeout elapses."""
+    experiment = create_experiment_cr(name=BASIC_OPTIMIZATION_JOB_NAME)
+
+    poll_count = 0
+
+    def patched_get(*args, **kwargs):
+        nonlocal poll_count
+        mock_thread = Mock()
+        if args[3] == constants.EXPERIMENT_PLURAL:
+            poll_count += 1
+            mock_thread.get.return_value = normalize_model(experiment, models.V1beta1Experiment)
+        return mock_thread
+
+    optimizer_backend.custom_api.get_namespaced_custom_object.side_effect = patched_get
+
+    fake_time = [0.0]
+
+    def fake_time_time():
+        return fake_time[0]
+
+    def fake_sleep(seconds):
+        fake_time[0] += seconds
+
+    with (
+        patch("time.time", side_effect=fake_time_time),
+        patch("time.sleep", side_effect=fake_sleep),
+        pytest.raises(TimeoutError),
+    ):
+        optimizer_backend.wait_for_job_status(
+            name=BASIC_OPTIMIZATION_JOB_NAME,
+            status={constants.OPTIMIZATION_JOB_COMPLETE},
+            timeout=5,
+            polling_interval=2,
+        )
+
+    assert poll_count == 3
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
