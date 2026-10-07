@@ -29,7 +29,7 @@ def run_example_in_cluster(
     """Run an example script in-cluster via a Kubernetes Job.
 
     The Job pod has KUBERNETES_SERVICE_HOST set, so SparkClient uses the
-    in-cluster URL (sc://...svc.cluster.local) and no port-forward.
+    in-cluster URL (sc://...svc) and no port-forward.
 
     Args:
         example_script_name: Script filename (e.g. spark_connect_simple.py).

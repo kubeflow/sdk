@@ -416,8 +416,7 @@ def build_service_url(info: SparkConnectInfo) -> str:
         info: SparkConnectInfo with service details.
 
     Returns:
-        Spark Connect URL
-        (e.g., "sc://my-session-server.default.svc.cluster.local:15002").
+        Spark Connect URL (e.g., "sc://my-session-server.default.svc:15002").
 
     Raises:
         RuntimeError: If ``info.service_name`` is not populated. An empty value
@@ -430,10 +429,7 @@ def build_service_url(info: SparkConnectInfo) -> str:
             "status.server.serviceName is not populated yet. The session is not "
             "ready to accept in-cluster connections."
         )
-    return (
-        f"sc://{info.service_name}.{info.namespace}.svc.cluster.local"
-        f":{constants.SPARK_CONNECT_PORT}"
-    )
+    return f"sc://{info.service_name}.{info.namespace}.svc:{constants.SPARK_CONNECT_PORT}"
 
 
 def get_spark_connect_driver_spec(
