@@ -15,14 +15,8 @@
 from kubeflow_katib_api import models
 import pytest
 
-from kubeflow.optimizer.backends.kubernetes.utils import (
-    TrialParameterPlaceholder,
-    convert_value,
-    should_quote_trial_parameter,
-)
-from kubeflow.optimizer.constants import constants
-from kubeflow.optimizer.types.search_types import Search
-from kubeflow.trainer.test.common import FAILED, SUCCESS, TestCase
+from kubeflow.optimizer.backends.kubernetes.utils import convert_value
+from kubeflow.test.common import FAILED, SUCCESS, TestCase
 
 
 @pytest.mark.parametrize(

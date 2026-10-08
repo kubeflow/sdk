@@ -21,6 +21,8 @@ from enum import Enum
 import logging
 from typing import Any
 
+import kubeflow.common.constants as common_constants
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,7 +31,6 @@ class SparkConnectState(str, Enum):
 
     PROVISIONING = "Provisioning"
     READY = "Ready"
-    RUNNING = "Running"  # Operator may set this when server is up; treated as ready
     NOT_READY = "NotReady"
     FAILED = "Failed"
 
@@ -51,7 +52,7 @@ class SparkConnectInfo:
 
     name: str
     namespace: str
-    state: SparkConnectState
+    state: str = common_constants.UNKNOWN
     driver_pod_name: str | None = None
     pod_ip: str | None = None
     service_name: str | None = None
@@ -71,10 +72,14 @@ class Driver:
         java_options: JVM options for the driver (e.g., "-Xmx4g -XX:+UseG1GC").
         service_account: Kubernetes service account name for RBAC.
 
-    Example:
+    Example::
+
         driver = Driver(
-            resources={"cpu": "4", "memory": "8Gi"},
-            service_account="spark-driver-prod"
+            resources={
+                "cpu": "4",
+                "memory": "8Gi",
+            },
+            service_account="spark-driver-prod",
         )
 
     Note:
@@ -101,10 +106,14 @@ class Executor:
             (e.g., {"cpu": "4", "memory": "8Gi"}).
         java_options: JVM options for executors (e.g., "-Xmx28g -XX:+UseG1GC").
 
-    Example:
+    Example::
+
         executor = Executor(
             num_instances=20,
-            resources_per_executor={"cpu": "8", "memory": "32Gi"}
+            resources_per_executor={
+                "cpu": "8",
+                "memory": "32Gi",
+            },
         )
 
     Note:
@@ -198,7 +207,7 @@ class SparkJob:
 
     name: str
     namespace: str
-    status: SparkJobStatus | None = None
+    status: str = common_constants.UNKNOWN
     creation_timestamp: datetime | None = None
     num_executors: int | None = None
     driver_pod_name: str | None = None
@@ -222,6 +231,10 @@ class FileJob:
 @dataclass
 class FuncJob:
     """Function-based Spark application.
+
+    The provided function must be self-contained. Any required imports
+    should be placed inside the function body. Module-level globals,
+    closures, and decorated functions are not supported.
 
     Args:
         func: Python function executed as a Spark batch job.

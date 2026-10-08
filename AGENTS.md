@@ -50,8 +50,7 @@ kubeflow/                        # Main Python package
 │   │   └── localprocess/              # Subprocess backend for quick prototyping
 │   ├── constants/                   # Common trainer constants and defaults
 │   ├── options/                     # Backend configuration options (KubernetesOptions, etc.)
-│   ├── types/                       # Common trainer types (e.g. TrainJob, CustomTrainer, BuiltinTrainer)
-│   └── test/                        # Shared test fixtures (common.py)
+│   └── types/                       # Common trainer types (e.g. TrainJob, CustomTrainer, BuiltinTrainer)
 │
 ├── optimizer/                     # Kubeflow Optimizer
 │   ├── api/                         # OptimizerClient - main user interface
@@ -66,9 +65,11 @@ kubeflow/                        # Main Python package
 │   │   └── kubernetes/                # Kubernetes backend
 │   └── types/                       # Spark types and options
 │
-└── hub/                           # Kubeflow Hub
-    ├── api/                         # ModelRegistryClient - main user interface
-    └── types/                       # Hub types
+├── hub/                           # Kubeflow Hub
+│   ├── api/                         # ModelRegistryClient - main user interface
+│   └── types/                       # Hub types
+│
+└── test/                          # Shared test helpers (common.py)
 ```
 
 ## Environment & Tooling
@@ -178,7 +179,7 @@ uv run pre-commit run --all-files           # Run all hooks
 - Every new feature or bugfix MUST be covered by unit tests
 - Unit tests: `kubeflow/trainer/**/*_test.py` (no network calls allowed)
 - Use `pytest` with `TestCase` dataclass for parametrized tests (see `kubeflow/trainer/backends/kubernetes/backend_test.py` for the reference pattern)
-- See `kubeflow/trainer/test/common.py` for fixtures and patterns
+- See `kubeflow/test/common.py` for shared fixtures and patterns
 
 ### 4. Security
 

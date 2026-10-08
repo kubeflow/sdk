@@ -81,6 +81,37 @@ Use the :class:`~kubeflow.trainer.TrainerClient` to submit your function to Kube
 
 That's it! Your training function is now running on Kubernetes.
 
+Optional: Configure TrainJob options
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+To customize your training job, you can pass options when submitting it:
+
+Import the options from ``kubeflow.trainer.options`` and pass them as a list to the
+``options`` argument:
+
+.. code-block:: python
+
+   from kubeflow.trainer.options import Name, Labels, Annotations
+
+   # Submit the job with custom name, labels, and annotations
+   job_name = client.train(
+       trainer=CustomTrainer(func=train_mnist),
+       options=[
+           Name("my-mnist-job"),
+           Labels({"team": "ml-platform"}),
+           Annotations({"description": "Quickstart training job"}),
+       ]
+   )
+
+.. note::
+
+   ``Labels``, ``Annotations``, and ``RuntimePatch`` are Kubernetes-only. Only ``Name``
+   works with the local backends described below.
+
+For more advanced configurations, such as mounting volumes, setting node selectors,
+or patching container security contexts via the ``RuntimePatch`` API, see the
+:doc:`../train/options` guide.
+
 Step 3: Monitor Progress
 ------------------------
 

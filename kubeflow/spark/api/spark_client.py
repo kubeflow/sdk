@@ -187,8 +187,6 @@ class SparkClient:
         or remote file source.
         - **FuncJob**: Submit a Python function as a Spark batch job.
 
-        Function-based jobs will be supported in Phase 2.
-
         Args:
             job:
                 Job definition describing the workload to execute.
@@ -202,7 +200,7 @@ class SparkClient:
                 Format: ``{"cpu": "5", "memory": "10Gi"}``.
 
             spark_conf:
-                Spark configuration dictionary.
+                Spark configuration properties.
 
             options:
                 List of additional Spark configuration options.
@@ -217,16 +215,13 @@ class SparkClient:
             NotImplementedError:
                 If unsupported features are requested.
         """
-        if spark_conf is not None:
-            raise NotImplementedError("spark_conf support is not yet implemented.")
-
-        if options is not None:
-            raise NotImplementedError("options are not supported in Phase 1.")
 
         return self.backend.submit_job(
             job=job,
             num_executors=num_executors,
             resources_per_executor=resources_per_executor,
+            options=options,
+            spark_conf=spark_conf,
         ).name
 
     def get_job(self, name: str) -> SparkJob:
@@ -269,7 +264,7 @@ class SparkClient:
     def wait_for_job_status(
         self,
         name: str,
-        status: set[SparkJobStatus] | None = None,
+        status: set[SparkJobStatus] = {SparkJobStatus.COMPLETED},
         timeout: int = 600,
         polling_interval: int = 2,
     ) -> SparkJob:
