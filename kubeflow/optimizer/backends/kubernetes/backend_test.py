@@ -1173,3 +1173,41 @@ def test_get_job_events(optimizer_backend, test_case):
         assert test_case.expected_status != SUCCESS
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+def test_get_job_events_with_event_time_only(optimizer_backend):
+    """Test KubernetesBackend.get_job_events keeps events that only set eventTime."""
+    mock_thread = Mock()
+    mock_thread.get.return_value = models.IoK8sApiCoreV1EventList(
+        items=[
+            models.IoK8sApiCoreV1Event(
+                metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                    name="test-event-3",
+                    namespace=DEFAULT_NAMESPACE,
+                ),
+                involvedObject=models.IoK8sApiCoreV1ObjectReference(
+                    kind=constants.EXPERIMENT_KIND,
+                    name=BASIC_OPTIMIZATION_JOB_NAME,
+                    namespace=DEFAULT_NAMESPACE,
+                ),
+                message="0/3 nodes are available: insufficient nvidia.com/gpu",
+                reason="FailedScheduling",
+                eventTime=datetime.datetime(2025, 6, 1, 10, 32, 0),
+            ),
+        ]
+    )
+    optimizer_backend.core_api.list_namespaced_event = Mock(return_value=mock_thread)
+
+    events = optimizer_backend.get_job_events(BASIC_OPTIMIZATION_JOB_NAME)
+
+    assert [asdict(e) for e in events] == [
+        asdict(
+            Event(
+                involved_object_kind=constants.EXPERIMENT_KIND,
+                involved_object_name=BASIC_OPTIMIZATION_JOB_NAME,
+                message="0/3 nodes are available: insufficient nvidia.com/gpu",
+                reason="FailedScheduling",
+                event_time=datetime.datetime(2025, 6, 1, 10, 32, 0),
+            )
+        )
+    ]
