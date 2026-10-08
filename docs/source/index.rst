@@ -147,6 +147,7 @@ Getting Involved
    :hidden:
    :caption: Getting Started
 
+   getting-started/index
    getting-started/installation
    getting-started/quickstart
    getting-started/local-development
