@@ -150,6 +150,11 @@ DEFAULT_COMMAND = (
 # The default home directory for the MPI user.
 DEFAULT_MPI_USER_HOME = os.getenv("DEFAULT_MPI_USER_HOME", "/home/mpiuser")
 
+# The directory for the generated training script and the pip install log on non-MPI runtimes.
+# The container shell resolves it at runtime: `TMPDIR` when the image sets one, otherwise /tmp.
+# Both are writable for a non-root user, unlike the image working directory.
+DEFAULT_TEMPORARY_DIRECTORY = "${TMPDIR:-/tmp}"
+
 # The default command for the OpenMPI CustomTrainer.
 MPI_COMMAND = (
     "mpirun",
