@@ -30,6 +30,10 @@ import pytest
 
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.optimizer.backends.kubernetes.backend import KubernetesBackend
+from kubeflow.optimizer.backends.kubernetes.utils import (
+    TrialParameterPlaceholder,
+    should_quote_trial_parameter,
+)
 from kubeflow.optimizer.constants import constants
 from kubeflow.optimizer.types.algorithm_types import RandomSearch
 from kubeflow.optimizer.types.optimization_types import (
@@ -509,10 +513,40 @@ def test_optimize(optimizer_backend, test_case):
         assert payload["spec"]["objective"]["objectiveMetricName"] == "loss"
         assert payload["spec"]["algorithm"] is not None
 
+        # Search-space params become typed Katib placeholders in trainer func_args.
+        trainer_arg = optimizer_backend.trainer_backend._get_trainjob_spec.call_args.kwargs[
+            "trainer"
+        ]
+        for param_name, param_spec in search_space.items():
+            placeholder = trainer_arg.func_args[param_name]
+            assert isinstance(placeholder, TrialParameterPlaceholder)
+            assert placeholder.name == param_name
+            assert placeholder.quoted is should_quote_trial_parameter(param_spec)
+
     except Exception as e:
         assert test_case.expected_status != SUCCESS
         assert type(e) is test_case.expected_error
 
+    print("test execution complete")
+
+
+def test_optimize_quotes_string_categorical_placeholders(optimizer_backend):
+    """String categorical HPs keep quoted Katib placeholders."""
+    print("Executing test: string categorical placeholders are quoted")
+    trial_template = TrainJobTemplate(
+        trainer=CustomTrainer(func=lambda: None, num_nodes=1),
+    )
+    job_name = optimizer_backend.optimize(
+        trial_template=trial_template,
+        search_space={"optimizer": Search.choice(["adam", "sgd"])},
+    )
+    assert isinstance(job_name, str) and len(job_name) > 0
+
+    trainer_arg = optimizer_backend.trainer_backend._get_trainjob_spec.call_args.kwargs["trainer"]
+    placeholder = trainer_arg.func_args["optimizer"]
+    assert isinstance(placeholder, TrialParameterPlaceholder)
+    assert placeholder.quoted is True
+    assert repr(placeholder) == "'${trialParameters.optimizer}'"
     print("test execution complete")
 
 

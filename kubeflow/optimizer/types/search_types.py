@@ -69,10 +69,24 @@ class Search:
 
         Returns:
             Katib ParameterSpec object.
+
+        Raises:
+            ValueError: If a string choice contains characters that would break the
+                generated training script after Katib substitution (``'``, ``\\``,
+                or newlines).
         """
+        string_values = [str(v) for v in values]
+        for value in string_values:
+            if any(ch in value for ch in ("'", "\\", "\n", "\r")):
+                raise ValueError(
+                    f"Search.choice value {value!r} contains characters that break "
+                    "generated trial scripts (quote, backslash, or newline). "
+                    "Use a value without those characters."
+                )
+
         return katib_models.V1beta1ParameterSpec(
             parameterType=constants.CATEGORICAL_PARAMETERS,
-            feasibleSpace=katib_models.V1beta1FeasibleSpace(list=[str(v) for v in values]),
+            feasibleSpace=katib_models.V1beta1FeasibleSpace(list=string_values),
         )
 
 
