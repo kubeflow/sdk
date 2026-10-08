@@ -14,7 +14,6 @@
 
 import importlib.util
 import os
-from pathlib import Path
 import shlex
 import subprocess
 import sys
@@ -448,8 +447,8 @@ def test_get_script_for_python_packages(test_case):
                     '    print("Hello World")\n\n'
                     "sample_train_func(**{'batch_size': 128, 'learning_rate': 0.001, 'epochs': 20})\n\n"
                     "EOM\n"
-                    'printf "%s" "$SCRIPT" > "/tmp/utils_test.py"\n'
-                    'python "/tmp/utils_test.py"'
+                    'printf "%s" "$SCRIPT" > "${TMPDIR:-/tmp}/utils_test.py"\n'
+                    'python "${TMPDIR:-/tmp}/utils_test.py"'
                 ),
             ],
         ),
@@ -472,8 +471,8 @@ def test_get_script_for_python_packages(test_case):
                     '    print("Hello World")\n\n'
                     "sample_train_func()\n\n"
                     "EOM\n"
-                    'printf "%s" "$SCRIPT" > "/tmp/utils_test.py"\n'
-                    'python "/tmp/utils_test.py"'
+                    'printf "%s" "$SCRIPT" > "${TMPDIR:-/tmp}/utils_test.py"\n'
+                    'python "${TMPDIR:-/tmp}/utils_test.py"'
                 ),
             ],
         ),
@@ -520,8 +519,8 @@ def test_get_script_for_python_packages(test_case):
                     '    print("Hello World")\n\n'
                     "sample_train_func(**{'a': 1, 'b': 2})\n\n"
                     "EOM\n"
-                    'printf "%s" "$SCRIPT" > "/tmp/utils_test.py"\n'
-                    'python "/tmp/utils_test.py"'
+                    'printf "%s" "$SCRIPT" > "${TMPDIR:-/tmp}/utils_test.py"\n'
+                    'python "${TMPDIR:-/tmp}/utils_test.py"'
                 ),
             ],
         ),
@@ -544,8 +543,8 @@ def test_get_script_for_python_packages(test_case):
                     '    return "ok"\n\n'
                     "sample_train_func_kwargs(**{'a': 3, 'b': 'hi', 'c': 0.2})\n\n"
                     "EOM\n"
-                    'printf "%s" "$SCRIPT" > "/tmp/utils_test.py"\n'
-                    'python "/tmp/utils_test.py"'
+                    'printf "%s" "$SCRIPT" > "${TMPDIR:-/tmp}/utils_test.py"\n'
+                    'python "${TMPDIR:-/tmp}/utils_test.py"'
                 ),
             ],
         ),
@@ -568,7 +567,7 @@ def test_get_script_for_python_packages(test_case):
                     "fi\n\n\n"
                     "PACKAGES=(requests)\n"
                     "PIP_OPTS=(--index-url https://pypi.org/simple)\n"
-                    'LOG_FILE="/tmp/pip_install.log"\n'
+                    'LOG_FILE="${TMPDIR:-/tmp}/pip_install.log"\n'
                     'rm -f "$LOG_FILE"\n'
                     "\n"
                     "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
@@ -589,8 +588,8 @@ def test_get_script_for_python_packages(test_case):
                     '    print("Hello World")\n\n'
                     "sample_train_func()\n\n"
                     "EOM\n"
-                    'printf "%s" "$SCRIPT" > "/tmp/utils_test.py"\n'
-                    'python "/tmp/utils_test.py"'
+                    'printf "%s" "$SCRIPT" > "${TMPDIR:-/tmp}/utils_test.py"\n'
+                    'python "${TMPDIR:-/tmp}/utils_test.py"'
                 ),
             ],
         ),
@@ -675,11 +674,12 @@ def test_generated_command_runs_from_read_only_working_directory(
     working_directory = tmp_path / "working-directory"
     existing_python_path_directory = tmp_path / "existing-python-path"
     training_function_source_file = tmp_path / f"{training_function_module_name}.py"
-    temporary_directory = Path("/tmp")
+    temporary_directory = tmp_path / "temporary-directory"
     temporary_shadow_module_file = temporary_directory / f"{working_directory_module_name}.py"
     generated_function_file = temporary_directory / training_function_source_file.name
     working_directory.mkdir()
     existing_python_path_directory.mkdir()
+    temporary_directory.mkdir()
 
     try:
         (working_directory / f"{working_directory_module_name}.py").write_text(
@@ -739,6 +739,9 @@ def test_generated_command_runs_from_read_only_working_directory(
         )
         environment = os.environ.copy()
         environment["PYTHONPATH"] = str(existing_python_path_directory)
+        # The generated command resolves `${TMPDIR:-/tmp}` in the shell; point it at a
+        # per-test directory so the test proves the resolution and never touches /tmp.
+        environment["TMPDIR"] = str(temporary_directory)
         if safe_path_enabled:
             environment["PYTHONSAFEPATH"] = "1"
         else:

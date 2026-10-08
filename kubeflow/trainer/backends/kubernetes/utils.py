@@ -385,13 +385,14 @@ def get_command_using_train_func(
         func_file = os.path.join(constants.DEFAULT_MPI_USER_HOME, func_file)
         install_log_file = os.path.join(constants.DEFAULT_MPI_USER_HOME, "pip_install.log")
     else:
-        func_file = os.path.join("/tmp", func_file)
-        install_log_file = os.path.join("/tmp", "pip_install.log")
-        # Preserve the working directory as Python's first import root instead of /tmp.
+        func_file = os.path.join(constants.DEFAULT_TEMPORARY_DIRECTORY, func_file)
+        install_log_file = os.path.join(constants.DEFAULT_TEMPORARY_DIRECTORY, "pip_install.log")
+        # Preserve the working directory as Python's first import root instead of the
+        # temporary directory.
         #
         # Python puts the generated script's directory first on `sys.path`. Because the script now
-        # lives in /tmp, that entry is replaced with the working directory to keep the import
-        # precedence the training function had before the script was relocated.
+        # lives in the temporary directory, that entry is replaced with the working directory to
+        # keep the import precedence the training function had before the script was relocated.
         #
         # Under `-P` or `PYTHONSAFEPATH=1` Python deliberately omits that entry, because the point
         # of safe path mode is to keep a writable directory off the import path. In that mode

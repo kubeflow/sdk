@@ -288,7 +288,7 @@ def get_custom_trainer(
     install_script = utils.get_script_for_python_packages(
         packages_to_install=packages_to_install,
         pip_index_urls=pip_index_urls,
-        install_log_file="/tmp/pip_install.log",
+        install_log_file="${TMPDIR:-/tmp}/pip_install.log",
     )
 
     # Append the embedded training function script that matches EXEC_FUNC_SCRIPT
@@ -308,8 +308,8 @@ def get_custom_trainer(
         '    """Sample training function."""\n'
         '    print("Hello World")\n\n'
         "sample_train_func(**{'learning_rate': 0.001, 'batch_size': 32})\n\n"
-        'EOM\nprintf "%s" "$SCRIPT" > "/tmp/backend_test.py"\n'
-        'torchrun "/tmp/backend_test.py"'
+        'EOM\nprintf "%s" "$SCRIPT" > "${TMPDIR:-/tmp}/backend_test.py"\n'
+        'torchrun "${TMPDIR:-/tmp}/backend_test.py"'
     )
 
     full_command = install_script + func_script
