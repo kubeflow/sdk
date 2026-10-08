@@ -121,6 +121,15 @@ Your training function receives hyperparameters as arguments:
        # Report the metric back
        print(f"accuracy={accuracy:.4f}")
 
+Each hyperparameter keeps its type:
+
+- ``Search.uniform()`` and ``Search.loguniform()`` values are passed as ``float``.
+- ``Search.choice()`` values are passed as given when every value is a number or a
+  boolean, for example ``Search.choice([16, 32, 64])`` passes an ``int``.
+- Any other ``Search.choice()`` list, including one that mixes numbers and strings, is
+  passed as ``str``. String values must not contain a single quote, a backslash, or a
+  line break.
+
 Tips for Search Space Design
 ----------------------------
 
