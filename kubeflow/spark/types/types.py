@@ -88,7 +88,7 @@ class Driver:
     """
 
     image: str | None = None
-    resources: dict[str, str] | None = None
+    resources: dict | None = None
     java_options: str | None = None
     service_account: str | None = None
 
@@ -122,7 +122,7 @@ class Executor:
     """
 
     num_instances: int | None = None
-    resources_per_executor: dict[str, str] | None = None
+    resources_per_executor: dict | None = None
     java_options: str | None = None
 
 
