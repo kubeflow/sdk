@@ -22,6 +22,7 @@ import math
 import multiprocessing
 import os
 import random
+import re
 import socket
 import subprocess
 import sys
@@ -86,6 +87,19 @@ def _enable_spark_debug_logging() -> None:
         root.addHandler(h)
 
 
+def spark_version_from_image(image: str | None) -> str | None:
+    """Extract version from a Spark image string using regex."""
+    if not image:
+        return None
+
+    tag_part = image.split(":")[-1] if ":" in image else ""
+
+    # Match versioning format (e.g: 4.0.0)
+    match = re.search(r"(\d+\.\d+\.\d+)", tag_part)
+
+    return match.group(1) if match else None
+
+
 class KubernetesBackend(RuntimeBackend):
     """Kubernetes backend for managing SparkConnect sessions and Spark batch jobs."""
 
@@ -148,12 +162,15 @@ class KubernetesBackend(RuntimeBackend):
         """
         name = generate_session_name()
 
+        extracted_spark_version = spark_version_from_image(driver.image) if driver else None
+
         spark_connect = build_spark_connect_cr(
             name=name,
             namespace=self.namespace,
             num_executors=num_executors,
             resources_per_executor=resources_per_executor,
             spark_conf=spark_conf,
+            spark_version=extracted_spark_version,
             driver=driver,
             executor=executor,
             options=options,
