@@ -16,7 +16,7 @@
 
 from datetime import datetime
 import multiprocessing
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from kubeflow_spark_api import models
 from kubernetes import client
@@ -30,17 +30,6 @@ from kubeflow.spark.backends.kubernetes.utils import (
     validate_spark_connect_url,
 )
 from kubeflow.spark.options import Labels, Name
-from kubeflow.spark.test.common import (
-    DEFAULT_NAMESPACE,
-    FAILED,
-    RUNTIME,
-    SPARK_CONNECT_FAILED,
-    SPARK_CONNECT_PROVISIONING,
-    SPARK_CONNECT_READY,
-    SUCCESS,
-    TIMEOUT,
-    TestCase,
-)
 from kubeflow.spark.types.types import (
     FileJob,
     FuncJob,
@@ -48,6 +37,19 @@ from kubeflow.spark.types.types import (
     SparkConnectState,
     SparkJobStatus,
 )
+from kubeflow.test.common import (
+    DEFAULT_NAMESPACE,
+    FAILED,
+    RUNTIME,
+    SUCCESS,
+    TIMEOUT,
+    TestCase,
+)
+
+# SparkConnect states for mocking
+SPARK_CONNECT_READY = "spark-connect-ready"
+SPARK_CONNECT_PROVISIONING = "spark-connect-provisioning"
+SPARK_CONNECT_FAILED = "spark-connect-failed"
 
 # --------------------------
 # Fixtures
@@ -852,40 +854,79 @@ def test_validate_spark_connect_url(test_case):
             expected_status=SUCCESS,
             config={"session_name": None},
         ),
+        TestCase(
+            name="create succeeds, wait fails",
+            expected_status=FAILED,
+            config={"session_name": "test-session", "wait_error": RuntimeError("Wait failed")},
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="create succeeds, connect fails",
+            expected_status=FAILED,
+            config={
+                "session_name": "test-session",
+                "connect_error": RuntimeError("Connect failed"),
+            },
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="create itself fails",
+            expected_status=FAILED,
+            config={"session_name": "test-session", "create_error": RuntimeError("Create failed")},
+            expected_error=RuntimeError,
+        ),
     ],
 )
 def test_create_and_connect(kubernetes_backend, test_case):
     """Test create_and_connect with and without Name option."""
     print("Executing test:", test_case.name)
-    try:
-        options = (
-            [Name(test_case.config["session_name"])] if test_case.config["session_name"] else None
-        )
-        ready_info = SparkConnectInfo(
-            name=test_case.config["session_name"] or "spark-connect-abc",
-            namespace=DEFAULT_NAMESPACE,
-            state=SparkConnectState.READY,
-            service_name="svc",
-        )
+    options = [Name(test_case.config["session_name"])] if test_case.config["session_name"] else None
+    session_name = test_case.config["session_name"] or "spark-connect-abc"
+    ready_info = SparkConnectInfo(
+        name=session_name,
+        namespace=DEFAULT_NAMESPACE,
+        state=SparkConnectState.READY,
+        service_name="svc",
+    )
 
-        with (
-            patch.object(
-                kubernetes_backend, "_create_session", return_value=ready_info
-            ) as mock_create,
-            patch.object(kubernetes_backend, "_wait_for_session_ready", return_value=ready_info),
-            patch.object(
-                kubernetes_backend, "get_connect_url", return_value=("sc://localhost:15002", None)
-            ),
-            patch("kubeflow.spark.backends.kubernetes.backend.SparkSession"),
-        ):
+    create_error = test_case.config.get("create_error")
+    wait_error = test_case.config.get("wait_error")
+    connect_error = test_case.config.get("connect_error")
+    with (
+        patch.object(
+            kubernetes_backend,
+            "_create_session",
+            side_effect=create_error,
+            return_value=ready_info,
+        ) as mock_create,
+        patch.object(
+            kubernetes_backend,
+            "_wait_for_session_ready",
+            side_effect=wait_error,
+            return_value=ready_info,
+        ),
+        patch.object(
+            kubernetes_backend,
+            "connect",
+            side_effect=connect_error,
+            return_value=MagicMock(),
+        ),
+        patch.object(kubernetes_backend, "delete_session") as mock_delete,
+    ):
+        try:
             kubernetes_backend.create_and_connect(options=options)
+            assert test_case.expected_status == SUCCESS
+            mock_delete.assert_not_called()
+        except Exception as e:
+            assert type(e) is test_case.expected_error
+            if create_error:
+                mock_delete.assert_not_called()
+            else:
+                mock_delete.assert_called_once_with(session_name)
+
+        if not create_error:
             mock_create.assert_called_once()
             assert mock_create.call_args.kwargs.get("options") == options
-
-        assert test_case.expected_status == SUCCESS
-
-    except Exception as e:
-        assert type(e) is test_case.expected_error
     print("test execution complete")
 
 

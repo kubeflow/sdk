@@ -33,6 +33,14 @@ from kubernetes import client
 import pytest
 
 from kubeflow.common.types import KubernetesBackendConfig
+from kubeflow.test.common import (
+    DEFAULT_NAMESPACE,
+    FAILED,
+    RUNTIME,
+    SUCCESS,
+    TIMEOUT,
+    TestCase,
+)
 from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
 import kubeflow.trainer.backends.kubernetes.utils as utils
 from kubeflow.trainer.constants import constants
@@ -49,14 +57,6 @@ from kubeflow.trainer.options import (
     ReplicatedJobPatch,
     RuntimePatch,
     TrainingRuntimeSpecPatch,
-)
-from kubeflow.trainer.test.common import (
-    DEFAULT_NAMESPACE,
-    FAILED,
-    RUNTIME,
-    SUCCESS,
-    TIMEOUT,
-    TestCase,
 )
 from kubeflow.trainer.types import types
 

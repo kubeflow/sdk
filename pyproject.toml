@@ -96,6 +96,10 @@ build-backend = "hatchling.build"
 [tool.hatch.metadata]
 allow-direct-references = true
 
+[tool.hatch.build.targets.wheel]
+packages = ["kubeflow"]
+exclude = ["**/*_test.py", "kubeflow/test/**"]
+
 # ruff configuration
 [tool.ruff]
 # Formatting + lint coordination
@@ -150,7 +154,6 @@ force-sort-within-sections = true
 markers = [
   "integration: marks tests as integration tests (requires Kind cluster)",
   "slow: marks tests as slow running",
-  "smoke: CRD-only smoke test (Kind + CRD, no operator)",
   "timeout: marks tests with timeout limit",
   "options: marks tests for Spark options pattern",
 ]

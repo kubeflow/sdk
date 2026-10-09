@@ -621,7 +621,7 @@ def get_spark_connect_info_from_cr(
         try:
             state = SparkConnectState(spark_connect_cr.status.state)
         except ValueError:
-            state = SparkConnectState.PROVISIONING
+            state = common_constants.UNKNOWN
 
     # Extract server status
     server_status = None
@@ -671,7 +671,6 @@ def get_spark_job_driver_spec(
     return models.SparkV1beta2DriverSpec(
         cores=cores,
         memory=memory,
-        service_account=constants.DEFAULT_SERVICE_ACCOUNT,
     )
 
 
