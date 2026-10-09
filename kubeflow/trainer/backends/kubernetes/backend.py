@@ -627,32 +627,66 @@ class KubernetesBackend(RuntimeBackend):
         )
 
     def _read_pod_logs(self, pod_name: str, container_name: str, follow: bool) -> Iterator[str]:
-        """Read logs from a pod container."""
-        try:
-            if follow:
-                log_stream = watch.Watch().stream(
-                    self.core_api.read_namespaced_pod_log,
-                    name=pod_name,
-                    namespace=self.namespace,
-                    container=container_name,
-                    follow=True,
+        """Read logs from a pod container, retrying the transient API errors."""
+        delay = constants.POD_LOG_RETRY_DELAY_SECONDS
+        for attempt in range(1, constants.POD_LOG_MAX_ATTEMPTS + 1):
+            started = False
+            try:
+                for line in self._stream_pod_logs(pod_name, container_name, follow):
+                    started = True
+                    yield line
+                return
+            except client.ApiException as e:
+                # Don't retry after a line is returned, since the caller would get it again.
+                if (
+                    e.status not in constants.POD_LOG_RETRYABLE_STATUSES
+                    or started
+                    or attempt == constants.POD_LOG_MAX_ATTEMPTS
+                ):
+                    attempts = f" after {attempt} attempts" if attempt > 1 else ""
+                    raise RuntimeError(
+                        f"Failed to read logs for the pod {self.namespace}/{pod_name}{attempts}"
+                    ) from e
+
+                logger.warning(
+                    "Transient HTTP %s reading logs for the pod %s/%s, retrying in %ss "
+                    "(attempt %s/%s)",
+                    e.status,
+                    self.namespace,
+                    pod_name,
+                    delay,
+                    attempt,
+                    constants.POD_LOG_MAX_ATTEMPTS,
                 )
+                # Wait longer after every failed attempt.
+                time.sleep(delay)
+                delay *= 2
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to read logs for the pod {self.namespace}/{pod_name}"
+                ) from e
 
-                # Stream logs incrementally.
-                yield from log_stream  # type: ignore
-            else:
-                logs = self.core_api.read_namespaced_pod_log(
-                    name=pod_name,
-                    namespace=self.namespace,
-                    container=container_name,
-                )
+    def _stream_pod_logs(self, pod_name: str, container_name: str, follow: bool) -> Iterator[str]:
+        """Make a single attempt to read logs from a pod container."""
+        if follow:
+            log_stream = watch.Watch().stream(
+                self.core_api.read_namespaced_pod_log,
+                name=pod_name,
+                namespace=self.namespace,
+                container=container_name,
+                follow=True,
+            )
 
-                yield from logs.splitlines()
+            # Stream logs incrementally.
+            yield from log_stream  # type: ignore
+        else:
+            logs = self.core_api.read_namespaced_pod_log(
+                name=pod_name,
+                namespace=self.namespace,
+                container=container_name,
+            )
 
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to read logs for the pod {self.namespace}/{pod_name}"
-            ) from e
+            yield from logs.splitlines()
 
     def __get_trainjob_from_cr(
         self,
