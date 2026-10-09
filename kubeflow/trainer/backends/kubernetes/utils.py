@@ -38,6 +38,9 @@ if TYPE_CHECKING:
     from requests import Session
 
 
+_logger = logging.getLogger(__name__)
+
+
 def get_container_devices(
     resources: models.IoK8sApiCoreV1ResourceRequirements | None,
 ) -> tuple[str, str] | None:
@@ -46,7 +49,7 @@ def get_container_devices(
     """
 
     # If containers resource limits are empty, return Unknown.
-    if resources is None or resources.limits is None:
+    if not resources or not resources.limits:
         return None
 
     # TODO (andreyvelich): We should discuss how to get container device type.
@@ -76,9 +79,12 @@ def get_container_devices(
         device = constants.CPU_LABEL
         device_count = resources.limits[constants.CPU_LABEL].actual_instance
     else:
-        raise Exception(f"Unknown device type in the container resources: {resources.limits}")
+        _logger.debug(
+            "No recognized compute device found in container limits: %s", resources.limits
+        )
+        return None
     if device_count is None:
-        raise Exception(f"Failed to get device count for resources: {resources.limits}")
+        return None
 
     return device, str(device_count)
 
@@ -683,8 +689,6 @@ def get_model_initializer(
 # ---------------------------------------------------------------------------
 # TrainJob status reporting utilities
 # ---------------------------------------------------------------------------
-
-_logger = logging.getLogger(__name__)
 
 _ENV_SERVER_URL = "KUBEFLOW_TRAINER_SERVER_URL"
 _ENV_CA_CERT = "KUBEFLOW_TRAINER_SERVER_CA_CERT"
