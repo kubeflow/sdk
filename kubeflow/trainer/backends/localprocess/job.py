@@ -83,7 +83,7 @@ class LocalJob(threading.Thread):
                 text=True,
                 encoding="utf-8",
                 bufsize=1,
-                env=self.env,
+                env={**os.environ, **self.env},
             )
             # set job status
             self._status = constants.TRAINJOB_RUNNING
