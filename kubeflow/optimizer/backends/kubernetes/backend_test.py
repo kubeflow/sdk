@@ -737,6 +737,24 @@ UNREADABLE_EXPERIMENT_TEST_CASES = [
         },
     ),
     TestCase(
+        name="normal distribution",
+        config={
+            "spec_changes": {
+                "parameters": [
+                    models.V1beta1ParameterSpec(
+                        name="lr",
+                        parameterType=constants.DOUBLE_PARAMETER,
+                        feasibleSpace=models.V1beta1FeasibleSpace(
+                            min="0.001",
+                            max="0.1",
+                            distribution="normal",
+                        ),
+                    ),
+                ],
+            },
+        },
+    ),
+    TestCase(
         name="batch Job trial template",
         config={
             "spec_changes": {
