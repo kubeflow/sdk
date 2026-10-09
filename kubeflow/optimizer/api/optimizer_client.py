@@ -116,6 +116,9 @@ class OptimizerClient:
     def list_jobs(self) -> list[OptimizationJob]:
         """List created OptimizationJobs.
 
+        Katib Experiments the SDK can't represent (for example, ones created with an
+        unsupported algorithm or a non-TrainJob trial template) are skipped with a warning.
+
         Returns:
             List of created OptimizationJobs. If no OptimizationJobs exist,
             an empty list is returned.
@@ -146,6 +149,7 @@ class OptimizerClient:
         Raises:
             TimeoutError: Timeout occurred while getting the OptimizationJob.
             RuntimeError: Failed to get the OptimizationJob.
+            ValueError: The Katib Experiment uses features the SDK can't represent.
 
         Examples:
             >>> from kubeflow.optimizer import OptimizerClient
