@@ -103,6 +103,13 @@ class LocalProcessBackend(RuntimeBackend):
         if not isinstance(trainer, types.CustomTrainer):
             raise ValueError("CustomTrainer must be set with LocalProcessBackend")
 
+        # Reject duplicates before starting anything, since only one train step is tracked per job.
+        if any(j.name == trainjob_name for j in self.__local_jobs):
+            raise ValueError(
+                f"TrainJob with name '{trainjob_name}' already exists. "
+                "Delete it first with delete_job() or use a different name."
+            )
+
         # create temp dir
         venv_dir = tempfile.mkdtemp(prefix=trainjob_name)
         logger.debug(f"operating in {venv_dir}")
@@ -288,19 +295,10 @@ class LocalProcessBackend(RuntimeBackend):
         job: LocalJob,
         runtime: types.Runtime,
     ):
-        existing_jobs = [j for j in self.__local_jobs if j.name == train_job_name]
-        if not existing_jobs:
-            _job = LocalBackendJobs(name=train_job_name, runtime=runtime, created=datetime.now())
-            self.__local_jobs.append(_job)
-        else:
-            _job = existing_jobs[0]
-
-        existing_steps = [s for s in _job.steps if s.step_name == step_name]
-        if not existing_steps:
-            _step = LocalBackendStep(step_name=step_name, job=job)
-            _job.steps.append(_step)
-        else:
-            logger.warning(f"Step '{step_name}' already registered.")
+        # train() rejects duplicate job names, so the job and its step are always new.
+        _job = LocalBackendJobs(name=train_job_name, runtime=runtime, created=datetime.now())
+        _job.steps.append(LocalBackendStep(step_name=step_name, job=job))
+        self.__local_jobs.append(_job)
 
     def __convert_local_runtime_to_runtime(self, local_runtime) -> types.Runtime:
         return types.Runtime(
