@@ -151,9 +151,8 @@ SHFMT_OPTIONS ?= --indent 2 --case-indent --space-redirects
 # Extra shellcheck options, e.g. set SHELLCHECK_OPTIONS=--severity=warning to only fail on warnings.
 SHELLCHECK_OPTIONS ?=
 
-# ponytail: actionlint embeds shellcheck on workflow run: scripts; severity=error avoids failing on
-# pre-existing style/info findings across unrelated workflows until those are cleaned up separately.
-ACTIONLINT_SHELLCHECK_OPTS ?= --severity=error
+# actionlint embeds shellcheck on workflow run: scripts; fail on warning+ findings.
+ACTIONLINT_SHELLCHECK_OPTS ?= --severity=warning
 
 .PHONY: shell-fmt
 shell-fmt: $(SHFMT) ## Format shell scripts with shfmt.
