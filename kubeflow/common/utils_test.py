@@ -11,9 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import warnings
+
 import pytest
 
-from kubeflow.common import utils
+from kubeflow.common import constants, utils
 from kubeflow.test.common import SUCCESS, TestCase
 
 # --------------------------
@@ -148,3 +150,85 @@ def test_validate_python_function(test_case):
             utils.validate_python_function(func)
     else:
         utils.validate_python_function(func)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="component env var set takes precedence without warning",
+            expected_status=SUCCESS,
+            config={
+                "env": {
+                    constants.KUBEFLOW_SPARK_NAMESPACE_ENV_VAR: "custom-spark-ns",
+                    constants.KUBEFLOW_SYSTEM_NAMESPACE_ENV_VAR: "deprecated-ns",
+                },
+                "kwargs": {
+                    "component_env_var": constants.KUBEFLOW_SPARK_NAMESPACE_ENV_VAR,
+                },
+                "expected_namespace": "custom-spark-ns",
+                "expect_warning": False,
+            },
+        ),
+        TestCase(
+            name="deprecated system env var fallback emits deprecation warning",
+            expected_status=SUCCESS,
+            config={
+                "env": {
+                    constants.KUBEFLOW_SYSTEM_NAMESPACE_ENV_VAR: "system-ns",
+                },
+                "kwargs": {
+                    "component_env_var": constants.KUBEFLOW_SPARK_NAMESPACE_ENV_VAR,
+                },
+                "expected_namespace": "system-ns",
+                "expect_warning": True,
+            },
+        ),
+        TestCase(
+            name="default namespace when no env var is set",
+            expected_status=SUCCESS,
+            config={
+                "env": {},
+                "kwargs": {
+                    "component_env_var": constants.KUBEFLOW_SPARK_NAMESPACE_ENV_VAR,
+                },
+                "expected_namespace": "kubeflow",
+                "expect_warning": False,
+            },
+        ),
+        TestCase(
+            name="custom default namespace override when no env var is set",
+            expected_status=SUCCESS,
+            config={
+                "env": {},
+                "kwargs": {
+                    "component_env_var": constants.KUBEFLOW_SPARK_NAMESPACE_ENV_VAR,
+                    "default": "custom-default",
+                },
+                "expected_namespace": "custom-default",
+                "expect_warning": False,
+            },
+        ),
+    ],
+)
+def test_get_component_namespace(test_case, monkeypatch):
+    """Test get_component_namespace resolution hierarchy and deprecation warnings."""
+    monkeypatch.delenv(constants.KUBEFLOW_SPARK_NAMESPACE_ENV_VAR, raising=False)
+    monkeypatch.delenv(constants.KUBEFLOW_SYSTEM_NAMESPACE_ENV_VAR, raising=False)
+
+    for k, v in test_case.config["env"].items():
+        monkeypatch.setenv(k, v)
+
+    kwargs = test_case.config["kwargs"]
+    expected_ns = test_case.config["expected_namespace"]
+
+    if test_case.config["expect_warning"]:
+        with pytest.deprecated_call(match="KUBEFLOW_SYSTEM_NAMESPACE is deprecated"):
+            ns = utils.get_component_namespace(**kwargs)
+    else:
+        with warnings.catch_warnings(record=True) as recorded_warnings:
+            warnings.simplefilter("always")
+            ns = utils.get_component_namespace(**kwargs)
+            assert len(recorded_warnings) == 0
+
+    assert ns == expected_ns
