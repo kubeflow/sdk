@@ -34,7 +34,7 @@ from kubeflow_spark_api import models
 from kubernetes import client, config
 from pyspark.sql import SparkSession
 
-from kubeflow.common import constants as common_constants
+from kubeflow.common import constants as common_constants, utils
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.common.utils import validate_python_function
 from kubeflow.spark.backends.base import RuntimeBackend
@@ -113,10 +113,39 @@ class KubernetesBackend(RuntimeBackend):
 
         self.custom_api = client.CustomObjectsApi()
         self.core_api = client.CoreV1Api()
+        self.verify_backend()
 
     # ------------------------------------------------------------------
     # Spark Connect sessions
     # ------------------------------------------------------------------
+
+    def verify_backend(self) -> None:
+        """Verify that the Spark Operator control plane exposes version metadata.
+
+        This check only ensures that the public control-plane ConfigMap exists
+        and contains a ``kubeflow_spark_version`` field. It does not
+        enforce version compatibility and never raises.
+        """
+        system_namespace = utils.get_component_namespace(
+            common_constants.KUBEFLOW_SPARK_NAMESPACE_ENV_VAR,
+            default="kubeflow",
+        )
+        config_map_name = "kubeflow-spark-public"
+
+        try:
+            _ = self.core_api.read_namespaced_config_map(
+                name=config_map_name,
+                namespace=system_namespace,
+            ).data["kubeflow_spark_version"]
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "Spark Operator control-plane version info is not available: "
+                f"unable to read 'kubeflow_spark_version' from ConfigMap "
+                f"'{config_map_name}' in namespace '{system_namespace}': {e}. "
+                "If your Spark Operator control-plane is installed in a different namespace, "
+                f"set the {common_constants.KUBEFLOW_SPARK_NAMESPACE_ENV_VAR} environment variable accordingly."
+            )
+            return
 
     def _create_session(
         self,
