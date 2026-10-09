@@ -15,6 +15,7 @@
 """Unit tests for KubernetesBackend."""
 
 from datetime import datetime
+import logging
 import multiprocessing
 from unittest.mock import MagicMock, Mock, patch
 
@@ -83,6 +84,22 @@ def kubernetes_backend():
 # --------------------------
 # Mock Helpers
 # --------------------------
+
+
+def _build_core_api_mock(
+    config_map_data: dict | None = None,
+    error: Exception | None = None,
+):
+    """Helper to construct a CoreV1Api mock for version checks."""
+
+    core_api = Mock()
+
+    if error is not None:
+        core_api.read_namespaced_config_map.side_effect = error
+    else:
+        core_api.read_namespaced_config_map.return_value = Mock(data=config_map_data)
+
+    return core_api
 
 
 def get_spark_application(
@@ -383,6 +400,42 @@ def decorated_func() -> None:
     pass
 
 
+def _run_verify_backend_with_core_api(core_api: Mock) -> tuple[list[str], int]:
+    """Helper to run verify_backend and capture warning logs."""
+
+    logger_name = "kubeflow.spark.backends.kubernetes.backend"
+    logger_obj = logging.getLogger(logger_name)
+
+    class _ListHandler(logging.Handler):
+        def __init__(self) -> None:
+            super().__init__()
+            self.records: list[logging.LogRecord] = []
+
+        def emit(self, record: logging.LogRecord) -> None:  # type: ignore[override]
+            self.records.append(record)
+
+    handler = _ListHandler()
+    logger_obj.addHandler(handler)
+    previous_level = logger_obj.level
+    logger_obj.setLevel(logging.WARNING)
+
+    try:
+        with (
+            patch("kubernetes.config.load_kube_config", return_value=None),
+            patch("kubernetes.config.load_incluster_config", return_value=None),
+            patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
+            patch("kubernetes.client.CoreV1Api", return_value=core_api),
+        ):
+            KubernetesBackend(KubernetesBackendConfig())
+    finally:
+        logger_obj.removeHandler(handler)
+        logger_obj.setLevel(previous_level)
+
+    messages = [record.getMessage() for record in handler.records]
+    call_count = core_api.read_namespaced_config_map.call_count
+    return messages, call_count
+
+
 # --------------------------
 # Tests
 # --------------------------
@@ -488,6 +541,54 @@ def test_get_session(kubernetes_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="version metadata present",
+            expected_status=SUCCESS,
+            config={
+                "core_api": _build_core_api_mock({"kubeflow_spark_version": "1.2.3"}),
+                "expect_warning": False,
+            },
+        ),
+        TestCase(
+            name="ConfigMap read error logs warning",
+            expected_status=SUCCESS,
+            config={
+                "core_api": _build_core_api_mock(None, Exception("ConfigMap not found")),
+                "expect_warning": True,
+                "must_contain": [
+                    "Spark Operator control-plane version info is not available",
+                    "kubeflow-spark-public",
+                    "ConfigMap not found",
+                    "KUBEFLOW_SYSTEM_NAMESPACE",
+                ],
+            },
+        ),
+    ],
+)
+def test_verify_backend(test_case):
+    """Test KubernetesBackend.verify_backend across version metadata scenarios."""
+
+    core_api: Mock = test_case.config["core_api"]
+    expect_warning: bool = test_case.config.get("expect_warning", False)
+    must_contain: list[str] = test_case.config.get("must_contain", [])
+
+    warnings, call_count = _run_verify_backend_with_core_api(core_api)
+    combined = "\n".join(warnings)
+
+    assert call_count >= 1
+
+    if expect_warning:
+        assert warnings, "Expected warning logs but found none"
+        for text in must_contain:
+            assert text in combined
+        assert "kubeflow_spark_version" in combined
+    else:
+        assert "Spark Operator control-plane version info is not available" not in combined
 
 
 @pytest.mark.parametrize(
