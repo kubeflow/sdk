@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 import inspect
 import logging
 import os
+import posixpath
 import shlex
 import textwrap
 import threading
@@ -382,8 +383,8 @@ def get_command_using_train_func(
     is_mpi = runtime.trainer.command[0] == "mpirun"
     # The default file location for OpenMPI is: /home/mpiuser/<FILE_NAME>.py
     if is_mpi:
-        func_file = os.path.join(constants.DEFAULT_MPI_USER_HOME, func_file)
-        install_log_file = os.path.join(constants.DEFAULT_MPI_USER_HOME, "pip_install.log")
+        func_file = posixpath.join(constants.DEFAULT_MPI_USER_HOME, func_file)
+        install_log_file = posixpath.join(constants.DEFAULT_MPI_USER_HOME, "pip_install.log")
     else:
         install_log_file = "pip_install.log"
 
@@ -526,9 +527,11 @@ def get_args_using_torchtune_config(
         relative_path = "/".join(parts[1:]) if len(parts) > 1 else "."
 
         if relative_path != "." and "." in relative_path:
-            args.append(f"dataset.data_files={os.path.join(constants.DATASET_PATH, relative_path)}")
+            args.append(
+                f"dataset.data_files={posixpath.join(constants.DATASET_PATH, relative_path)}"
+            )
         else:
-            args.append(f"dataset.data_dir={os.path.join(constants.DATASET_PATH, relative_path)}")
+            args.append(f"dataset.data_dir={posixpath.join(constants.DATASET_PATH, relative_path)}")
 
     if fine_tuning_config.peft_config:
         args += get_args_from_peft_config(fine_tuning_config.peft_config)

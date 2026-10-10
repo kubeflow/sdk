@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import ntpath
 import os
 import tempfile
 import time
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from kubeflow_trainer_api import models
@@ -1007,7 +1009,7 @@ def _build_builtin_runtime() -> types.Runtime:
             },
             expected_output=[
                 "dtype=bf16",
-                f"dataset.data_dir={os.path.join(constants.DATASET_PATH, '.')}",
+                f"dataset.data_dir={constants.DATASET_PATH}/.",
             ],
         ),
         TestCase(
@@ -1022,7 +1024,7 @@ def _build_builtin_runtime() -> types.Runtime:
                 ),
             },
             expected_output=[
-                f"dataset.data_files={os.path.join(constants.DATASET_PATH, 'data.json')}",
+                f"dataset.data_files={constants.DATASET_PATH}/data.json",
             ],
         ),
         TestCase(
@@ -1037,7 +1039,7 @@ def _build_builtin_runtime() -> types.Runtime:
                 ),
             },
             expected_output=[
-                f"dataset.data_dir={os.path.join(constants.DATASET_PATH, 'train')}",
+                f"dataset.data_dir={constants.DATASET_PATH}/train",
             ],
         ),
         TestCase(
@@ -1067,6 +1069,43 @@ def test_get_args_using_torchtune_config(test_case: TestCase):
         assert test_case.expected_status == FAILED
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+@pytest.fixture
+def windows_client(monkeypatch):
+    """Make the module under test resolve os.path the way a Windows client does."""
+    monkeypatch.setattr(utils, "os", SimpleNamespace(path=ntpath))
+
+
+def test_get_command_using_train_func_mpi_paths(windows_client):
+    runtime = _build_runtime()
+    runtime.trainer.set_command(constants.MPI_COMMAND)
+
+    command = utils.get_command_using_train_func(
+        runtime=runtime,
+        train_func=sample_train_func,
+        train_func_parameters=None,
+        pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
+        packages_to_install=["requests"],
+    )
+
+    mpi_home = constants.DEFAULT_MPI_USER_HOME
+    assert f'LOG_FILE="{mpi_home}/pip_install.log"' in command[-1]
+    assert f'printf "%s" "$SCRIPT" > "{mpi_home}/utils_test.py"' in command[-1]
+    assert f'python "{mpi_home}/utils_test.py"' in command[-1]
+
+
+def test_get_args_using_torchtune_config_dataset_path(windows_client):
+    args = utils.get_args_using_torchtune_config(
+        types.TorchTuneConfig(),
+        types.Initializer(
+            dataset=types.HuggingFaceDatasetInitializer(
+                storage_uri="hf://tatsu-lab/alpaca/data/train.json",
+            ),
+        ),
+    )
+
+    assert args == ["dataset.data_files=/workspace/dataset/data/train.json"]
 
 
 @pytest.mark.parametrize(
@@ -1166,7 +1205,7 @@ def test_get_args_using_torchtune_config(test_case: TestCase):
                 command=["tune", "run"],
                 args=[
                     "batch_size=8",
-                    f"dataset.data_files={os.path.join(constants.DATASET_PATH, 'data.json')}",
+                    f"dataset.data_files={constants.DATASET_PATH}/data.json",
                 ],
             ),
         ),
