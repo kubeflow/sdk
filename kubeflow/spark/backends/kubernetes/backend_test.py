@@ -1167,6 +1167,16 @@ def test_is_supported_func_arg(
             },
             expected_error=ValueError,
         ),
+        TestCase(
+            name="no func_args for required arguments",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=sample_func_with_args,
+                ),
+            },
+            expected_error=ValueError,
+        ),
     ],
 )
 def test_validate_func_job(kubernetes_backend, test_case):
