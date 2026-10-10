@@ -1,0 +1,27 @@
+title: Adopt kube-authkit as Unified Authentication for Kubeflow SDK
+kep-number: 281
+authors:
+  - "@szaher"
+status: implementable
+creation-date: 2026-04-23
+reviewers:
+  - "@andreyvelich"
+  - "@astefanutti"
+  - "@kramaranya"
+approvers:
+  - "@andreyvelich"
+  - "@astefanutti"
+  - "@kramaranya"
+
+see-also:
+  - "NA"
+replaces:
+  - "NA"
+
+stage: alpha
+latest-milestone: "v0.5.0"
+
+milestone:
+  alpha: "v0.6.0"
+  beta: "v0.7.0"
+  stable: "v0.8.0"
