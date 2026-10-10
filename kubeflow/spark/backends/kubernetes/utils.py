@@ -14,7 +14,7 @@
 
 """Utility functions for Kubernetes Spark backend."""
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 import inspect
 import logging
 import math
@@ -81,8 +81,7 @@ def read_pod_logs(
 
             resp = thread.get(common_constants.DEFAULT_TIMEOUT)
 
-            for line in resp.stream():
-                yield line.decode("utf-8").rstrip("\n")
+            yield from _iter_log_lines(resp.stream())
         else:
             thread = core_api.read_namespaced_pod_log(
                 name=pod_name,
@@ -92,14 +91,36 @@ def read_pod_logs(
 
             logs = thread.get(common_constants.DEFAULT_TIMEOUT)
 
-            for line in logs.split("\n"):
-                yield line
+            yield from logs.split("\n")
 
     except multiprocessing.TimeoutError as e:
         raise TimeoutError("Timeout while retrieving pod logs.") from e
 
     except Exception as e:
         raise RuntimeError("Failed to retrieve pod logs.") from e
+
+
+def _iter_log_lines(chunks: Iterable[bytes]) -> Iterator[str]:
+    """Split a streamed pod log into lines.
+
+    The chunks of a streamed response follow the transport, not the log. One chunk can
+    hold several lines, and a line or a multi-byte character can span two chunks.
+
+    Args:
+        chunks: Raw chunks of the pod log.
+
+    Yields:
+        Log lines without the trailing newline.
+    """
+    buffer = b""
+    for chunk in chunks:
+        buffer += chunk
+        *lines, buffer = buffer.split(b"\n")
+        for line in lines:
+            yield line.decode("utf-8")
+
+    if buffer:
+        yield buffer.decode("utf-8")
 
 
 def _resolve_driver_resources(
