@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import os
-import textwrap
+
+from kubeflow.common.utils import get_embedded_python_script
 
 # Common constants.
 GROUP = "trainer.kubeflow.org"
@@ -131,13 +132,8 @@ DEFAULT_PIP_INDEX_URLS = os.getenv("DEFAULT_PIP_INDEX_URLS", "https://pypi.org/s
 
 # The exec script to embed training function into container command.
 # __ENTRYPOINT__ depends on the MLPolicy, func_code and func_file is substituted in the `train` API.
-EXEC_FUNC_SCRIPT = textwrap.dedent(
-    """
-        read -r -d '' SCRIPT << EOM\n
-        {func_code}
-        EOM
-        printf "%s" \"$SCRIPT\" > \"{func_file}\"
-        __ENTRYPOINT__ \"{func_file}\""""
+EXEC_FUNC_SCRIPT = (
+    get_embedded_python_script("{func_code}", "{func_file}") + '__ENTRYPOINT__ "{func_file}"'
 )
 
 # The default command for the PlainML CustomTrainer.

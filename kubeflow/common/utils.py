@@ -109,3 +109,25 @@ def validate_python_function(func: Callable) -> None:
         for node in func_tree.body
     ):
         raise ValueError("Decorated functions are not supported.")
+
+
+def get_embedded_python_script(func_code: str, func_file: str) -> str:
+    """Generate a shell script that writes embedded Python code to a file.
+
+    Args:
+        func_code: Python source code to embed.
+        func_file: Destination file path for the Python source.
+
+    Returns:
+        Shell script that writes the Python source to func_file.
+    """
+    script_template = textwrap.dedent(
+        f"""
+        read -r -d '' SCRIPT << '{constants.EMBEDDED_PYTHON_SCRIPT_DELIMITER}'
+        {{func_code}}
+        {constants.EMBEDDED_PYTHON_SCRIPT_DELIMITER}
+
+        printf "%s" "$SCRIPT" > "{{func_file}}"
+        """
+    )
+    return script_template.format(func_code=func_code, func_file=func_file)

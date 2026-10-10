@@ -20,3 +20,6 @@ DEFAULT_TIMEOUT = 120
 
 # Unknown indicates that the value can't be identified.
 UNKNOWN = "Unknown"
+
+# Delimiter used when embedding Python source code in a shell heredoc.
+EMBEDDED_PYTHON_SCRIPT_DELIMITER = "__KUBEFLOW_EMBEDDED_SCRIPT__"

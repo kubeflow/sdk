@@ -14,8 +14,6 @@
 
 """Constants for Kubernetes Spark backend."""
 
-import textwrap
-
 # SparkConnect CRD
 SPARK_CONNECT_GROUP = "sparkoperator.k8s.io"
 SPARK_CONNECT_VERSION = "v1alpha1"
@@ -55,13 +53,3 @@ FUNC_JOB_INIT_CONTAINER_NAME = "prepare-spark-app"
 FUNC_JOB_SCRIPT_NAME = "spark_job.py"
 FUNC_JOB_SCRIPT_DIR = "/opt/spark/app"
 FUNC_JOB_MAIN_FILE = f"local://{FUNC_JOB_SCRIPT_DIR}/{FUNC_JOB_SCRIPT_NAME}"
-FUNC_JOB_SCRIPT_DELIMITER = "__KUBEFLOW_FUNC_JOB_SCRIPT__"
-FUNC_JOB_SCRIPT_TEMPLATE = textwrap.dedent(
-    f"""
-    read -r -d '' SCRIPT << '{FUNC_JOB_SCRIPT_DELIMITER}'
-    {{func_code}}
-    {FUNC_JOB_SCRIPT_DELIMITER}
-
-    printf "%s" "$SCRIPT" > "{{func_file}}"
-    """
-)
