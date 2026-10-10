@@ -515,6 +515,20 @@ def mock_read_namespaced_pod_log(*args, **kwargs):
     """Simulate log retrieval from a pod."""
     if kwargs.get("namespace") == FAIL_LOGS:
         raise Exception("Failed to read logs")
+
+    # Handle streaming case: when _preload_content=False and follow=True
+    if kwargs.get("_preload_content") is False and kwargs.get("follow") is True:
+        # Return a mock response object with a stream() method
+        mock_response = Mock()
+
+        def mock_stream():
+            """Mock stream generator that yields log lines as bytes."""
+            yield b"test log content"
+
+        mock_response.stream = mock_stream
+        return mock_response
+
+    # Non-streaming case: return plain text logs
     return "test log content"
 
 
@@ -1656,6 +1670,12 @@ def test_list_jobs(kubernetes_backend, test_case):
             config={"name": BASIC_TRAIN_JOB_NAME, "namespace": FAIL_LOGS},
             expected_error=RuntimeError,
         ),
+        TestCase(
+            name="valid flow with follow=True for streaming logs",
+            expected_status=SUCCESS,
+            config={"name": BASIC_TRAIN_JOB_NAME, "follow": True},
+            expected_output=["test log content"],
+        ),
     ],
 )
 def test_get_job_logs(kubernetes_backend, test_case):
@@ -1663,7 +1683,8 @@ def test_get_job_logs(kubernetes_backend, test_case):
     print("Executing test:", test_case.name)
     try:
         kubernetes_backend.namespace = test_case.config.get("namespace", DEFAULT_NAMESPACE)
-        logs = kubernetes_backend.get_job_logs(test_case.config.get("name"))
+        follow = test_case.config.get("follow", False)
+        logs = kubernetes_backend.get_job_logs(test_case.config.get("name"), follow=follow)
         # Convert iterator to list for comparison.
         logs_list = list(logs)
         assert test_case.expected_status == SUCCESS
