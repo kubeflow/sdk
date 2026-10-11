@@ -176,6 +176,8 @@ class SparkClient:
         job: FileJob | FuncJob,
         num_executors: int | None = None,
         resources_per_executor: dict[str, str] | None = None,
+        driver: Driver | None = None,
+        executor: Executor | None = None,
         spark_conf: dict[str, str] | None = None,
         options: list | None = None,
     ) -> str:
@@ -193,11 +195,21 @@ class SparkClient:
                 Supports either ``FileJob`` or ``FuncJob``.
 
             num_executors:
-                Number of executor instances.
+                Number of executor instances (simple mode).
 
             resources_per_executor:
-                Resource requirements per executor.
+                Resource requirements per executor (simple mode).
                 Format: ``{"cpu": "5", "memory": "10Gi"}``.
+
+            driver:
+                Driver configuration (advanced mode). Overrides ``resources_per_driver``
+                when provided. ``java_options`` is wired through to the driver
+                container (e.g., ``"-Xmx4g -XX:+UseG1GC"``).
+
+            executor:
+                Executor configuration (advanced mode). Overrides
+                ``num_executors`` and ``resources_per_executor`` when provided.
+                ``java_options`` is wired through to every executor container.
 
             spark_conf:
                 Spark configuration properties.
@@ -220,6 +232,8 @@ class SparkClient:
             job=job,
             num_executors=num_executors,
             resources_per_executor=resources_per_executor,
+            driver=driver,
+            executor=executor,
             options=options,
             spark_conf=spark_conf,
         ).name

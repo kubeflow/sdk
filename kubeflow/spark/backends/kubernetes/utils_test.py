@@ -1260,6 +1260,21 @@ def test_read_pod_logs(test_case: TestCase) -> None:
             expected_status=SUCCESS,
             config={},
         ),
+        TestCase(
+            name="driver spec propagates java_options from Driver config",
+            expected_status=SUCCESS,
+            config={
+                "driver": Driver(java_options="-Xmx4g -XX:+UseG1GC"),
+            },
+            expected_output="-Xmx4g -XX:+UseG1GC",
+        ),
+        TestCase(
+            name="driver spec with None java_options leaves field unset",
+            expected_status=SUCCESS,
+            config={
+                "driver": Driver(java_options=None),
+            },
+        ),
     ],
 )
 def test_get_spark_job_driver_spec(test_case: TestCase) -> None:
@@ -1267,7 +1282,8 @@ def test_get_spark_job_driver_spec(test_case: TestCase) -> None:
 
     print("Executing test:", test_case.name)
 
-    spec = get_spark_job_driver_spec()
+    driver = test_case.config.get("driver")
+    spec = get_spark_job_driver_spec(driver=driver)
 
     assert test_case.expected_status == SUCCESS
 
@@ -1276,6 +1292,11 @@ def test_get_spark_job_driver_spec(test_case: TestCase) -> None:
         constants.DEFAULT_DRIVER_MEMORY,
     )
     assert spec.service_account is None
+
+    if test_case.name == "driver spec propagates java_options from Driver config":
+        assert spec.java_options == test_case.expected_output
+    elif test_case.name == "driver spec with None java_options leaves field unset":
+        assert spec.java_options is None
 
     print("test execution complete")
 
@@ -1401,6 +1422,21 @@ def test_get_command_using_spark_func(test_case: TestCase) -> None:
             expected_status=SUCCESS,
             config={},
         ),
+        TestCase(
+            name="executor spec propagates java_options from Executor config",
+            expected_status=SUCCESS,
+            config={
+                "executor": Executor(java_options="-Xmx28g -XX:+UseG1GC"),
+            },
+            expected_output="-Xmx28g -XX:+UseG1GC",
+        ),
+        TestCase(
+            name="executor spec with None java_options leaves field unset",
+            expected_status=SUCCESS,
+            config={
+                "executor": Executor(java_options=None),
+            },
+        ),
     ],
 )
 def test_get_spark_job_executor_spec(test_case: TestCase) -> None:
@@ -1408,7 +1444,9 @@ def test_get_spark_job_executor_spec(test_case: TestCase) -> None:
 
     print("Executing test:", test_case.name)
 
+    executor = test_case.config.get("executor")
     spec = get_spark_job_executor_spec(
+        executor=executor,
         num_executors=test_case.config.get("num_executors"),
         resources_per_executor=test_case.config.get(
             "resources_per_executor",
@@ -1422,6 +1460,11 @@ def test_get_spark_job_executor_spec(test_case: TestCase) -> None:
     assert spec.memory == _memory_kubernetes_to_spark(
         constants.DEFAULT_EXECUTOR_MEMORY,
     )
+
+    if test_case.name == "executor spec propagates java_options from Executor config":
+        assert spec.java_options == test_case.expected_output
+    elif test_case.name == "executor spec with None java_options leaves field unset":
+        assert spec.java_options is None
 
     print("test execution complete")
 

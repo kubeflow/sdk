@@ -659,6 +659,10 @@ def get_spark_job_driver_spec(
 ) -> models.SparkV1beta2DriverSpec:
     """Build DriverSpec for SparkApplication.
 
+    Args:
+        driver: Driver configuration. When provided, ``java_options`` is wired
+            through to the driver spec.
+
     Returns:
         SparkApplication DriverSpec model.
 
@@ -668,21 +672,28 @@ def get_spark_job_driver_spec(
     """
     cores, memory = _resolve_driver_resources(driver)
 
+    java_options = driver.java_options if driver else None
+
     return models.SparkV1beta2DriverSpec(
         cores=cores,
         memory=memory,
+        java_options=java_options,
     )
 
 
 def get_spark_job_executor_spec(
+    executor: Executor | None = None,
     num_executors: int | None = None,
     resources_per_executor: dict[str, str] | None = None,
 ) -> models.SparkV1beta2ExecutorSpec:
     """Build ExecutorSpec for SparkApplication.
 
     Args:
-        num_executors: Number of executor instances.
-        resources_per_executor: Resource requirements for each executor.
+        executor: Executor configuration. When provided, ``java_options`` is wired
+            through to the executor spec and takes precedence over ``num_executors``
+            and ``resources_per_executor`` for instance and resource resolution.
+        num_executors: Number of executor instances (simple mode).
+        resources_per_executor: Resource requirements for each executor (simple mode).
 
     Returns:
         SparkApplication ExecutorSpec model.
@@ -692,14 +703,18 @@ def get_spark_job_executor_spec(
             If the configured executor resources are invalid.
     """
     instances, cores, memory = _resolve_executor_resources(
+        executor=executor,
         num_executors=num_executors,
         resources_per_executor=resources_per_executor,
     )
+
+    java_options = executor.java_options if executor else None
 
     return models.SparkV1beta2ExecutorSpec(
         instances=instances,
         cores=cores,
         memory=memory,
+        java_options=java_options,
     )
 
 
@@ -791,6 +806,8 @@ def get_spark_application_cr_from_file_job(
     arguments: list[str] | None = None,
     num_executors: int | None = None,
     resources_per_executor: dict[str, str] | None = None,
+    driver: Driver | None = None,
+    executor: Executor | None = None,
     options: list | None = None,
     backend: Any | None = None,
     spark_conf: dict[str, str] | None = None,
@@ -802,8 +819,12 @@ def get_spark_application_cr_from_file_job(
         namespace: Kubernetes namespace.
         main_file: Path or URI to the Spark application file.
         arguments: Command-line arguments passed to the Spark application.
-        num_executors: Number of executor instances.
-        resources_per_executor: Resource requirements for each executor.
+        num_executors: Number of executor instances (simple mode).
+        resources_per_executor: Resource requirements for each executor (simple mode).
+        driver: Driver configuration (advanced mode). ``java_options`` is wired
+            through to the driver spec when provided.
+        executor: Executor configuration (advanced mode). ``java_options`` is wired
+            through to the executor spec when provided.
         options: List of configuration options.
         backend: Backend instance used for option validation.
         spark_conf: Spark configuration properties.
@@ -815,6 +836,8 @@ def get_spark_application_cr_from_file_job(
         ValueError:
             If the executor resource configuration is invalid.
     """
+    _validate_spark_conf(spark_conf)
+
     spark_application = models.SparkV1beta2SparkApplication(
         api_version=f"{constants.SPARK_APPLICATION_GROUP}/{constants.SPARK_APPLICATION_VERSION}",
         kind=constants.SPARK_APPLICATION_KIND,
@@ -829,8 +852,9 @@ def get_spark_application_cr_from_file_job(
             image=constants.DEFAULT_SPARK_IMAGE,
             main_application_file=main_file,
             arguments=arguments or None,
-            driver=get_spark_job_driver_spec(),
+            driver=get_spark_job_driver_spec(driver),
             executor=get_spark_job_executor_spec(
+                executor=executor,
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
             ),
@@ -854,6 +878,8 @@ def get_spark_application_cr_from_func_job(
     func_args: dict[str, Any] | None = None,
     num_executors: int | None = None,
     resources_per_executor: dict[str, str] | None = None,
+    driver: Driver | None = None,
+    executor: Executor | None = None,
     options: list | None = None,
     backend: Any | None = None,
     spark_conf: dict[str, str] | None = None,
@@ -865,8 +891,12 @@ def get_spark_application_cr_from_func_job(
         namespace: Kubernetes namespace.
         func: Python function to execute as the Spark application.
         func_args: Keyword arguments passed to the function.
-        num_executors: Number of executor instances.
-        resources_per_executor: Resource requirements for each executor.
+        num_executors: Number of executor instances (simple mode).
+        resources_per_executor: Resource requirements for each executor (simple mode).
+        driver: Driver configuration (advanced mode). ``java_options`` is wired
+            through to the driver spec when provided.
+        executor: Executor configuration (advanced mode). ``java_options`` is wired
+            through to the executor spec when provided.
         options: List of configuration options.
         backend: Backend instance used for option validation.
         spark_conf: Spark configuration properties.
@@ -899,8 +929,9 @@ def get_spark_application_cr_from_func_job(
             mode="cluster",
             image=constants.DEFAULT_SPARK_IMAGE,
             main_application_file=constants.FUNC_JOB_MAIN_FILE,
-            driver=get_spark_job_driver_spec(),
+            driver=get_spark_job_driver_spec(driver),
             executor=get_spark_job_executor_spec(
+                executor=executor,
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
             ),
