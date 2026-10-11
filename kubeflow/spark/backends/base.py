@@ -149,6 +149,8 @@ class RuntimeBackend(abc.ABC):
         job: FileJob | FuncJob,
         num_executors: int | None = None,
         resources_per_executor: dict[str, str] | None = None,
+        driver: Driver | None = None,
+        executor: Executor | None = None,
         options: list | None = None,
         spark_conf: dict[str, str] | None = None,
     ) -> SparkJob:
@@ -156,8 +158,12 @@ class RuntimeBackend(abc.ABC):
 
         Args:
             job: Spark application to execute.
-            num_executors: Number of executor instances.
-            resources_per_executor: Resource requirements for each executor.
+            num_executors: Number of executor instances (simple mode).
+            resources_per_executor: Resource requirements for each executor (simple mode).
+            driver: Driver configuration (advanced mode). ``java_options`` is wired
+                through to the driver spec when provided.
+            executor: Executor configuration (advanced mode). ``java_options`` is wired
+                through to the executor spec when provided.
             options: List of configuration options. Use the Name option for a custom job name.
             spark_conf: Spark configuration properties to set on the SparkApplication.
 

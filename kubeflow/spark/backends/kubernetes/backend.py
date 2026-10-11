@@ -944,6 +944,8 @@ class KubernetesBackend(RuntimeBackend):
         job: FileJob | FuncJob,
         num_executors: int | None = None,
         resources_per_executor: dict[str, str] | None = None,
+        driver: Driver | None = None,
+        executor: Executor | None = None,
         options: list | None = None,
         spark_conf: dict[str, str] | None = None,
     ) -> SparkJob:
@@ -954,10 +956,18 @@ class KubernetesBackend(RuntimeBackend):
                 File-based or function-based Spark workload definition.
 
             num_executors:
-                Number of executor instances.
+                Number of executor instances (simple mode).
 
             resources_per_executor:
-                Resource requirements per executor.
+                Resource requirements per executor (simple mode).
+
+            driver:
+                Driver configuration (advanced mode). ``java_options`` is wired
+                through to the driver spec when provided.
+
+            executor:
+                Executor configuration (advanced mode). ``java_options`` is wired
+                through to the executor spec when provided.
 
             options:
                 List of additional Spark configuration options.
@@ -989,6 +999,8 @@ class KubernetesBackend(RuntimeBackend):
                 arguments=job.args,
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
+                driver=driver,
+                executor=executor,
                 options=options,
                 backend=self,
                 spark_conf=spark_conf,
@@ -1002,6 +1014,8 @@ class KubernetesBackend(RuntimeBackend):
                 func_args=job.func_args,
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
+                driver=driver,
+                executor=executor,
                 options=options,
                 backend=self,
                 spark_conf=spark_conf,

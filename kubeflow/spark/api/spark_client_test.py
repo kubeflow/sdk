@@ -170,6 +170,8 @@ def test_submit_job_success(job, options):
             job=job,
             num_executors=None,
             resources_per_executor=None,
-            spark_conf=None,
+            driver=None,
+            executor=None,
             options=options,
+            spark_conf=None,
         )
