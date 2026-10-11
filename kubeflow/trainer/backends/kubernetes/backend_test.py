@@ -169,6 +169,11 @@ def get_mock_pod_list():
                             name=constants.DATASET_INITIALIZER,
                             image="dataset-initializer:latest",
                             command=["python", "-m", "dataset_initializer"],
+                            resources=models.IoK8sApiCoreV1ResourceRequirements(
+                                limits={
+                                    "memory": models.IoK8sApimachineryPkgApiResourceQuantity("2Gi"),
+                                }
+                            ),
                         )
                     ]
                 ),

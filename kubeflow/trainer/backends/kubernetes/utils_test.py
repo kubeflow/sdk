@@ -65,6 +65,74 @@ def sample_train_func_kwargs(a: int, b: str, c: float) -> str:
     "test_case",
     [
         TestCase(
+            name="resources is None returns None",
+            expected_status=SUCCESS,
+            config={"resources": None},
+            expected_output=None,
+        ),
+        TestCase(
+            name="resources limits is None returns None",
+            expected_status=SUCCESS,
+            config={"resources": models.IoK8sApiCoreV1ResourceRequirements(limits=None)},
+            expected_output=None,
+        ),
+        TestCase(
+            name="empty limits returns None",
+            expected_status=SUCCESS,
+            config={"resources": models.IoK8sApiCoreV1ResourceRequirements(limits={})},
+            expected_output=None,
+        ),
+        TestCase(
+            name="memory only limit returns None",
+            expected_status=SUCCESS,
+            config={
+                "resources": models.IoK8sApiCoreV1ResourceRequirements(
+                    limits={
+                        "memory": models.IoK8sApimachineryPkgApiResourceQuantity("4Gi"),
+                    }
+                )
+            },
+            expected_output=None,
+        ),
+        TestCase(
+            name="memory and ephemeral-storage limits returns None",
+            expected_status=SUCCESS,
+            config={
+                "resources": models.IoK8sApiCoreV1ResourceRequirements(
+                    limits={
+                        "memory": models.IoK8sApimachineryPkgApiResourceQuantity("4Gi"),
+                        "ephemeral-storage": models.IoK8sApimachineryPkgApiResourceQuantity("10Gi"),
+                    }
+                )
+            },
+            expected_output=None,
+        ),
+        TestCase(
+            name="cpu limit returns cpu device and count",
+            expected_status=SUCCESS,
+            config={
+                "resources": models.IoK8sApiCoreV1ResourceRequirements(
+                    limits={
+                        constants.CPU_LABEL: models.IoK8sApimachineryPkgApiResourceQuantity("2"),
+                    }
+                )
+            },
+            expected_output=("cpu", "2"),
+        ),
+        TestCase(
+            name="gpu and memory limits returns gpu device and count",
+            expected_status=SUCCESS,
+            config={
+                "resources": models.IoK8sApiCoreV1ResourceRequirements(
+                    limits={
+                        constants.GPU_LABEL: models.IoK8sApimachineryPkgApiResourceQuantity(1),
+                        "memory": models.IoK8sApimachineryPkgApiResourceQuantity("4Gi"),
+                    }
+                )
+            },
+            expected_output=("gpu", "1.0"),
+        ),
+        TestCase(
             name="single MIG limit returns device and count",
             expected_status=SUCCESS,
             config={
