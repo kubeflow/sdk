@@ -65,6 +65,21 @@ from kubeflow.trainer.types import types
 logger = logging.getLogger(__name__)
 
 
+def _get_gpu_count(resources_per_node: dict | types.Resources | None) -> str | int | None:
+    """Get the configured GPU count for local container execution."""
+    if isinstance(resources_per_node, types.Resources):
+        for resource_values in (resources_per_node.limits, resources_per_node.requests):
+            if not resource_values:
+                continue
+            for resource_key in ("gpu", constants.GPU_LABEL):
+                if resource_key in resource_values:
+                    return resource_values[resource_key]
+        return None
+    if resources_per_node:
+        return resources_per_node.get("gpu", resources_per_node.get(constants.GPU_LABEL))
+    return None
+
+
 class ContainerBackend(RuntimeBackend):
     """
     Unified container backend that auto-detects Docker or Podman.
@@ -343,14 +358,15 @@ class ContainerBackend(RuntimeBackend):
             # For GPU training: spawn one process per GPU for optimal utilization
             # For CPU training: use single process (PyTorch parallelizes internally via threads)
             nproc_per_node = 1  # Default for CPU training
-            if trainer.resources_per_node and "gpu" in trainer.resources_per_node:
+            gpu_count = _get_gpu_count(trainer.resources_per_node)
+            if gpu_count is not None:
                 try:
-                    nproc_per_node = int(trainer.resources_per_node["gpu"])
+                    nproc_per_node = int(gpu_count)
                     logger.debug(f"Using {nproc_per_node} processes per node (1 per GPU)")
                 except (ValueError, TypeError):
                     logger.warning(
-                        f"Invalid GPU count in resources_per_node: "
-                        f"{trainer.resources_per_node['gpu']}, defaulting to 1 process per node"
+                        f"Invalid GPU count in resources_per_node: {gpu_count}, "
+                        "defaulting to 1 process per node"
                     )
             else:
                 logger.debug("No GPU specified, using 1 process per node")
