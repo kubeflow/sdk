@@ -83,8 +83,6 @@ def get_container_devices(
             "No recognized compute device found in container limits: %s", resources.limits
         )
         return None
-    if device_count is None:
-        return None
 
     return device, str(device_count)
 
