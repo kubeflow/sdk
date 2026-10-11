@@ -659,6 +659,10 @@ def get_spark_job_driver_spec(
 ) -> models.SparkV1beta2DriverSpec:
     """Build DriverSpec for SparkApplication.
 
+    Args:
+        driver: Driver configuration. When provided, ``service_account`` is wired
+            through to the driver spec.
+
     Returns:
         SparkApplication DriverSpec model.
 
@@ -668,9 +672,12 @@ def get_spark_job_driver_spec(
     """
     cores, memory = _resolve_driver_resources(driver)
 
+    service_account = driver.service_account if driver else None
+
     return models.SparkV1beta2DriverSpec(
         cores=cores,
         memory=memory,
+        service_account=service_account,
     )
 
 
@@ -791,6 +798,7 @@ def get_spark_application_cr_from_file_job(
     arguments: list[str] | None = None,
     num_executors: int | None = None,
     resources_per_executor: dict[str, str] | None = None,
+    driver: Driver | None = None,
     options: list | None = None,
     backend: Any | None = None,
     spark_conf: dict[str, str] | None = None,
@@ -804,6 +812,8 @@ def get_spark_application_cr_from_file_job(
         arguments: Command-line arguments passed to the Spark application.
         num_executors: Number of executor instances.
         resources_per_executor: Resource requirements for each executor.
+        driver: Driver configuration. When provided, ``service_account`` is wired
+            through to the driver spec.
         options: List of configuration options.
         backend: Backend instance used for option validation.
         spark_conf: Spark configuration properties.
@@ -829,7 +839,7 @@ def get_spark_application_cr_from_file_job(
             image=constants.DEFAULT_SPARK_IMAGE,
             main_application_file=main_file,
             arguments=arguments or None,
-            driver=get_spark_job_driver_spec(),
+            driver=get_spark_job_driver_spec(driver=driver),
             executor=get_spark_job_executor_spec(
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,
@@ -854,6 +864,7 @@ def get_spark_application_cr_from_func_job(
     func_args: dict[str, Any] | None = None,
     num_executors: int | None = None,
     resources_per_executor: dict[str, str] | None = None,
+    driver: Driver | None = None,
     options: list | None = None,
     backend: Any | None = None,
     spark_conf: dict[str, str] | None = None,
@@ -867,6 +878,8 @@ def get_spark_application_cr_from_func_job(
         func_args: Keyword arguments passed to the function.
         num_executors: Number of executor instances.
         resources_per_executor: Resource requirements for each executor.
+        driver: Driver configuration. When provided, ``service_account`` is wired
+            through to the driver spec.
         options: List of configuration options.
         backend: Backend instance used for option validation.
         spark_conf: Spark configuration properties.
@@ -899,7 +912,7 @@ def get_spark_application_cr_from_func_job(
             mode="cluster",
             image=constants.DEFAULT_SPARK_IMAGE,
             main_application_file=constants.FUNC_JOB_MAIN_FILE,
-            driver=get_spark_job_driver_spec(),
+            driver=get_spark_job_driver_spec(driver=driver),
             executor=get_spark_job_executor_spec(
                 num_executors=num_executors,
                 resources_per_executor=resources_per_executor,

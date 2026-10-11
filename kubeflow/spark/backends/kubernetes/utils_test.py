@@ -1260,6 +1260,21 @@ def test_read_pod_logs(test_case: TestCase) -> None:
             expected_status=SUCCESS,
             config={},
         ),
+        TestCase(
+            name="driver spec propagates service_account from Driver config",
+            expected_status=SUCCESS,
+            config={
+                "driver": Driver(service_account="spark-sa"),
+            },
+            expected_output="spark-sa",
+        ),
+        TestCase(
+            name="driver spec with None service_account leaves field unset",
+            expected_status=SUCCESS,
+            config={
+                "driver": Driver(service_account=None),
+            },
+        ),
     ],
 )
 def test_get_spark_job_driver_spec(test_case: TestCase) -> None:
@@ -1267,7 +1282,8 @@ def test_get_spark_job_driver_spec(test_case: TestCase) -> None:
 
     print("Executing test:", test_case.name)
 
-    spec = get_spark_job_driver_spec()
+    driver = test_case.config.get("driver")
+    spec = get_spark_job_driver_spec(driver=driver)
 
     assert test_case.expected_status == SUCCESS
 
@@ -1275,7 +1291,11 @@ def test_get_spark_job_driver_spec(test_case: TestCase) -> None:
     assert spec.memory == _memory_kubernetes_to_spark(
         constants.DEFAULT_DRIVER_MEMORY,
     )
-    assert spec.service_account is None
+
+    if test_case.name == "driver spec propagates service_account from Driver config":
+        assert spec.service_account == test_case.expected_output
+    else:
+        assert spec.service_account is None
 
     print("test execution complete")
 

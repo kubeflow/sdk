@@ -176,6 +176,7 @@ class SparkClient:
         job: FileJob | FuncJob,
         num_executors: int | None = None,
         resources_per_executor: dict[str, str] | None = None,
+        driver: Driver | None = None,
         spark_conf: dict[str, str] | None = None,
         options: list | None = None,
     ) -> str:
@@ -199,6 +200,10 @@ class SparkClient:
                 Resource requirements per executor.
                 Format: ``{"cpu": "5", "memory": "10Gi"}``.
 
+            driver:
+                Driver configuration. When provided, ``service_account`` is wired
+                through to the driver spec.
+
             spark_conf:
                 Spark configuration properties.
 
@@ -220,6 +225,7 @@ class SparkClient:
             job=job,
             num_executors=num_executors,
             resources_per_executor=resources_per_executor,
+            driver=driver,
             options=options,
             spark_conf=spark_conf,
         ).name
