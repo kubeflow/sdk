@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib.util
 import ntpath
 import os
 import tempfile
@@ -1106,6 +1107,18 @@ def test_get_args_using_torchtune_config_dataset_path(windows_client):
     )
 
     assert args == ["dataset.data_files=/workspace/dataset/data/train.json"]
+
+
+def test_workspace_paths_on_windows_client(monkeypatch):
+    # The constants are built at import time, so run the module again as a Windows client would.
+    spec = importlib.util.spec_from_file_location("windows_client_constants", constants.__file__)
+    windows_client_constants = importlib.util.module_from_spec(spec)
+    with monkeypatch.context() as windows_os:
+        windows_os.setattr(os, "path", ntpath)
+        spec.loader.exec_module(windows_client_constants)
+
+    assert windows_client_constants.DATASET_PATH == "/workspace/dataset"
+    assert windows_client_constants.MODEL_PATH == "/workspace/model"
 
 
 @pytest.mark.parametrize(
