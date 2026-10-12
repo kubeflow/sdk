@@ -108,6 +108,23 @@ def get_runtime_trainer_container(
     return None
 
 
+def _multiply_device_count_by_num_nodes(device_count: str, num_nodes: int) -> str:
+    """Multiply an integral device count by the number of nodes.
+
+    Kubernetes resource quantities can be represented as decimal strings such
+    as "2.0". Only integral counts are multiplied; other values are preserved.
+    """
+    try:
+        count = float(device_count)
+    except (TypeError, ValueError):
+        return device_count
+
+    if not count.is_integer():
+        return device_count
+
+    return str(int(count) * num_nodes)
+
+
 def get_runtime_trainer(
     framework: str,
     replicated_jobs: list[models.JobsetV1alpha2ReplicatedJob],
@@ -141,8 +158,10 @@ def get_runtime_trainer(
         trainer.device_count = str(ml_policy.mpi.num_proc_per_node)
 
     # Multiply accelerator_count by the number of nodes.
-    if trainer.device_count.isdigit() and ml_policy.num_nodes:
-        trainer.device_count = str(int(trainer.device_count) * ml_policy.num_nodes)
+    if ml_policy.num_nodes:
+        trainer.device_count = _multiply_device_count_by_num_nodes(
+            trainer.device_count, ml_policy.num_nodes
+        )
 
     # Add number of training nodes.
     if ml_policy.num_nodes:
