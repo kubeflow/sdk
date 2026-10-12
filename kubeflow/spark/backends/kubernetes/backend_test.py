@@ -1383,6 +1383,15 @@ def test_submit_job(kubernetes_backend, test_case):
     print("test execution complete")
 
 
+def test_submit_job_without_required_func_args(kubernetes_backend):
+    """Test KubernetesBackend.submit_job() rejects the job before calling Kubernetes."""
+
+    with pytest.raises(ValueError, match="missing a required argument: 'name'"):
+        kubernetes_backend.submit_job(job=FuncJob(func=sample_func_with_args))
+
+    kubernetes_backend.custom_api.create_namespaced_custom_object.assert_not_called()
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
