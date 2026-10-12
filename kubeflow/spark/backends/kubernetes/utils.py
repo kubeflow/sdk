@@ -91,7 +91,11 @@ def read_pod_logs(
 
             logs = thread.get(common_constants.DEFAULT_TIMEOUT)
 
-            yield from logs.split("\n")
+            lines = logs.split("\n")
+            # A trailing newline ends the last line, it does not start an empty one.
+            if not lines[-1]:
+                lines.pop()
+            yield from lines
 
     except multiprocessing.TimeoutError as e:
         raise TimeoutError("Timeout while retrieving pod logs.") from e
