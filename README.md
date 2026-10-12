@@ -123,7 +123,7 @@ optimization_id = OptimizerClient().optimize(
 print(f"OptimizationJob created: {optimization_id}")
 ```
 
-### Run data processing with Spark Connect
+### Run data processing with Spark
 
 **Install Kubeflow Spark support:**
 
@@ -132,6 +132,8 @@ pip install 'kubeflow[spark]'
 ```
 
 To install the Spark Operator, see the [installation guide](https://www.kubeflow.org/docs/components/spark-operator/getting-started/).
+
+#### Interactive sessions with Spark Connect
 
 ```python
 from kubeflow.spark import KubernetesBackendConfig, SparkClient
@@ -168,6 +170,49 @@ spark = client.connect(
 df = spark.range(5)
 df.show()
 ```
+
+#### Submit a batch Spark job
+
+Submit a Spark application file as a batch job and monitor its lifecycle:
+
+```python
+from kubeflow.spark import SparkClient, FileJob, SparkJobStatus
+
+client = SparkClient()
+
+# Submit a batch job from a file
+job_name = client.submit_job(job=FileJob(file_source="local:///opt/spark/examples/spark_job.py"))
+
+# Wait for the job to complete
+client.wait_for_job_status(job_name, status={SparkJobStatus.COMPLETED})
+
+# Print the job logs
+for line in client.get_job_logs(job_name):
+    print(line)
+```
+
+You can also submit a Python function directly as a batch job:
+
+```python
+from kubeflow.spark import SparkClient, FuncJob
+
+def my_spark_app():
+    from pyspark.sql import SparkSession
+    from pyspark.sql.functions import col
+
+    spark = SparkSession.builder.getOrCreate()
+    df = spark.range(10).withColumn("square", col("id") * col("id"))
+    df.show()
+    spark.stop()
+
+client = SparkClient()
+job_name = client.submit_job(job=FuncJob(func=my_spark_app))
+client.wait_for_job_status(job_name)
+```
+
+For advanced options such as custom labels, annotations, node selectors, and tolerations,
+see the [Spark examples](./examples/spark/) and the
+[Spark SDK documentation](https://sdk.kubeflow.org/en/latest/spark/index.html).
 
 ### Manage models with Model Registry
 
