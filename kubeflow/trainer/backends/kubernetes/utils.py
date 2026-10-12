@@ -737,9 +737,27 @@ def _should_throttle() -> bool:
     return (now - _last_update_time) < _MIN_UPDATE_INTERVAL_SECONDS
 
 
-def _update_last_time() -> None:
+def _reserve_throttle_slot() -> float | None:
+    """Atomically claim the next throttle slot, or return None if still throttled.
+
+    The reservation is made before the HTTP request is sent so concurrent callers
+    observe it immediately, instead of racing to send once the window expires.
+    """
     global _last_update_time
-    _last_update_time = time.monotonic()
+    with _throttle_lock:
+        if _should_throttle():
+            return None
+        reservation = time.monotonic()
+        _last_update_time = reservation
+        return reservation
+
+
+def _release_throttle_slot(reservation: float) -> None:
+    """Roll back a reservation, but only if no newer reservation has replaced it."""
+    global _last_update_time
+    with _throttle_lock:
+        if _last_update_time == reservation:
+            _last_update_time = 0.0
 
 
 def update_trainjob_status(
@@ -769,14 +787,15 @@ def update_trainjob_status(
     Returns:
         True if update was sent successfully, False otherwise.
     """
+    reservation: float | None = None
     try:
         url = os.environ.get(_ENV_SERVER_URL)
         if not url:
             return False
 
-        with _throttle_lock:
-            if _should_throttle():
-                return False
+        reservation = _reserve_throttle_slot()
+        if reservation is None:
+            return False
 
         ca_file = os.environ.get(_ENV_CA_CERT)
         token_path = os.environ.get(_ENV_TOKEN_PATH)
@@ -784,6 +803,7 @@ def update_trainjob_status(
         token = _get_cached_token(token_path)
         if not token:
             _logger.debug("No authentication token available")
+            _release_throttle_slot(reservation)
             return False
 
         trainer_status: dict = {
@@ -827,18 +847,22 @@ def update_trainjob_status(
         )
 
         if response.status_code == 200:
-            _update_last_time()
             _logger.debug("Status update sent: %s%%", progress_percent)
             return True
         else:
+            _release_throttle_slot(reservation)
             _logger.warning("Status update failed: HTTP %s", response.status_code)
             _logger.debug("Response body: %.500s", response.text)
             return False
 
     except requests.RequestException as e:
+        if reservation is not None:
+            _release_throttle_slot(reservation)
         _logger.warning("Failed to send status update: %s", e)
         return False
     except Exception as e:
+        if reservation is not None:
+            _release_throttle_slot(reservation)
         _logger.warning("Unexpected error in update_trainjob_status: %s", e)
         return False
 
