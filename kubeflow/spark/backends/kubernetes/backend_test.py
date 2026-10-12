@@ -1167,6 +1167,16 @@ def test_is_supported_func_arg(
             },
             expected_error=ValueError,
         ),
+        TestCase(
+            name="no func_args for required arguments",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=sample_func_with_args,
+                ),
+            },
+            expected_error=ValueError,
+        ),
     ],
 )
 def test_validate_func_job(kubernetes_backend, test_case):
@@ -1371,6 +1381,15 @@ def test_submit_job(kubernetes_backend, test_case):
         assert type(e) is test_case.expected_error
 
     print("test execution complete")
+
+
+def test_submit_job_without_required_func_args(kubernetes_backend):
+    """Test KubernetesBackend.submit_job() rejects the job before calling Kubernetes."""
+
+    with pytest.raises(ValueError, match="missing a required argument: 'name'"):
+        kubernetes_backend.submit_job(job=FuncJob(func=sample_func_with_args))
+
+    kubernetes_backend.custom_api.create_namespaced_custom_object.assert_not_called()
 
 
 @pytest.mark.parametrize(
