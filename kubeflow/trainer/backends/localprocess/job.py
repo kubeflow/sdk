@@ -26,10 +26,10 @@ class LocalJob(threading.Thread):
     def __init__(
         self,
         name,
-        command: list | tuple[str] | str,
-        execution_dir: str = None,
-        env: dict[str, str] = None,
-        dependencies: list = None,
+        command: list[str] | tuple[str, ...],
+        execution_dir: str | None = None,
+        env: dict[str, str] | None = None,
+        dependencies: list["LocalJob"] | None = None,
     ):
         """Creates a LocalJob.
 

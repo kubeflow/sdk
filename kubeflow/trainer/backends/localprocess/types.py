@@ -16,7 +16,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from kubeflow.trainer.backends.localprocess.job import LocalJob
 from kubeflow.trainer.types import types
@@ -40,7 +40,7 @@ class LocalBackendStep(BaseModel):
 
 
 class LocalBackendJobs(BaseModel):
-    steps: list[LocalBackendStep] | None = []
+    steps: list[LocalBackendStep] = Field(default_factory=list)
     runtime: types.Runtime | None = None
     name: str
     created: datetime | None = None
