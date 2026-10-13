@@ -147,7 +147,7 @@ def test_init_import_error(test_case, monkeypatch):
             },
             expected_output={
                 "server_address": "https://example.org:456",
-                "port": 443,
+                "port": 456,
                 "author": "test",
                 "is_secure": True,
                 "user_token": None,
@@ -163,7 +163,7 @@ def test_init_import_error(test_case, monkeypatch):
             },
             expected_output={
                 "server_address": "http://example.org:456",
-                "port": 8080,
+                "port": 456,
                 "author": "test",
                 "is_secure": False,
                 "user_token": None,
