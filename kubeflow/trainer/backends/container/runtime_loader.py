@@ -15,19 +15,22 @@
 """
 Runtime loader for container backends (Docker, Podman).
 
-We support loading training runtime definitions from multiple sources:
-1. GitHub: Fetches latest runtimes from kubeflow/trainer repository (with caching)
-2. Local bundled: Falls back to `kubeflow/trainer/config/training_runtimes/` YAML files
-3. User custom: Additional YAML files in the local directory
+Training runtime definitions are loaded from the sources configured in
+`TrainingRuntimeSource.sources`, in priority order. Each source is a URL with a
+scheme: `github://owner/repo[/path]`, `https://`, `http://`, `file://`, or an
+absolute path. The first runtime found for a given name wins.
 
-The loader tries GitHub first (with 24-hour cache), then falls back to bundled files
-if the network is unavailable or GitHub fetch fails.
+Any runtime name not provided by a configured source falls back to a built-in
+definition derived from `constants.DEFAULT_FRAMEWORK_IMAGES`.
+
+GitHub sources are fetched over the network and memoized for the lifetime of the
+process, so resolving runtimes repeatedly (for example, once per job in
+`list_jobs`) does not re-fetch them.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-import json
+import functools
 import logging
 from pathlib import Path
 from typing import Any
@@ -41,18 +44,7 @@ from kubeflow.trainer.types import types as base_types
 
 logger = logging.getLogger(__name__)
 
-TRAINING_RUNTIMES_DIR = Path(__file__).parents[2] / "config" / "training_runtimes"
-CACHE_DIR = Path.home() / ".kubeflow" / "trainer" / "cache"
-CACHE_DURATION = timedelta(hours=24)
-
-# GitHub runtimes configuration
-GITHUB_RUNTIMES_BASE_URL = (
-    "https://raw.githubusercontent.com/kubeflow/trainer/master/manifests/base/runtimes"
-)
-GITHUB_RUNTIMES_TREE_URL = "https://github.com/kubeflow/trainer/tree/master/manifests/base/runtimes"
-
 __all__ = [
-    "TRAINING_RUNTIMES_DIR",
     "get_training_runtime_from_sources",
     "list_training_runtimes_from_sources",
 ]
@@ -151,164 +143,6 @@ def _fetch_runtime_from_github(
     except (urllib.error.URLError, TimeoutError, Exception) as e:
         logger.debug(f"Failed to fetch {runtime_file} from GitHub: {e}")
         return None
-
-
-def _get_cached_runtime_list() -> list[str] | None:
-    """
-    Get cached runtime file list if it exists and is not expired.
-
-    Returns None if cache doesn't exist or is expired.
-    """
-    if not CACHE_DIR.exists():
-        return None
-
-    cache_file = CACHE_DIR / "runtime_list.json"
-
-    if not cache_file.exists():
-        return None
-
-    try:
-        with open(cache_file) as f:
-            data = json.load(f)
-
-        cached_time = datetime.fromisoformat(data["cached_at"])
-        if datetime.now() - cached_time > CACHE_DURATION:
-            logger.debug("Runtime list cache expired")
-            return None
-
-        logger.debug(f"Using cached runtime list: {data['files']}")
-        return data["files"]
-    except (json.JSONDecodeError, KeyError, ValueError, Exception) as e:
-        logger.debug(f"Failed to read runtime list cache: {e}")
-        return None
-
-
-def _cache_runtime_list(files: list[str]) -> None:
-    """Cache the discovered runtime file list."""
-    try:
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        cache_file = CACHE_DIR / "runtime_list.json"
-
-        data = {
-            "cached_at": datetime.now().isoformat(),
-            "files": files,
-        }
-        with open(cache_file, "w") as f:
-            json.dump(data, f)
-
-        logger.debug(f"Cached runtime list: {files}")
-    except Exception as e:
-        logger.debug(f"Failed to cache runtime list: {e}")
-
-
-def _get_github_runtime_files() -> list[str]:
-    """
-    Get list of runtime files from GitHub with caching.
-
-    Priority:
-    1. Check cache (if not expired)
-    2. Discover from GitHub (and cache if successful)
-    3. Return empty list if both fail
-    """
-    # Try cache first
-    cached = _get_cached_runtime_list()
-    if cached is not None:
-        return cached
-
-    # Try GitHub discovery
-    files = _discover_github_runtime_files()
-    if files:
-        _cache_runtime_list(files)
-        return files
-
-    return []
-
-
-def _get_cached_runtime(runtime_file: str) -> dict[str, Any] | None:
-    """
-    Get cached runtime if it exists and is not expired.
-
-    Returns None if cache doesn't exist or is expired.
-    """
-    if not CACHE_DIR.exists():
-        return None
-
-    cache_file = CACHE_DIR / runtime_file
-    metadata_file = CACHE_DIR / f"{runtime_file}.metadata"
-
-    if not cache_file.exists() or not metadata_file.exists():
-        return None
-
-    try:
-        # Check if cache is expired
-        with open(metadata_file) as f:
-            metadata = json.load(f)
-
-        cached_time = datetime.fromisoformat(metadata["cached_at"])
-        if datetime.now() - cached_time > CACHE_DURATION:
-            logger.debug(f"Cache expired for {runtime_file}")
-            return None
-
-        # Load cached runtime
-        with open(cache_file) as f:
-            data = yaml.safe_load(f)
-
-        logger.debug(f"Using cached runtime: {runtime_file}")
-        return data
-    except (json.JSONDecodeError, KeyError, ValueError, Exception) as e:
-        logger.debug(f"Failed to read cache for {runtime_file}: {e}")
-        return None
-
-
-def _cache_runtime(runtime_file: str, data: dict[str, Any]) -> None:
-    """Cache a runtime YAML with metadata."""
-    try:
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
-        cache_file = CACHE_DIR / runtime_file
-        metadata_file = CACHE_DIR / f"{runtime_file}.metadata"
-
-        # Write runtime data
-        with open(cache_file, "w") as f:
-            yaml.safe_dump(data, f)
-
-        # Write metadata
-        metadata = {
-            "cached_at": datetime.now().isoformat(),
-            "source": "github",
-        }
-        with open(metadata_file, "w") as f:
-            json.dump(metadata, f)
-
-        logger.debug(f"Cached runtime: {runtime_file}")
-    except Exception as e:
-        logger.debug(f"Failed to cache {runtime_file}: {e}")
-
-
-def _load_runtime_from_github_with_cache(runtime_file: str) -> dict[str, Any] | None:
-    """
-    Load runtime from GitHub with caching.
-
-    Priority:
-    1. Check cache (if not expired)
-    2. Fetch from GitHub (and cache if successful)
-    3. Return None if both fail
-
-    Args:
-        runtime_file: YAML filename to load
-    """
-    # Try cache first
-    cached = _get_cached_runtime(runtime_file)
-    if cached is not None:
-        return cached
-
-    # Try GitHub
-    data = _fetch_runtime_from_github(runtime_file)
-    if data is not None:
-        _cache_runtime(runtime_file, data)
-        return data
-
-    return None
 
 
 def _create_default_runtimes() -> list[base_types.Runtime]:
@@ -449,15 +283,21 @@ def _parse_source_url(source: str) -> tuple[str, str]:
         )
 
 
-def _load_from_github_url(github_path: str) -> list[base_types.Runtime]:
+@functools.cache
+def _load_from_github_url(github_path: str) -> tuple[base_types.Runtime, ...]:
     """
     Load runtimes from a GitHub URL (github://owner/repo[/path]).
+
+    Memoized for the lifetime of the process: runtimes are resolved once per job in
+    `list_jobs`, and re-fetching them per job costs a directory listing plus one
+    request per runtime file against unauthenticated GitHub. Restart the process to
+    pick up upstream runtime changes.
 
     Args:
         github_path: Path after github:// (e.g., "kubeflow/trainer" or "myorg/myrepo")
 
     Returns:
-        List of Runtime objects loaded from GitHub
+        Tuple of Runtime objects loaded from GitHub
     """
     runtimes = []
     runtime_names_seen = set()
@@ -467,7 +307,7 @@ def _load_from_github_url(github_path: str) -> list[base_types.Runtime]:
     parts = github_path.split("/")
     if len(parts) < 2:
         logger.warning(f"Invalid GitHub path format: {github_path}. Expected owner/repo[/path]")
-        return runtimes
+        return ()
 
     owner = parts[0]
     repo = parts[1]
@@ -492,7 +332,7 @@ def _load_from_github_url(github_path: str) -> list[base_types.Runtime]:
         except Exception as e:
             logger.debug(f"Failed to parse GitHub runtime {runtime_file}: {e}")
 
-    return runtimes
+    return tuple(runtimes)
 
 
 def _load_from_http_url(url: str) -> list[base_types.Runtime]:
