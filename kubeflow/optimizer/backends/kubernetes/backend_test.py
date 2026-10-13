@@ -43,6 +43,7 @@ from kubeflow.optimizer.types.optimization_types import (
 from kubeflow.optimizer.types.search_types import (
     ContinuousSearchSpace,
     Distribution,
+    IntegerSearchSpace,
     Search,
 )
 from kubeflow.test.common import (
@@ -554,6 +555,51 @@ def test_get_job(optimizer_backend, test_case):
         assert test_case.expected_status != SUCCESS
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+@pytest.mark.parametrize("method", ["get_job", "list_jobs"])
+def test_job_readback_preserves_integer_search_space(
+    optimizer_backend: KubernetesBackend, method: str
+) -> None:
+    """Both read methods should preserve Katib integer bounds and step."""
+    experiment = create_experiment_cr()
+    experiment.spec.parameters.append(
+        models.V1beta1ParameterSpec(
+            name="batch_size",
+            parameterType=constants.INT_PARAMETER,
+            feasibleSpace=models.V1beta1FeasibleSpace(
+                min="16", max="128", step="16", distribution="uniform"
+            ),
+        )
+    )
+
+    if method == "get_job":
+        response = Mock()
+        response.get.return_value = normalize_model(experiment, models.V1beta1Experiment)
+        optimizer_backend.custom_api.get_namespaced_custom_object.return_value = response
+        optimizer_backend.custom_api.get_namespaced_custom_object.side_effect = None
+        job = optimizer_backend.get_job(name=experiment.metadata.name)
+    else:
+        response = Mock()
+        response.get.return_value = normalize_model(
+            models.V1beta1ExperimentList(items=[experiment]), models.V1beta1ExperimentList
+        )
+        original_list = optimizer_backend.custom_api.list_namespaced_custom_object.side_effect
+
+        def list_response(*args: Any, **kwargs: Any) -> Mock:
+            if args[3] == constants.EXPERIMENT_PLURAL:
+                return response
+            return original_list(*args, **kwargs)
+
+        optimizer_backend.custom_api.list_namespaced_custom_object.side_effect = list_response
+        (job,) = optimizer_backend.list_jobs()
+
+    search_space = job.search_space["batch_size"]
+    assert isinstance(search_space, IntegerSearchSpace)
+    assert search_space.min == 16
+    assert search_space.max == 128
+    assert search_space.step == 16
+    assert search_space.distribution is Distribution.UNIFORM
 
 
 @pytest.mark.parametrize(
