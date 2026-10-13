@@ -294,11 +294,13 @@ def get_script_for_python_packages(
     packages_str = " ".join(shlex.quote(pkg) for pkg in packages_to_install)
 
     # first url will be the index-url.
-    options = [f"--index-url {shlex.quote(pip_index_urls[0])}"]
-    options.extend(
-        f"--extra-index-url {shlex.quote(extra_index_url)}"
-        for extra_index_url in pip_index_urls[1:]
-    )
+    options = []
+    if pip_index_urls:
+        options.append(f"--index-url {shlex.quote(pip_index_urls[0])}")
+        options.extend(
+            f"--extra-index-url {shlex.quote(extra_index_url)}"
+            for extra_index_url in pip_index_urls[1:]
+        )
     options_str = " ".join(options)
 
     header_script = textwrap.dedent(
