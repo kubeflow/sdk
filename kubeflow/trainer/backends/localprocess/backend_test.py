@@ -58,6 +58,17 @@ def local_backend():
 
 
 @pytest.fixture
+def local_backend_with_config():
+    """Create LocalProcessBackend with a custom config."""
+
+    def _create(cfg: LocalProcessBackendConfig):
+        backend = LocalProcessBackend(cfg)
+        return backend
+
+    return _create
+
+
+@pytest.fixture
 def mock_train_environment():
     """Mock the training environment to avoid actual subprocess execution."""
     with (
@@ -372,6 +383,31 @@ def test_train(local_backend, mock_train_environment, test_case):
         # Verify job is tracked
         jobs = local_backend.list_jobs(runtime=runtime)
         assert any(job.name == train_job_name for job in jobs)
+
+
+def test_train_backend_env(local_backend_with_config, mock_train_environment):
+    """Test backend-level environment variables are passed to LocalJob."""
+
+    backend = local_backend_with_config(
+        LocalProcessBackendConfig(
+            env={"BACKEND_ENV": "backend-value"},
+        )
+    )
+
+    trainer = types.CustomTrainer(
+        func=dummy_training_function,
+    )
+    runtime = backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
+
+    backend.train(
+        runtime=runtime,
+        trainer=trainer,
+    )
+
+    job = backend._LocalProcessBackend__local_jobs[0]
+    train_step = job.steps[0]
+
+    assert train_step.job.env["BACKEND_ENV"] == "backend-value"
 
 
 @pytest.mark.parametrize(

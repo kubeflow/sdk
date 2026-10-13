@@ -126,12 +126,15 @@ class LocalProcessBackend(RuntimeBackend):
         # set the command in the runtime trainer
         runtime.trainer.set_command(training_command)
 
+        env = dict(trainer.env or {})
+        env.update(self.cfg.env)
+
         # create subprocess object
         train_job = LocalJob(
             name=f"{trainjob_name}-train",
             command=training_command,
             execution_dir=venv_dir,
-            env=trainer.env,
+            env=env,
             dependencies=[],
         )
 

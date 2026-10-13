@@ -16,7 +16,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from kubeflow.trainer.backends.localprocess.job import LocalJob
 from kubeflow.trainer.types import types
@@ -24,6 +24,10 @@ from kubeflow.trainer.types import types
 
 class LocalProcessBackendConfig(BaseModel):
     cleanup_venv: bool = True
+    env: dict[str, str] = Field(
+        default_factory=dict,
+        description="Additional environment variables for local processes",
+    )
 
 
 @dataclass
