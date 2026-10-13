@@ -160,8 +160,7 @@ def aggregate_status_from_containers(container_statuses: list[str]) -> str:
         return constants.TRAINJOB_FAILED
     if constants.TRAINJOB_RUNNING in container_statuses:
         return constants.TRAINJOB_RUNNING
-    known_statuses = [s for s in container_statuses if s != UNKNOWN]
-    if known_statuses and all(s == constants.TRAINJOB_COMPLETE for s in known_statuses):
+    if container_statuses and all(s == constants.TRAINJOB_COMPLETE for s in container_statuses):
         return constants.TRAINJOB_COMPLETE
     if any(s == constants.TRAINJOB_CREATED for s in container_statuses):
         return constants.TRAINJOB_CREATED

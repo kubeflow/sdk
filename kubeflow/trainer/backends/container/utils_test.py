@@ -133,10 +133,10 @@ def test_build_pip_install_cmd(test_case: TestCase):
             expected_output=constants.TRAINJOB_COMPLETE,
         ),
         TestCase(
-            name="complete with unknown is complete",
+            name="complete with unknown is not complete",
             expected_status=SUCCESS,
             config={"statuses": [constants.TRAINJOB_COMPLETE, UNKNOWN]},
-            expected_output=constants.TRAINJOB_COMPLETE,
+            expected_output=UNKNOWN,
         ),
         TestCase(
             name="failed takes precedence",
