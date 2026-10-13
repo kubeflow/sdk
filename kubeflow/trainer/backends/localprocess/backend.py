@@ -194,6 +194,7 @@ class LocalProcessBackend(RuntimeBackend):
         self,
         name: str,
         follow: bool = False,
+        tail_lines: int | None = None,
         step: str = constants.NODE + "-0",
     ) -> Iterator[str]:
         _job = [j for j in self.__local_jobs if j.name == name]
@@ -207,7 +208,10 @@ class LocalProcessBackend(RuntimeBackend):
                 continue
             # Flatten the generator and pass through flags so it behaves as expected
             # (adjust args if stream_logs has different signature)
-            yield from _step.job.logs(follow=follow)
+            yield from _step.job.logs(
+                follow=follow,
+                tail_lines=tail_lines,
+            )
 
     def get_job_events(self, name: str) -> list[types.Event]:
         raise NotImplementedError()

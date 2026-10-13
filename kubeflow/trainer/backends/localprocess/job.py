@@ -149,9 +149,14 @@ class LocalJob(threading.Thread):
     def returncode(self):
         return self._returncode
 
-    def logs(self, follow=False) -> list[str]:
+    def logs(
+        self,
+        follow=False,
+        tail_lines: int | None = None,
+    ) -> list[str]:
         if not follow:
-            return self._stdout.splitlines()
+            lines = self._stdout.splitlines()
+            return lines if tail_lines is None else lines[-tail_lines:]
 
         try:
             for chunk in self.stream_logs():
@@ -159,7 +164,8 @@ class LocalJob(threading.Thread):
         except StopIteration:
             pass
 
-        return self._stdout.splitlines()
+        lines = self._stdout.splitlines()
+        return lines if tail_lines is None else lines[-tail_lines:]
 
     def stream_logs(self):
         """Generator that yields new output lines as they come in."""

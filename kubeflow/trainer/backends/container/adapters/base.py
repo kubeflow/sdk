@@ -98,7 +98,12 @@ class BaseContainerClientAdapter(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def container_logs(self, container_id: str, follow: bool) -> Iterator[str]:
+    def container_logs(
+        self,
+        container_id: str,
+        follow: bool,
+        tail_lines: int | None = None,
+    ) -> Iterator[str]:
         """Stream logs from a container."""
         raise NotImplementedError()
 
