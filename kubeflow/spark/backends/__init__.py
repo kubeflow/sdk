@@ -12,4 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Execution backends for Kubeflow Spark."""
+
 from kubeflow.spark.backends.base import RuntimeBackend as RuntimeBackend
