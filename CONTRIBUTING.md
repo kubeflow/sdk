@@ -20,7 +20,7 @@ the guidelines and responsibilities for such contributions.
 
 The Kubeflow SDK project includes a Makefile with several helpful commands to streamline your development workflow.
 
-To install all dependencies (including dev tools) and create virtual environment, run
+To install all dependencies (including dev tools) and create a virtual environment, run
 
 ```sh
 make install-dev
@@ -44,14 +44,14 @@ make verify
 The Kubeflow SDK project includes several types of tests to ensure code quality and functionality.
 
 ### Unit Testing
-To run unit tests locally use the following make command:
+To run unit tests locally, use the following make command:
 
 ```shell
 make test-python
 ```
 
 ### E2E Tests
-E2E test run in CI on a kind cluster using [Kubeflow Trainer E2E Scripts](https://github.com/kubeflow/trainer/blob/master/CONTRIBUTING.md#e2e-tests).
+E2E tests run in CI on a kind cluster using [Kubeflow Trainer E2E Scripts](https://github.com/kubeflow/trainer/blob/master/CONTRIBUTING.md#e2e-tests).
 Clone the `Kubeflow Trainer` repo and run the provided commands against `Trainer` Makefile.
 For more details check [the Kubeflow Trainer Contributing Guide](https://github.com/kubeflow/trainer/blob/master/CONTRIBUTING.md#e2e-tests).
 
