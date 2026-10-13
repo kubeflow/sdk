@@ -62,11 +62,16 @@ class LocalProcessBackend(RuntimeBackend):
         return runtime
 
     def get_runtime_packages(self, runtime: types.Runtime):
+        from typing import cast
+
+        from kubeflow.trainer.backends.localprocess.types import LocalRuntimeTrainer
+
         local_runtime = next((rt for rt in local_runtimes if rt.name == runtime.name), None)
         if not local_runtime:
             raise ValueError(f"Runtime '{runtime.name}' not found.")
 
-        return local_runtime.trainer.packages
+        trainer = cast(LocalRuntimeTrainer, local_runtime.trainer)
+        return trainer.packages
 
     def train(
         self,
@@ -150,17 +155,19 @@ class LocalProcessBackend(RuntimeBackend):
         result = []
 
         for _job in self.__local_jobs:
-            if runtime and _job.runtime.name != runtime.name:
+            if runtime and (_job.runtime is None or _job.runtime.name != runtime.name):
                 continue
+            assert _job.created is not None
+            assert _job.runtime is not None
             result.append(
                 types.TrainJob(
                     name=_job.name,
                     creation_timestamp=_job.created,
-                    runtime=runtime,
+                    runtime=_job.runtime,
                     num_nodes=1,
                     steps=[
                         types.Step(name=s.step_name, pod_name=s.step_name, status=s.job.status)
-                        for s in _job.steps
+                        for s in (_job.steps or [])
                     ],
                 )
             )
@@ -174,6 +181,9 @@ class LocalProcessBackend(RuntimeBackend):
         # check and set the correct job status to match `TrainerClient` supported statuses
         status = self.__get_job_status(_job)
 
+        assert _job.created is not None
+        assert _job.runtime is not None
+
         return types.TrainJob(
             name=_job.name,
             creation_timestamp=_job.created,
@@ -183,7 +193,7 @@ class LocalProcessBackend(RuntimeBackend):
                     pod_name=_step.step_name,
                     status=_step.job.status,
                 )
-                for _step in _job.steps
+                for _step in (_job.steps or [])
             ],
             runtime=_job.runtime,
             num_nodes=1,
@@ -202,7 +212,7 @@ class LocalProcessBackend(RuntimeBackend):
 
         want_all_steps = step == constants.NODE + "-0"
 
-        for _step in _job[0].steps:
+        for _step in _job[0].steps or []:
             if not want_all_steps and _step.step_name != step:
                 continue
             # Flatten the generator and pass through flags so it behaves as expected
@@ -261,7 +271,7 @@ class LocalProcessBackend(RuntimeBackend):
             raise ValueError(f"No TrainJob with name {name}")
 
         # cancel all nested step jobs in target job
-        _ = [step.job.cancel() for step in _job.steps]
+        _ = [step.job.cancel() for step in (_job.steps or [])]
         # remove the job from the list of jobs
         self.__local_jobs.remove(_job)
 
@@ -295,9 +305,11 @@ class LocalProcessBackend(RuntimeBackend):
         else:
             _job = existing_jobs[0]
 
-        existing_steps = [s for s in _job.steps if s.step_name == step_name]
+        existing_steps = [s for s in (_job.steps or []) if s.step_name == step_name]
         if not existing_steps:
             _step = LocalBackendStep(step_name=step_name, job=job)
+            if _job.steps is None:
+                _job.steps = []
             _job.steps.append(_step)
         else:
             logger.warning(f"Step '{step_name}' already registered.")
