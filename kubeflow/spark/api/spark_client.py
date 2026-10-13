@@ -15,6 +15,7 @@
 """SparkClient for Kubeflow SDK."""
 
 from collections.abc import Iterator
+import subprocess
 
 from pyspark.sql import SparkSession
 
@@ -236,6 +237,26 @@ class SparkClient:
         """
 
         return self.backend.get_job(name)
+
+    def get_job_ui_url(
+        self, name: str, local_port: int | None = None
+    ) -> tuple[str, subprocess.Popen | None]:
+        """Build a URL to the submitted job's Spark UI, port forwarding to it if needed.
+
+        Args:
+            name: Name of the Spark job.
+            local_port: Local port for port-forward when running outside the cluster.
+                Defaults to a random port in the 4040-5040 range.
+
+        Returns:
+            (ui_url, port_forward_process or None). Caller may keep the process
+            reference; it exits when the Python process exits.
+
+        Raises:
+            RuntimeError: If the job's UI Service cannot be found, or if
+                port-forward fails.
+        """
+        return self.backend.get_job_ui_url(name=name, local_port=local_port)
 
     def list_jobs(
         self,
