@@ -256,13 +256,24 @@ def get_resources_per_node(
     for k, v in resources_per_node.items():
         key = k.lower() if k.lower() in standard_resources or k.lower().startswith("mig-") else k
         key = resource_aliases.get(key, key)
+
+        if key in resources:
+            raise ValueError(f"conflicting resource keys normalize to the same key: {key}")
+
         resources[key] = models.IoK8sApimachineryPkgApiResourceQuantity(v)
 
     # Optional alias for MIG: "mig-<profile>" -> "nvidia.com/mig-<profile>"
     # Example: "mig-1g.5gb" -> "nvidia.com/mig-1g.5gb"
     mig_alias_keys = [k for k in resources if k.startswith("mig-")]
     for k in mig_alias_keys:
-        resources[f"{constants.GPU_MIG_PREFIX}{k[len('mig-') :]}"] = resources.pop(k)
+        normalized_key = f"{constants.GPU_MIG_PREFIX}{k[len('mig-') :]}"
+
+        if normalized_key in resources:
+            raise ValueError(
+                f"conflicting resource keys normalize to the same key: {normalized_key}"
+            )
+
+        resources[normalized_key] = resources.pop(k)
 
     mig_keys = [k for k in resources if k.startswith(constants.GPU_MIG_PREFIX)]
     if len(mig_keys) > 1:
