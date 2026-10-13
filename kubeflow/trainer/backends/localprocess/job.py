@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from collections.abc import Iterator
 from datetime import datetime
 import logging
 import os
@@ -149,30 +150,32 @@ class LocalJob(threading.Thread):
     def returncode(self):
         return self._returncode
 
-    def logs(self, follow=False) -> list[str]:
+    def logs(self, follow: bool = False) -> list[str] | Iterator[str]:
+        """Get stdout for the local job.
+
+        Args:
+            follow: Whether to stream logs in realtime as they are produced.
+
+        Returns:
+            Buffered stdout lines when ``follow`` is disabled. Otherwise, an
+            iterator that yields stdout lines as they become available.
+        """
         if not follow:
             return self._stdout.splitlines()
 
-        try:
-            for chunk in self.stream_logs():
-                print(chunk, end="", flush=True)  # stream to console live
-        except StopIteration:
-            pass
+        return self.stream_logs()
 
-        return self._stdout.splitlines()
-
-    def stream_logs(self):
-        """Generator that yields new output lines as they come in."""
-        last_index = 0
-        while self.is_alive() or last_index < len(self._stdout):
+    def stream_logs(self) -> Iterator[str]:
+        """Yield newly available stdout lines as they are written by the process."""
+        emitted_line_count = 0
+        while self.is_alive() or emitted_line_count < len(self._stdout.splitlines()):
             self._output_updated.wait(timeout=1)
             with self._lock:
-                data = self._stdout
-                new_data = data[last_index:]
-                last_index = len(data)
+                lines = self._stdout.splitlines()
+                new_lines = lines[emitted_line_count:]
+                emitted_line_count = len(lines)
                 self._output_updated.clear()
-            if new_data:
-                yield new_data
+            yield from new_lines
 
     @property
     def creation_time(self):
