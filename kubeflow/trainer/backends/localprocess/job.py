@@ -149,30 +149,30 @@ class LocalJob(threading.Thread):
     def returncode(self):
         return self._returncode
 
-    def logs(self, follow=False) -> list[str]:
+    def logs(self, follow=False):
         if not follow:
-            return self._stdout.splitlines()
+            with self._lock:
+                return self._stdout.splitlines()
 
-        try:
-            for chunk in self.stream_logs():
-                print(chunk, end="", flush=True)  # stream to console live
-        except StopIteration:
-            pass
-
-        return self._stdout.splitlines()
+        return self.stream_logs()
 
     def stream_logs(self):
         """Generator that yields new output lines as they come in."""
         last_index = 0
-        while self.is_alive() or last_index < len(self._stdout):
+        while True:
             self._output_updated.wait(timeout=1)
             with self._lock:
                 data = self._stdout
                 new_data = data[last_index:]
                 last_index = len(data)
+                done = not self.is_alive()
                 self._output_updated.clear()
+
             if new_data:
                 yield new_data
+
+            if done and not new_data:
+                break
 
     @property
     def creation_time(self):
