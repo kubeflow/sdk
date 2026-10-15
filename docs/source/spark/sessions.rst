@@ -12,6 +12,13 @@ executors for you, but does not delete them automatically — call
 ``client.delete_session(name)`` when you are done, otherwise the ``SparkConnect``
 resource keeps running after your script exits.
 
+.. note::
+
+   The Kubeflow Spark client uses ``pyspark-client``, a lightweight pure-Python
+   client designed exclusively for remote Spark Connect sessions (connecting via
+   ``sc://`` URIs). Local or master execution modes (which require a local JVM
+   runtime and full PySpark package) are not supported.
+
 Quick Example
 -------------
 

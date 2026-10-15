@@ -21,6 +21,7 @@ from unittest.mock import Mock, patch
 from kubeflow_spark_api import models
 import pytest
 
+from kubeflow.common import constants as common_constants
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.spark.backends.kubernetes.utils import (
@@ -46,7 +47,6 @@ from kubeflow.spark.backends.kubernetes.utils import (
     validate_spark_connect_url,
 )
 from kubeflow.spark.options import Labels
-from kubeflow.spark.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
@@ -54,6 +54,7 @@ from kubeflow.spark.types.types import (
     SparkConnectState,
     SparkJobStatus,
 )
+from kubeflow.test.common import FAILED, SUCCESS, TestCase
 
 # --------------------------
 # Fixtures
@@ -394,6 +395,20 @@ def test_validate_spark_conf(test_case: TestCase) -> None:
             expected_error=ValueError,
             expected_output="Port is required",
         ),
+        TestCase(
+            name="missing hostname",
+            expected_status=FAILED,
+            config={"url": "sc://:15002"},
+            expected_error=ValueError,
+            expected_output="Host is required",
+        ),
+        TestCase(
+            name="missing hostname with malformed port",
+            expected_status=FAILED,
+            config={"url": "sc://:abc"},
+            expected_error=ValueError,
+            expected_output="Host is required",
+        ),
     ],
 )
 def test_validate_spark_connect_url(test_case: TestCase) -> None:
@@ -505,6 +520,7 @@ def test_build_service_url(test_case: TestCase) -> None:
             config={
                 "spark_conf": {
                     "spark.sql.adaptive.enabled": "true",
+                    "spark.jars": "local:///opt/spark/jars/my.jar",
                 },
             },
         ),
@@ -665,6 +681,7 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.server.cores == constants.DEFAULT_DRIVER_CPU
         assert spark_connect.spec.server.memory == "512m"
         assert spark_connect.spec.spark_conf["spark.connect.grpc.binding.address"] == "0.0.0.0"
+        assert "spark.jars" not in spark_connect.spec.spark_conf
 
     elif test_case.name == "spark connect cr with num executors":
         assert spark_connect.spec.executor.instances == 3
@@ -674,10 +691,7 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.executor.memory == "4g"
 
     elif test_case.name == "spark connect cr with spark conf":
-        assert spark_connect.spec.spark_conf["spark.jars"].endswith(
-            f"spark-connect_{constants.SPARK_CONNECT_PACKAGE_SCALA_VERSION}-"
-            f"{constants.DEFAULT_SPARK_VERSION}.jar"
-        )
+        assert spark_connect.spec.spark_conf["spark.jars"] == "local:///opt/spark/jars/my.jar"
         assert spark_connect.spec.spark_conf["spark.sql.adaptive.enabled"] == "true"
 
     elif test_case.name == "spark conf overrides grpc binding address":
@@ -699,10 +713,6 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.executor.memory == "8g"
 
     elif test_case.name == "spark connect cr with app name":
-        assert spark_connect.spec.spark_conf["spark.jars"].endswith(
-            f"spark-connect_{constants.SPARK_CONNECT_PACKAGE_SCALA_VERSION}-"
-            f"{constants.DEFAULT_SPARK_VERSION}.jar"
-        )
         assert spark_connect.spec.spark_conf["spark.app.name"] == "my-spark-app"
 
     elif test_case.name == "executor config overrides num executors":
@@ -807,6 +817,19 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
             },
         ),
         TestCase(
+            name="unknown status",
+            expected_status=SUCCESS,
+            config={
+                "metadata": {
+                    "name": "unknown-session",
+                    "namespace": "default",
+                },
+                "status": models.SparkV1alpha1SparkConnectStatus(
+                    state="InvalidOrUnknownState",
+                ),
+            },
+        ),
+        TestCase(
             name="missing name",
             expected_status=FAILED,
             config={
@@ -847,21 +870,23 @@ def test_get_spark_connect_info_from_cr(
             assert info.service_name == "my-session-svc"
             assert info.creation_timestamp is not None
 
-        elif test_case.name == "provisioning status":
-            assert info.name == "new-session"
-            assert info.namespace == "spark"
+        elif test_case.name == "empty status":
             assert info.state == SparkConnectState.PROVISIONING
+            assert info.driver_pod_name is None
 
         elif test_case.name == "failed status":
             assert info.state == SparkConnectState.FAILED
 
         elif test_case.name == "running status":
-            assert info.state == SparkConnectState.RUNNING
+            assert info.state == common_constants.UNKNOWN
             assert info.service_name == "run-session-svc"
-
-        elif test_case.name == "empty status":
+        elif test_case.name == "provisioning status":
+            assert info.name == "new-session"
+            assert info.namespace == "spark"
             assert info.state == SparkConnectState.PROVISIONING
-            assert info.driver_pod_name is None
+
+        elif test_case.name == "unknown status":
+            assert info.state == common_constants.UNKNOWN
 
     else:
         with pytest.raises(
@@ -1231,7 +1256,7 @@ def test_read_pod_logs(test_case: TestCase) -> None:
     "test_case",
     [
         TestCase(
-            name="default spark job driver spec",
+            name="default spark job driver spec leaves service account unset",
             expected_status=SUCCESS,
             config={},
         ),
@@ -1250,7 +1275,7 @@ def test_get_spark_job_driver_spec(test_case: TestCase) -> None:
     assert spec.memory == _memory_kubernetes_to_spark(
         constants.DEFAULT_DRIVER_MEMORY,
     )
-    assert spec.service_account == constants.DEFAULT_SERVICE_ACCOUNT
+    assert spec.service_account is None
 
     print("test execution complete")
 
@@ -1325,7 +1350,7 @@ def test_get_func_job_init_container(test_case: TestCase) -> None:
                 "func_args": None,
             },
             expected_error=ValueError,
-            expected_output="Expected a callable function",
+            expected_output="Function must be a Python function.",
         ),
     ],
 )

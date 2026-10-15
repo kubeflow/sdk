@@ -19,7 +19,6 @@ from kubeflow.spark.options.kubernetes import (
     Labels,
     Name,
     NodeSelector,
-    PodTemplateOverride,
     Toleration,
 )
 
@@ -28,6 +27,5 @@ __all__ = [
     "Labels",
     "Name",
     "NodeSelector",
-    "PodTemplateOverride",
     "Toleration",
 ]

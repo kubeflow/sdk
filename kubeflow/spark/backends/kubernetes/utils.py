@@ -30,6 +30,7 @@ from kubeflow_spark_api import models
 from kubernetes import client
 
 from kubeflow.common import constants as common_constants
+from kubeflow.common.utils import validate_python_function
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.types.types import (
     Driver,
@@ -562,24 +563,13 @@ def build_spark_connect_cr(
 
     image = driver.image if driver and driver.image else default_image
 
-    # Use direct JAR URL to avoid Ivy cache (container may not have writable ~/.ivy2)
-    connect_jar_url = (
-        f"https://repo1.maven.org/maven2/org/apache/spark/"
-        f"spark-connect_{constants.SPARK_CONNECT_PACKAGE_SCALA_VERSION}/{spark_version}/"
-        f"spark-connect_{constants.SPARK_CONNECT_PACKAGE_SCALA_VERSION}-{spark_version}.jar"
-    )
     # Server listens on all interfaces so port-forward and in-cluster access work (Spark Connect config)
     base_conf: dict[str, str] = {
-        "spark.jars": connect_jar_url,
         "spark.connect.grpc.binding.address": "0.0.0.0",
     }
+
     if spark_conf:
-        existing_jars = spark_conf.get("spark.jars", "").strip()
-        if existing_jars:
-            base_conf["spark.jars"] = f"{connect_jar_url},{existing_jars}"
-        for k, v in spark_conf.items():
-            if k != "spark.jars":
-                base_conf[k] = v
+        base_conf.update(spark_conf)
 
     # Build the typed SparkConnect model
     spark_connect = models.SparkV1alpha1SparkConnect(
@@ -631,7 +621,7 @@ def get_spark_connect_info_from_cr(
         try:
             state = SparkConnectState(spark_connect_cr.status.state)
         except ValueError:
-            state = SparkConnectState.PROVISIONING
+            state = common_constants.UNKNOWN
 
     # Extract server status
     server_status = None
@@ -681,7 +671,6 @@ def get_spark_job_driver_spec(
     return models.SparkV1beta2DriverSpec(
         cores=cores,
         memory=memory,
-        service_account=constants.DEFAULT_SERVICE_ACCOUNT,
     )
 
 
@@ -771,10 +760,9 @@ def get_command_using_spark_func(
 
     Raises:
         ValueError:
-            If ``func`` is not callable.
+            If ``func`` is not a supported Python function.
     """
-    if not callable(func):
-        raise ValueError(f"Expected a callable function, got {type(func)}.")
+    validate_python_function(func)
 
     func_code = textwrap.dedent(
         inspect.getsource(func),
