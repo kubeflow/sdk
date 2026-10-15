@@ -1723,3 +1723,26 @@ def test_get_tpu_num_nodes(test_case: TestCase):
         assert test_case.expected_status == FAILED
         assert isinstance(e, test_case.expected_error)
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    ("device_count", "num_nodes", "expected"),
+    [
+        ("2", 4, "8"),
+        ("2.0", 4, "8"),
+        ("2.00", 4, "8"),
+        ("0.0", 3, "0"),
+        ("1.5", 4, "1.5"),
+        ("-1", 4, "-1"),
+        ("1_0", 4, "1_0"),
+        (" 2 ", 4, " 2 "),
+        ("+2", 4, "+2"),
+        ("1e3", 4, "1e3"),
+        ("9007199254740993", 4, "36028797018963972"),
+        ("unknown", 4, "unknown"),
+    ],
+)
+def test_multiply_device_count_by_num_nodes(device_count, num_nodes, expected):
+    assert (
+        utils._multiply_device_count_by_num_nodes(device_count, num_nodes) == expected
+    )
