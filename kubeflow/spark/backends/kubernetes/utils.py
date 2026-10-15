@@ -509,7 +509,6 @@ def get_spark_connect_executor_spec(
 def build_spark_connect_cr(
     name: str,
     namespace: str,
-    spark_version: str | None = None,
     num_executors: int | None = None,
     resources_per_executor: dict[str, str] | None = None,
     spark_conf: dict[str, str] | None = None,
@@ -529,7 +528,6 @@ def build_spark_connect_cr(
     Args:
         name: Session name.
         namespace: Kubernetes namespace.
-        spark_version: Spark version (default: `constants.DEFAULT_SPARK_VERSION`).
         num_executors: Number of executor instances (simple mode).
         resources_per_executor: Resource requirements per executor (simple mode).
         spark_conf: Spark configuration properties.
@@ -547,7 +545,7 @@ def build_spark_connect_cr(
     """
     _validate_spark_conf(spark_conf)
 
-    spark_version = spark_version or constants.DEFAULT_SPARK_VERSION
+    spark_version = constants.DEFAULT_SPARK_VERSION
 
     # Build server spec using conversion function
     server_spec = get_spark_connect_driver_spec(driver)
