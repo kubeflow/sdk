@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 import inspect
 import logging
 import os
+import re
 import shlex
 import textwrap
 import threading
@@ -109,20 +110,16 @@ def get_runtime_trainer_container(
 
 
 def _multiply_device_count_by_num_nodes(device_count: str, num_nodes: int) -> str:
-    """Multiply an integral device count by the number of nodes.
+    """Multiply a non-negative integral device count by the number of nodes.
 
     Kubernetes resource quantities can be represented as decimal strings such
-    as "2.0". Only integral counts are multiplied; other values are preserved.
+    as "2.0". Accept digit strings with an optional all-zero fractional part;
+    preserve other formats and values.
     """
-    try:
-        count = float(device_count)
-    except (TypeError, ValueError):
+    if not re.fullmatch(r"\d+(?:\.0+)?", device_count):
         return device_count
 
-    if not count.is_integer():
-        return device_count
-
-    return str(int(count) * num_nodes)
+    return str(int(device_count.split(".", maxsplit=1)[0]) * num_nodes)
 
 
 def get_runtime_trainer(
