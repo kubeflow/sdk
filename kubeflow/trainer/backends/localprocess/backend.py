@@ -152,6 +152,7 @@ class LocalProcessBackend(RuntimeBackend):
         for _job in self.__local_jobs:
             if runtime and _job.runtime.name != runtime.name:
                 continue
+            status = self.__get_job_status(_job)
             result.append(
                 types.TrainJob(
                     name=_job.name,
@@ -162,6 +163,7 @@ class LocalProcessBackend(RuntimeBackend):
                         types.Step(name=s.step_name, pod_name=s.step_name, status=s.job.status)
                         for s in _job.steps
                     ],
+                    status=status,
                 )
             )
         return result
