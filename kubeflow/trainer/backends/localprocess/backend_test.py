@@ -414,11 +414,20 @@ def test_list_jobs(local_backend, test_case):
     assert isinstance(jobs, list)
 
 
-def test_list_jobs_returns_overall_status(local_backend):
+@pytest.mark.parametrize(
+    "step_status",
+    [
+        constants.TRAINJOB_CREATED,
+        constants.TRAINJOB_RUNNING,
+        constants.TRAINJOB_COMPLETE,
+        constants.TRAINJOB_FAILED,
+    ],
+)
+def test_list_jobs_returns_overall_status(local_backend, step_status):
     """Test that list_jobs returns the overall status for each job."""
     runtime = local_backend.get_runtime(TORCH_RUNTIME)
     job = LocalJob(name="test-job", command=[])
-    job._status = constants.TRAINJOB_COMPLETE
+    job._status = step_status
     local_backend._LocalProcessBackend__local_jobs.append(
         LocalBackendJobs(
             name="test-job",
@@ -429,7 +438,7 @@ def test_list_jobs_returns_overall_status(local_backend):
 
     listed_job = local_backend.list_jobs()[0]
 
-    assert listed_job.status == constants.TRAINJOB_COMPLETE
+    assert listed_job.status == local_backend.get_job("test-job").status == step_status
 
 
 @pytest.mark.parametrize(
