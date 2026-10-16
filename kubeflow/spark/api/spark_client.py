@@ -64,7 +64,7 @@ class SparkClient:
         base_url: str | None = None,
         token: str | None = None,
         num_executors: int | None = None,
-        resources_per_executor: dict[str, str] | None = None,
+        resources_per_executor: dict | None = None,
         spark_conf: dict[str, str] | None = None,
         driver: Driver | None = None,
         executor: Executor | None = None,
@@ -175,7 +175,7 @@ class SparkClient:
         self,
         job: FileJob | FuncJob,
         num_executors: int | None = None,
-        resources_per_executor: dict[str, str] | None = None,
+        resources_per_executor: dict | None = None,
         spark_conf: dict[str, str] | None = None,
         options: list | None = None,
     ) -> str:
