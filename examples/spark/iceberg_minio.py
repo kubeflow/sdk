@@ -62,10 +62,10 @@ from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark import Name, SparkClient
 
 # MinIO / S3 credentials — replace with your own for production
-MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")
+MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "http://minio:9000")
 MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY", "minioadmin")
 MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "minioadmin")
-ICEBERG_REST_URI = os.environ.get("ICEBERG_REST_URI", "http://localhost:8181")
+ICEBERG_REST_URI = os.environ.get("ICEBERG_REST_URI", "http://iceberg-rest:8181")
 WAREHOUSE = os.environ.get("ICEBERG_WAREHOUSE", "s3://warehouse/")
 
 
@@ -105,11 +105,12 @@ def create_spark_session() -> tuple[SparkClient, SparkSession, str]:
 
     spark = client.connect(
         spark_conf={
-            # Iceberg runtime + AWS SDK v2 (required for S3FileIO in Iceberg 1.9.x)
-            "spark.jars.packages": (
-                "org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.9.1,"
-                "software.amazon.awssdk:bundle:2.26.24,"
-                "software.amazon.awssdk:url-connection-client:2.26.24"
+            # Iceberg runtime + a minimal AWS SDK v2 set (required for S3FileIO in Iceberg 1.9.x)
+            # Use direct JAR URLs so the server can fetch artifacts without
+            # relying on Ivy/package resolution (helpful in air-gapped CI).
+            "spark.jars": (
+                "https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-4.0_2.13/1.11.0/iceberg-spark-runtime-4.0_2.13-1.11.0.jar,"
+                "https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/1.11.0/iceberg-aws-bundle-1.11.0.jar"
             ),
             # Enables: CREATE TABLE ... USING iceberg, time travel, etc.
             "spark.sql.extensions": (
