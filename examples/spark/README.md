@@ -72,3 +72,21 @@ Batch job examples use `submit_job()` with either `FileJob` or `FuncJob`, then m
 - `delete_job()` - Delete a batch job
 
 See the [Spark SDK API reference](https://sdk.kubeflow.org/en/latest/spark/api.html) for the current API surface.
+
+## Iceberg + MinIO Example
+
+`iceberg_minio.py` demonstrates reading and writing Iceberg tables with MinIO as S3-compatible storage through the Kubeflow Spark SDK.
+
+For a Kind-based e2e cluster, enable the optional Iceberg and MinIO services during setup:
+
+```bash
+SPARK_E2E_ENABLE_ICEBERG_MINIO=1 make test-e2e-setup-cluster
+```
+
+Then run the example with endpoints reachable from your environment:
+
+```bash
+python examples/spark/iceberg_minio.py
+```
+
+The example accepts `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `ICEBERG_REST_URI`, and `ICEBERG_WAREHOUSE` environment variables. Defaults are intended for local development.
