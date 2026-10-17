@@ -332,6 +332,36 @@ class TrainerClient:
             polling_interval=polling_interval,
             callbacks=callbacks,
         )
+    def get_job_progress(self, name: str) -> dict:
+        """Get progress of a TrainJob.
+
+        Args:
+            name: Name of the TrainJob.
+
+        Returns:
+            Dictionary containing job status and progress.
+        """
+
+        # Get job details
+        job = self.get_job(name=name)
+
+        status = job.status if hasattr(job, "status") else "Unknown"
+
+        if status == "Running":
+            progress = "In Progress"
+        elif status in ["Complete", "Succeeded"]:
+            progress = "100%"
+        elif status == "Failed":
+            progress = "Error"
+        else:
+            progress = "Unknown"
+
+        return {
+            "job_id": name,
+            "status": status,
+            "progress": progress,
+        }
+    
 
     def delete_job(self, name: str):
         """Delete the TrainJob.
