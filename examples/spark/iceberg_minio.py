@@ -111,8 +111,6 @@ def create_spark_session() -> tuple[SparkClient, SparkSession, str]:
                 "software.amazon.awssdk:bundle:2.26.24,"
                 "software.amazon.awssdk:url-connection-client:2.26.24"
             ),
-            # Pass AWS region to driver JVM.
-            "spark.driver.extraJavaOptions": "-Daws.region=us-east-1",
             # Enables: CREATE TABLE ... USING iceberg, time travel, etc.
             "spark.sql.extensions": (
                 "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions"
@@ -126,7 +124,8 @@ def create_spark_session() -> tuple[SparkClient, SparkSession, str]:
             "spark.sql.catalog.lakehouse.io-impl": "org.apache.iceberg.aws.s3.S3FileIO",
             "spark.sql.catalog.lakehouse.s3.endpoint": MINIO_ENDPOINT,
             "spark.sql.catalog.lakehouse.s3.path-style-access": "true",
-            "spark.sql.catalog.lakehouse.s3.region": "us-east-1",
+            # Configure the AWS client region for S3FileIO on both drivers and executors.
+            "spark.sql.catalog.lakehouse.client.region": "us-east-1",
             "spark.sql.catalog.lakehouse.s3.access-key-id": MINIO_ACCESS_KEY,
             "spark.sql.catalog.lakehouse.s3.secret-access-key": MINIO_SECRET_KEY,
         },
