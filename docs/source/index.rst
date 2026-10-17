@@ -97,6 +97,18 @@ Supported Projects
 
 ----
 
+Kubeflow MCP Server
+-------------------
+
+We also have the `MCP Server <https://github.com/kubeflow/mcp-server>`_, which exposes the SDK as
+`Model Context Protocol <https://modelcontextprotocol.io/>`_ tools, so agents like Claude, Cursor,
+or Claude Code can plan, submit, and monitor training jobs conversationally — without users
+needing to learn Kubernetes or the SDK directly.
+
+:doc:`Learn more about the MCP Server → <mcp-server/index>`
+
+----
+
 Getting Involved
 ----------------
 *Join the community and help shape the future of ML on Kubernetes.*
@@ -137,6 +149,7 @@ Getting Involved
 
    getting-started/installation
    getting-started/quickstart
+   getting-started/local-development
 
 .. toctree::
    :maxdepth: 2
@@ -168,6 +181,10 @@ Getting Involved
    :caption: Spark
 
    spark/index
+   spark/sessions
+   spark/batch-jobs
+   spark/lifecycle
+   spark/options
    spark/api
 
 .. toctree::
@@ -185,6 +202,15 @@ Getting Involved
 
    hub/index
    hub/api
+
+.. toctree::
+   :maxdepth: 2
+   :hidden:
+   :caption: MCP Server
+
+   mcp-server/index
+   mcp-server/tools
+   mcp-server/configuration
 
 .. toctree::
    :maxdepth: 2

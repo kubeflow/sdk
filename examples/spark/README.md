@@ -2,86 +2,91 @@
 
 This directory contains examples for using the Kubeflow Spark SDK.
 
+The Spark SDK supports two ways to run Spark, matching the [Spark SDK documentation](https://sdk.kubeflow.org/en/latest/spark/index.html):
+
+- **Interactive Sessions** - Connect to Spark from a notebook or script using Spark Connect.
+- **Batch Jobs** - Submit Spark applications as managed Kubernetes workloads.
+
+For the full documentation, see [Interactive Sessions](https://sdk.kubeflow.org/en/latest/spark/sessions.html), [Batch Jobs](https://sdk.kubeflow.org/en/latest/spark/batch-jobs.html), and [Job Lifecycle](https://sdk.kubeflow.org/en/latest/spark/lifecycle.html).
+
 ## Examples
 
-- **spark_connect_simple.py** - Basic SparkClient usage with simple API
-- **spark_advanced_options.py** - Advanced configuration with Driver/Executor objects
-- **demo_existing_sparkconnect.py** - Connect to existing SparkConnect cluster
-- **test_connect_url.py** - Test URL-based connection to Spark Connect
-- **iceberg_minio.py** - SparkClient example with Apache Iceberg and MinIO
+### Interactive Sessions
+
+- **spark_connect_simple.ipynb** - Basic SparkClient usage with simple API
+- **spark_advanced_options.ipynb** - Advanced configuration with Driver/Executor objects
+- **demo_existing_sparkconnect.ipynb** - Create, inspect, list, read logs from, and delete SparkConnect sessions
+- **connect_existing_session.ipynb** - Connect to an existing Spark Connect session through `base_url`
+
+### Batch Jobs
+
+- **batch_job_lifecycle.ipynb** - Submit a `FileJob` and exercise the batch job lifecycle (`get_job`, `list_jobs`, `get_job_logs`, `delete_job`)
+- **batch_func_job_lifecycle.ipynb** - Submit a `FuncJob` and exercise the batch job lifecycle
+- **batch_failed_job.ipynb** - Submit a `FileJob` expected to fail and inspect the `FAILED` state
+- **batch_job_options.ipynb** - Submit a batch job with Kubernetes options (labels, annotations, node selector, tolerations, custom name)
+  See the [Options Reference](https://sdk.kubeflow.org/en/latest/spark/options.html) for details on Kubernetes options.
+- **spark_job.py** - A simple Spark application used as the remote `file_source` for the batch job examples
 
 ## Prerequisites
 
-Install spark dependencies:
+Install spark and notebook dependencies:
 ```bash
-uv pip install kubeflow[spark]
+uv sync --extra spark --group notebooks
 ```
+
+The Spark examples run against a Kubernetes cluster with the Spark Operator installed. The SDK does not set a ServiceAccount on the driver spec, so the Spark Operator must be configured with a fallback ServiceAccount that can create executor pods in the target namespace (`controller.defaultServiceAccount` in the Helm chart). See the [Spark SDK docs](https://sdk.kubeflow.org/en/latest/spark/index.html) for prerequisites.
+
 
 ## Running Examples
 
 ```bash
 # Run from repository root
-uv run python examples/spark/spark_connect_simple.py
+
+# Launch Jupyter to explore and run the interactive notebooks:
+jupyter lab examples/spark/
+
+# Or execute headlessly with papermill:
+uv run papermill examples/spark/spark_connect_simple.ipynb /dev/null
 ```
+
+## Interactive Session APIs
+
+Interactive session examples use `SparkClient` and `connect()`:
+
+- `SparkClient()` - Create a client for the Kubernetes cluster
+- `connect()` - Create a new Spark Connect session, or connect to an existing server when `base_url` is provided
+- `list_sessions()` / `get_session()` - Inspect Spark Connect sessions
+- `get_session_logs()` - Read session logs
+- `delete_session()` - Delete a Spark Connect session when you are done with it
+
+See the [Spark SDK API reference](https://sdk.kubeflow.org/en/latest/spark/api.html) for the current API surface.
+
+## Batch Job APIs
+
+Batch job examples use `submit_job()` with either `FileJob` or `FuncJob`, then manage the job with the lifecycle APIs:
+
+- `submit_job()` - Submit a Spark application as a managed Kubernetes workload
+- `get_job()` / `list_jobs()` - Inspect batch jobs
+- `wait_for_job_status()` - Wait for a job to reach a target `SparkJobStatus`
+- `get_job_logs()` - Read driver pod logs
+- `delete_job()` - Delete a batch job
+
+See the [Spark SDK API reference](https://sdk.kubeflow.org/en/latest/spark/api.html) for the current API surface.
 
 ## Iceberg + MinIO Example
 
-Demonstrates reading and writing Iceberg tables using MinIO as S3-compatible storage through the Kubeflow Spark SDK.
+`iceberg_minio.py` demonstrates reading and writing Iceberg tables with MinIO as S3-compatible storage through the Kubeflow Spark SDK.
 
-### Prerequisites
-
-- A Kind-based Spark e2e setup with the optional Iceberg/MinIO services enabled
-
-### Setup
-
-Enable the Iceberg/MinIO services in the Spark e2e cluster bootstrap:
+For a Kind-based e2e cluster, enable the optional Iceberg and MinIO services during setup:
 
 ```bash
 SPARK_E2E_ENABLE_ICEBERG_MINIO=1 make test-e2e-setup-cluster
 ```
 
-Wait for the setup to finish. The Spark dependency comes from `pyproject.toml` via `kubeflow[spark]`, so there is no separate PySpark install step.
-
-### Run
+Then run the example with endpoints reachable from your environment:
 
 ```bash
 python examples/spark/iceberg_minio.py
 ```
 
-You should see:
-
-```text
---- Reading data ---
-+---+-----+
-| id| name|
-+---+-----+
-|  1|Alice|
-|  2|  Bob|
-+---+-----+
-[SUCCESS] Iceberg + MinIO example complete!
-```
-
-### Configuration
-
-The example can be configured via environment variables:
-
-| Variable | Default | Description |
-|---|---|---|
-| `MINIO_ENDPOINT` | `http://localhost:9000` | MinIO endpoint |
-| `MINIO_ACCESS_KEY` | `minioadmin` | MinIO access key |
-| `MINIO_SECRET_KEY` | `minioadmin` | MinIO secret key |
-| `ICEBERG_REST_URI` | `http://localhost:8181` | Iceberg REST catalog URI |
-| `ICEBERG_WAREHOUSE` | `s3://warehouse/` | Warehouse location |
-
-The e2e setup also accepts overrides for `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`,
-and `AWS_REGION`. The defaults are intended for local development only.
-
-### E2E
-
-The Iceberg example is exercised by the Spark e2e test harness in `test/e2e/spark/test_spark_examples.py` when the Iceberg service endpoints are available in the environment.
-
-### Teardown
-
-```bash
-bash hack/e2e-setup-cluster.sh --delete
-```
+The example accepts `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `ICEBERG_REST_URI`, and `ICEBERG_WAREHOUSE` environment variables. Defaults are intended for local development.

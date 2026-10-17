@@ -19,6 +19,7 @@ import pytest
 from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.trainer.backends.localprocess.backend import LocalProcessBackend
 from kubeflow.trainer.options import (
+    ActiveDeadlineSeconds,
     Annotations,
     ContainerPatch,
     JobSetSpecPatch,
@@ -69,6 +70,7 @@ class TestKubernetesOptionBackendValidation:
             (Annotations, {"description": "test job"}),
             (TrainerCommand, ["python", "train.py"]),
             (TrainerArgs, ["--epochs", "10"]),
+            (ActiveDeadlineSeconds, 3600),
         ],
     )
     def test_kubernetes_options_reject_wrong_backend(
@@ -79,6 +81,8 @@ class TestKubernetesOptionBackendValidation:
             option = option_class(command=option_args)
         elif option_class == TrainerArgs:
             option = option_class(args=option_args)
+        elif option_class == ActiveDeadlineSeconds:
+            option = option_class(seconds=option_args)
         else:
             option = option_class(option_args)
 
@@ -129,6 +133,11 @@ class TestKubernetesOptionApplication:
                 ["--epochs", "10"],
                 {"spec": {"trainer": {"args": ["--epochs", "10"]}}},
             ),
+            (
+                ActiveDeadlineSeconds,
+                3600,
+                {"spec": {"activeDeadlineSeconds": 3600}},
+            ),
         ],
     )
     def test_option_application(
@@ -139,6 +148,8 @@ class TestKubernetesOptionApplication:
             option = option_class(command=option_args)
         elif option_class == TrainerArgs:
             option = option_class(args=option_args)
+        elif option_class == ActiveDeadlineSeconds:
+            option = option_class(seconds=option_args)
         else:
             option = option_class(option_args)
 
@@ -415,3 +426,22 @@ class TestRuntimePatchApplication:
                 },
             },
         }
+
+
+class TestActiveDeadlineSeconds:
+    """Test ActiveDeadlineSeconds validation."""
+
+    @pytest.mark.parametrize(
+        "seconds,expected_error",
+        [
+            (0, "activeDeadlineSeconds must be a positive integer (minimum 1)"),
+            (-1, "activeDeadlineSeconds must be a positive integer (minimum 1)"),
+            (-100, "activeDeadlineSeconds must be a positive integer (minimum 1)"),
+            (True, "activeDeadlineSeconds must be a positive integer (minimum 1)"),
+        ],
+    )
+    def test_active_deadline_seconds_rejects_invalid_values(self, seconds, expected_error):
+        """Test ActiveDeadlineSeconds rejects non-positive values."""
+        with pytest.raises(ValueError) as exc_info:
+            ActiveDeadlineSeconds(seconds=seconds)
+        assert expected_error in str(exc_info.value)
