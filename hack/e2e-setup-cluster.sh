@@ -255,7 +255,7 @@ spec:
     spec:
       containers:
         - name: minio
-          image: minio/minio
+          image: public.ecr.aws/y9w4h2u9/minio:RELEASE.2025-09-07T16-13-09Z
           args:
             - server
             - /data
@@ -287,18 +287,27 @@ spec:
     spec:
       restartPolicy: Never
       containers:
-        - name: mc
-          image: minio/mc
-          command:
-            - /bin/sh
-            - -c
+        - name: aws-cli
+          image: public.ecr.aws/aws-cli/aws-cli:2.37.4
+          command: ["sh", "-c"]
           args:
             - |
-              until mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
+              until aws --endpoint-url http://minio:9000 s3api list-buckets >/dev/null 2>&1; do
                 sleep 2
               done
-              mc mb local/warehouse --ignore-existing
-              echo 'Bucket warehouse created successfully'
+              if ! aws --endpoint-url http://minio:9000 s3api head-bucket --bucket warehouse >/dev/null 2>&1; then
+                aws --endpoint-url http://minio:9000 s3api create-bucket --bucket warehouse
+              fi
+              echo 'Bucket warehouse is ready'
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              value: "$MINIO_ROOT_USER"
+            - name: AWS_SECRET_ACCESS_KEY
+              value: "$MINIO_ROOT_PASSWORD"
+            - name: AWS_DEFAULT_REGION
+              value: us-east-1
+            - name: AWS_EC2_METADATA_DISABLED
+              value: "true"
 ---
 apiVersion: v1
 kind: Service
