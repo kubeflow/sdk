@@ -84,6 +84,7 @@ jobs:
           SPARK_TEST_CLUSTER: spark-test
           SPARK_TEST_NAMESPACE: spark-test
           SPARK_OPERATOR_IMAGE_TAG: local
+          SPARK_E2E_ENABLE_ICEBERG_MINIO: "1"
         timeout-minutes: 15
 
       - name: Run E2E test for Spark example Notebooks
@@ -130,6 +131,11 @@ jobs:
             NOTEBOOK_INPUT=./examples/spark/spark_connect_simple.ipynb \
             NOTEBOOK_OUTPUT=./artifacts/notebooks/spark_connect_simple.ipynb \
             PAPERMILL_TIMEOUT=600
+
+          make test-e2e-notebook \
+            NOTEBOOK_INPUT=./examples/spark/iceberg_minio.ipynb \
+            NOTEBOOK_OUTPUT=./artifacts/notebooks/iceberg_minio.ipynb \
+            PAPERMILL_TIMEOUT=900
         env:
           SPARK_TEST_CLUSTER: spark-test
           SPARK_TEST_NAMESPACE: spark-test

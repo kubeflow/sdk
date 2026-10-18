@@ -17,6 +17,7 @@ For the full documentation, see [Interactive Sessions](https://sdk.kubeflow.org/
 - **spark_advanced_options.ipynb** - Advanced configuration with Driver/Executor objects
 - **demo_existing_sparkconnect.ipynb** - Create, inspect, list, read logs from, and delete SparkConnect sessions
 - **connect_existing_session.ipynb** - Connect to an existing Spark Connect session through `base_url`
+- **iceberg_minio.ipynb** - Read and write Iceberg tables backed by MinIO
 
 ### Batch Jobs
 
@@ -75,7 +76,7 @@ See the [Spark SDK API reference](https://sdk.kubeflow.org/en/latest/spark/api.h
 
 ## Iceberg + MinIO Example
 
-`iceberg_minio.py` demonstrates reading and writing Iceberg tables with MinIO as S3-compatible storage through the Kubeflow Spark SDK.
+`iceberg_minio.ipynb` demonstrates reading and writing Iceberg tables with MinIO as S3-compatible storage through the Kubeflow Spark SDK.
 
 For a Kind-based e2e cluster, enable the optional Iceberg and MinIO services during setup:
 
@@ -86,7 +87,7 @@ SPARK_E2E_ENABLE_ICEBERG_MINIO=1 make test-e2e-setup-cluster
 Then run the example with endpoints reachable from your environment:
 
 ```bash
-python examples/spark/iceberg_minio.py
+jupyter lab examples/spark/iceberg_minio.ipynb
 ```
 
 The example accepts `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `ICEBERG_REST_URI`, and `ICEBERG_WAREHOUSE` environment variables. Defaults are intended for local development.
