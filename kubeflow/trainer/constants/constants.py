@@ -125,6 +125,13 @@ POD_LABEL_SELECTOR = (
     f"in ({DATASET_INITIALIZER}, {MODEL_INITIALIZER}, {LAUNCHER}, {NODE})"
 )
 
+# The label selector for Pods of all TrainJobs in a namespace, used by list_jobs()
+# to fetch every TrainJob's Pods with a single request.
+ALL_TRAINJOBS_POD_LABEL_SELECTOR = (
+    f"{JOBSET_NAME_LABEL},{JOBSET_RJOB_NAME_LABEL} "
+    f"in ({DATASET_INITIALIZER}, {MODEL_INITIALIZER}, {LAUNCHER}, {NODE})"
+)
+
 # Handle environment variable for multiple URLs (comma-separated).
 # The first URL will be the index-url, and remaining ones are extra-index-urls.
 DEFAULT_PIP_INDEX_URLS = os.getenv("DEFAULT_PIP_INDEX_URLS", "https://pypi.org/simple").split(",")
