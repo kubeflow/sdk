@@ -892,3 +892,17 @@ class ContainerBackend(RuntimeBackend):
         # Remove working directory if configured
         if self.cfg.auto_remove and workdir_host and os.path.isdir(workdir_host):
             shutil.rmtree(workdir_host, ignore_errors=True)
+
+    def get_gpu_status(self, name: str) -> list[dict[str, str]]:
+        """Get GPU status for the containers of a TrainJob.
+
+        Args:
+            name: Name of the TrainJob.
+
+        Raises:
+            NotImplementedError: GPU status is not supported in the container backend.
+        """
+        raise NotImplementedError(
+            "GPU status is not supported in the container backend. "
+            "Use the Kubernetes backend to get GPU metrics from the training nodes."
+        )
