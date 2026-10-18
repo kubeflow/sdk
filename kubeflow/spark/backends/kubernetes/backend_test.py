@@ -1786,6 +1786,35 @@ def test_delete_job(kubernetes_backend, test_case):
             },
         ),
         TestCase(
+            name="job reaches target state given as plain string",
+            expected_status=SUCCESS,
+            config={
+                "job_name": "spark-job-completed",
+                "job_status": SparkJobStatus.COMPLETED,
+                "target_status": {"Completed"},
+            },
+        ),
+        TestCase(
+            name="invalid target status",
+            expected_status=FAILED,
+            config={
+                "job_name": "spark-job-completed",
+                "job_status": SparkJobStatus.COMPLETED,
+                "target_status": {"Complete"},
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="empty target status",
+            expected_status=FAILED,
+            config={
+                "job_name": "spark-job-completed",
+                "job_status": SparkJobStatus.COMPLETED,
+                "target_status": set(),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
             name="runtime error while polling",
             expected_status=FAILED,
             config={

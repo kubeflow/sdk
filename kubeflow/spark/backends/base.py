@@ -229,6 +229,8 @@ class RuntimeBackend(abc.ABC):
             Spark job information after reaching one of the desired statuses.
 
         Raises:
+            ValueError: If status is empty or contains values that are not valid
+                SparkJobStatus values.
             TimeoutError: If the timeout is exceeded before reaching the target status.
         """
         raise NotImplementedError()

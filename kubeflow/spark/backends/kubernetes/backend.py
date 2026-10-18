@@ -1198,7 +1198,8 @@ class KubernetesBackend(RuntimeBackend):
             SparkJob information object after the target status is reached.
 
         Raises:
-            ValueError: If polling_interval is negative.
+            ValueError: If timeout or polling_interval is not positive, or if status is empty
+                or contains values that are not valid SparkJobStatus values.
             RuntimeError: If the SparkApplication reaches the FAILED state before reaching
                 one of the target statuses.
             TimeoutError: If the target status is not reached within the timeout.
@@ -1208,6 +1209,14 @@ class KubernetesBackend(RuntimeBackend):
 
         if polling_interval <= 0:
             raise ValueError("polling_interval must be positive.")
+
+        # An invalid or empty status can never match, so fail fast instead of polling until timeout.
+        valid_statuses = set(SparkJobStatus)
+        if not status or not set(status).issubset(valid_statuses):
+            raise ValueError(
+                f"Expected status {status} must be a non-empty subset of "
+                f"{sorted(s.value for s in valid_statuses)}"
+            )
 
         start_time = time.monotonic()
         last_log_time = start_time
