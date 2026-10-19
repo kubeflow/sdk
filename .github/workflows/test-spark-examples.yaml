@@ -84,8 +84,14 @@ jobs:
           SPARK_TEST_CLUSTER: spark-test
           SPARK_TEST_NAMESPACE: spark-test
           SPARK_OPERATOR_IMAGE_TAG: local
-          SPARK_E2E_ENABLE_ICEBERG_MINIO: "1"
         timeout-minutes: 15
+
+      - name: Setup Iceberg + MinIO fixtures
+        run: |
+          make test-e2e-setup-fixtures
+        env:
+          SPARK_TEST_NAMESPACE: spark-test
+        timeout-minutes: 10
 
       - name: Run E2E test for Spark example Notebooks
         run: |
