@@ -90,6 +90,8 @@ jobs:
         run: |
           make test-e2e-setup-fixtures
         env:
+          SPARK_E2E_LOAD_FIXTURE_IMAGES: "1"
+          SPARK_TEST_CLUSTER: spark-test
           SPARK_TEST_NAMESPACE: spark-test
         timeout-minutes: 10
 

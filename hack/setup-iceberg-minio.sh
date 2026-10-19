@@ -18,6 +18,23 @@ set -euo pipefail
 NAMESPACE="${SPARK_TEST_NAMESPACE:-spark-test}"
 MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-minioadmin}"
+MINIO_IMAGE="public.ecr.aws/y9w4h2u9/minio:RELEASE.2025-09-07T16-13-09Z"
+ICEBERG_REST_IMAGE="tabulario/iceberg-rest:latest"
+AWS_CLI_IMAGE="public.ecr.aws/aws-cli/aws-cli:2.37.4"
+
+show_fixture_diagnostics() {
+    kubectl get pods -n "$NAMESPACE" -o wide || true
+    kubectl get events -n "$NAMESPACE" --sort-by=.lastTimestamp || true
+    kubectl logs -n "$NAMESPACE" job/minio-init --all-containers=true || true
+}
+trap show_fixture_diagnostics ERR
+
+if [[ "${SPARK_E2E_LOAD_FIXTURE_IMAGES:-0}" == "1" ]]; then
+    for image in "$MINIO_IMAGE" "$ICEBERG_REST_IMAGE" "$AWS_CLI_IMAGE"; do
+        docker pull "$image"
+        "${KIND:-kind}" load docker-image "$image" --name "${SPARK_TEST_CLUSTER:-spark-test}"
+    done
+fi
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 kubectl create secret generic minio-credentials -n "$NAMESPACE" \
@@ -53,7 +70,8 @@ spec:
     spec:
       containers:
         - name: minio
-          image: quay.io/minio/minio:RELEASE.2024-06-13T22-53-53Z
+          image: $MINIO_IMAGE
+          imagePullPolicy: IfNotPresent
           args: [server, /data, --console-address, ":9001"]
           env:
             - {name: MINIO_ROOT_USER, valueFrom: {secretKeyRef: {name: minio-credentials, key: MINIO_ACCESS_KEY}}}
@@ -82,7 +100,8 @@ spec:
     spec:
       containers:
         - name: iceberg-rest
-          image: tabulario/iceberg-rest
+          image: $ICEBERG_REST_IMAGE
+          imagePullPolicy: IfNotPresent
           envFrom: [{secretRef: {name: minio-credentials}}]
           env:
             - {name: AWS_REGION, value: us-east-1}
@@ -107,12 +126,24 @@ spec:
     spec:
       restartPolicy: Never
       containers:
-        - name: mc
-          image: quay.io/minio/mc:RELEASE.2024-11-21T17-21-54Z
-          command: [/bin/sh, -c]
+        - name: aws-cli
+          image: $AWS_CLI_IMAGE
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
           args:
-            - mc alias set local http://minio:9000 "\$MINIO_ACCESS_KEY" "\$MINIO_SECRET_KEY" && mc mb local/warehouse --ignore-existing
-          envFrom: [{secretRef: {name: minio-credentials}}]
+            - |
+              until aws --endpoint-url http://minio:9000 s3api list-buckets >/dev/null 2>&1; do
+                sleep 2
+              done
+              if ! aws --endpoint-url http://minio:9000 s3api head-bucket --bucket warehouse >/dev/null 2>&1; then
+                aws --endpoint-url http://minio:9000 s3api create-bucket --bucket warehouse
+              fi
+              echo 'Bucket warehouse is ready'
+          env:
+            - {name: AWS_ACCESS_KEY_ID, valueFrom: {secretKeyRef: {name: minio-credentials, key: AWS_ACCESS_KEY_ID}}}
+            - {name: AWS_SECRET_ACCESS_KEY, valueFrom: {secretKeyRef: {name: minio-credentials, key: AWS_SECRET_ACCESS_KEY}}}
+            - {name: AWS_DEFAULT_REGION, value: us-east-1}
+            - {name: AWS_EC2_METADATA_DISABLED, value: "true"}
 EOF
 
 kubectl wait --for=condition=complete job/minio-init -n "$NAMESPACE" --timeout=180s
