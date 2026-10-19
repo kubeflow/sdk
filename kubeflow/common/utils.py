@@ -14,8 +14,10 @@
 import ast
 from collections.abc import Callable
 import inspect
+import math
 import os
 import textwrap
+from typing import Any
 
 from kubernetes import config
 
@@ -109,3 +111,63 @@ def validate_python_function(func: Callable) -> None:
         for node in func_tree.body
     ):
         raise ValueError("Decorated functions are not supported.")
+
+
+def is_literal_func_arg(value: Any) -> bool:
+    """Check whether a function argument can be written into a generated script as a literal.
+
+    The SDK renders `func_args` into the generated training script with `repr()`. Only values
+    whose `repr()` is a valid Python literal survive that round trip. Other values, such as
+    `pathlib.Path`, NumPy scalars, or non finite floats, render as names that are not defined
+    in the training container, for example `PosixPath('/data')`, `np.float64(0.1)`, or `inf`.
+
+    Args:
+        value: The function argument value.
+
+    Returns:
+        True if the value is None, a str, int, bool, finite float, or a list, tuple, or dict
+        that only contains such values (dict keys must be str).
+    """
+    # Use type() rather than isinstance() so that subclasses are rejected: their repr() is
+    # usually not a plain literal, e.g. enum.IntEnum members or numpy.float64 under NumPy 2.
+    if value is None or type(value) in (str, int, bool):
+        return True
+
+    if type(value) is float:
+        return math.isfinite(value)
+
+    if type(value) in (list, tuple):
+        return all(is_literal_func_arg(v) for v in value)
+
+    if type(value) is dict:
+        return all(isinstance(k, str) and is_literal_func_arg(v) for k, v in value.items())
+
+    return False
+
+
+def validate_func_args(func_args: dict | None) -> None:
+    """Validate the arguments that are passed to a user function in a generated script.
+
+    Args:
+        func_args: The keyword arguments for the function.
+
+    Raises:
+        ValueError: If `func_args` is not a dict, has a key that is not a str, or has a value
+            that cannot be written into the generated script as a Python literal.
+    """
+    if func_args is None:
+        return
+
+    if not isinstance(func_args, dict):
+        raise ValueError(f"func_args must be a dict, got: {type(func_args).__name__}")
+
+    for key, value in func_args.items():
+        if not isinstance(key, str):
+            raise ValueError(f"func_args keys must be str, got: {key!r}")
+        if not is_literal_func_arg(value):
+            raise ValueError(
+                f"func_args[{key!r}] has unsupported value {value!r} of type "
+                f"{type(value).__name__}. Use None, str, int, bool, a finite float, or a "
+                "list, tuple, or dict of these values. For example, pass a path as str(path) "
+                "and a NumPy scalar as value.item()."
+            )
