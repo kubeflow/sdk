@@ -1,5 +1,9 @@
+
+Use the Spark SDK to inspect and manage Spark Connect sessions in the
+configured Kubernetes namespace (defaults to ``default``).
+
+**List active sessions:**
 Interactive Sessions
-=====================
 
 Connect to Spark interactively from a notebook or script using Spark Connect.
 
