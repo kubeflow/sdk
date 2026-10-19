@@ -1815,6 +1815,17 @@ def test_delete_job(kubernetes_backend, test_case):
             expected_error=ValueError,
         ),
         TestCase(
+            name="bare string target status",
+            expected_status=FAILED,
+            config={
+                "job_name": "spark-job-completed",
+                "job_status": SparkJobStatus.COMPLETED,
+                "target_status": "Completed",
+            },
+            expected_output="status must be a set of SparkJobStatus values",
+            expected_error=ValueError,
+        ),
+        TestCase(
             name="runtime error while polling",
             expected_status=FAILED,
             config={
@@ -1877,7 +1888,7 @@ def test_wait_for_job_status(kubernetes_backend, test_case):
                 job = kubernetes_backend.wait_for_job_status(**kwargs)
                 assert job.status == test_case.config["job_status"]
             else:
-                with pytest.raises(test_case.expected_error):
+                with pytest.raises(test_case.expected_error, match=test_case.expected_output):
                     kubernetes_backend.wait_for_job_status(**kwargs)
 
     print("test execution complete")

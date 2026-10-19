@@ -280,8 +280,9 @@ class SparkClient:
 
         Raises:
             ValueError:
-                If the polling interval or timeout values are invalid, or if status is
-                empty or contains values that are not valid SparkJobStatus values.
+                If the polling interval or timeout values are invalid, or if status is a
+                bare string, empty, or contains values that are not valid SparkJobStatus
+                values.
         """
         common_utils.validate_wait_for_job_status(
             polling_interval,
