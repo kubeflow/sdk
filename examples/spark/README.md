@@ -78,10 +78,11 @@ See the [Spark SDK API reference](https://sdk.kubeflow.org/en/latest/spark/api.h
 
 `iceberg_minio.ipynb` demonstrates reading and writing Iceberg tables with MinIO as S3-compatible storage through the Kubeflow Spark SDK.
 
-For a Kind-based e2e cluster, enable the optional Iceberg and MinIO services during setup:
+For a Kind-based e2e cluster, set up the cluster and then deploy the optional Iceberg and MinIO fixtures:
 
 ```bash
-SPARK_E2E_ENABLE_ICEBERG_MINIO=1 make test-e2e-setup-cluster
+make test-e2e-setup-cluster
+make test-e2e-setup-fixtures
 ```
 
 Then run the example with endpoints reachable from your environment:
