@@ -15,6 +15,7 @@
 """Unit tests for KubernetesBackend."""
 
 from datetime import datetime
+import inspect
 import multiprocessing
 from unittest.mock import MagicMock, Mock, patch
 
@@ -1852,6 +1853,19 @@ def test_wait_for_job_status(kubernetes_backend, test_case):
                     kubernetes_backend.wait_for_job_status(**kwargs)
 
     print("test execution complete")
+
+
+def test_wait_for_job_status_default_status_is_not_a_shared_mutable_set():
+    """Regression test for a mutable default argument.
+
+    `status` used to default to a `{SparkJobStatus.COMPLETED}` set literal, which Python
+    evaluates once at function-definition time and shares across every call that omits the
+    argument. Mutating that shared set in place (e.g. `status.add(...)` in calling code)
+    would silently corrupt the default target status for every later call, for the lifetime
+    of the process. The default must be `None`, with a fresh set built inside the function.
+    """
+    sig = inspect.signature(KubernetesBackend.wait_for_job_status)
+    assert sig.parameters["status"].default is None
 
 
 @pytest.mark.parametrize(

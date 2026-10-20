@@ -264,14 +264,15 @@ class SparkClient:
     def wait_for_job_status(
         self,
         name: str,
-        status: set[SparkJobStatus] = {SparkJobStatus.COMPLETED},
+        status: set[SparkJobStatus] | None = None,
         timeout: int = 600,
         polling_interval: int = 2,
     ) -> SparkJob:
         """Wait for a Spark job to reach one of the target states.
         Args:
             name: Job name.
-            status: Target job state(s).
+            status: Target job state(s). Defaults to ``{SparkJobStatus.COMPLETED}`` if
+                not provided.
             timeout: Maximum wait time in seconds. Default 600.
             polling_interval: Time in seconds between status checks.
 
@@ -286,6 +287,9 @@ class SparkClient:
             polling_interval,
             timeout,
         )
+
+        if status is None:
+            status = {SparkJobStatus.COMPLETED}
 
         return self.backend.wait_for_job_status(
             name=name,

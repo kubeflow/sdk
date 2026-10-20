@@ -1182,7 +1182,7 @@ class KubernetesBackend(RuntimeBackend):
     def wait_for_job_status(
         self,
         name: str,
-        status: set[SparkJobStatus] = {SparkJobStatus.COMPLETED},
+        status: set[SparkJobStatus] | None = None,
         timeout: int = 600,
         polling_interval: int = 2,
     ) -> SparkJob:
@@ -1190,7 +1190,8 @@ class KubernetesBackend(RuntimeBackend):
 
         Args:
             name: Name of the SparkApplication.
-            status: Target job statuses to wait for. Defaults to COMPLETED.
+            status: Target job statuses to wait for. Defaults to ``{SparkJobStatus.COMPLETED}``
+                if not provided.
             timeout: Maximum time in seconds to wait.
             polling_interval: Time in seconds between status checks.
 
@@ -1208,6 +1209,9 @@ class KubernetesBackend(RuntimeBackend):
 
         if polling_interval <= 0:
             raise ValueError("polling_interval must be positive.")
+
+        if status is None:
+            status = {SparkJobStatus.COMPLETED}
 
         start_time = time.monotonic()
         last_log_time = start_time
