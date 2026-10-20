@@ -439,6 +439,16 @@ def test_delete_job(test_case: TestCase):
                 "status": {SparkJobStatus.COMPLETED},
                 "timeout": 30,
             },
+            expected_error=TimeoutError,
+        ),
+        TestCase(
+            name="job failed before reaching target status",
+            expected_status=FAILED,
+            config={
+                "job_name": "spark-job-123",
+                "status": {SparkJobStatus.COMPLETED},
+                "timeout": 30,
+            },
             expected_error=RuntimeError,
         ),
     ],
