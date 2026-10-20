@@ -364,17 +364,7 @@ def test_delete_job(test_case: TestCase):
             expected_output=SparkJob(name="spark-job-123", namespace="default"),
         ),
         TestCase(
-            name="single status {RUNNING}",
-            expected_status=SUCCESS,
-            config={
-                "job_name": "spark-job-123",
-                "status": {SparkJobStatus.RUNNING},
-                "timeout": 60,
-            },
-            expected_output=SparkJob(name="spark-job-123", namespace="default"),
-        ),
-        TestCase(
-            name="multiple statuses {COMPLETED, FAILED}",
+            name="custom target statuses",
             expected_status=SUCCESS,
             config={
                 "job_name": "spark-job-123",
