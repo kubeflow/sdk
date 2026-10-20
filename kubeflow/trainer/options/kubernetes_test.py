@@ -235,6 +235,19 @@ class TestContainerPatch:
                 {"name": "trainer", "volume_mounts": [{"name": "vol"}]},
                 "Each volume_mounts entry must have a 'mountPath' key",
             ),
+            (
+                {
+                    "name": "trainer",
+                    "env": [
+                        {
+                            "name": "LOG_LEVEL",
+                            "value": "debug",
+                            "valueFrom": {"fieldRef": {"fieldPath": "metadata.name"}},
+                        }
+                    ],
+                },
+                "env 'value' and 'valueFrom' are mutually exclusive",
+            ),
         ],
     )
     def test_container_patch_validation(self, kwargs, expected_error):
@@ -242,6 +255,25 @@ class TestContainerPatch:
         with pytest.raises(ValueError) as exc_info:
             ContainerPatch(**kwargs)
         assert expected_error in str(exc_info.value)
+
+    @pytest.mark.parametrize(
+        "env_entry",
+        [
+            {"name": "LOG_LEVEL", "value": "debug"},
+            {
+                "name": "POD_NAME",
+                "valueFrom": {"fieldRef": {"fieldPath": "metadata.name"}},
+            },
+            {
+                "name": "EMPTY_WITH_SOURCE",
+                "value": "",
+                "valueFrom": {"fieldRef": {"fieldPath": "metadata.name"}},
+            },
+        ],
+    )
+    def test_container_patch_accepts_valid_env_entries(self, env_entry):
+        """Test ContainerPatch still accepts env entries with exactly one source."""
+        ContainerPatch(name="trainer", env=[env_entry])
 
 
 class TestRuntimePatch:

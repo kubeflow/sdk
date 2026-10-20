@@ -57,6 +57,10 @@ class ContainerPatch:
                     raise ValueError("env 'name' must be a non-empty string")
                 if "value" not in env_var and "valueFrom" not in env_var:
                     raise ValueError("Each env entry must have either 'value' or 'valueFrom' key")
+                # The Kubernetes API treats value and valueFrom as mutually exclusive:
+                # valueFrom "Cannot be used if value is not empty."
+                if env_var.get("value") and "valueFrom" in env_var:
+                    raise ValueError("env 'value' and 'valueFrom' are mutually exclusive")
                 if "valueFrom" in env_var:
                     value_from = env_var["valueFrom"]
                     if not isinstance(value_from, dict):
