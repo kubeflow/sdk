@@ -212,7 +212,7 @@ class RuntimeBackend(abc.ABC):
     def wait_for_job_status(
         self,
         name: str,
-        status: set[SparkJobStatus] = {SparkJobStatus.COMPLETED},
+        status: set[SparkJobStatus] | None = None,
         timeout: int = 600,
         polling_interval: int = 2,
     ) -> SparkJob:

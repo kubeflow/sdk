@@ -14,6 +14,7 @@
 
 """Unit tests for SparkClient API."""
 
+import inspect
 from unittest.mock import patch
 
 import pytest
@@ -25,6 +26,7 @@ from kubeflow.spark.types.types import (
     FileJob,
     FuncJob,
     SparkJob,
+    SparkJobStatus,
 )
 from kubeflow.test.common import FAILED, SUCCESS, TestCase
 
@@ -173,3 +175,39 @@ def test_submit_job_success(job, options):
             spark_conf=None,
             options=options,
         )
+
+
+def test_wait_for_job_status_default_status_is_not_a_shared_mutable_set():
+    """Regression test for a mutable default argument.
+
+    `status` used to default to a `{SparkJobStatus.COMPLETED}` set literal, which Python
+    evaluates once at function-definition time and shares across every call that omits the
+    argument. Mutating that shared set in place (e.g. `status.add(...)` in calling code)
+    would silently corrupt the default target status for every later call, for the lifetime
+    of the process. The default must be `None`, with a fresh set built inside the function.
+    """
+    sig = inspect.signature(SparkClient.wait_for_job_status)
+    assert sig.parameters["status"].default is None
+
+
+def test_wait_for_job_status_without_status_builds_a_fresh_default_set():
+    """Test that omitting `status` resolves to a freshly built `{SparkJobStatus.COMPLETED}`."""
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
+        backend = mock_backend.return_value
+        backend.wait_for_job_status.return_value = SparkJob(
+            name="spark-job-123", namespace="default"
+        )
+
+        client = SparkClient()
+        client.wait_for_job_status(name="spark-job-123")
+
+        called_status = backend.wait_for_job_status.call_args.kwargs["status"]
+        assert called_status == {SparkJobStatus.COMPLETED}
+
+        # Simulate calling code mutating the set it received, as would have silently
+        # corrupted the shared literal default before the fix.
+        called_status.add(SparkJobStatus.FAILED)
+
+        client.wait_for_job_status(name="spark-job-456")
+        second_call_status = backend.wait_for_job_status.call_args.kwargs["status"]
+        assert second_call_status == {SparkJobStatus.COMPLETED}
