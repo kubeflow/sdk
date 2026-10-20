@@ -583,3 +583,9 @@ def test_get_job_status(local_backend, test_case):
 
     status = local_backend._LocalProcessBackend__get_job_status(job)
     assert status == test_case.expected_output
+
+
+def test_connect_is_not_implemented(local_backend):
+    """Test that the LocalProcess backend doesn't support interactive sessions."""
+    with pytest.raises(NotImplementedError):
+        local_backend.connect()

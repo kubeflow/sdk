@@ -70,3 +70,34 @@ def test_backend_selection(test_case):
         client = TrainerClient(backend_config=test_case["backend_config"])
         backend_name = client.backend.__class__.__name__
         assert backend_name == test_case["expected_backend"]
+
+
+def test_connect_delegates_to_backend():
+    """Test that TrainerClient.connect passes all arguments to the backend."""
+    with (
+        patch("kubernetes.config.load_kube_config"),
+        patch("kubernetes.client.CustomObjectsApi", return_value=Mock()),
+        patch("kubernetes.client.CoreV1Api", return_value=Mock()),
+    ):
+        client = TrainerClient()
+
+    client.backend = Mock()
+    client.backend.connect.return_value = "session"
+
+    session = client.connect(
+        runtime="mpi-interactive",
+        trainer=None,
+        options=[],
+        timeout=10,
+        polling_interval=1,
+    )
+
+    assert session == "session"
+    client.backend.connect.assert_called_once_with(
+        runtime="mpi-interactive",
+        initializer=None,
+        trainer=None,
+        options=[],
+        timeout=10,
+        polling_interval=1,
+    )

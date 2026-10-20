@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from unittest.mock import Mock
+
 import pytest
 
 from kubeflow.test.common import FAILED, SUCCESS, TestCase
@@ -179,3 +181,70 @@ def test_hugging_face_dataset_initializer(test_case: TestCase):
         assert test_case.expected_status == FAILED
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+def test_exec_result_str_returns_stdout():
+    """Test that printing an ExecResult prints the standard output."""
+    result = types.ExecResult(stdout="hello\n", stderr="warning\n", returncode=0)
+
+    assert str(result) == "hello\n"
+
+
+def test_train_job_session_execute_delegates_to_backend():
+    """Test that TrainJobSession.execute passes the command to the backend."""
+    backend = Mock()
+    backend.exec_command.return_value = types.ExecResult(stdout="out", stderr="", returncode=0)
+    session = types.TrainJobSession(name="interactive-job", backend=backend)
+
+    result = session.execute(["echo", "hello"], container="trainer")
+
+    assert session.name == "interactive-job"
+    assert result.stdout == "out"
+    backend.exec_command.assert_called_once_with(
+        "interactive-job", ["echo", "hello"], container="trainer"
+    )
+
+
+def test_train_job_session_close_deletes_job_and_waits():
+    """Test that TrainJobSession.close deletes the TrainJob and waits for its Pods."""
+    backend = Mock()
+    session = types.TrainJobSession(name="interactive-job", backend=backend)
+
+    session.close(timeout=42)
+
+    backend.delete_job.assert_called_once_with("interactive-job")
+    backend.wait_for_job_deletion.assert_called_once_with("interactive-job", timeout=42)
+
+
+def test_train_job_session_close_is_idempotent():
+    """Test that closing a session twice deletes the TrainJob only once."""
+    backend = Mock()
+    session = types.TrainJobSession(name="interactive-job", backend=backend)
+
+    session.close()
+    session.close()
+
+    backend.delete_job.assert_called_once_with("interactive-job")
+
+
+def test_train_job_session_context_manager_closes():
+    """Test that leaving the context manager closes the session."""
+    backend = Mock()
+
+    with types.TrainJobSession(name="interactive-job", backend=backend) as session:
+        assert isinstance(session, types.TrainJobSession)
+
+    backend.delete_job.assert_called_once_with("interactive-job")
+    backend.wait_for_job_deletion.assert_called_once_with("interactive-job", timeout=180)
+
+
+def test_train_job_session_execute_after_close_raises():
+    """Test that a closed session can't execute commands."""
+    backend = Mock()
+    session = types.TrainJobSession(name="interactive-job", backend=backend)
+    session.close()
+
+    with pytest.raises(RuntimeError):
+        session.execute(["echo", "hello"])
+
+    backend.exec_command.assert_not_called()

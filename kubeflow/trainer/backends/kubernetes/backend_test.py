@@ -52,10 +52,12 @@ from kubeflow.trainer.options import (
     JobSpecPatch,
     JobTemplatePatch,
     Labels,
+    Name,
     PodSpecPatch,
     PodTemplatePatch,
     ReplicatedJobPatch,
     RuntimePatch,
+    TrainerCommand,
     TrainingRuntimeSpecPatch,
 )
 from kubeflow.trainer.types import types
@@ -1874,3 +1876,477 @@ def test_get_job_events(kubernetes_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+# --------------------------
+# Interactive session tests
+# --------------------------
+
+INTERACTIVE_TRAIN_JOB_NAME = "interactive-job"
+
+
+class MockExecStream:
+    """Mock the Kubernetes WSClient returned by the exec stream."""
+
+    def __init__(self, stdout: str = "", stderr: str = "", returncode: int = 0):
+        self._stdout_chunks = [stdout] if stdout else []
+        self._stderr_chunks = [stderr] if stderr else []
+        self.returncode = returncode
+        self.closed = False
+        self._done = False
+
+    def is_open(self):
+        return not self._done
+
+    def update(self, timeout=0):
+        # The remote command finishes after the first update.
+        self._done = True
+
+    def peek_stdout(self):
+        return bool(self._stdout_chunks)
+
+    def read_stdout(self):
+        return self._stdout_chunks.pop(0)
+
+    def peek_stderr(self):
+        return bool(self._stderr_chunks)
+
+    def read_stderr(self):
+        return self._stderr_chunks.pop(0)
+
+    def close(self):
+        self.closed = True
+
+
+def get_interactive_pod(
+    name: str = "launcher-pod",
+    role: str = constants.LAUNCHER,
+    job_index: str = "0",
+    phase: str = constants.POD_RUNNING,
+    containers: tuple = (constants.NODE,),
+    ancestor: str | None = constants.TRAINER,
+):
+    """Create a mocked Pod scheduled for the interactive TrainJob."""
+    labels = {
+        constants.JOBSET_NAME_LABEL: BASIC_TRAIN_JOB_NAME,
+        constants.JOBSET_RJOB_NAME_LABEL: role,
+        constants.JOB_INDEX_LABEL: job_index,
+    }
+    if ancestor is not None:
+        labels[constants.TRAINJOB_ANCESTOR_LABEL] = ancestor
+
+    return models.IoK8sApiCoreV1Pod(
+        metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+            name=name,
+            namespace=DEFAULT_NAMESPACE,
+            labels=labels,
+        ),
+        spec=models.IoK8sApiCoreV1PodSpec(
+            containers=[
+                models.IoK8sApiCoreV1Container(name=container, image="mpi:latest")
+                for container in containers
+            ]
+        ),
+        status=models.IoK8sApiCoreV1PodStatus(phase=phase),
+    )
+
+
+def get_pod_list(*pods):
+    """Create a mocked PodList object with the given Pods."""
+    return models.IoK8sApiCoreV1PodList(items=list(pods))
+
+
+def mock_list_namespaced_pod(pod_list):
+    """Return a mock for list_namespaced_pod that always returns the given PodList."""
+    thread = Mock()
+    thread.get.return_value = pod_list
+    return Mock(return_value=thread)
+
+
+def test_connect(kubernetes_backend):
+    """Test KubernetesBackend.connect creates an interactive TrainJob."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    kubernetes_backend.core_api.list_namespaced_pod = mock_list_namespaced_pod(
+        get_pod_list(get_interactive_pod())
+    )
+    runtime = kubernetes_backend.get_runtime(TORCH_RUNTIME)
+
+    session = kubernetes_backend.connect(
+        runtime=runtime,
+        options=[Name(INTERACTIVE_TRAIN_JOB_NAME)],
+        timeout=10,
+        polling_interval=1,
+    )
+
+    assert session.name == INTERACTIVE_TRAIN_JOB_NAME
+
+    # The default keep-alive command must be injected into the TrainJob.
+    created_body = kubernetes_backend.custom_api.create_namespaced_custom_object.call_args[0][4]
+    assert created_body["spec"]["trainer"]["command"] == list(constants.INTERACTIVE_COMMAND)
+
+
+def test_connect_respects_trainer_command(kubernetes_backend):
+    """Test that connect doesn't override an explicitly provided TrainerCommand."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    kubernetes_backend.core_api.list_namespaced_pod = mock_list_namespaced_pod(
+        get_pod_list(get_interactive_pod())
+    )
+    runtime = kubernetes_backend.get_runtime(TORCH_RUNTIME)
+
+    session = kubernetes_backend.connect(
+        runtime=runtime,
+        options=[
+            Name(INTERACTIVE_TRAIN_JOB_NAME),
+            TrainerCommand(["bash", "-c", "keep-alive"]),
+        ],
+        timeout=10,
+        polling_interval=1,
+    )
+
+    assert session.name == INTERACTIVE_TRAIN_JOB_NAME
+
+    created_body = kubernetes_backend.custom_api.create_namespaced_custom_object.call_args[0][4]
+    assert created_body["spec"]["trainer"]["command"] == ["bash", "-c", "keep-alive"]
+
+
+def test_connect_rejects_non_container_trainer(kubernetes_backend):
+    """Test that connect requires a CustomTrainerContainer trainer."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    runtime = kubernetes_backend.get_runtime(TORCH_RUNTIME)
+
+    with pytest.raises(ValueError):
+        kubernetes_backend.connect(
+            runtime=runtime,
+            trainer=types.CustomTrainer(func=sample_train_func),
+        )
+
+
+def test_connect_timeout_when_pod_is_not_running(kubernetes_backend):
+    """Test connect timing out when the launcher Pod never starts running."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    kubernetes_backend.core_api.list_namespaced_pod = mock_list_namespaced_pod(
+        get_pod_list(get_interactive_pod(phase=constants.POD_PENDING))
+    )
+    runtime = kubernetes_backend.get_runtime(TORCH_RUNTIME)
+
+    with (
+        patch("kubeflow.trainer.backends.kubernetes.backend.time.sleep"),
+        pytest.raises(TimeoutError) as exc_info,
+    ):
+        kubernetes_backend.connect(
+            runtime=runtime,
+            options=[Name(INTERACTIVE_TRAIN_JOB_NAME)],
+            timeout=2,
+            polling_interval=1,
+        )
+
+    assert constants.POD_PENDING in str(exc_info.value)
+
+
+def test_connect_waits_for_the_trainer_pod(kubernetes_backend):
+    """Test that connect doesn't connect to the node Pods of the MPI runtimes."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    kubernetes_backend.core_api.list_namespaced_pod = mock_list_namespaced_pod(
+        get_pod_list(
+            get_interactive_pod(name="node-0-pod", role=constants.NODE, ancestor=None),
+        )
+    )
+    runtime = kubernetes_backend.get_runtime(TORCH_RUNTIME)
+
+    with (
+        patch("kubeflow.trainer.backends.kubernetes.backend.time.sleep"),
+        pytest.raises(TimeoutError),
+    ):
+        kubernetes_backend.connect(
+            runtime=runtime,
+            options=[Name(INTERACTIVE_TRAIN_JOB_NAME)],
+            timeout=2,
+            polling_interval=1,
+        )
+
+
+def test_connect_falls_back_to_the_launcher_pod(kubernetes_backend):
+    """Test that connect uses the launcher Pod when the ancestor label is not set."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    kubernetes_backend.core_api.list_namespaced_pod = mock_list_namespaced_pod(
+        get_pod_list(
+            get_interactive_pod(name="node-0-pod", role=constants.NODE, ancestor=None),
+            get_interactive_pod(name="launcher-pod", role=constants.LAUNCHER, ancestor=None),
+        )
+    )
+    runtime = kubernetes_backend.get_runtime(TORCH_RUNTIME)
+
+    session = kubernetes_backend.connect(
+        runtime=runtime,
+        options=[Name(INTERACTIVE_TRAIN_JOB_NAME)],
+        timeout=10,
+        polling_interval=1,
+    )
+
+    assert session.name == INTERACTIVE_TRAIN_JOB_NAME
+
+
+def test_connect_fails_when_pod_has_finished(kubernetes_backend):
+    """Test connect failing when the launcher Pod finished before the session started."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    kubernetes_backend.core_api.list_namespaced_pod = mock_list_namespaced_pod(
+        get_pod_list(get_interactive_pod(phase=constants.POD_SUCCEEDED))
+    )
+    runtime = kubernetes_backend.get_runtime(TORCH_RUNTIME)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        kubernetes_backend.connect(
+            runtime=runtime,
+            options=[Name(INTERACTIVE_TRAIN_JOB_NAME)],
+        )
+
+    assert constants.POD_SUCCEEDED in str(exc_info.value)
+
+
+def test_connect_rejects_invalid_polling_interval(kubernetes_backend):
+    """Test that connect validates the polling interval and timeout."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+
+    with pytest.raises(ValueError):
+        kubernetes_backend.connect(timeout=1, polling_interval=1)
+
+
+def test_exec_command(kubernetes_backend):
+    """Test that exec_command executes the command in the trainer Pod."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    kubernetes_backend.core_api.list_namespaced_pod = mock_list_namespaced_pod(
+        get_pod_list(
+            # The node Pods of the MPI runtimes only run the SSH server.
+            get_interactive_pod(name="node-0-pod", role=constants.NODE, ancestor=None),
+            get_interactive_pod(name="launcher-pod", role=constants.LAUNCHER),
+        )
+    )
+    response = MockExecStream(stdout="hello\n", stderr="warning\n", returncode=0)
+
+    with patch(
+        "kubeflow.trainer.backends.kubernetes.backend.stream", return_value=response
+    ) as mock_stream:
+        result = kubernetes_backend.exec_command(INTERACTIVE_TRAIN_JOB_NAME, ["echo", "hello"])
+
+    assert result.stdout == "hello\n"
+    assert result.stderr == "warning\n"
+    assert result.returncode == 0
+    assert response.closed
+    mock_stream.assert_called_once_with(
+        kubernetes_backend.core_api.connect_get_namespaced_pod_exec,
+        "launcher-pod",
+        DEFAULT_NAMESPACE,
+        container=constants.NODE,
+        command=["echo", "hello"],
+        stderr=True,
+        stdin=False,
+        stdout=True,
+        tty=False,
+        _preload_content=False,
+    )
+
+
+def test_exec_command_ignores_node_pods(kubernetes_backend):
+    """Test that exec_command never executes commands in the node Pods of the MPI runtimes."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    kubernetes_backend.core_api.list_namespaced_pod = mock_list_namespaced_pod(
+        get_pod_list(
+            get_interactive_pod(name="node-0-pod", role=constants.NODE, ancestor=None),
+            get_interactive_pod(name="node-1-pod", role=constants.NODE, ancestor=None),
+        )
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        kubernetes_backend.exec_command(INTERACTIVE_TRAIN_JOB_NAME, ["echo", "hello"])
+
+    assert INTERACTIVE_TRAIN_JOB_NAME in str(exc_info.value)
+
+
+def test_exec_command_falls_back_to_launcher_pod(kubernetes_backend):
+    """Test that exec_command uses the launcher Pod when the ancestor label is not set."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    kubernetes_backend.core_api.list_namespaced_pod = mock_list_namespaced_pod(
+        get_pod_list(
+            get_interactive_pod(name="node-0-pod", role=constants.NODE, ancestor=None),
+            get_interactive_pod(name="launcher-pod", role=constants.LAUNCHER, ancestor=None),
+        )
+    )
+    response = MockExecStream()
+
+    with patch(
+        "kubeflow.trainer.backends.kubernetes.backend.stream", return_value=response
+    ) as mock_stream:
+        kubernetes_backend.exec_command(INTERACTIVE_TRAIN_JOB_NAME, ["echo"])
+
+    assert mock_stream.call_args.args[1] == "launcher-pod"
+
+
+def test_exec_command_with_string_command(kubernetes_backend):
+    """Test that a string command is executed with the shell."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    kubernetes_backend.core_api.list_namespaced_pod = mock_list_namespaced_pod(
+        get_pod_list(get_interactive_pod())
+    )
+    response = MockExecStream(stdout="hello\n")
+
+    with patch(
+        "kubeflow.trainer.backends.kubernetes.backend.stream", return_value=response
+    ) as mock_stream:
+        kubernetes_backend.exec_command(INTERACTIVE_TRAIN_JOB_NAME, "echo hello")
+
+    assert mock_stream.call_args.kwargs["command"] == ["sh", "-c", "echo hello"]
+
+
+def test_exec_command_with_container_override(kubernetes_backend):
+    """Test that the container can be overridden when executing a command."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    kubernetes_backend.core_api.list_namespaced_pod = mock_list_namespaced_pod(
+        get_pod_list(get_interactive_pod(containers=("istio-proxy", constants.NODE)))
+    )
+    response = MockExecStream()
+
+    with patch(
+        "kubeflow.trainer.backends.kubernetes.backend.stream", return_value=response
+    ) as mock_stream:
+        kubernetes_backend.exec_command(
+            INTERACTIVE_TRAIN_JOB_NAME, ["echo"], container="istio-proxy"
+        )
+
+    assert mock_stream.call_args.kwargs["container"] == "istio-proxy"
+
+
+def test_exec_command_uses_trainer_node_pod(kubernetes_backend):
+    """Test that exec_command uses a node Pod for the runtimes without the launcher."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    kubernetes_backend.core_api.list_namespaced_pod = mock_list_namespaced_pod(
+        get_pod_list(
+            get_interactive_pod(name="node-0-pod", role=constants.NODE, job_index="0"),
+            get_interactive_pod(name="node-1-pod", role=constants.NODE, job_index="1"),
+        )
+    )
+    response = MockExecStream()
+
+    with patch(
+        "kubeflow.trainer.backends.kubernetes.backend.stream", return_value=response
+    ) as mock_stream:
+        kubernetes_backend.exec_command(INTERACTIVE_TRAIN_JOB_NAME, ["echo"])
+
+    assert mock_stream.call_args.args[1] in ("node-0-pod", "node-1-pod")
+
+
+def test_exec_command_rejects_empty_command(kubernetes_backend):
+    """Test that exec_command requires a non-empty command."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+
+    with pytest.raises(ValueError):
+        kubernetes_backend.exec_command(INTERACTIVE_TRAIN_JOB_NAME, [])
+
+
+def test_exec_command_fails_without_pods(kubernetes_backend):
+    """Test that exec_command fails when the TrainJob has no Pods."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    kubernetes_backend.core_api.list_namespaced_pod = mock_list_namespaced_pod(get_pod_list())
+
+    with pytest.raises(RuntimeError) as exc_info:
+        kubernetes_backend.exec_command(INTERACTIVE_TRAIN_JOB_NAME, ["echo"])
+
+    assert INTERACTIVE_TRAIN_JOB_NAME in str(exc_info.value)
+
+
+def test_exec_command_fails_when_pod_is_not_running(kubernetes_backend):
+    """Test that exec_command fails when the Pod is not running."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    kubernetes_backend.core_api.list_namespaced_pod = mock_list_namespaced_pod(
+        get_pod_list(get_interactive_pod(phase=constants.POD_PENDING))
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        kubernetes_backend.exec_command(INTERACTIVE_TRAIN_JOB_NAME, ["echo"])
+
+    assert constants.POD_PENDING in str(exc_info.value)
+
+
+def test_exec_command_fails_when_stream_fails(kubernetes_backend):
+    """Test that exec_command wraps stream failures into a RuntimeError."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    kubernetes_backend.core_api.list_namespaced_pod = mock_list_namespaced_pod(
+        get_pod_list(get_interactive_pod())
+    )
+
+    with (
+        patch(
+            "kubeflow.trainer.backends.kubernetes.backend.stream",
+            side_effect=RuntimeError("connection refused"),
+        ),
+        pytest.raises(RuntimeError),
+    ):
+        kubernetes_backend.exec_command(INTERACTIVE_TRAIN_JOB_NAME, ["echo"])
+
+
+def test_exec_command_without_returncode(kubernetes_backend):
+    """Test that exec_command reports output when the exit code is unknown."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    kubernetes_backend.core_api.list_namespaced_pod = mock_list_namespaced_pod(
+        get_pod_list(get_interactive_pod())
+    )
+    response = MockExecStream(stdout="hello\n")
+    response.returncode = None
+
+    with patch("kubeflow.trainer.backends.kubernetes.backend.stream", return_value=response):
+        result = kubernetes_backend.exec_command(INTERACTIVE_TRAIN_JOB_NAME, ["echo"])
+
+    assert result.stdout == "hello\n"
+    assert result.returncode is None
+
+
+def test_wait_for_job_deletion(kubernetes_backend):
+    """Test that wait_for_job_deletion returns when the TrainJob has no Pods."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    kubernetes_backend.core_api.list_namespaced_pod = mock_list_namespaced_pod(get_pod_list())
+
+    kubernetes_backend.wait_for_job_deletion(
+        INTERACTIVE_TRAIN_JOB_NAME, timeout=10, polling_interval=1
+    )
+
+
+def test_wait_for_job_deletion_waits_for_pods(kubernetes_backend):
+    """Test that wait_for_job_deletion waits until all Pods are deleted."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    thread = Mock()
+    thread.get.side_effect = [get_pod_list(get_interactive_pod()), get_pod_list()]
+    kubernetes_backend.core_api.list_namespaced_pod = Mock(return_value=thread)
+
+    with patch("kubeflow.trainer.backends.kubernetes.backend.time.sleep"):
+        kubernetes_backend.wait_for_job_deletion(
+            INTERACTIVE_TRAIN_JOB_NAME, timeout=10, polling_interval=1
+        )
+
+    assert thread.get.call_count == 2
+
+
+def test_wait_for_job_deletion_logs_timeout(kubernetes_backend, caplog):
+    """Test that wait_for_job_deletion logs a warning when the Pods are not deleted."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    kubernetes_backend.core_api.list_namespaced_pod = mock_list_namespaced_pod(
+        get_pod_list(get_interactive_pod())
+    )
+
+    with (
+        caplog.at_level(logging.WARNING),
+        patch("kubeflow.trainer.backends.kubernetes.backend.time.sleep"),
+    ):
+        kubernetes_backend.wait_for_job_deletion(
+            INTERACTIVE_TRAIN_JOB_NAME, timeout=2, polling_interval=1
+        )
+
+    assert "Timeout waiting for all Pods" in caplog.text
+
+
+def test_wait_for_job_deletion_rejects_invalid_polling_interval(kubernetes_backend):
+    """Test that wait_for_job_deletion validates the polling interval and timeout."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+
+    with pytest.raises(ValueError):
+        kubernetes_backend.wait_for_job_deletion(
+            INTERACTIVE_TRAIN_JOB_NAME, timeout=1, polling_interval=1
+        )

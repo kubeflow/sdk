@@ -161,6 +161,7 @@ Getting Involved
    train/distributed
    train/runtimes
    train/initializers
+   train/interactive-session
    train/options
    train/api
 

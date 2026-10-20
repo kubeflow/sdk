@@ -490,6 +490,17 @@ class ContainerBackend(RuntimeBackend):
             # Re-raise the original exception
             raise
 
+    def connect(
+        self,
+        runtime: str | types.Runtime | None = None,
+        initializer: types.Initializer | None = None,
+        trainer: types.CustomTrainerContainer | None = None,
+        options: list | None = None,
+        timeout: int = 600,
+        polling_interval: int = 2,
+    ) -> types.TrainJobSession:
+        raise NotImplementedError()
+
     def _get_job_containers(self, name: str) -> list[dict]:
         """
         Get containers for a specific training job.

@@ -17,9 +17,13 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from typing import TYPE_CHECKING
 
 import kubeflow.common.constants as common_constants
 from kubeflow.trainer.constants import constants
+
+if TYPE_CHECKING:
+    from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
 
 
 # Configuration for the Custom Trainer.
@@ -503,3 +507,107 @@ class TrainJobTemplate:
 
     def __getitem__(self, key):
         return getattr(self, key)
+
+
+@dataclass
+class ExecResult:
+    """The result of a command executed in an interactive TrainJob.
+
+    Args:
+        stdout (`str`): The standard output of the command.
+        stderr (`str`): The standard error of the command.
+        returncode (`Optional[int]`): The exit code of the command. It is None if the
+            Kubernetes API server didn't report the exit code.
+    """
+
+    stdout: str
+    stderr: str
+    returncode: int | None = None
+
+    def __str__(self) -> str:
+        return self.stdout
+
+
+class TrainJobSession:
+    """A live session to execute commands in an interactive TrainJob.
+
+    Do not instantiate this class directly. Use `TrainerClient.connect()` to create
+    an interactive TrainJob and get its session.
+
+    Example:
+        .. code-block:: python
+
+            from kubeflow.trainer import CustomTrainerContainer, TrainerClient
+
+            client = TrainerClient()
+            runtime = client.get_runtime("mpi-interactive")
+
+            with client.connect(
+                runtime=runtime,
+                trainer=CustomTrainerContainer(image=runtime.trainer.image, num_nodes=4),
+            ) as session:
+                result = session.execute(["mpirun", "hostname"])
+                print(result.stdout)
+    """
+
+    def __init__(self, name: str, backend: "KubernetesBackend"):
+        """Initialize the TrainJob session.
+
+        Args:
+            name: The name of the TrainJob.
+            backend: The Kubernetes backend used to execute commands and delete the TrainJob.
+        """
+        self._name = name
+        self._backend = backend
+        self._closed = False
+
+    @property
+    def name(self) -> str:
+        """The name of the TrainJob this session is connected to."""
+        return self._name
+
+    def execute(
+        self,
+        command: str | list[str],
+        *,
+        container: str | None = None,
+    ) -> ExecResult:
+        """Execute a command in the TrainJob's launcher Pod.
+
+        Args:
+            command (`Union[str, list[str]]`): The command to execute. A string command is
+                executed with `sh -c`. A list of arguments is executed directly.
+            container (`Optional[str]`): The name of the container the command is executed in.
+                Defaults to the TrainJob's trainer container.
+
+        Returns:
+            `ExecResult`: The result of the executed command.
+
+        Raises:
+            RuntimeError: If the session is closed or the command can't be executed.
+        """
+        if self._closed:
+            raise RuntimeError(f"TrainJob session {self._name} is closed")
+        return self._backend.exec_command(self._name, command, container=container)
+
+    def close(self, timeout: int = 180) -> None:
+        """Delete the TrainJob and wait for its Pods to be deleted.
+
+        Waiting for the Pods to be deleted ensures that a new TrainJob with the same
+        name can be created right after the session is closed.
+
+        Args:
+            timeout (`int`): The maximum time to wait for the TrainJob's Pods to be
+                deleted in seconds. Defaults to 180.
+        """
+        if self._closed:
+            return
+        self._backend.delete_job(self._name)
+        self._closed = True
+        self._backend.wait_for_job_deletion(self._name, timeout=timeout)
+
+    def __enter__(self) -> "TrainJobSession":
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.close()

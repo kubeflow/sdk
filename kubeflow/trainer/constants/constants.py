@@ -46,8 +46,14 @@ TRAINJOB_COMPLETE = "Complete"
 # The failed status of the TrainJob, defined when TrainJob CR has failed condition.
 TRAINJOB_FAILED = "Failed"
 
+# The running phase of the Pods.
+POD_RUNNING = "Running"
+
 # The succeeded phase of the Pods.
 POD_SUCCEEDED = "Succeeded"
+
+# The failed phase of the Pods.
+POD_FAILED = "Failed"
 
 # The label key to identify the relationship between TrainJob and Pod template in the runtime.
 # For example, what PodTemplate must be overridden by TrainJob's .spec.trainer APIs.
@@ -63,6 +69,11 @@ DATASET_INITIALIZER = "dataset-initializer"
 # The name of the ReplicatedJob and container of the model initializer.
 # Also, it represents the `trainjob-ancestor-step` label value for the model initializer step.
 MODEL_INITIALIZER = "model-initializer"
+
+# The `trainjob-ancestor-step` label value for the trainer step.
+# The Pod with this label runs the trainer command, e.g. the launcher Pod for the MPI
+# runtimes and the node Pod for the other runtimes.
+TRAINER = "trainer"
 
 # The env name for the access token of dataset/model initializer.
 INITIALIZER_ENV_ACCESS_TOKEN = "ACCESS_TOKEN"
@@ -172,6 +183,10 @@ TORCH_ENV_NUM_PROC_PER_NODE = "PET_NPROC_PER_NODE"
 
 # The default command for the TorchTune BuiltinTrainer.
 TORCH_TUNE_COMMAND = ("tune", "run")
+
+# The default command for the interactive TrainJob created by the connect API.
+# It keeps the launcher Pod alive, so commands can be executed in the session.
+INTERACTIVE_COMMAND = ("sleep", "infinity")
 
 # The Instruct Datasets class in torchtune
 TORCH_TUNE_INSTRUCT_DATASET = "torchtune.datasets.instruct_dataset"

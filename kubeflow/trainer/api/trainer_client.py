@@ -186,6 +186,67 @@ class TrainerClient:
             options=options,
         )
 
+    def connect(
+        self,
+        runtime: str | types.Runtime | None = None,
+        initializer: types.Initializer | None = None,
+        trainer: types.CustomTrainerContainer | None = None,
+        options: list | None = None,
+        timeout: int = 600,
+        polling_interval: int = 2,
+    ) -> types.TrainJobSession:
+        """Create an interactive TrainJob and connect a session to it.
+
+        The interactive TrainJob keeps running, so multiple commands can be executed in the
+        returned session, e.g. `mpirun` for MPI runtimes. If the options don't include a
+        `TrainerCommand`, the launcher Pod is kept alive with the default `sleep infinity`
+        command.
+
+        Args:
+            runtime: Optional reference to one of the existing runtimes. It can accept the
+                runtime name or Runtime object. Defaults to the torch-distributed runtime if
+                not provided.
+            initializer: Optional configuration for the dataset and model initializers.
+            trainer: Optional configuration for a CustomTrainerContainer. CustomTrainer and
+                BuiltinTrainer are not supported, since their training process exits when the
+                training finishes.
+            options: Optional list of options to configure the TrainJob, e.g. a
+                `TrainerCommand` to override the default keep-alive command.
+            timeout: The maximum time to wait for the interactive TrainJob to be ready in
+                seconds. Defaults to 600.
+            polling_interval: The interval to poll the TrainJob's Pods in seconds.
+                Defaults to 2.
+
+        Returns:
+            `TrainJobSession`: The session to execute commands in the TrainJob.
+
+        Raises:
+            ValueError: If the trainer is not a CustomTrainerContainer or the timeout values
+                are invalid.
+            TimeoutError: If the interactive TrainJob is not ready within the timeout.
+            NotImplementedError: If the client uses the LocalProcess or Container backend.
+            RuntimeError: If the interactive TrainJob can't be created.
+
+        Examples:
+            >>> from kubeflow.trainer import CustomTrainerContainer, TrainerClient
+            >>> client = TrainerClient()
+            >>> runtime = client.get_runtime("mpi-interactive")
+            >>> with client.connect(
+            ...     runtime=runtime,
+            ...     trainer=CustomTrainerContainer(image=runtime.trainer.image, num_nodes=4),
+            ... ) as session:
+            ...     result = session.execute(["mpirun", "hostname"])
+            ...     print(result.stdout)
+        """
+        return self.backend.connect(
+            runtime=runtime,
+            initializer=initializer,
+            trainer=trainer,
+            options=options,
+            timeout=timeout,
+            polling_interval=polling_interval,
+        )
+
     def list_jobs(self, runtime: types.Runtime | None = None) -> list[types.TrainJob]:
         """List created TrainJobs.
 

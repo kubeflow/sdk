@@ -26,6 +26,7 @@ import uuid
 
 from kubeflow_trainer_api import models
 from kubernetes import client, config, watch
+from kubernetes.stream import stream
 
 import kubeflow.common.constants as common_constants
 from kubeflow.common.types import KubernetesBackendConfig
@@ -539,6 +540,230 @@ class KubernetesBackend(RuntimeBackend):
 
         logger.debug(f"{constants.TRAINJOB_KIND} {self.namespace}/{name} has been deleted")
 
+    def connect(
+        self,
+        runtime: str | types.Runtime | None = None,
+        initializer: types.Initializer | None = None,
+        trainer: types.CustomTrainerContainer | None = None,
+        options: list | None = None,
+        timeout: int = 600,
+        polling_interval: int = 2,
+    ) -> types.TrainJobSession:
+        """Create an interactive TrainJob and connect a session to it.
+
+        The TrainJob keeps running, so multiple commands can be executed in the returned
+        session. If the options don't include a `TrainerCommand`, the launcher Pod is kept
+        alive with the default `sleep infinity` command.
+
+        Args:
+            runtime: reference to one of the existing runtimes. It can accept the runtime
+                name or Runtime object. Defaults to the torch-distributed runtime if not provided.
+            initializer: Optional configuration for the dataset and model initializers.
+            trainer: Optional configuration for a CustomTrainerContainer. CustomTrainer and
+                BuiltinTrainer are not supported, since their training process exits when the
+                training finishes.
+            options: Optional list of options to configure the TrainJob, e.g. a
+                `TrainerCommand` to override the default keep-alive command.
+            timeout: The maximum time to wait for the interactive TrainJob to be ready in seconds.
+            polling_interval: The interval to poll the TrainJob's Pods in seconds.
+
+        Returns:
+            `TrainJobSession`: The session to execute commands in the TrainJob.
+
+        Raises:
+            ValueError: If the trainer is not a CustomTrainerContainer or the timeout values
+                are invalid.
+            TimeoutError: If the interactive TrainJob is not ready within the timeout.
+            RuntimeError: If the interactive TrainJob can't be created or its Pod has already
+                finished.
+        """
+        if trainer is not None and not isinstance(trainer, types.CustomTrainerContainer):
+            raise ValueError(
+                "Trainer must be a CustomTrainerContainer to create an interactive TrainJob. "
+                "CustomTrainer and BuiltinTrainer are not supported, since their training "
+                "process exits when the training finishes."
+            )
+
+        common_utils.validate_wait_for_job_status(polling_interval, timeout)
+
+        # Import the option here to avoid circular imports at module load time.
+        from kubeflow.trainer.options.kubernetes import TrainerCommand
+
+        options = list(options) if options else []
+        if not any(isinstance(option, TrainerCommand) for option in options):
+            logger.debug(
+                f"Setting the default command for the interactive {constants.TRAINJOB_KIND}: "
+                f"{' '.join(constants.INTERACTIVE_COMMAND)}"
+            )
+            options.append(TrainerCommand(list(constants.INTERACTIVE_COMMAND)))
+
+        name = self.train(
+            runtime=runtime,
+            initializer=initializer,
+            trainer=trainer,
+            options=options,
+        )
+
+        logger.debug(
+            f"Waiting for the interactive {constants.TRAINJOB_KIND} "
+            f"{self.namespace}/{name} to be ready"
+        )
+
+        last_pod_phase = None
+        for _ in range(round(timeout / polling_interval)):
+            pod = self._get_trainer_pod(name)
+            if pod is not None:
+                last_pod_phase = pod.status.phase if pod.status else None
+                if last_pod_phase == constants.POD_RUNNING:
+                    return types.TrainJobSession(name=name, backend=self)
+                if last_pod_phase in {constants.POD_SUCCEEDED, constants.POD_FAILED}:
+                    raise RuntimeError(
+                        f"TrainJob's Pod {pod.metadata.name} reached the {last_pod_phase} phase "
+                        "before an interactive session could be established. Make sure the "
+                        "trainer Pod keeps running, e.g. by omitting the TrainerCommand option "
+                        "to use the default "
+                        f"'{' '.join(constants.INTERACTIVE_COMMAND)}' command."
+                    )
+            time.sleep(polling_interval)
+
+        raise TimeoutError(
+            f"Timeout waiting for the interactive {constants.TRAINJOB_KIND} "
+            f"{self.namespace}/{name} to be ready"
+            + (f" (last Pod phase: {last_pod_phase})" if last_pod_phase else "")
+            + f". The {constants.TRAINJOB_KIND} was created and can be deleted with "
+            f"delete_job('{name}')"
+        )
+
+    def exec_command(
+        self,
+        name: str,
+        command: str | list[str],
+        container: str | None = None,
+    ) -> types.ExecResult:
+        """Execute a command in the TrainJob's trainer Pod.
+
+        Args:
+            name: The name of the TrainJob to execute the command in.
+            command: The command to execute. A string command is executed with `sh -c`.
+                A list of arguments is executed directly.
+            container: The name of the container the command is executed in. Defaults to the
+                TrainJob's trainer container.
+
+        Returns:
+            `ExecResult`: The standard output, standard error and exit code of the command.
+
+        Raises:
+            ValueError: If the command is empty.
+            RuntimeError: If the TrainJob's Pod can't be found, is not running, or the command
+                can't be executed.
+        """
+        command = ["sh", "-c", command] if isinstance(command, str) else list(command)
+
+        if not command:
+            raise ValueError("Command must not be empty")
+
+        pod = self._get_trainer_pod(name)
+        if pod is None:
+            raise RuntimeError(
+                f"Failed to find the trainer Pod for {constants.TRAINJOB_KIND}: "
+                f"{self.namespace}/{name}"
+            )
+
+        pod_phase = pod.status.phase if pod.status else None
+        if pod_phase != constants.POD_RUNNING:
+            raise RuntimeError(
+                f"{constants.TRAINJOB_KIND}'s Pod {pod.metadata.name} is not Running, "
+                f"its phase is {pod_phase}"
+            )
+
+        container_name = container or self._get_exec_container_name(pod)
+
+        try:
+            response = stream(
+                self.core_api.connect_get_namespaced_pod_exec,
+                pod.metadata.name,
+                self.namespace,
+                container=container_name,
+                command=command,
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+                # Return the WebSocket client to stream the output of the command.
+                _preload_content=False,
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to exec the command in {constants.TRAINJOB_KIND}'s Pod "
+                f"{self.namespace}/{pod.metadata.name}"
+            ) from e
+
+        stdout: list[str] = []
+        stderr: list[str] = []
+        try:
+            while response.is_open():
+                response.update(timeout=1)
+                if response.peek_stdout():
+                    stdout.append(response.read_stdout())
+                if response.peek_stderr():
+                    stderr.append(response.read_stderr())
+
+            try:
+                returncode = response.returncode
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Failed to get the command's return code: {e}")
+                returncode = None
+        finally:
+            response.close()
+
+        return types.ExecResult(
+            stdout="".join(stdout),
+            stderr="".join(stderr),
+            returncode=returncode,
+        )
+
+    def wait_for_job_deletion(
+        self,
+        name: str,
+        timeout: int = 180,
+        polling_interval: int = 2,
+    ) -> None:
+        """Wait for all Pods of the deleted TrainJob to be removed.
+
+        Waiting for the Pods to be deleted ensures that a new TrainJob with the same name can
+        be created right after. Otherwise, old Pods (e.g. with SSH keys) might conflict with
+        the new TrainJob.
+
+        Args:
+            name: The name of the deleted TrainJob.
+            timeout: The maximum time to wait for the Pods to be deleted in seconds.
+            polling_interval: The interval to poll the Pods in seconds.
+
+        Raises:
+            ValueError: If the timeout values are invalid.
+            RuntimeError: If the TrainJob's Pods can't be listed.
+        """
+        common_utils.validate_wait_for_job_status(polling_interval, timeout)
+
+        for _ in range(round(timeout / polling_interval)):
+            pods = self._list_job_pods(name)
+            if not pods:
+                logger.debug(
+                    f"All Pods of {constants.TRAINJOB_KIND} {self.namespace}/{name} "
+                    "have been deleted"
+                )
+                return
+            logger.debug(
+                f"Waiting for {len(pods)} Pods of {constants.TRAINJOB_KIND} "
+                f"{self.namespace}/{name} to be deleted"
+            )
+            time.sleep(polling_interval)
+
+        logger.warning(
+            f"Timeout waiting for all Pods of {constants.TRAINJOB_KIND} "
+            f"{self.namespace}/{name} to be deleted after {timeout} seconds"
+        )
+
     def get_job_events(self, name: str) -> list[types.Event]:
         # Get all pod names related to this TrainJob
         trainjob = self.get_job(name)
@@ -653,6 +878,79 @@ class KubernetesBackend(RuntimeBackend):
             raise RuntimeError(
                 f"Failed to read logs for the pod {self.namespace}/{pod_name}"
             ) from e
+
+    def _list_job_pods(self, name: str) -> list:
+        """List the Pods created for the TrainJob."""
+        try:
+            response = self.core_api.list_namespaced_pod(
+                namespace=self.namespace,
+                label_selector=constants.POD_LABEL_SELECTOR.format(trainjob_name=name),
+                async_req=True,
+            ).get(common_constants.DEFAULT_TIMEOUT)
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(
+                f"Timeout to list {constants.TRAINJOB_KIND}'s Pods: {self.namespace}/{name}"
+            ) from e
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to list {constants.TRAINJOB_KIND}'s Pods: {self.namespace}/{name}"
+            ) from e
+
+        return list(response.items) if response and response.items else []
+
+    def _get_trainer_pod(self, name: str):
+        """Get the Pod that runs the trainer command for the TrainJob.
+
+        The trainer Pod is marked with the `trainer.kubeflow.org/trainjob-ancestor-step`
+        label. It is the launcher Pod for the MPI runtimes and the node Pod for the other
+        runtimes. The node Pods of the MPI runtimes only run the SSH server, so commands
+        must never be executed in them.
+        """
+        pods = self._list_job_pods(name)
+
+        trainer_pods = [
+            pod
+            for pod in pods
+            if pod.metadata
+            and pod.metadata.labels
+            and pod.metadata.labels.get(constants.TRAINJOB_ANCESTOR_LABEL) == constants.TRAINER
+        ]
+        if not trainer_pods:
+            # Fall back to the launcher Pod for the runtimes that don't set the ancestor label.
+            trainer_pods = [
+                pod
+                for pod in pods
+                if pod.metadata
+                and pod.metadata.labels
+                and pod.metadata.labels.get(constants.JOBSET_RJOB_NAME_LABEL) == constants.LAUNCHER
+            ]
+
+        if not trainer_pods:
+            return None
+
+        # If the Pod was restarted, use the newest one.
+        return max(
+            trainer_pods,
+            key=lambda pod: (
+                pod.metadata is not None and pod.metadata.creation_timestamp is not None,
+                pod.metadata.creation_timestamp if pod.metadata else None,
+            ),
+        )
+
+    def _get_exec_container_name(self, pod) -> str:
+        """Get the name of the container commands are executed in."""
+        containers = pod.spec.containers if pod.spec and pod.spec.containers else []
+        if not containers:
+            raise RuntimeError(
+                f"{constants.TRAINJOB_KIND}'s Pod {pod.metadata.name} has no containers"
+            )
+
+        # The trainer container is always named 'node' in the TrainJob runtimes.
+        for container in containers:
+            if container.name == constants.NODE:
+                return container.name
+
+        return containers[0].name
 
     def __get_trainjob_from_cr(
         self,

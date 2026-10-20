@@ -40,6 +40,7 @@ from kubeflow.trainer.types.types import (
     DataFormat,
     DataType,
     Event,
+    ExecResult,
     HuggingFaceDatasetInitializer,
     HuggingFaceModelInitializer,
     Initializer,
@@ -53,6 +54,7 @@ from kubeflow.trainer.types.types import (
     TorchTuneConfig,
     TorchTuneInstructDataset,
     TrainerType,
+    TrainJobSession,
     TrainJobTemplate,
 )
 
@@ -65,6 +67,7 @@ __all__ = [
     "DATASET_PATH",
     "DataType",
     "Event",
+    "ExecResult",
     "HuggingFaceDatasetInitializer",
     "HuggingFaceModelInitializer",
     "Initializer",
@@ -78,6 +81,7 @@ __all__ = [
     "RuntimeTrainer",
     "S3DatasetInitializer",
     "S3ModelInitializer",
+    "TrainJobSession",
     "TrainJobTemplate",
     "TrainerClient",
     "TrainerType",

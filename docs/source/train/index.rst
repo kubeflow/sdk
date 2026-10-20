@@ -79,6 +79,12 @@ Guides
 
       Configure advanced settings like labels, annotations, and runtime patches.
 
+   .. grid-item-card:: Interactive Sessions
+      :link: interactive-session
+      :link-type: doc
+
+      Run commands in a training job that keeps running on the cluster.
+
 Common Patterns
 ---------------
 

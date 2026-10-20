@@ -1130,3 +1130,9 @@ def test_create_adapter_error_message_format():
         # Guard the patch target: the failure must come from the mocked adapter, not from
         # a genuinely unavailable Docker daemon.
         assert mock_docker.called
+
+
+def test_connect_is_not_implemented(container_backend):
+    """Test that the Container backend doesn't support interactive sessions."""
+    with pytest.raises(NotImplementedError):
+        container_backend.connect()

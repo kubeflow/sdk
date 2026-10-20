@@ -23,6 +23,17 @@ Trainers
    :members:
    :show-inheritance:
 
+Interactive Sessions
+--------------------
+
+.. autoclass:: kubeflow.trainer.TrainJobSession
+   :members:
+   :show-inheritance:
+
+.. autoclass:: kubeflow.trainer.ExecResult
+   :members:
+   :show-inheritance:
+
 Initializers
 ------------
 

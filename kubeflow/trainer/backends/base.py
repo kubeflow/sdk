@@ -51,6 +51,18 @@ class RuntimeBackend(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
+    def connect(
+        self,
+        runtime: str | types.Runtime | None = None,
+        initializer: types.Initializer | None = None,
+        trainer: types.CustomTrainerContainer | None = None,
+        options: list | None = None,
+        timeout: int = 600,
+        polling_interval: int = 2,
+    ) -> types.TrainJobSession:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
     def list_jobs(self, runtime: types.Runtime | None = None) -> list[types.TrainJob]:
         raise NotImplementedError()
 
