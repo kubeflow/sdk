@@ -670,7 +670,18 @@ class KubernetesBackend(RuntimeBackend):
         name = trainjob_cr.metadata.name
         namespace = trainjob_cr.metadata.namespace
 
-        runtime = self.get_runtime(trainjob_cr.spec.runtime_ref.name)
+        runtime_name = trainjob_cr.spec.runtime_ref.name
+        try:
+            runtime = self.get_runtime(runtime_name)
+        except RuntimeError as e:
+            # The runtime can be deleted while its TrainJobs still exist.
+            if not (isinstance(e.__cause__, client.ApiException) and e.__cause__.status == 404):
+                raise
+            logger.warning(
+                f"Runtime {runtime_name} of {constants.TRAINJOB_KIND} {namespace}/{name} "
+                "is not found, it may have been deleted"
+            )
+            runtime = None
 
         # Construct the TrainJob from the CR.
         trainjob = types.TrainJob(
@@ -683,6 +694,8 @@ class KubernetesBackend(RuntimeBackend):
                 trainjob_cr.spec.trainer.num_nodes
                 if trainjob_cr.spec.trainer and trainjob_cr.spec.trainer.num_nodes
                 else runtime.trainer.num_nodes
+                if runtime
+                else None
             ),
             status=constants.TRAINJOB_CREATED,  # The default TrainJob status.
         )
@@ -708,6 +721,17 @@ class KubernetesBackend(RuntimeBackend):
                     pod.metadata.creation_timestamp if pod.metadata else None,
                 ),
                 reverse=True,
+            )
+            is_mpi = (
+                runtime.trainer.command[0] == "mpirun"
+                if runtime
+                else any(
+                    pod.metadata
+                    and pod.metadata.labels
+                    and pod.metadata.labels.get(constants.JOBSET_RJOB_NAME_LABEL)
+                    == constants.LAUNCHER
+                    for pod in sorted_pods
+                )
             )
             seen_step_keys: set[str] = set()
             for pod in sorted_pods:
@@ -747,7 +771,7 @@ class KubernetesBackend(RuntimeBackend):
                             pod.metadata.name,
                             pod.spec,
                             pod.status,
-                            trainjob.runtime,
+                            is_mpi,
                             role,
                             int(pod.metadata.labels[constants.JOB_INDEX_LABEL]),
                         )

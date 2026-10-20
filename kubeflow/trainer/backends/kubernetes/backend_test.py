@@ -74,6 +74,9 @@ FAIL_LOGS = "fail_logs"
 LIST_RUNTIMES = "list_runtimes"
 BASIC_TRAIN_JOB_NAME = "basic-job"
 JOB_WITH_POD_RESTARTS = "job-with-pod-restarts"
+JOB_WITH_DELETED_RUNTIME = "job-with-deleted-runtime"
+JOB_WITH_FORBIDDEN_RUNTIME = "job-with-forbidden-runtime"
+DELETED_RUNTIME = "deleted-runtime"
 TRAIN_JOBS = "trainjobs"
 TRAIN_JOB_WITH_BUILT_IN_TRAINER = "train-job-with-built-in-trainer"
 TRAIN_JOB_WITH_CUSTOM_TRAINER = "train-job-with-custom-trainer"
@@ -406,6 +409,8 @@ def get_cluster_custom_object_response(*args, **kwargs):
         raise multiprocessing.TimeoutError()
     if args[3] == RUNTIME:
         raise RuntimeError()
+    if args[3] == DELETED_RUNTIME:
+        raise client.ApiException(status=404)
     if args[2] == constants.CLUSTER_TRAINING_RUNTIME_PLURAL:
         mock_thread.get.return_value = normalize_model(
             create_cluster_training_runtime(name=args[3]),
@@ -422,12 +427,17 @@ def get_namespaced_custom_object_response(*args, **kwargs):
         raise multiprocessing.TimeoutError()
     if args[2] == RUNTIME or args[4] == RUNTIME:
         raise RuntimeError()
-    if args[4] == NOT_FOUND:
+    if args[4] in {NOT_FOUND, DELETED_RUNTIME}:
         raise client.ApiException(status=404)
     if args[4] == FORBIDDEN:
         raise client.ApiException(status=403)
     if args[3] == TRAIN_JOBS:  # TODO: review this.
-        mock_thread.get.return_value = add_status(create_train_job(train_job_name=args[4]))
+        train_job = add_status(create_train_job(train_job_name=args[4]))
+        if args[4] == JOB_WITH_DELETED_RUNTIME:
+            train_job.spec.runtime_ref.name = DELETED_RUNTIME
+        elif args[4] == JOB_WITH_FORBIDDEN_RUNTIME:
+            train_job.spec.runtime_ref.name = FORBIDDEN
+        mock_thread.get.return_value = train_job
     elif args[3] == constants.TRAINING_RUNTIME_PLURAL:
         # Return a namespaced TrainingRuntime for the requested name.
         mock_thread.get.return_value = normalize_model(
@@ -816,6 +826,14 @@ def get_train_job_data_type(
         num_nodes=2,
         status="Complete",
     )
+
+
+def get_train_job_with_deleted_runtime_data_type(train_job_name: str) -> types.TrainJob:
+    """Create the expected TrainJob after its runtime is deleted."""
+    train_job = get_train_job_data_type(DELETED_RUNTIME, train_job_name)
+    train_job.runtime = None
+    train_job.num_nodes = None
+    return train_job
 
 
 def get_train_job_with_restarted_pods_data_type(
@@ -1565,6 +1583,20 @@ def test_train(kubernetes_backend, test_case):
             ),
         ),
         TestCase(
+            name="returns the job without a runtime when the runtime is deleted",
+            expected_status=SUCCESS,
+            config={"name": JOB_WITH_DELETED_RUNTIME},
+            expected_output=get_train_job_with_deleted_runtime_data_type(
+                train_job_name=JOB_WITH_DELETED_RUNTIME,
+            ),
+        ),
+        TestCase(
+            name="runtime error when the runtime is forbidden",
+            expected_status=FAILED,
+            config={"name": JOB_WITH_FORBIDDEN_RUNTIME},
+            expected_error=RuntimeError,
+        ),
+        TestCase(
             name="timeout error when getting job",
             expected_status=FAILED,
             config={"name": TIMEOUT},
@@ -1590,6 +1622,14 @@ def test_get_job(kubernetes_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+def test_get_job_warns_when_runtime_is_deleted(kubernetes_backend, caplog):
+    """Test KubernetesBackend.get_job logs a warning when the TrainJob's runtime is deleted."""
+    with caplog.at_level(logging.WARNING):
+        kubernetes_backend.get_job(JOB_WITH_DELETED_RUNTIME)
+
+    assert DELETED_RUNTIME in caplog.text
 
 
 @pytest.mark.parametrize(

@@ -292,9 +292,9 @@ class Step:
 @dataclass
 class TrainJob:
     name: str
-    runtime: Runtime
+    runtime: Runtime | None
     steps: list[Step]
-    num_nodes: int
+    num_nodes: int | None
     creation_timestamp: datetime
     status: str = common_constants.UNKNOWN
 
