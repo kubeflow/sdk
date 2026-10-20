@@ -236,7 +236,7 @@ separate fields is easier to use from a notebook.
 ## Implementation History
 
 The implementation is in the following pull request:
-https://github.com/kubeflow/sdk/pull/868
+https://github.com/kubeflow/sdk/pull/886
 
 ## Test Plan
 
