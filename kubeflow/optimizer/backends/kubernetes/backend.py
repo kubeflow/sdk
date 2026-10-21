@@ -389,6 +389,10 @@ class KubernetesBackend(RuntimeBackend):
             raise TimeoutError(
                 f"Timeout getting {constants.OPTIMIZATION_JOB_KIND} events: {self.namespace}/{name}"
             ) from e
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to get {constants.OPTIMIZATION_JOB_KIND} events: {self.namespace}/{name}"
+            ) from e
 
     def _get_best_trial(self, name: str) -> Trial | None:
         """Get the best current Trial for the OptimizationJob"""
