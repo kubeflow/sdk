@@ -380,12 +380,17 @@ def get_command_using_train_func(
     func_code = f"{func_code}\n{func_call}\n"
 
     is_mpi = runtime.trainer.command[0] == "mpirun"
-    # The default file location for OpenMPI is: /home/mpiuser/<FILE_NAME>.py
+    # These are container paths, so join them with "/" regardless of the client platform.
+    # OpenMPI runs the script from the MPI user home; every other runtime uses the writable
+    # temporary directory, which the container shell resolves from DEFAULT_TEMPORARY_DIRECTORY.
     if is_mpi:
-        func_file = os.path.join(constants.DEFAULT_MPI_USER_HOME, func_file)
-        install_log_file = os.path.join(constants.DEFAULT_MPI_USER_HOME, "pip_install.log")
+        func_file = f"{constants.DEFAULT_MPI_USER_HOME}/{func_file}"
+        install_log_file = f"{constants.DEFAULT_MPI_USER_HOME}/pip_install.log"
     else:
-        install_log_file = "pip_install.log"
+        func_file = f"{constants.DEFAULT_TEMPORARY_DIRECTORY}/{func_file}"
+        install_log_file = f"{constants.DEFAULT_TEMPORARY_DIRECTORY}/pip_install.log"
+        # Keep the working directory, not the temporary directory, as the first import root.
+        func_code = constants.PYTHON_IMPORT_PATH_PRELUDE + func_code
 
     # Install Python packages if that is required.
     install_packages = ""
