@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib.util
 import os
 import shlex
 import subprocess
@@ -20,7 +19,6 @@ import sys
 import tempfile
 import time
 from unittest.mock import MagicMock, patch
-import uuid
 
 from kubeflow_trainer_api import models
 import pytest
@@ -35,16 +33,7 @@ MPI_INSTALLATION_LOG_FILE = os.path.join(
     constants.DEFAULT_MPI_USER_HOME,
     "pip_install.log",
 )
-NON_MPI_IMPORT_PATH_PRELUDE = (
-    "import os\n"
-    "import sys\n\n"
-    "_kubeflow_generated_script_directory = os.path.realpath(os.path.dirname(__file__))\n"
-    "_kubeflow_working_directory = os.getcwd()\n"
-    "if sys.path and os.path.realpath(sys.path[0]) == _kubeflow_generated_script_directory:\n"
-    "    sys.path[0] = _kubeflow_working_directory\n"
-    'elif not getattr(sys.flags, "safe_path", False):\n'
-    "    sys.path.insert(0, _kubeflow_working_directory)\n\n"
-)
+NON_MPI_IMPORT_PATH_PRELUDE = constants.PYTHON_IMPORT_PATH_PRELUDE
 
 # --------------------------
 # Test Helpers
@@ -668,85 +657,62 @@ def test_generated_command_runs_from_read_only_working_directory(
     tmp_path,
     safe_path_enabled,
 ):
-    unique_name_suffix = uuid.uuid4().hex
-    working_directory_module_name = f"working_directory_module_{unique_name_suffix}"
-    training_function_module_name = f"training_function_{unique_name_suffix}"
     working_directory = tmp_path / "working-directory"
     existing_python_path_directory = tmp_path / "existing-python-path"
-    training_function_source_file = tmp_path / f"{training_function_module_name}.py"
     temporary_directory = tmp_path / "temporary-directory"
-    temporary_shadow_module_file = temporary_directory / f"{working_directory_module_name}.py"
-    generated_function_file = temporary_directory / training_function_source_file.name
+    generated_function_file = temporary_directory / "utils_test.py"
     working_directory.mkdir()
     existing_python_path_directory.mkdir()
     temporary_directory.mkdir()
 
+    (working_directory / "working_directory_module.py").write_text(
+        'VALUE = "working-directory"\n',
+        encoding="utf-8",
+    )
+    # A module with the same name next to the generated script must never win over the
+    # working directory, which proves the prelude swapped the script directory out of sys.path.
+    (temporary_directory / "working_directory_module.py").write_text(
+        'VALUE = "temporary-directory"\n',
+        encoding="utf-8",
+    )
+    (existing_python_path_directory / "existing_python_path_module.py").write_text(
+        'VALUE = "existing-python-path"\n',
+        encoding="utf-8",
+    )
+
+    def training_function(expected_python_path):
+        import os
+
+        import existing_python_path_module
+        import working_directory_module
+
+        assert os.environ["PYTHONPATH"] == expected_python_path
+        print(f"{working_directory_module.VALUE}:{existing_python_path_module.VALUE}")
+
+    python_executable_command = (
+        "bash",
+        "-c",
+        constants.EXEC_FUNC_SCRIPT.replace("__ENTRYPOINT__", shlex.quote(sys.executable)),
+    )
+    command = utils.get_command_using_train_func(
+        runtime=_build_runtime(python_executable_command),
+        train_func=training_function,
+        train_func_parameters={"expected_python_path": str(existing_python_path_directory)},
+        pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
+        packages_to_install=[],
+    )
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(existing_python_path_directory)
+    # The generated command resolves `${TMPDIR:-/tmp}` in the shell; point it at a per-test
+    # directory so the test proves the resolution and never touches /tmp.
+    environment["TMPDIR"] = str(temporary_directory)
+    if safe_path_enabled:
+        environment["PYTHONSAFEPATH"] = "1"
+    else:
+        environment.pop("PYTHONSAFEPATH", None)
+
+    working_directory.chmod(0o555)
     try:
-        (working_directory / f"{working_directory_module_name}.py").write_text(
-            'VALUE = "working-directory"\n',
-            encoding="utf-8",
-        )
-        temporary_shadow_module_file.write_text(
-            'VALUE = "temporary-directory"\n',
-            encoding="utf-8",
-        )
-        (existing_python_path_directory / "existing_python_path_module.py").write_text(
-            'VALUE = "existing-python-path"\n',
-            encoding="utf-8",
-        )
-        training_function_source_file.write_text(
-            (
-                "def training_function(expected_python_path):\n"
-                "    import os\n"
-                "    import existing_python_path_module\n"
-                f"    import {working_directory_module_name}\n\n"
-                '    assert os.environ["PYTHONPATH"] == expected_python_path\n'
-                "    print(\n"
-                f'        f"{{{working_directory_module_name}.VALUE}}:'
-                '{existing_python_path_module.VALUE}"\n'
-                "    )\n"
-            ),
-            encoding="utf-8",
-        )
-        training_function_module_specification = importlib.util.spec_from_file_location(
-            training_function_module_name,
-            training_function_source_file,
-        )
-        assert training_function_module_specification is not None
-        assert training_function_module_specification.loader is not None
-        training_function_module = importlib.util.module_from_spec(
-            training_function_module_specification
-        )
-        training_function_module_specification.loader.exec_module(training_function_module)
-
-        working_directory.chmod(0o555)
-        python_executable_command = (
-            "bash",
-            "-c",
-            constants.EXEC_FUNC_SCRIPT.replace(
-                "__ENTRYPOINT__",
-                shlex.quote(sys.executable),
-            ),
-        )
-        command = utils.get_command_using_train_func(
-            runtime=_build_runtime(python_executable_command),
-            train_func=training_function_module.training_function,
-            train_func_parameters={
-                "expected_python_path": str(existing_python_path_directory),
-            },
-            pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
-            packages_to_install=[],
-        )
-        environment = os.environ.copy()
-        environment["PYTHONPATH"] = str(existing_python_path_directory)
-        # The generated command resolves `${TMPDIR:-/tmp}` in the shell; point it at a
-        # per-test directory so the test proves the resolution and never touches /tmp.
-        environment["TMPDIR"] = str(temporary_directory)
-        if safe_path_enabled:
-            environment["PYTHONSAFEPATH"] = "1"
-        else:
-            environment.pop("PYTHONSAFEPATH", None)
-
         result = subprocess.run(
             command,
             cwd=working_directory,
@@ -757,12 +723,9 @@ def test_generated_command_runs_from_read_only_working_directory(
         )
     finally:
         working_directory.chmod(0o755)
-        generated_function_file.unlink(missing_ok=True)
-        temporary_shadow_module_file.unlink(missing_ok=True)
-        for owned_python_cache_file in (temporary_directory / "__pycache__").glob(
-            f"{working_directory_module_name}.*.pyc"
-        ):
-            owned_python_cache_file.unlink()
+
+    # chmod does not stop root, so assert directly that the script landed in TMPDIR.
+    assert generated_function_file.is_file()
 
     if safe_path_enabled and sys.version_info >= (3, 11):
         # Under PYTHONSAFEPATH the working directory must stay off sys.path, so the module that
@@ -770,12 +733,11 @@ def test_generated_command_runs_from_read_only_working_directory(
         # what Python itself does when no prelude is involved.
         assert result.returncode != 0
         assert "ModuleNotFoundError" in result.stderr
-        assert working_directory_module_name in result.stderr
+        assert "working_directory_module" in result.stderr
         assert "existing_python_path_module" not in result.stderr
     else:
-        # Python 3.10 has no safe path mode and ignores PYTHONSAFEPATH, so the prelude's
-        # `getattr(sys.flags, "safe_path", False)` fallback must restore the working directory
-        # exactly as it does on the normal path.
+        # Normal path, or Python 3.10 which ignores PYTHONSAFEPATH: sys.path[0] is the generated
+        # script's directory, so the prelude swaps in the working directory.
         assert result.returncode == 0, result.stderr
         assert result.stdout.strip() == "working-directory:existing-python-path"
 

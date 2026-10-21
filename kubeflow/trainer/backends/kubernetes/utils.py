@@ -380,38 +380,17 @@ def get_command_using_train_func(
     func_code = f"{func_code}\n{func_call}\n"
 
     is_mpi = runtime.trainer.command[0] == "mpirun"
-    # The default file location for OpenMPI is: /home/mpiuser/<FILE_NAME>.py
+    # These are container paths, so join them with "/" regardless of the client platform.
+    # OpenMPI runs the script from the MPI user home; every other runtime uses the writable
+    # temporary directory, which the container shell resolves from DEFAULT_TEMPORARY_DIRECTORY.
     if is_mpi:
-        func_file = os.path.join(constants.DEFAULT_MPI_USER_HOME, func_file)
-        install_log_file = os.path.join(constants.DEFAULT_MPI_USER_HOME, "pip_install.log")
+        func_file = f"{constants.DEFAULT_MPI_USER_HOME}/{func_file}"
+        install_log_file = f"{constants.DEFAULT_MPI_USER_HOME}/pip_install.log"
     else:
-        func_file = os.path.join(constants.DEFAULT_TEMPORARY_DIRECTORY, func_file)
-        install_log_file = os.path.join(constants.DEFAULT_TEMPORARY_DIRECTORY, "pip_install.log")
-        # Preserve the working directory as Python's first import root instead of the
-        # temporary directory.
-        #
-        # Python puts the generated script's directory first on `sys.path`. Because the script now
-        # lives in the temporary directory, that entry is replaced with the working directory to
-        # keep the import precedence the training function had before the script was relocated.
-        #
-        # Under `-P` or `PYTHONSAFEPATH=1` Python deliberately omits that entry, because the point
-        # of safe path mode is to keep a writable directory off the import path. In that mode
-        # nothing is inserted, matching how CPython fixed `pdb` and how `ipykernel` and `pyright`
-        # handle the same problem. `sys.flags.safe_path` only exists on Python 3.11+, and this
-        # package supports 3.10, so it is read defensively.
-        python_import_path_prelude = (
-            "import os\n"
-            "import sys\n\n"
-            "_kubeflow_generated_script_directory = "
-            "os.path.realpath(os.path.dirname(__file__))\n"
-            "_kubeflow_working_directory = os.getcwd()\n"
-            "if sys.path and os.path.realpath(sys.path[0]) == "
-            "_kubeflow_generated_script_directory:\n"
-            "    sys.path[0] = _kubeflow_working_directory\n"
-            'elif not getattr(sys.flags, "safe_path", False):\n'
-            "    sys.path.insert(0, _kubeflow_working_directory)\n\n"
-        )
-        func_code = python_import_path_prelude + func_code
+        func_file = f"{constants.DEFAULT_TEMPORARY_DIRECTORY}/{func_file}"
+        install_log_file = f"{constants.DEFAULT_TEMPORARY_DIRECTORY}/pip_install.log"
+        # Keep the working directory, not the temporary directory, as the first import root.
+        func_code = constants.PYTHON_IMPORT_PATH_PRELUDE + func_code
 
     # Install Python packages if that is required.
     install_packages = ""

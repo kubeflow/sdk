@@ -295,15 +295,7 @@ def get_custom_trainer(
     # with torchrun as the entrypoint and a fixed lambda for deterministic tests.
     func_script = (
         "\nread -r -d '' SCRIPT << EOM\n\n"
-        "import os\n"
-        "import sys\n\n"
-        "_kubeflow_generated_script_directory = os.path.realpath(os.path.dirname(__file__))\n"
-        "_kubeflow_working_directory = os.getcwd()\n"
-        "if sys.path and os.path.realpath(sys.path[0]) == "
-        "_kubeflow_generated_script_directory:\n"
-        "    sys.path[0] = _kubeflow_working_directory\n"
-        'elif not getattr(sys.flags, "safe_path", False):\n'
-        "    sys.path.insert(0, _kubeflow_working_directory)\n\n"
+        f"{constants.PYTHON_IMPORT_PATH_PRELUDE}"
         "def sample_train_func() -> None:\n"
         '    """Sample training function."""\n'
         '    print("Hello World")\n\n'
