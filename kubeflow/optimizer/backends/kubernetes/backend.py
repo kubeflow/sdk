@@ -506,6 +506,8 @@ class KubernetesBackend(RuntimeBackend):
                     optimization_job.status = constants.OPTIMIZATION_JOB_COMPLETE
                 elif c.type == constants.OPTIMIZATION_JOB_FAILED and c.status == "True":
                     optimization_job.status = constants.OPTIMIZATION_JOB_FAILED
+                elif c.type == constants.EXPERIMENT_RUNNING and c.status == "True":
+                    optimization_job.status = constants.OPTIMIZATION_JOB_RUNNING
                 else:
                     for trial in optimization_job.trials:
                         if trial.trainjob.status == trainer_constants.TRAINJOB_RUNNING:

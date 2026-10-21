@@ -607,6 +607,40 @@ def test_get_job(optimizer_backend, test_case):
             ),
         ),
         TestCase(
+            name="running condition maps to OPTIMIZATION_JOB_RUNNING between trials",
+            expected_status=SUCCESS,
+            config={
+                "name": "running-between-trials-job",
+                "conditions": [
+                    models.V1beta1ExperimentCondition(
+                        type=constants.EXPERIMENT_RUNNING, status="True"
+                    ),
+                ],
+                "trial_status": trainer_constants.TRAINJOB_COMPLETE,
+            },
+            expected_output=get_optimization_job_data_type(
+                name="running-between-trials-job",
+                status=constants.OPTIMIZATION_JOB_RUNNING,
+            ),
+        ),
+        TestCase(
+            name="running condition maps to OPTIMIZATION_JOB_RUNNING with pending trials",
+            expected_status=SUCCESS,
+            config={
+                "name": "running-pending-trials-job",
+                "conditions": [
+                    models.V1beta1ExperimentCondition(
+                        type=constants.EXPERIMENT_RUNNING, status="True"
+                    ),
+                ],
+                "trial_status": trainer_constants.TRAINJOB_CREATED,
+            },
+            expected_output=get_optimization_job_data_type(
+                name="running-pending-trials-job",
+                status=constants.OPTIMIZATION_JOB_RUNNING,
+            ),
+        ),
+        TestCase(
             name="no conditions maps to OPTIMIZATION_JOB_CREATED",
             expected_status=SUCCESS,
             config={
