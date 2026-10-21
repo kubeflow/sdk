@@ -1173,3 +1173,19 @@ def test_get_job_events(optimizer_backend, test_case):
         assert test_case.expected_status != SUCCESS
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "api_error, expected_error",
+    [
+        (multiprocessing.TimeoutError(), TimeoutError),
+        (Exception("events are forbidden"), RuntimeError),
+    ],
+    ids=["timeout", "api failure"],
+)
+def test_get_job_events_when_listing_events_fails(optimizer_backend, api_error, expected_error):
+    """Test that failures from listing events map to the errors the client documents."""
+    optimizer_backend.core_api.list_namespaced_event = Mock(side_effect=api_error)
+
+    with pytest.raises(expected_error):
+        optimizer_backend.get_job_events(BASIC_OPTIMIZATION_JOB_NAME)
