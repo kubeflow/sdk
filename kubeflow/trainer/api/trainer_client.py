@@ -14,6 +14,7 @@
 
 from collections.abc import Callable, Iterator
 import logging
+from typing import Any
 
 from kubeflow.common.types import KubernetesBackendConfig
 import kubeflow.common.utils as common_utils
@@ -131,6 +132,60 @@ class TrainerClient:
             >>> client.get_runtime_packages(runtime)
         """
         return self.backend.get_runtime_packages(runtime=runtime)
+
+    def preview_train_job(
+        self,
+        runtime: str | types.Runtime | None = None,
+        initializer: types.Initializer | None = None,
+        trainer: types.CustomTrainer
+        | types.CustomTrainerContainer
+        | types.BuiltinTrainer
+        | None = None,
+        options: list | None = None,
+    ) -> dict[str, Any]:
+        """Build a Kubernetes TrainJob without submitting it.
+
+        This method returns the same client-built resource body that :meth:`train`
+        submits to Kubernetes. It does not create the TrainJob or perform server-side
+        validation. Resolving a runtime by name, or resolving the default runtime, can
+        still read from the cluster.
+
+        Use a ``Name`` option when comparing separate preview and submission calls;
+        otherwise, each call generates a different name. The returned resource can
+        contain sensitive configuration and should be handled accordingly.
+
+        Args:
+            runtime: Optional reference to one of the existing runtimes. It can accept the runtime
+                name or Runtime object. Defaults to the torch-distributed runtime if not provided.
+            initializer: Optional configuration for the dataset and model initializers.
+            trainer: Optional configuration for a CustomTrainer, CustomTrainerContainer, or
+                BuiltinTrainer. If not specified, the TrainJob will use the runtime's
+                default values.
+            options: Optional list of configuration options to apply to the TrainJob.
+                Options can be imported from kubeflow.trainer.options.
+
+        Returns:
+            The Kubernetes TrainJob resource body that would be submitted.
+
+        Raises:
+            ValueError: If input arguments are invalid.
+            TimeoutError: Timeout occurred while resolving the runtime.
+            RuntimeError: Failed to resolve the runtime.
+            NotImplementedError: If the client does not use the Kubernetes backend.
+
+        Examples:
+            >>> from kubeflow.trainer import TrainerClient
+            >>> from kubeflow.trainer.options import Name
+            >>> client = TrainerClient()
+            >>> train_job = client.preview_train_job(options=[Name("reviewable-job")])
+            >>> print(train_job["metadata"]["name"])
+        """
+        return self.backend.preview_train_job(
+            runtime=runtime,
+            initializer=initializer,
+            trainer=trainer,
+            options=options,
+        )
 
     def train(
         self,

@@ -52,6 +52,7 @@ from kubeflow.trainer.options import (
     JobSpecPatch,
     JobTemplatePatch,
     Labels,
+    Name,
     PodSpecPatch,
     PodTemplatePatch,
     ReplicatedJobPatch,
@@ -1541,6 +1542,28 @@ def test_train(kubernetes_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+def test_preview_train_job_matches_submission_without_creating_resource(kubernetes_backend):
+    """Preview returns the submitted body but does not create a TrainJob itself."""
+    kubernetes_backend.namespace = DEFAULT_NAMESPACE
+    runtime = kubernetes_backend.get_runtime(TORCH_RUNTIME)
+    options = [Name(BASIC_TRAIN_JOB_NAME)]
+
+    preview = kubernetes_backend.preview_train_job(runtime=runtime, options=options)
+
+    kubernetes_backend.custom_api.create_namespaced_custom_object.assert_not_called()
+
+    train_job_name = kubernetes_backend.train(runtime=runtime, options=options)
+
+    assert train_job_name == BASIC_TRAIN_JOB_NAME
+    kubernetes_backend.custom_api.create_namespaced_custom_object.assert_called_once_with(
+        constants.GROUP,
+        constants.VERSION,
+        DEFAULT_NAMESPACE,
+        constants.TRAINJOB_PLURAL,
+        preview,
+    )
 
 
 @pytest.mark.parametrize(
