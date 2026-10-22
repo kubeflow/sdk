@@ -46,9 +46,11 @@ How It Works
 3. The Spark Operator schedules the driver and executor pods on the cluster
 4. You monitor progress and retrieve logs or results
 
-By default, SparkClient provisions **1 CPU** and **512Mi** of memory per
-executor. You can customize the number of executors and their resource requests
-using ``num_executors`` and ``resources_per_executor``.
+By default, SparkClient provisions **1 Spark core** and **512Mi** of memory per
+executor. Use ``cpu`` for Spark task slots and ``cpu_request``/``cpu_limit``
+for the executor pods' physical Kubernetes CPU resources. Customize the number
+of executors and their resources with ``num_executors`` and
+``resources_per_executor``.
 
 .. note::
 
