@@ -14,6 +14,7 @@
 
 import abc
 from collections.abc import Callable, Iterator
+from typing import Any
 
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
@@ -36,6 +37,18 @@ class RuntimeBackend(abc.ABC):
     @abc.abstractmethod
     def get_runtime_packages(self, runtime: types.Runtime):
         raise NotImplementedError()
+
+    def preview_train_job(
+        self,
+        runtime: str | types.Runtime | None = None,
+        initializer: types.Initializer | None = None,
+        trainer: types.CustomTrainer
+        | types.CustomTrainerContainer
+        | types.BuiltinTrainer
+        | None = None,
+        options: list | None = None,
+    ) -> dict[str, Any]:
+        raise NotImplementedError(f"{type(self).__name__} does not support previewing TrainJobs")
 
     @abc.abstractmethod
     def train(

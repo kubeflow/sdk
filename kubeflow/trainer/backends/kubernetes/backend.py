@@ -292,6 +292,24 @@ class KubernetesBackend(RuntimeBackend):
                         job_name,
                     )
 
+    def preview_train_job(
+        self,
+        runtime: str | types.Runtime | None = None,
+        initializer: types.Initializer | None = None,
+        trainer: types.CustomTrainer
+        | types.CustomTrainerContainer
+        | types.BuiltinTrainer
+        | None = None,
+        options: list | None = None,
+    ) -> dict[str, Any]:
+        """Build and serialize a TrainJob without creating it."""
+        return self._build_train_job(
+            runtime=runtime,
+            initializer=initializer,
+            trainer=trainer,
+            options=options,
+        ).to_dict()
+
     def train(
         self,
         runtime: str | types.Runtime | None = None,
@@ -302,6 +320,49 @@ class KubernetesBackend(RuntimeBackend):
         | None = None,
         options: list | None = None,
     ) -> str:
+        train_job = self._build_train_job(
+            runtime=runtime,
+            initializer=initializer,
+            trainer=trainer,
+            options=options,
+        )
+        train_job_name = train_job.metadata.name
+
+        # Create the TrainJob.
+        try:
+            self.custom_api.create_namespaced_custom_object(
+                constants.GROUP,
+                constants.VERSION,
+                self.namespace,
+                constants.TRAINJOB_PLURAL,
+                train_job.to_dict(),
+            )
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(
+                f"Timeout to create {constants.TRAINJOB_KIND}: {self.namespace}/{train_job_name}"
+            ) from e
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to create {constants.TRAINJOB_KIND}: {self.namespace}/{train_job_name}"
+            ) from e
+
+        logger.debug(
+            f"{constants.TRAINJOB_KIND} {self.namespace}/{train_job_name} has been created"
+        )
+
+        return train_job_name
+
+    def _build_train_job(
+        self,
+        runtime: str | types.Runtime | None = None,
+        initializer: types.Initializer | None = None,
+        trainer: types.CustomTrainer
+        | types.CustomTrainerContainer
+        | types.BuiltinTrainer
+        | None = None,
+        options: list | None = None,
+    ) -> models.TrainerV1alpha1TrainJob:
+        """Build the TrainJob shared by preview and submission."""
         # Process options to extract configuration
         job_spec = {}
         labels = None
@@ -351,30 +412,7 @@ class KubernetesBackend(RuntimeBackend):
             ),
             spec=trainjob_spec,
         )
-
-        # Create the TrainJob.
-        try:
-            self.custom_api.create_namespaced_custom_object(
-                constants.GROUP,
-                constants.VERSION,
-                self.namespace,
-                constants.TRAINJOB_PLURAL,
-                train_job.to_dict(),
-            )
-        except multiprocessing.TimeoutError as e:
-            raise TimeoutError(
-                f"Timeout to create {constants.TRAINJOB_KIND}: {self.namespace}/{train_job_name}"
-            ) from e
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to create {constants.TRAINJOB_KIND}: {self.namespace}/{train_job_name}"
-            ) from e
-
-        logger.debug(
-            f"{constants.TRAINJOB_KIND} {self.namespace}/{train_job_name} has been created"
-        )
-
-        return train_job_name
+        return train_job
 
     def list_jobs(self, runtime: types.Runtime | None = None) -> list[types.TrainJob]:
         result = []
