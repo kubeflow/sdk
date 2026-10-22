@@ -235,6 +235,12 @@ sessions:
        spark_conf={"spark.sql.adaptive.enabled": "true"},
    )
 
+.. note::
+
+   Batch jobs currently support ``cpu`` and ``memory`` in
+   ``resources_per_executor``. ``cpu_request`` and ``cpu_limit`` are supported
+   for interactive Spark Connect sessions only.
+
 For Kubernetes-native customization — labels, annotations, node selection,
 tolerations, and custom job names — see :doc:`options`.
 

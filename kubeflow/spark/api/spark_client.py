@@ -83,11 +83,16 @@ class SparkClient:
                  If provided, connects to existing server. If None, creates new session.
             token: Optional authentication token for existing server.
             num_executors: Number of executor instances (create mode only).
-            resources_per_executor: Resource requirements per executor as dict.
-                Format: `{"cpu": "5", "memory": "10Gi"}` (create mode only).
+            resources_per_executor: Resource requirements per executor as dict
+                (create mode only). Supported keys: ``cpu`` (Spark cores),
+                ``cpu_request``/``cpu_limit`` (physical Kubernetes CPU request/limit),
+                and ``memory``. Format: ``{"cpu": "2", "cpu_request": "500m",
+                "cpu_limit": "1", "memory": "4Gi"}``.
             spark_conf: Spark configuration dictionary (create mode only).
             driver: Driver configuration object (create mode only).
+                Use ``Driver.resources`` for Spark cores and physical CPU request/limit.
             executor: Executor configuration object (create mode only).
+                Use ``Executor.resources_per_executor`` for the same resource keys.
             options: List of configuration options (create mode only).
                 Use Name option for custom session name.
             timeout: Timeout in seconds to wait for session ready.
@@ -104,6 +109,9 @@ class SparkClient:
         Note:
             Server port defaults to 15002 (Spark Connect gRPC). PySpark and server Spark
             major.minor should match; see constants and pyproject.toml [spark].
+
+            ``cpu_request`` and ``cpu_limit`` require a Spark Operator version that
+            includes kubeflow/spark-operator#3096.
         """
         if base_url:
             validate_spark_connect_url(base_url)
@@ -198,6 +206,8 @@ class SparkClient:
             resources_per_executor:
                 Resource requirements per executor.
                 Format: ``{"cpu": "5", "memory": "10Gi"}``.
+                ``cpu_request`` and ``cpu_limit`` are only supported for Spark
+                Connect sessions, not batch jobs.
 
             spark_conf:
                 Spark configuration properties.
