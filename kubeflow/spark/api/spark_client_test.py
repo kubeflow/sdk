@@ -73,7 +73,9 @@ def test_create_and_connect(test_case: TestCase):
             f"Expected exception but none was raised for {test_case.name}"
         )
     except Exception as e:
+        # If we got an exception but expected success, fail
         assert test_case.expected_status == FAILED, f"Unexpected exception in {test_case.name}: {e}"
+        # Validate the exception type if specified
         if test_case.expected_error:
             assert isinstance(e, test_case.expected_error), (
                 f"Expected exception type '{test_case.expected_error.__name__}' but got '{type(e).__name__}: {str(e)}'"
