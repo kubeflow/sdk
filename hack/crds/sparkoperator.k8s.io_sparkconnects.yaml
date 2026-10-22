@@ -18,7 +18,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     api-approved.kubernetes.io: https://github.com/kubeflow/spark-operator/pull/1298
-    controller-gen.kubebuilder.io/version: v0.17.1
+    controller-gen.kubebuilder.io/version: v0.20.1
   name: sparkconnects.sparkoperator.k8s.io
 spec:
   group: sparkoperator.k8s.io
@@ -108,12 +108,50 @@ spec:
               executor:
                 description: Executor is the Spark executor specification.
                 properties:
+                  coreLimit:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: CoreLimit is the physical CPU core limit for the
+                      pod.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  coreRequest:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: CoreRequest is the physical CPU core request for
+                      the pod.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
                   cores:
                     description: Cores maps to `spark.driver.cores` or `spark.executor.cores`
                       for the driver and executors, respectively.
                     format: int32
                     minimum: 1
                     type: integer
+                  gpu:
+                    description: |-
+                      GPU specifies GPU resources for the pod and Spark resource scheduler.
+                      GPU discovery and per-task resource settings are configured through SparkConf.
+                    properties:
+                      name:
+                        description: |-
+                          Name is the Kubernetes GPU resource name, such as nvidia.com/gpu or amd.com/gpu.
+                          The vendor domain is used for Spark's GPU resource vendor configuration.
+                        maxLength: 257
+                        pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?\.)*[a-z0-9]([-a-z0-9]*[a-z0-9])?/gpu$
+                        type: string
+                      quantity:
+                        description: Quantity is the number of GPUs to request for
+                          each pod.
+                        format: int64
+                        minimum: 1
+                        type: integer
+                    required:
+                    - name
+                    - quantity
+                    type: object
                   instances:
                     description: Instances is the number of executor instances.
                     format: int32
@@ -147,12 +185,50 @@ spec:
               server:
                 description: Server is the Spark connect server specification.
                 properties:
+                  coreLimit:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: CoreLimit is the physical CPU core limit for the
+                      pod.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  coreRequest:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: CoreRequest is the physical CPU core request for
+                      the pod.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
                   cores:
                     description: Cores maps to `spark.driver.cores` or `spark.executor.cores`
                       for the driver and executors, respectively.
                     format: int32
                     minimum: 1
                     type: integer
+                  gpu:
+                    description: |-
+                      GPU specifies GPU resources for the pod and Spark resource scheduler.
+                      GPU discovery and per-task resource settings are configured through SparkConf.
+                    properties:
+                      name:
+                        description: |-
+                          Name is the Kubernetes GPU resource name, such as nvidia.com/gpu or amd.com/gpu.
+                          The vendor domain is used for Spark's GPU resource vendor configuration.
+                        maxLength: 257
+                        pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?\.)*[a-z0-9]([-a-z0-9]*[a-z0-9])?/gpu$
+                        type: string
+                      quantity:
+                        description: Quantity is the number of GPUs to request for
+                          each pod.
+                        format: int64
+                        minimum: 1
+                        type: integer
+                    required:
+                    - name
+                    - quantity
+                    type: object
                   memory:
                     description: Memory is the amount of memory to request for the
                       pod.
@@ -515,13 +591,12 @@ spec:
                             type: object
                           trafficDistribution:
                             description: |-
-                              TrafficDistribution offers a way to express preferences for how traffic is
-                              distributed to Service endpoints. Implementations can use this field as a
-                              hint, but are not required to guarantee strict adherence. If the field is
-                              not set, the implementation will apply its default routing strategy. If set
-                              to "PreferClose", implementations should prioritize endpoints that are
-                              topologically close (e.g., same zone).
-                              This is a beta field and requires enabling ServiceTrafficDistribution feature.
+                              TrafficDistribution offers a way to express preferences for how traffic
+                              is distributed to Service endpoints. Implementations can use this field
+                              as a hint, but are not required to guarantee strict adherence. If the
+                              field is not set, the implementation will apply its default routing
+                              strategy. If set to "PreferClose", implementations should prioritize
+                              endpoints that are in the same zone.
                             type: string
                           type:
                             description: |-
