@@ -171,9 +171,79 @@ def sample_function_with_args(name: str, age: int):
             expected_output="512m",
         ),
         TestCase(
-            name="Normalize uppercase G",
+            name="Convert decimal M to MiB",
+            config={"k8s_memory": "512M"},
+            expected_output="488m",
+        ),
+        TestCase(
+            name="Convert decimal G to MiB",
             config={"k8s_memory": "2G"},
-            expected_output="2g",
+            expected_output="1907m",
+        ),
+        TestCase(
+            name="Convert larger decimal G to MiB",
+            config={"k8s_memory": "4G"},
+            expected_output="3814m",
+        ),
+        TestCase(
+            name="Convert decimal T to MiB",
+            config={"k8s_memory": "1T"},
+            expected_output="953674m",
+        ),
+        TestCase(
+            name="Convert decimal P to MiB",
+            config={"k8s_memory": "1P"},
+            expected_output="953674316m",
+        ),
+        TestCase(
+            name="Convert decimal E to MiB",
+            config={"k8s_memory": "1E"},
+            expected_output="953674316406m",
+        ),
+        TestCase(
+            name="Convert binary Ei to MiB",
+            config={"k8s_memory": "1Ei"},
+            expected_output="1099511627776m",
+        ),
+        TestCase(
+            name="Lowercase k is decimal kilo",
+            config={"k8s_memory": "512k"},
+            expected_output="1m",
+        ),
+        TestCase(
+            name="Uppercase K is Spark binary k",
+            config={"k8s_memory": "512K"},
+            expected_output="512k",
+        ),
+        TestCase(
+            name="Convert fractional decimal G to MiB",
+            config={"k8s_memory": "1.5G"},
+            expected_output="1430m",
+        ),
+        TestCase(
+            name="Convert fractional Gi to MiB rounding down",
+            config={"k8s_memory": "1.3Gi"},
+            expected_output="1331m",
+        ),
+        TestCase(
+            name="Sub-MiB value rounds up to 1m",
+            config={"k8s_memory": "500k"},
+            expected_output="1m",
+        ),
+        TestCase(
+            name="Uppercase GB is Spark binary",
+            config={"k8s_memory": "1.5GB"},
+            expected_output="1536m",
+        ),
+        TestCase(
+            name="Mixed-case Gb is Spark binary",
+            config={"k8s_memory": "1.5Gb"},
+            expected_output="1536m",
+        ),
+        TestCase(
+            name="Fractional MB rounds down to whole MiB",
+            config={"k8s_memory": "1.5MB"},
+            expected_output="1m",
         ),
         TestCase(
             name="Convert fractional Gi to Mi",
