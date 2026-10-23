@@ -63,12 +63,28 @@ class SparkConnectInfo:
 class Driver:
     """Driver configuration for Spark Connect session.
 
-    The Driver configuration allows fine-grained control over the Spark driver pod.
     All fields are optional, with sensible defaults applied by the backend.
 
     Args:
         image: Custom container image for the driver.
-        resources: Resource requirements as dict (e.g., {"cpu": "2", "memory": "4Gi"}).
+        resources: Resource requirements for the Spark Connect server pod.
+            Supported keys:
+
+            - ``cpu``: Spark cores (``spec.server.cores``).
+            - ``cpu_request``: Physical Kubernetes CPU request
+              (``spec.server.coreRequest``).
+            - ``cpu_limit``: Physical Kubernetes CPU limit
+              (``spec.server.coreLimit``).
+            - ``memory``: Spark memory (e.g. ``"4Gi"``).
+
+            ``cpu`` and ``cpu_request``/``cpu_limit`` are independent.
+
+            ``cpu``, ``cpu_request``, and ``cpu_limit`` accept ``str`` or
+            ``int``. Use strings for fractional values (for example, ``"500m"``
+            or ``"0.5"``); Python ``float`` and ``bool`` values are rejected.
+            Values must be positive, at most 1024 cores, and ``cpu_request``
+            must not exceed ``cpu_limit``. The 1024-core cap is an SDK guard,
+            not an operator limit. The ``memory`` value must be a string.
         java_options: JVM options for the driver (e.g., "-Xmx4g -XX:+UseG1GC").
         service_account: Kubernetes service account name for RBAC.
 
@@ -76,19 +92,17 @@ class Driver:
 
         driver = Driver(
             resources={
-                "cpu": "4",
-                "memory": "8Gi",
+                "cpu": "2",
+                "cpu_request": "500m",
+                "cpu_limit": "1",
+                "memory": "4Gi",
             },
             service_account="spark-driver-prod",
         )
-
-    Note:
-        The resources dict is extensible - any valid Kubernetes resource name is supported.
-        This design allows future resource types without API changes.
     """
 
     image: str | None = None
-    resources: dict[str, str] | None = None
+    resources: dict[str, str | int] | None = None
     java_options: str | None = None
     service_account: str | None = None
 
@@ -97,13 +111,28 @@ class Driver:
 class Executor:
     """Executor configuration for Spark Connect session.
 
-    The Executor configuration controls the worker pods that execute Spark tasks.
     All fields are optional, with sensible defaults applied by the backend.
 
     Args:
         num_instances: Number of executor instances (pods).
-        resources_per_executor: Resource requirements per executor as dict
-            (e.g., {"cpu": "4", "memory": "8Gi"}).
+        resources_per_executor: Resource requirements per executor.
+            Supported keys:
+
+            - ``cpu``: Spark cores (``spec.executor.cores``).
+            - ``cpu_request``: Physical Kubernetes CPU request
+              (``spec.executor.coreRequest``).
+            - ``cpu_limit``: Physical Kubernetes CPU limit
+              (``spec.executor.coreLimit``).
+            - ``memory``: Spark memory (e.g. ``"8Gi"``).
+
+            ``cpu`` and ``cpu_request``/``cpu_limit`` are independent.
+
+            ``cpu``, ``cpu_request``, and ``cpu_limit`` accept ``str`` or
+            ``int``. Use strings for fractional values (for example, ``"500m"``
+            or ``"0.5"``); Python ``float`` and ``bool`` values are rejected.
+            Values must be positive, at most 1024 cores, and ``cpu_request``
+            must not exceed ``cpu_limit``. The 1024-core cap is an SDK guard,
+            not an operator limit. The ``memory`` value must be a string.
         java_options: JVM options for executors (e.g., "-Xmx28g -XX:+UseG1GC").
 
     Example::
@@ -111,18 +140,16 @@ class Executor:
         executor = Executor(
             num_instances=20,
             resources_per_executor={
-                "cpu": "8",
+                "cpu": "4",
+                "cpu_request": "500m",
+                "cpu_limit": "2",
                 "memory": "32Gi",
             },
         )
-
-    Note:
-        The resources_per_executor dict is extensible - any valid Kubernetes resource
-        name is supported. This design allows future resource types without API changes.
     """
 
     num_instances: int | None = None
-    resources_per_executor: dict[str, str] | None = None
+    resources_per_executor: dict[str, str | int] | None = None
     java_options: str | None = None
 
 

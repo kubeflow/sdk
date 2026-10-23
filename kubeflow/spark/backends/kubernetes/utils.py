@@ -22,12 +22,13 @@ import multiprocessing
 import os
 import re
 import textwrap
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlparse
 import uuid
 
 from kubeflow_spark_api import models
 from kubernetes import client
+from kubernetes.utils.quantity import parse_quantity
 
 from kubeflow.common import constants as common_constants
 from kubeflow.common.utils import validate_python_function
@@ -122,21 +123,31 @@ def _resolve_driver_resources(
     memory = _memory_kubernetes_to_spark(constants.DEFAULT_DRIVER_MEMORY)
 
     if driver and driver.resources:
-        if "cpu" in driver.resources:
-            cores = _validate_cpu_value(driver.resources["cpu"])
+        if constants.RESOURCE_CPU in driver.resources:
+            cores = _validate_cpu_value(driver.resources[constants.RESOURCE_CPU])
 
-        if "memory" in driver.resources:
+        if constants.RESOURCE_MEMORY in driver.resources:
             memory = _memory_kubernetes_to_spark(
-                driver.resources["memory"],
+                cast(str, driver.resources[constants.RESOURCE_MEMORY]),
             )
 
     return cores, memory
 
 
+def _get_executor_resource_dict(
+    executor: Executor | None = None,
+    resources_per_executor: dict[str, str | int] | None = None,
+) -> dict[str, str | int] | None:
+    """Return the executor resource dict using SDK precedence rules."""
+    if executor and executor.resources_per_executor:
+        return executor.resources_per_executor
+    return resources_per_executor
+
+
 def _resolve_executor_resources(
     executor: Executor | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict[str, str | int] | None = None,
 ) -> tuple[int, int, str]:
     """Resolve executor configuration.
 
@@ -165,12 +176,7 @@ def _resolve_executor_resources(
     else:
         instances = constants.DEFAULT_NUM_EXECUTORS
 
-    resource_dict = None
-
-    if executor and executor.resources_per_executor:
-        resource_dict = executor.resources_per_executor
-    elif resources_per_executor:
-        resource_dict = resources_per_executor
+    resource_dict = _get_executor_resource_dict(executor, resources_per_executor)
 
     cores = constants.DEFAULT_EXECUTOR_CPU
     memory = _memory_kubernetes_to_spark(
@@ -178,12 +184,12 @@ def _resolve_executor_resources(
     )
 
     if resource_dict:
-        if "cpu" in resource_dict:
-            cores = _validate_cpu_value(resource_dict["cpu"])
+        if constants.RESOURCE_CPU in resource_dict:
+            cores = _validate_cpu_value(resource_dict[constants.RESOURCE_CPU])
 
-        if "memory" in resource_dict:
+        if constants.RESOURCE_MEMORY in resource_dict:
             memory = _memory_kubernetes_to_spark(
-                resource_dict["memory"],
+                cast(str, resource_dict[constants.RESOURCE_MEMORY]),
             )
 
     return instances, cores, memory
@@ -292,10 +298,167 @@ def _validate_cpu_value(cpu: str | int | None) -> int:
 
     cores = math.ceil(cores)
 
-    if cores > 1024:
+    if cores > constants.MAX_CPU_CORES:
         raise ValueError("CPU cores value is unrealistically large")
 
     return cores
+
+
+def _validate_cpu_quantity(value: Any, field_name: str) -> str:
+    """Validate a physical Kubernetes CPU quantity.
+
+    Args:
+        value: CPU quantity provided by the user.
+        field_name: Field name used in error messages.
+
+    Returns:
+        The original Kubernetes quantity string.
+
+    Raises:
+        ValueError: If the quantity is invalid, non-positive, or too large.
+    """
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        raise ValueError(
+            f"Invalid {field_name} type '{type(value).__name__}'. Expected str or int."
+        )
+
+    quantity = str(value).strip()
+    if not quantity:
+        raise ValueError(f"Invalid {field_name}: value cannot be empty.")
+
+    try:
+        parsed = parse_quantity(quantity)
+    except (TypeError, ValueError) as e:
+        raise ValueError(
+            f"Invalid {field_name} value '{value}'. Expected a Kubernetes CPU "
+            "quantity such as '500m', '1', or '0.5'."
+        ) from e
+
+    if parsed <= 0:
+        raise ValueError(f"Invalid {field_name} value '{value}': must be greater than 0.")
+
+    if parsed > constants.MAX_CPU_CORES:
+        raise ValueError(
+            f"Invalid {field_name} value '{value}': must not exceed "
+            f"{constants.MAX_CPU_CORES} cores."
+        )
+
+    return quantity
+
+
+def _resolve_cpu_request_limit(
+    resources: dict[str, str | int] | None = None,
+    role: str = "driver",
+) -> tuple[str | None, str | None]:
+    """Resolve and validate physical CPU request and limit.
+
+    Args:
+        resources: Resource dictionary provided by the user.
+        role: Role name used in error messages.
+
+    Returns:
+        Tuple of ``(cpu_request, cpu_limit)``.
+
+    Raises:
+        ValueError: If a quantity is invalid or request exceeds limit.
+    """
+    if not resources:
+        return None, None
+
+    request = None
+    limit = None
+
+    if constants.RESOURCE_CPU_REQUEST in resources:
+        request = _validate_cpu_quantity(
+            resources[constants.RESOURCE_CPU_REQUEST],
+            f"{role} cpu_request",
+        )
+
+    if constants.RESOURCE_CPU_LIMIT in resources:
+        limit = _validate_cpu_quantity(
+            resources[constants.RESOURCE_CPU_LIMIT],
+            f"{role} cpu_limit",
+        )
+
+    if (
+        request is not None
+        and limit is not None
+        and parse_quantity(request) > parse_quantity(limit)
+    ):
+        raise ValueError(
+            f"Invalid {role} resources: cpu_request ({request}) must not be "
+            f"greater than cpu_limit ({limit})."
+        )
+
+    return request, limit
+
+
+def _to_api_cpu_quantity(
+    value: str | None,
+) -> models.IoK8sApimachineryPkgApiResourceQuantity | None:
+    """Wrap a CPU quantity for the generated API model."""
+    if value is None:
+        return None
+    return models.IoK8sApimachineryPkgApiResourceQuantity(value)
+
+
+def _model_cpu_quantity(value: Any) -> str | None:
+    """Extract a quantity string from a generated API model."""
+    if value is None:
+        return None
+    actual = getattr(value, "actual_instance", value)
+    return str(actual) if actual is not None else None
+
+
+def _validate_effective_cpu_pair(
+    role: str,
+    request: str | None,
+    limit: str | None,
+) -> None:
+    """Validate an effective CPU request and limit pair."""
+    if request is None or limit is None:
+        return
+
+    try:
+        request_value = parse_quantity(request)
+        limit_value = parse_quantity(limit)
+    except (TypeError, ValueError) as e:
+        raise ValueError(
+            f"Invalid effective CPU request/limit for {role}: {request!r}, {limit!r}."
+        ) from e
+
+    if request_value > limit_value:
+        raise ValueError(
+            f"Invalid {role} resources: effective cpu_request ({request}) must not "
+            f"be greater than effective cpu_limit ({limit})."
+        )
+
+
+def _validate_effective_cpu_resources(
+    spark_connect: models.SparkV1alpha1SparkConnect,
+    spark_conf: dict[str, str] | None = None,
+) -> None:
+    """Validate effective CPU resources using conservative SDK fallback rules."""
+    server = spark_connect.spec.server
+    executor = spark_connect.spec.executor
+    conf = spark_conf or {}
+
+    # Use cores as a conservative server request fallback until spark-operator#3252 is resolved.
+    server_request = _model_cpu_quantity(server.core_request) or (
+        str(server.cores) if server.cores is not None else None
+    )
+    server_limit = _model_cpu_quantity(server.core_limit)
+    _validate_effective_cpu_pair("driver", server_request, server_limit)
+
+    executor_request = (
+        _model_cpu_quantity(executor.core_request)
+        or conf.get(constants.SPARK_EXECUTOR_REQUEST_CORES_CONF)
+        or (str(executor.cores) if executor.cores is not None else None)
+    )
+    executor_limit = _model_cpu_quantity(executor.core_limit) or conf.get(
+        constants.SPARK_EXECUTOR_LIMIT_CORES_CONF
+    )
+    _validate_effective_cpu_pair("executor", executor_request, executor_limit)
 
 
 def apply_options(
@@ -452,6 +615,10 @@ def get_spark_connect_driver_spec(
             If the configured driver resources are invalid.
     """
     cores, memory = _resolve_driver_resources(driver)
+    cpu_request, cpu_limit = _resolve_cpu_request_limit(
+        driver.resources if driver else None,
+        "driver",
+    )
 
     template = None
 
@@ -466,6 +633,8 @@ def get_spark_connect_driver_spec(
     return models.SparkV1alpha1ServerSpec(
         cores=cores,
         memory=memory,
+        core_request=_to_api_cpu_quantity(cpu_request),
+        core_limit=_to_api_cpu_quantity(cpu_limit),
         template=template,
     )
 
@@ -473,7 +642,7 @@ def get_spark_connect_driver_spec(
 def get_spark_connect_executor_spec(
     executor: Executor | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict[str, str | int] | None = None,
 ) -> models.SparkV1alpha1ExecutorSpec:
     """Convert SDK Executor to API ExecutorSpec.
 
@@ -498,11 +667,17 @@ def get_spark_connect_executor_spec(
         num_executors,
         resources_per_executor,
     )
+    cpu_request, cpu_limit = _resolve_cpu_request_limit(
+        _get_executor_resource_dict(executor, resources_per_executor),
+        "executor",
+    )
 
     return models.SparkV1alpha1ExecutorSpec(
         instances=instances,
         cores=cores,
         memory=memory,
+        core_request=_to_api_cpu_quantity(cpu_request),
+        core_limit=_to_api_cpu_quantity(cpu_limit),
     )
 
 
@@ -511,7 +686,7 @@ def build_spark_connect_cr(
     namespace: str,
     spark_version: str | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict[str, str | int] | None = None,
     spark_conf: dict[str, str] | None = None,
     driver: Driver | None = None,
     executor: Executor | None = None,
@@ -587,6 +762,9 @@ def build_spark_connect_cr(
             spark_conf=base_conf,
         ),
     )
+
+    # Validate effective CPU resources before options can mutate the spec.
+    _validate_effective_cpu_resources(spark_connect, base_conf)
 
     # Apply options - extensibility without API changes (callable pattern)
     apply_options(
@@ -676,7 +854,7 @@ def get_spark_job_driver_spec(
 
 def get_spark_job_executor_spec(
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict[str, str | int] | None = None,
 ) -> models.SparkV1beta2ExecutorSpec:
     """Build ExecutorSpec for SparkApplication.
 
@@ -691,6 +869,12 @@ def get_spark_job_executor_spec(
         ValueError:
             If the configured executor resources are invalid.
     """
+    if resources_per_executor and (
+        constants.RESOURCE_CPU_REQUEST in resources_per_executor
+        or constants.RESOURCE_CPU_LIMIT in resources_per_executor
+    ):
+        raise ValueError("cpu_request and cpu_limit are only supported for Spark Connect sessions.")
+
     instances, cores, memory = _resolve_executor_resources(
         num_executors=num_executors,
         resources_per_executor=resources_per_executor,
@@ -790,7 +974,7 @@ def get_spark_application_cr_from_file_job(
     main_file: str,
     arguments: list[str] | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict[str, str | int] | None = None,
     options: list | None = None,
     backend: Any | None = None,
     spark_conf: dict[str, str] | None = None,
@@ -853,7 +1037,7 @@ def get_spark_application_cr_from_func_job(
     func: Callable,
     func_args: dict[str, Any] | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict[str, str | int] | None = None,
     options: list | None = None,
     backend: Any | None = None,
     spark_conf: dict[str, str] | None = None,

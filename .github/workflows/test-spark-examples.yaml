@@ -123,7 +123,7 @@ jobs:
           make test-e2e-notebook \
             NOTEBOOK_INPUT=./examples/spark/spark_advanced_options.ipynb \
             NOTEBOOK_OUTPUT=./artifacts/notebooks/spark_advanced_options.ipynb \
-            PAPERMILL_PARAMS='-p DRIVER_CPU 500m -p DRIVER_MEMORY 512Mi -p EXECUTOR_CPU 500m -p EXECUTOR_MEMORY 512Mi -p NUM_EXECUTORS 1' \
+            PAPERMILL_PARAMS='-p DRIVER_CPU 500m -p DRIVER_CPU_REQUEST 500m -p DRIVER_CPU_LIMIT 1 -p DRIVER_MEMORY 512Mi -p EXECUTOR_CPU 500m -p EXECUTOR_CPU_REQUEST 500m -p EXECUTOR_CPU_LIMIT 1 -p EXECUTOR_MEMORY 512Mi -p NUM_EXECUTORS 1' \
             PAPERMILL_TIMEOUT=600
 
           make test-e2e-notebook \

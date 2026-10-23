@@ -37,6 +37,19 @@ SPARK_APPLICATION_VERSION = "v1beta2"
 SPARK_APPLICATION_PLURAL = "sparkapplications"
 SPARK_APPLICATION_KIND = "SparkApplication"
 
+# Resource keys accepted by Driver.resources and Executor.resources_per_executor
+RESOURCE_CPU = "cpu"
+RESOURCE_CPU_REQUEST = "cpu_request"
+RESOURCE_CPU_LIMIT = "cpu_limit"
+RESOURCE_MEMORY = "memory"
+
+# SDK guard for physical CPU quantities; not an operator limit.
+MAX_CPU_CORES = 1024
+
+# Spark configs used for executor CPU resources.
+SPARK_EXECUTOR_REQUEST_CORES_CONF = "spark.kubernetes.executor.request.cores"
+SPARK_EXECUTOR_LIMIT_CORES_CONF = "spark.kubernetes.executor.limit.cores"
+
 # Default values; keep major.minor aligned with pyspark-client in pyproject.toml
 DEFAULT_SPARK_VERSION = "4.0.4"
 DEFAULT_SPARK_IMAGE = "apache/spark:4.0.4"
