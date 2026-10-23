@@ -44,7 +44,7 @@ class RuntimeBackend(abc.ABC):
     def create_and_connect(
         self,
         num_executors: int | None = None,
-        resources_per_executor: dict[str, str] | None = None,
+        resources_per_executor: dict[str, str | int] | None = None,
         spark_conf: dict[str, str] | None = None,
         driver: Driver | None = None,
         executor: Executor | None = None,
@@ -148,7 +148,7 @@ class RuntimeBackend(abc.ABC):
         self,
         job: FileJob | FuncJob,
         num_executors: int | None = None,
-        resources_per_executor: dict[str, str] | None = None,
+        resources_per_executor: dict[str, str | int] | None = None,
         options: list | None = None,
         spark_conf: dict[str, str] | None = None,
     ) -> SparkJob:
