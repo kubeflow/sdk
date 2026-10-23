@@ -24,6 +24,7 @@ from kubernetes import client
 from kubernetes.client import ApiException
 import pytest
 
+from kubeflow.common import constants as common_constants
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
@@ -547,11 +548,22 @@ def test_get_session(kubernetes_backend, test_case):
     "test_case",
     [
         TestCase(
-            name="version metadata present",
+            name="version metadata present with default namespace",
             expected_status=SUCCESS,
             config={
                 "core_api": _build_core_api_mock({"kubeflow_spark_version": "1.2.3"}),
                 "expect_warning": False,
+                "expected_namespace": "kubeflow-system",
+            },
+        ),
+        TestCase(
+            name="version metadata present with custom component namespace",
+            expected_status=SUCCESS,
+            config={
+                "core_api": _build_core_api_mock({"kubeflow_spark_version": "1.2.3"}),
+                "expect_warning": False,
+                "env": {common_constants.KUBEFLOW_SPARK_NAMESPACE_ENV_VAR: "custom-spark-ns"},
+                "expected_namespace": "custom-spark-ns",
             },
         ),
         TestCase(
@@ -570,17 +582,28 @@ def test_get_session(kubernetes_backend, test_case):
         ),
     ],
 )
-def test_verify_backend(test_case):
+def test_verify_backend(monkeypatch, test_case):
     """Test KubernetesBackend.verify_backend across version metadata scenarios."""
 
     core_api: Mock = test_case.config["core_api"]
     expect_warning: bool = test_case.config.get("expect_warning", False)
     must_contain: list[str] = test_case.config.get("must_contain", [])
+    expected_namespace: str = test_case.config.get("expected_namespace", "kubeflow-system")
+
+    # Clean environment variables before test execution
+    monkeypatch.delenv(common_constants.KUBEFLOW_SPARK_NAMESPACE_ENV_VAR, raising=False)
+    monkeypatch.delenv(common_constants.KUBEFLOW_SYSTEM_NAMESPACE_ENV_VAR, raising=False)
+    for k, v in test_case.config.get("env", {}).items():
+        monkeypatch.setenv(k, v)
 
     warnings, call_count = _run_verify_backend_with_core_api(core_api)
     combined = "\n".join(warnings)
 
     assert call_count >= 1
+    core_api.read_namespaced_config_map.assert_called_with(
+        name="kubeflow-spark-public",
+        namespace=expected_namespace,
+    )
 
     if expect_warning:
         assert warnings, "Expected warning logs but found none"

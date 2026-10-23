@@ -128,7 +128,7 @@ class KubernetesBackend(RuntimeBackend):
         """
         system_namespace = utils.get_component_namespace(
             common_constants.KUBEFLOW_SPARK_NAMESPACE_ENV_VAR,
-            default="kubeflow",
+            default="kubeflow-system",
         )
         config_map_name = "kubeflow-spark-public"
 

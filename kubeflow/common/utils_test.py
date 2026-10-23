@@ -171,7 +171,7 @@ def test_validate_python_function(test_case):
             },
         ),
         TestCase(
-            name="deprecated system env var fallback emits deprecation warning",
+            name="deprecated system env var fallback emits warning",
             expected_status=SUCCESS,
             config={
                 "env": {
@@ -223,7 +223,7 @@ def test_get_component_namespace(test_case, monkeypatch):
     expected_ns = test_case.config["expected_namespace"]
 
     if test_case.config["expect_warning"]:
-        with pytest.deprecated_call(match="KUBEFLOW_SYSTEM_NAMESPACE is deprecated"):
+        with pytest.warns(UserWarning, match="KUBEFLOW_SYSTEM_NAMESPACE is deprecated"):
             ns = utils.get_component_namespace(**kwargs)
     else:
         with warnings.catch_warnings(record=True) as recorded_warnings:
