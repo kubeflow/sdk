@@ -43,7 +43,7 @@ RESOURCE_CPU_REQUEST = "cpu_request"
 RESOURCE_CPU_LIMIT = "cpu_limit"
 RESOURCE_MEMORY = "memory"
 
-# Upper bound for physical CPU quantities to catch unit mistakes.
+# SDK guard for physical CPU quantities; not an operator limit.
 MAX_CPU_CORES = 1024
 
 # Spark configs used for executor CPU resources.

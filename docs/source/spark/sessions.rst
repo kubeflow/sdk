@@ -186,10 +186,19 @@ server and executor pods:
 runs one Spark task slot per executor with a 500m physical CPU request and a
 1 CPU limit.
 
+These keys are supported for Spark Connect sessions only; batch jobs support
+only ``cpu`` and ``memory`` and reject the new keys.
+
 The operator applies ``server.coreRequest``/``coreLimit`` directly to the
 Spark Connect server pod and maps ``executor.coreRequest``/``coreLimit`` to
 ``spark.kubernetes.executor.request.cores``/``limit.cores`` for executor pods.
-An effective request must not exceed its limit.
+
+Values must be positive Kubernetes CPU quantities supplied as ``str`` or
+``int``. Use strings for fractional quantities such as ``"500m"`` or
+``"0.5"``; Python ``float`` and ``bool`` values are rejected. The SDK
+rejects values above 1024 cores; this cap is an SDK guard, not a Spark
+Operator limit. The effective ``cpu_request`` must not exceed the effective
+``cpu_limit``.
 
 .. note::
 

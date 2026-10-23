@@ -22,7 +22,7 @@ import multiprocessing
 import os
 import re
 import textwrap
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlparse
 import uuid
 
@@ -128,7 +128,7 @@ def _resolve_driver_resources(
 
         if constants.RESOURCE_MEMORY in driver.resources:
             memory = _memory_kubernetes_to_spark(
-                driver.resources[constants.RESOURCE_MEMORY],
+                cast(str, driver.resources[constants.RESOURCE_MEMORY]),
             )
 
     return cores, memory
@@ -136,8 +136,8 @@ def _resolve_driver_resources(
 
 def _get_executor_resource_dict(
     executor: Executor | None = None,
-    resources_per_executor: dict[str, str] | None = None,
-) -> dict[str, str] | None:
+    resources_per_executor: dict[str, str | int] | None = None,
+) -> dict[str, str | int] | None:
     """Return the executor resource dict using SDK precedence rules."""
     if executor and executor.resources_per_executor:
         return executor.resources_per_executor
@@ -147,7 +147,7 @@ def _get_executor_resource_dict(
 def _resolve_executor_resources(
     executor: Executor | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict[str, str | int] | None = None,
 ) -> tuple[int, int, str]:
     """Resolve executor configuration.
 
@@ -189,7 +189,7 @@ def _resolve_executor_resources(
 
         if constants.RESOURCE_MEMORY in resource_dict:
             memory = _memory_kubernetes_to_spark(
-                resource_dict[constants.RESOURCE_MEMORY],
+                cast(str, resource_dict[constants.RESOURCE_MEMORY]),
             )
 
     return instances, cores, memory
@@ -347,7 +347,7 @@ def _validate_cpu_quantity(value: Any, field_name: str) -> str:
 
 
 def _resolve_cpu_request_limit(
-    resources: dict[str, str] | None = None,
+    resources: dict[str, str | int] | None = None,
     role: str = "driver",
 ) -> tuple[str | None, str | None]:
     """Resolve and validate physical CPU request and limit.
@@ -438,12 +438,12 @@ def _validate_effective_cpu_resources(
     spark_connect: models.SparkV1alpha1SparkConnect,
     spark_conf: dict[str, str] | None = None,
 ) -> None:
-    """Validate effective CPU resources using operator fallback rules."""
+    """Validate effective CPU resources using conservative SDK fallback rules."""
     server = spark_connect.spec.server
     executor = spark_connect.spec.executor
     conf = spark_conf or {}
 
-    # Treat cores as the server request fallback for compatibility with spark-operator#3252.
+    # Use cores as a conservative server request fallback until spark-operator#3252 is resolved.
     server_request = _model_cpu_quantity(server.core_request) or (
         str(server.cores) if server.cores is not None else None
     )
@@ -642,7 +642,7 @@ def get_spark_connect_driver_spec(
 def get_spark_connect_executor_spec(
     executor: Executor | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict[str, str | int] | None = None,
 ) -> models.SparkV1alpha1ExecutorSpec:
     """Convert SDK Executor to API ExecutorSpec.
 
@@ -686,7 +686,7 @@ def build_spark_connect_cr(
     namespace: str,
     spark_version: str | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict[str, str | int] | None = None,
     spark_conf: dict[str, str] | None = None,
     driver: Driver | None = None,
     executor: Executor | None = None,
@@ -854,7 +854,7 @@ def get_spark_job_driver_spec(
 
 def get_spark_job_executor_spec(
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict[str, str | int] | None = None,
 ) -> models.SparkV1beta2ExecutorSpec:
     """Build ExecutorSpec for SparkApplication.
 
@@ -974,7 +974,7 @@ def get_spark_application_cr_from_file_job(
     main_file: str,
     arguments: list[str] | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict[str, str | int] | None = None,
     options: list | None = None,
     backend: Any | None = None,
     spark_conf: dict[str, str] | None = None,
@@ -1037,7 +1037,7 @@ def get_spark_application_cr_from_func_job(
     func: Callable,
     func_args: dict[str, Any] | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict[str, str | int] | None = None,
     options: list | None = None,
     backend: Any | None = None,
     spark_conf: dict[str, str] | None = None,

@@ -239,7 +239,8 @@ sessions:
 
    Batch jobs currently support ``cpu`` and ``memory`` in
    ``resources_per_executor``. ``cpu_request`` and ``cpu_limit`` are supported
-   for interactive Spark Connect sessions only.
+   for interactive Spark Connect sessions only. The SDK raises ``ValueError``
+   if either key is provided to ``submit_job()``.
 
 For Kubernetes-native customization — labels, annotations, node selection,
 tolerations, and custom job names — see :doc:`options`.

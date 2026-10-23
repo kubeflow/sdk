@@ -78,6 +78,13 @@ class Driver:
             - ``memory``: Spark memory (e.g. ``"4Gi"``).
 
             ``cpu`` and ``cpu_request``/``cpu_limit`` are independent.
+
+            ``cpu``, ``cpu_request``, and ``cpu_limit`` accept ``str`` or
+            ``int``. Use strings for fractional values (for example, ``"500m"``
+            or ``"0.5"``); Python ``float`` and ``bool`` values are rejected.
+            Values must be positive, at most 1024 cores, and ``cpu_request``
+            must not exceed ``cpu_limit``. The 1024-core cap is an SDK guard,
+            not an operator limit. The ``memory`` value must be a string.
         java_options: JVM options for the driver (e.g., "-Xmx4g -XX:+UseG1GC").
         service_account: Kubernetes service account name for RBAC.
 
@@ -95,7 +102,7 @@ class Driver:
     """
 
     image: str | None = None
-    resources: dict[str, str] | None = None
+    resources: dict[str, str | int] | None = None
     java_options: str | None = None
     service_account: str | None = None
 
@@ -119,6 +126,13 @@ class Executor:
             - ``memory``: Spark memory (e.g. ``"8Gi"``).
 
             ``cpu`` and ``cpu_request``/``cpu_limit`` are independent.
+
+            ``cpu``, ``cpu_request``, and ``cpu_limit`` accept ``str`` or
+            ``int``. Use strings for fractional values (for example, ``"500m"``
+            or ``"0.5"``); Python ``float`` and ``bool`` values are rejected.
+            Values must be positive, at most 1024 cores, and ``cpu_request``
+            must not exceed ``cpu_limit``. The 1024-core cap is an SDK guard,
+            not an operator limit. The ``memory`` value must be a string.
         java_options: JVM options for executors (e.g., "-Xmx28g -XX:+UseG1GC").
 
     Example::
@@ -135,7 +149,7 @@ class Executor:
     """
 
     num_instances: int | None = None
-    resources_per_executor: dict[str, str] | None = None
+    resources_per_executor: dict[str, str | int] | None = None
     java_options: str | None = None
 
 

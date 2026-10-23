@@ -64,7 +64,7 @@ class SparkClient:
         base_url: str | None = None,
         token: str | None = None,
         num_executors: int | None = None,
-        resources_per_executor: dict[str, str] | None = None,
+        resources_per_executor: dict[str, str | int] | None = None,
         spark_conf: dict[str, str] | None = None,
         driver: Driver | None = None,
         executor: Executor | None = None,
@@ -87,7 +87,12 @@ class SparkClient:
                 (create mode only). Supported keys: ``cpu`` (Spark cores),
                 ``cpu_request``/``cpu_limit`` (physical Kubernetes CPU request/limit),
                 and ``memory``. Format: ``{"cpu": "2", "cpu_request": "500m",
-                "cpu_limit": "1", "memory": "4Gi"}``.
+                "cpu_limit": "1", "memory": "4Gi"}``. ``cpu``, ``cpu_request``,
+                and ``cpu_limit`` accept ``str`` or ``int``; use strings for
+                fractional values. Python ``float``/``bool`` values are
+                rejected; values are capped at 1024 cores, and ``cpu_request``
+                must not exceed ``cpu_limit``. The 1024-core cap is an SDK
+                guard, not an operator limit. ``memory`` must be a string.
             spark_conf: Spark configuration dictionary (create mode only).
             driver: Driver configuration object (create mode only).
                 Use ``Driver.resources`` for Spark cores and physical CPU request/limit.
@@ -183,7 +188,7 @@ class SparkClient:
         self,
         job: FileJob | FuncJob,
         num_executors: int | None = None,
-        resources_per_executor: dict[str, str] | None = None,
+        resources_per_executor: dict[str, str | int] | None = None,
         spark_conf: dict[str, str] | None = None,
         options: list | None = None,
     ) -> str:
@@ -206,8 +211,11 @@ class SparkClient:
             resources_per_executor:
                 Resource requirements per executor.
                 Format: ``{"cpu": "5", "memory": "10Gi"}``.
-                ``cpu_request`` and ``cpu_limit`` are only supported for Spark
-                Connect sessions, not batch jobs.
+                ``cpu`` accepts a string or integer; use a string for
+                fractional CPU values. ``memory`` must be a string.
+                ``cpu_request`` and ``cpu_limit`` are only supported for
+                Spark Connect sessions, not batch jobs; the SDK raises
+                ``ValueError`` if either key is provided.
 
             spark_conf:
                 Spark configuration properties.
