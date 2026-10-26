@@ -21,8 +21,9 @@ s3_spark_conf = {
     "spark.jars.ivy": "/tmp/.ivy2",
     "spark.driver.extraJavaOptions": "-Divy.home=/tmp/.ivy2",
     "spark.executor.extraJavaOptions": "-Divy.home=/tmp/.ivy2",
-    # Hadoop-AWS packages
-    "spark.jars.packages": "org.apache.hadoop:hadoop-aws:3.4.1,com.amazonaws:aws-java-sdk-bundle:1.12.753",
+    # Trimmed package downloads
+    "spark.jars.packages": "org.apache.hadoop:hadoop-aws:3.4.1,software.amazon.awssdk:s3:2.24.6,software.amazon.awssdk:s3-transfer-manager:2.24.6",
+    "spark.jars.excludes": "software.amazon.awssdk:bundle",
     # S3A / SeaweedFS parameters
     "spark.hadoop.fs.s3a.endpoint": s3_endpoint,
     "spark.hadoop.fs.s3a.path.style.access": "true",
