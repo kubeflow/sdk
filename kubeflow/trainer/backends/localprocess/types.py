@@ -16,7 +16,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from kubeflow.trainer.backends.localprocess.job import LocalJob
 from kubeflow.trainer.types import types
@@ -35,8 +35,7 @@ class LocalBackendStep(BaseModel):
     step_name: str
     job: LocalJob
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class LocalBackendJobs(BaseModel):
@@ -46,5 +45,4 @@ class LocalBackendJobs(BaseModel):
     created: datetime | None = None
     completed: datetime | None = None
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
