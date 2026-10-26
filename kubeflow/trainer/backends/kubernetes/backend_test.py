@@ -1543,6 +1543,84 @@ def test_train(kubernetes_backend, test_case):
     print("test execution complete")
 
 
+@pytest.mark.parametrize("cluster_scoped", [False, True])
+@pytest.mark.parametrize("runtime_image", [None, "", "runtime:latest"])
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="custom function supplies image",
+            config={"trainer": types.CustomTrainer(func=sample_train_func, image="custom:latest")},
+            expected_output="custom:latest",
+        ),
+        TestCase(
+            name="custom container supplies image",
+            config={"trainer": types.CustomTrainerContainer(image="custom:latest")},
+            expected_output="custom:latest",
+        ),
+        TestCase(
+            name="custom function inherits image",
+            config={"trainer": types.CustomTrainer(func=sample_train_func)},
+            expected_output=None,
+        ),
+        TestCase(name="no trainer inherits image", config={"trainer": None}, expected_output=None),
+    ],
+    ids=lambda test_case: test_case.name,
+)
+def test_train_runtime_image(
+    kubernetes_backend: KubernetesBackend,
+    runtime_image: str | None,
+    test_case: TestCase,
+    cluster_scoped: bool,
+) -> None:
+    """Resolve runtime metadata before validating the image used for submission."""
+    runtime_cr = (
+        create_cluster_training_runtime(TORCH_RUNTIME)
+        if cluster_scoped
+        else create_training_runtime(TORCH_RUNTIME)
+    )
+    container = runtime_cr.spec.template.spec.replicated_jobs[
+        0
+    ].template.spec.template.spec.containers[0]
+    container.image = runtime_image
+    read_runtime = kubernetes_backend.custom_api.get_namespaced_custom_object
+    if cluster_scoped:
+        read_runtime.side_effect = client.ApiException(status=404)
+        read_runtime = kubernetes_backend.custom_api.get_cluster_custom_object
+    read_runtime.side_effect = None
+    read_runtime.return_value = Mock(get=Mock(return_value=runtime_cr.to_dict()))
+
+    # Reading a reusable runtime must not require its workload-specific image.
+    runtime = kubernetes_backend.get_runtime(TORCH_RUNTIME)
+    assert runtime.trainer.image == (runtime_image or "")
+
+    if not runtime_image and not test_case.expected_output:
+        with pytest.raises(ValueError, match="image"):
+            kubernetes_backend.train(runtime=TORCH_RUNTIME, **test_case.config)
+        kubernetes_backend.custom_api.create_namespaced_custom_object.assert_not_called()
+        return
+
+    kubernetes_backend.train(runtime=TORCH_RUNTIME, **test_case.config)
+    body = kubernetes_backend.custom_api.create_namespaced_custom_object.call_args.args[4]
+    assert (body["spec"].get("trainer") or {}).get("image") == test_case.expected_output
+    assert container.image == runtime_image
+
+
+def test_get_runtime_without_trainer_container(kubernetes_backend: KubernetesBackend) -> None:
+    """An absent trainer container remains an invalid runtime."""
+    runtime_cr = create_training_runtime(TORCH_RUNTIME)
+    runtime_cr.spec.template.spec.replicated_jobs[0].template.spec.template.spec.containers[
+        0
+    ].name = "other"
+    read_runtime = kubernetes_backend.custom_api.get_namespaced_custom_object
+    read_runtime.side_effect = None
+    read_runtime.return_value = Mock(get=Mock(return_value=runtime_cr.to_dict()))
+
+    with pytest.raises(RuntimeError) as exc_info:
+        kubernetes_backend.get_runtime(TORCH_RUNTIME)
+    assert "Runtime doesn't have trainer container" in str(exc_info.value.__cause__)
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
