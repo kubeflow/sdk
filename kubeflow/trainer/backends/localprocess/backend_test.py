@@ -523,6 +523,33 @@ def test_name_option_sets_job_name(local_backend, mock_train_environment):
     assert job_name == custom_name
 
 
+def test_train_rejects_duplicate_job_name(local_backend, mock_train_environment):
+    """Test that reusing a job name fails before a temp dir or process is created."""
+
+    def dummy_func():
+        pass
+
+    runtime = types.Runtime(
+        name=TORCH_RUNTIME,
+        trainer=types.RuntimeTrainer(
+            trainer_type=types.TrainerType.CUSTOM_TRAINER,
+            framework="torch",
+            image=LOCAL_RUNTIME_IMAGE,
+        ),
+        kind=types.RuntimeKind.TRAINING_RUNTIME,
+    )
+    trainer = types.CustomTrainer(func=dummy_func)
+    options = [Name(name="duplicate-job")]
+
+    local_backend.train(runtime=runtime, trainer=trainer, options=options)
+
+    with pytest.raises(ValueError, match="already exists"):
+        local_backend.train(runtime=runtime, trainer=trainer, options=options)
+
+    assert mock_train_environment["start"].call_count == 1
+    assert mock_train_environment["mkdtemp"].call_count == 1
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
