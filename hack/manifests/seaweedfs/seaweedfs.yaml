@@ -62,12 +62,18 @@ spec:
           args:
             - "server"
             - "-s3"
+            - "-s3.port=8333"
             - "-dir=/data"
           ports:
             - name: s3
               containerPort: 8333
             - name: master
               containerPort: 9333
+          readinessProbe:
+            tcpSocket:
+              port: 8333
+            initialDelaySeconds: 5
+            periodSeconds: 3
           volumeMounts:
             - name: data
               mountPath: /data
