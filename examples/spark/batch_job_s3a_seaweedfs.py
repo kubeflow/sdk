@@ -7,7 +7,10 @@ from kubeflow.spark import FileJob, SparkClient, SparkJobStatus
 
 namespace = os.environ.get("SPARK_TEST_NAMESPACE", "default")
 s3_endpoint = os.environ.get("S3_ENDPOINT", "http://seaweedfs-s3.seaweedfs.svc.cluster.local:8333")
-s3_bucket = os.environ.get("S3_BUCKET", "test-bucket")
+
+s3_bucket = os.environ.get("S3_BUCKET", "mlpipeline")
+s3_access_key = os.environ.get("AWS_ACCESS_KEY_ID")
+s3_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
 
 backend_config = KubernetesBackendConfig(namespace=namespace)
 client = SparkClient(backend_config=backend_config)
@@ -27,11 +30,22 @@ s3_spark_conf = {
     # S3A / SeaweedFS parameters
     "spark.hadoop.fs.s3a.endpoint": s3_endpoint,
     "spark.hadoop.fs.s3a.path.style.access": "true",
+    "spark.hadoop.fs.s3a.connection.ssl.enabled": "false",
     "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem",
-    "spark.hadoop.fs.s3a.aws.credentials.provider": "org.apache.hadoop.fs.s3a.AnonymousAWSCredentialsProvider",
     "spark.hadoop.fs.s3a.connection.timeout": "10000",
     "spark.hadoop.fs.s3a.endpoint.region": "us-east-1",
 }
+
+if s3_access_key and s3_secret_key:
+    s3_spark_conf["spark.hadoop.fs.s3a.access.key"] = s3_access_key
+    s3_spark_conf["spark.hadoop.fs.s3a.secret.key"] = s3_secret_key
+    s3_spark_conf["spark.hadoop.fs.s3a.aws.credentials.provider"] = (
+        "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider"
+    )
+else:
+    s3_spark_conf["spark.hadoop.fs.s3a.aws.credentials.provider"] = (
+        "org.apache.hadoop.fs.s3a.AnonymousAWSCredentialsProvider"
+    )
 
 print(f"[2/5] Submitting remote S3A batch job from: {REMOTE_S3_JOB}...")
 start_time = time.time()
