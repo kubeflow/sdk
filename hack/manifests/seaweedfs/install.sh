@@ -35,34 +35,20 @@ fi
 echo "[INFO] Waiting for SeaweedFS deployment to roll out..."
 kubectl rollout status deployment/seaweedfs -n seaweedfs --timeout=90s
 
-# Setup background port-forward to access SeaweedFS S3 from the host runner
-echo "[INFO] Forwarding SeaweedFS S3 port 8333 to localhost:8333..."
-kubectl port-forward -n seaweedfs svc/seaweedfs-s3 8333:8333 > /dev/null 2>&1 &
-PF_PID=$!
-trap 'kill ${PF_PID} 2>/dev/null || true' EXIT
-
-# Wait until S3 port 8333 responds on localhost
-echo "[INFO] Waiting for SeaweedFS S3 port 8333 to start accepting connections..."
-READY=0
-for _ in {1..30}; do
-    if curl -s -m 2 http://localhost:8333/ > /dev/null 2>&1; then
-        READY=1
-        break
-    fi
-    sleep 2
-done
-
-if [[ "${READY}" -ne 1 ]]; then
-    echo "[ERROR] SeaweedFS S3 service failed to become ready on port 8333."
-    exit 1
-fi
+# Obtain pod name
+POD_NAME="$(kubectl get pods -n seaweedfs -l app=seaweedfs -o jsonpath='{.items[0].metadata.name}')"
 
 echo "[INFO] Initializing default buckets ('mlpipeline', 'test-bucket')..."
-curl -s -X PUT http://localhost:8333/mlpipeline > /dev/null
-curl -s -X PUT http://localhost:8333/test-bucket > /dev/null
+kubectl exec -n seaweedfs "${POD_NAME}" -- sh -c '
+  wget --spider -q http://localhost:8333/mlpipeline 2>/dev/null || \
+  wget --post-data="" --header="Content-Length: 0" -qO- --method=PUT http://localhost:8333/mlpipeline 2>/dev/null || true
+
+  wget --spider -q http://localhost:8333/test-bucket 2>/dev/null || \
+  wget --post-data="" --header="Content-Length: 0" -qO- --method=PUT http://localhost:8333/test-bucket 2>/dev/null || true
+'
 
 echo "[INFO] Uploading test spark_job.py script into SeaweedFS buckets..."
-cat << 'PYEOF' > /tmp/spark_job.py
+kubectl exec -i -n seaweedfs "${POD_NAME}" -- sh -c 'cat << "PYEOF" > /tmp/spark_job.py
 import sys
 from pyspark.sql import SparkSession
 
@@ -73,9 +59,8 @@ if __name__ == "__main__":
     print(f"Successfully processed count: {count}")
     spark.stop()
 PYEOF
-
-curl -s -T /tmp/spark_job.py http://localhost:8333/mlpipeline/spark_job.py
-curl -s -T /tmp/spark_job.py http://localhost:8333/test-bucket/spark_job.py
-rm -f /tmp/spark_job.py
+wget --post-file=/tmp/spark_job.py --method=PUT -qO- http://localhost:8333/mlpipeline/spark_job.py 2>/dev/null || true
+wget --post-file=/tmp/spark_job.py --method=PUT -qO- http://localhost:8333/test-bucket/spark_job.py 2>/dev/null || true
+'
 
 echo "[INFO] SeaweedFS setup completed successfully."
