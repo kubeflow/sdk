@@ -340,60 +340,10 @@ print_status() {
 
 install_seaweedfs() {
     phase_start "install_seaweedfs"
-    log_info "Deploying SeaweedFS S3 storage and KFP artifact secrets..."
-
-    local script_dir manifest_file
+    local script_dir
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    manifest_file="${script_dir}/manifests/seaweedfs/seaweedfs.yaml"
 
-    kubectl apply -f "$manifest_file"
-
-    # Also replicate the secret to the test namespace if different from default
-    if [[ "$NAMESPACE" != "default" ]]; then
-        kubectl get secret mlpipeline-minio-artifact -n default -o yaml \
-          | sed "s/namespace: default/namespace: $NAMESPACE/" \
-          | kubectl apply -f -
-    fi
-
-    log_info "Waiting for SeaweedFS pod to be ready..."
-    kubectl rollout status deployment/seaweedfs -n seaweedfs --timeout=90s
-
-    # Bootstrap default buckets (KFP mlpipeline and test-bucket)
-    local pod_name
-    pod_name="$(kubectl get pods -n seaweedfs -l app=seaweedfs -o jsonpath='{.items[0].metadata.name}')"
-
-    log_info "Initializing default buckets ('mlpipeline', 'test-bucket')..."
-    kubectl exec -n seaweedfs "$pod_name" -- curl -s -X PUT http://localhost:8333/mlpipeline || true
-    kubectl exec -n seaweedfs "$pod_name" -- curl -s -X PUT http://localhost:8333/test-bucket || true
-
-    # Upload test spark_job.py script into the bucket
-    kubectl exec -i -n seaweedfs "$pod_name" -- sh -c 'cat << "PYEOF" > /tmp/spark_job.py
-import sys
-from pyspark.sql import SparkSession
-
-if __name__ == "__main__":
-    spark = SparkSession.builder.appName("SeaweedFSS3ATest").getOrCreate()
-    partitions = int(sys.argv[1]) if len(sys.argv) > 1 else 2
-    count = spark.sparkContext.parallelize(range(1, 100), partitions).count()
-    print(f"Successfully processed count: {count}")
-    spark.stop()
-PYEOF
-curl -s -T /tmp/spark_job.py http://localhost:8333/mlpipeline/spark_job.py
-curl -s -T /tmp/spark_job.py http://localhost:8333/test-bucket/spark_job.py
-'
-
-    # Configure CoreDNS forwarders to avoid WSL /etc/resolv.conf UDP packet drop
-    log_info "Configuring CoreDNS upstream forwarders for Maven resolution..."
-    kubectl -n kube-system get configmap coredns -o yaml > /tmp/coredns.yaml
-    if grep -q "forward . 8.8.8.8" /tmp/coredns.yaml; then
-        log_info "CoreDNS upstream forwarders already configured."
-    else
-        sed -i 's|forward \. /etc/resolv\.conf|forward . 8.8.8.8 1.1.1.1 {\n       prefer_udp\n    }|' /tmp/coredns.yaml
-        kubectl apply -f /tmp/coredns.yaml
-        kubectl rollout restart deployment coredns -n kube-system
-        kubectl rollout status deployment coredns -n kube-system --timeout=60s
-    fi
-
+    "${script_dir}/manifests/seaweedfs/install.sh" "${NAMESPACE:-default}"
     phase_end "install_seaweedfs"
 }
 
