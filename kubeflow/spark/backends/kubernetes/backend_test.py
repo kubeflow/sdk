@@ -31,7 +31,6 @@ from kubeflow.spark.backends.kubernetes.utils import (
 )
 from kubeflow.spark.options import Labels, Name
 from kubeflow.spark.types.types import (
-    Driver,
     FileJob,
     FuncJob,
     SparkConnectInfo,
@@ -444,27 +443,6 @@ def test_create_session(kubernetes_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
-
-
-def test_create_session_cpu_resources(kubernetes_backend):
-    """Test that physical CPU request/limit are serialized into the CR body."""
-    kubernetes_backend._create_session(
-        driver=Driver(
-            resources={"cpu": "1", "cpu_request": "500m", "cpu_limit": "1"},
-        ),
-        resources_per_executor={
-            "cpu": "1",
-            "cpu_request": "500m",
-            "cpu_limit": "1",
-        },
-    )
-
-    body = kubernetes_backend.custom_api.create_namespaced_custom_object.call_args.kwargs["body"]
-
-    assert body["spec"]["server"]["coreRequest"] == "500m"
-    assert body["spec"]["server"]["coreLimit"] == "1"
-    assert body["spec"]["executor"]["coreRequest"] == "500m"
-    assert body["spec"]["executor"]["coreLimit"] == "1"
 
 
 @pytest.mark.parametrize(

@@ -64,7 +64,7 @@ class SparkClient:
         base_url: str | None = None,
         token: str | None = None,
         num_executors: int | None = None,
-        resources_per_executor: dict[str, str | int] | None = None,
+        resources_per_executor: dict[str, str] | None = None,
         spark_conf: dict[str, str] | None = None,
         driver: Driver | None = None,
         executor: Executor | None = None,
@@ -83,21 +83,11 @@ class SparkClient:
                  If provided, connects to existing server. If None, creates new session.
             token: Optional authentication token for existing server.
             num_executors: Number of executor instances (create mode only).
-            resources_per_executor: Resource requirements per executor as dict
-                (create mode only). Supported keys: ``cpu`` (Spark cores),
-                ``cpu_request``/``cpu_limit`` (physical Kubernetes CPU request/limit),
-                and ``memory``. Format: ``{"cpu": "2", "cpu_request": "500m",
-                "cpu_limit": "1", "memory": "4Gi"}``. ``cpu``, ``cpu_request``,
-                and ``cpu_limit`` accept ``str`` or ``int``; use strings for
-                fractional values. Python ``float``/``bool`` values are
-                rejected; values are capped at 1024 cores, and ``cpu_request``
-                must not exceed ``cpu_limit``. The 1024-core cap is an SDK
-                guard, not an operator limit. ``memory`` must be a string.
+            resources_per_executor: Resource requirements per executor as dict.
+                Format: `{"cpu": "5", "memory": "10Gi"}` (create mode only).
             spark_conf: Spark configuration dictionary (create mode only).
             driver: Driver configuration object (create mode only).
-                Use ``Driver.resources`` for Spark cores and physical CPU request/limit.
             executor: Executor configuration object (create mode only).
-                Use ``Executor.resources_per_executor`` for the same resource keys.
             options: List of configuration options (create mode only).
                 Use Name option for custom session name.
             timeout: Timeout in seconds to wait for session ready.
@@ -114,9 +104,6 @@ class SparkClient:
         Note:
             Server port defaults to 15002 (Spark Connect gRPC). PySpark and server Spark
             major.minor should match; see constants and pyproject.toml [spark].
-
-            ``cpu_request`` and ``cpu_limit`` require a Spark Operator version that
-            includes kubeflow/spark-operator#3096.
         """
         if base_url:
             validate_spark_connect_url(base_url)
@@ -188,7 +175,7 @@ class SparkClient:
         self,
         job: FileJob | FuncJob,
         num_executors: int | None = None,
-        resources_per_executor: dict[str, str | int] | None = None,
+        resources_per_executor: dict[str, str] | None = None,
         spark_conf: dict[str, str] | None = None,
         options: list | None = None,
     ) -> str:
@@ -211,11 +198,6 @@ class SparkClient:
             resources_per_executor:
                 Resource requirements per executor.
                 Format: ``{"cpu": "5", "memory": "10Gi"}``.
-                ``cpu`` accepts a string or integer; use a string for
-                fractional CPU values. ``memory`` must be a string.
-                ``cpu_request`` and ``cpu_limit`` are only supported for
-                Spark Connect sessions, not batch jobs; the SDK raises
-                ``ValueError`` if either key is provided.
 
             spark_conf:
                 Spark configuration properties.

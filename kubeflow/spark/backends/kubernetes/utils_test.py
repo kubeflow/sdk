@@ -26,10 +26,8 @@ from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.spark.backends.kubernetes.utils import (
     _memory_kubernetes_to_spark,
-    _resolve_cpu_request_limit,
     _resolve_driver_resources,
     _resolve_executor_resources,
-    _validate_cpu_quantity,
     _validate_cpu_value,
     _validate_spark_conf,
     apply_options,
@@ -555,6 +553,20 @@ def test_build_service_url(test_case: TestCase) -> None:
             },
         ),
         TestCase(
+            name="spark connect cr with fractional driver cpu",
+            expected_status=SUCCESS,
+            config={
+                "driver": Driver(resources={"cpu": "500m"}),
+            },
+        ),
+        TestCase(
+            name="spark connect cr with fractional executor cpu",
+            expected_status=SUCCESS,
+            config={
+                "resources_per_executor": {"cpu": "0.5"},
+            },
+        ),
+        TestCase(
             name="spark connect cr with service account",
             expected_status=SUCCESS,
             config={
@@ -649,92 +661,6 @@ def test_build_service_url(test_case: TestCase) -> None:
                 ),
             },
         ),
-        TestCase(
-            name="spark connect cr with driver cpu request and limit",
-            expected_status=SUCCESS,
-            config={
-                "driver": Driver(
-                    resources={
-                        "cpu": "2",
-                        "cpu_request": "500m",
-                        "cpu_limit": "1500m",
-                        "memory": "2Gi",
-                    },
-                ),
-            },
-        ),
-        TestCase(
-            name="spark connect cr with executor cpu request and limit",
-            expected_status=SUCCESS,
-            config={
-                "resources_per_executor": {
-                    "cpu": "2",
-                    "cpu_request": "500m",
-                    "cpu_limit": "1",
-                    "memory": "2Gi",
-                },
-            },
-        ),
-        TestCase(
-            name="spark connect cr with cpu request only",
-            expected_status=SUCCESS,
-            config={
-                "driver": Driver(
-                    resources={
-                        "cpu": "1",
-                        "cpu_request": "500m",
-                    },
-                ),
-                "resources_per_executor": {
-                    "cpu": "1",
-                    "cpu_request": "500m",
-                },
-            },
-        ),
-        TestCase(
-            name="spark connect cr with fractional cpu request",
-            expected_status=SUCCESS,
-            config={
-                "driver": Driver(
-                    resources={
-                        "cpu": "1",
-                        "cpu_request": "0.5",
-                        "cpu_limit": "1",
-                    },
-                ),
-            },
-        ),
-        TestCase(
-            name="executor config overrides cpu request and limit",
-            expected_status=SUCCESS,
-            config={
-                "resources_per_executor": {
-                    "cpu": "1",
-                    "cpu_request": "500m",
-                    "cpu_limit": "1",
-                },
-                "executor": Executor(
-                    resources_per_executor={
-                        "cpu": "2",
-                        "cpu_request": "1",
-                        "cpu_limit": "2",
-                    },
-                ),
-            },
-        ),
-        TestCase(
-            name="spark conf executor cpu request satisfies limit",
-            expected_status=SUCCESS,
-            config={
-                "resources_per_executor": {
-                    "cpu": "2",
-                    "cpu_limit": "1",
-                },
-                "spark_conf": {
-                    "spark.kubernetes.executor.request.cores": "500m",
-                },
-            },
-        ),
     ],
 )
 def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
@@ -764,9 +690,13 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.metadata.namespace == "default"
         assert spark_connect.spec.spark_version == constants.DEFAULT_SPARK_VERSION
         assert spark_connect.spec.executor.instances == constants.DEFAULT_NUM_EXECUTORS
-        assert spark_connect.spec.executor.cores == constants.DEFAULT_EXECUTOR_CPU
+        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.core_request is None
+        assert spark_connect.spec.executor.core_limit is None
         assert spark_connect.spec.executor.memory == "512m"
-        assert spark_connect.spec.server.cores == constants.DEFAULT_DRIVER_CPU
+        assert spark_connect.spec.server.cores is None
+        assert spark_connect.spec.server.core_request is None
+        assert spark_connect.spec.server.core_limit is None
         assert spark_connect.spec.server.memory == "512m"
         assert spark_connect.spec.spark_conf["spark.connect.grpc.binding.address"] == "0.0.0.0"
         assert "spark.jars" not in spark_connect.spec.spark_conf
@@ -775,8 +705,14 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.executor.instances == 3
 
     elif test_case.name == "spark connect cr with executor resources":
-        assert spark_connect.spec.executor.cores == 2
+        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.core_request is not None
+        assert spark_connect.spec.executor.core_limit is not None
+        assert spark_connect.spec.executor.core_request.actual_instance == "2"
+        assert spark_connect.spec.executor.core_limit.actual_instance == "2"
         assert spark_connect.spec.executor.memory == "4g"
+        assert spark_connect.spec.server.core_request is None
+        assert spark_connect.spec.server.core_limit is None
 
     elif test_case.name == "spark connect cr with spark conf":
         assert spark_connect.spec.spark_conf["spark.jars"] == "local:///opt/spark/jars/my.jar"
@@ -789,15 +725,39 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.image == "custom-spark:v1"
 
     elif test_case.name == "spark connect cr with driver resources":
-        assert spark_connect.spec.server.cores == 2
+        assert spark_connect.spec.server.cores is None
+        assert spark_connect.spec.server.core_request is not None
+        assert spark_connect.spec.server.core_limit is not None
+        assert spark_connect.spec.server.core_request.actual_instance == "2"
+        assert spark_connect.spec.server.core_limit.actual_instance == "2"
         assert spark_connect.spec.server.memory == "2g"
+        assert spark_connect.spec.executor.core_request is None
+        assert spark_connect.spec.executor.core_limit is None
+
+    elif test_case.name == "spark connect cr with fractional driver cpu":
+        assert spark_connect.spec.server.cores is None
+        assert spark_connect.spec.server.core_request is not None
+        assert spark_connect.spec.server.core_limit is not None
+        assert spark_connect.spec.server.core_request.actual_instance == "500m"
+        assert spark_connect.spec.server.core_limit.actual_instance == "500m"
+
+    elif test_case.name == "spark connect cr with fractional executor cpu":
+        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.core_request is not None
+        assert spark_connect.spec.executor.core_limit is not None
+        assert spark_connect.spec.executor.core_request.actual_instance == "0.5"
+        assert spark_connect.spec.executor.core_limit.actual_instance == "0.5"
 
     elif test_case.name == "spark connect cr with service account":
         assert spark_connect.spec.server.template.spec.service_account_name == "spark-sa"
 
     elif test_case.name == "spark connect cr with executor config":
         assert spark_connect.spec.executor.instances == 5
-        assert spark_connect.spec.executor.cores == 4
+        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.core_request is not None
+        assert spark_connect.spec.executor.core_limit is not None
+        assert spark_connect.spec.executor.core_request.actual_instance == "4"
+        assert spark_connect.spec.executor.core_limit.actual_instance == "4"
         assert spark_connect.spec.executor.memory == "8g"
 
     elif test_case.name == "spark connect cr with app name":
@@ -807,81 +767,37 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.executor.instances == 10
 
     elif test_case.name == "executor config overrides executor resources":
-        assert spark_connect.spec.executor.cores == 8
+        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.core_request is not None
+        assert spark_connect.spec.executor.core_limit is not None
+        assert spark_connect.spec.executor.core_request.actual_instance == "8"
+        assert spark_connect.spec.executor.core_limit.actual_instance == "8"
         assert spark_connect.spec.executor.memory == "16g"
 
     elif test_case.name == "kep107 level2 simple mode":
         assert spark_connect.spec.executor.instances == 5
-        assert spark_connect.spec.executor.cores == 5
+        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.core_request is not None
+        assert spark_connect.spec.executor.core_limit is not None
+        assert spark_connect.spec.executor.core_request.actual_instance == "5"
+        assert spark_connect.spec.executor.core_limit.actual_instance == "5"
         assert spark_connect.spec.executor.memory == "10g"
 
     elif test_case.name == "kep107 level3 advanced mode":
-        assert spark_connect.spec.server.cores == 4
+        assert spark_connect.spec.server.cores is None
+        assert spark_connect.spec.server.core_request is not None
+        assert spark_connect.spec.server.core_limit is not None
+        assert spark_connect.spec.server.core_request.actual_instance == "4"
+        assert spark_connect.spec.server.core_limit.actual_instance == "4"
         assert spark_connect.spec.server.memory == "8g"
         assert spark_connect.spec.server.template.spec.service_account_name == "spark-driver-prod"
         assert spark_connect.spec.executor.instances == 20
-        assert spark_connect.spec.executor.cores == 8
+        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.core_request is not None
+        assert spark_connect.spec.executor.core_limit is not None
+        assert spark_connect.spec.executor.core_request.actual_instance == "8"
+        assert spark_connect.spec.executor.core_limit.actual_instance == "8"
         assert spark_connect.spec.executor.memory == "32g"
-
-    elif test_case.name == "spark connect cr with driver cpu request and limit":
-        server_request = spark_connect.spec.server.core_request
-        server_limit = spark_connect.spec.server.core_limit
-        assert spark_connect.spec.server.cores == 2
-        assert server_request is not None
-        assert server_limit is not None
-        assert server_request.actual_instance == "500m"
-        assert server_limit.actual_instance == "1500m"
-
-    elif test_case.name == "spark connect cr with executor cpu request and limit":
-        executor_request = spark_connect.spec.executor.core_request
-        executor_limit = spark_connect.spec.executor.core_limit
-        assert spark_connect.spec.executor.cores == 2
-        assert executor_request is not None
-        assert executor_limit is not None
-        assert executor_request.actual_instance == "500m"
-        assert executor_limit.actual_instance == "1"
-        body = spark_connect.to_dict()
-        assert body is not None
-        assert body["spec"]["executor"]["coreRequest"] == "500m"
-        assert body["spec"]["executor"]["coreLimit"] == "1"
-
-    elif test_case.name == "spark connect cr with cpu request only":
-        server_request = spark_connect.spec.server.core_request
-        executor_request = spark_connect.spec.executor.core_request
-        assert server_request is not None
-        assert executor_request is not None
-        assert server_request.actual_instance == "500m"
-        assert spark_connect.spec.server.core_limit is None
-        assert executor_request.actual_instance == "500m"
-        assert spark_connect.spec.executor.core_limit is None
-
-    elif test_case.name == "spark connect cr with fractional cpu request":
-        server_request = spark_connect.spec.server.core_request
-        server_limit = spark_connect.spec.server.core_limit
-        assert spark_connect.spec.server.cores == 1
-        assert server_request is not None
-        assert server_limit is not None
-        assert server_request.actual_instance == "0.5"
-        assert server_limit.actual_instance == "1"
-
-    elif test_case.name == "executor config overrides cpu request and limit":
-        executor_request = spark_connect.spec.executor.core_request
-        executor_limit = spark_connect.spec.executor.core_limit
-        assert spark_connect.spec.executor.cores == 2
-        assert executor_request is not None
-        assert executor_limit is not None
-        assert executor_request.actual_instance == "1"
-        assert executor_limit.actual_instance == "2"
-
-    elif test_case.name == "spark conf executor cpu request satisfies limit":
-        executor_limit = spark_connect.spec.executor.core_limit
-        spark_conf = spark_connect.spec.spark_conf
-        assert spark_connect.spec.executor.cores == 2
-        assert spark_connect.spec.executor.core_request is None
-        assert executor_limit is not None
-        assert executor_limit.actual_instance == "1"
-        assert spark_conf is not None
-        assert spark_conf["spark.kubernetes.executor.request.cores"] == "500m"
 
     elif test_case.name == "spark connect cr with options":
         assert spark_connect.metadata.labels["team"] == "ml"
@@ -1140,205 +1056,6 @@ def test_validate_cpu_value(test_case: TestCase) -> None:
         for cpu in test_case.config["cases"]:
             with pytest.raises(test_case.expected_error):
                 _validate_cpu_value(cpu)
-
-    print("test execution complete")
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TestCase(
-            name="valid cpu quantities",
-            expected_status=SUCCESS,
-            config={
-                "cases": [
-                    ("500m", "500m"),
-                    ("1", "1"),
-                    ("0.5", "0.5"),
-                    ("1500m", "1500m"),
-                    (" 500m ", "500m"),
-                    (2, "2"),
-                ],
-            },
-        ),
-        TestCase(
-            name="invalid cpu quantities",
-            expected_status=FAILED,
-            config={
-                "cases": [
-                    None,
-                    "",
-                    " ",
-                    "abc",
-                    "0",
-                    "-1",
-                    "1Gi",
-                    True,
-                    0.5,
-                    2048,
-                ],
-            },
-            expected_error=ValueError,
-        ),
-    ],
-)
-def test_validate_cpu_quantity(test_case: TestCase) -> None:
-    """Tests _validate_cpu_quantity."""
-
-    print("Executing test:", test_case.name)
-
-    if test_case.expected_status == SUCCESS:
-        for value, expected in test_case.config["cases"]:
-            assert _validate_cpu_quantity(value, "cpu_request") == expected
-    else:
-        for value in test_case.config["cases"]:
-            with pytest.raises(test_case.expected_error):
-                _validate_cpu_quantity(value, "cpu_request")
-
-    print("test execution complete")
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TestCase(
-            name="no resources",
-            expected_status=SUCCESS,
-            config={},
-        ),
-        TestCase(
-            name="request and limit",
-            expected_status=SUCCESS,
-            config={
-                "resources": {
-                    "cpu_request": "500m",
-                    "cpu_limit": "1",
-                },
-            },
-        ),
-        TestCase(
-            name="request only",
-            expected_status=SUCCESS,
-            config={"resources": {"cpu_request": "500m"}},
-        ),
-        TestCase(
-            name="limit only",
-            expected_status=SUCCESS,
-            config={"resources": {"cpu_limit": "1"}},
-        ),
-        TestCase(
-            name="request exceeds limit",
-            expected_status=FAILED,
-            config={"resources": {"cpu_request": "2", "cpu_limit": "1"}},
-            expected_error=ValueError,
-        ),
-        TestCase(
-            name="invalid request",
-            expected_status=FAILED,
-            config={"resources": {"cpu_request": "abc"}},
-            expected_error=ValueError,
-        ),
-    ],
-)
-def test_resolve_cpu_request_limit(test_case: TestCase) -> None:
-    """Tests _resolve_cpu_request_limit."""
-
-    print("Executing test:", test_case.name)
-
-    if test_case.expected_status == SUCCESS:
-        request, limit = _resolve_cpu_request_limit(
-            test_case.config.get("resources"),
-            "driver",
-        )
-
-        if test_case.name == "no resources":
-            assert request is None
-            assert limit is None
-        elif test_case.name == "request and limit":
-            assert request == "500m"
-            assert limit == "1"
-        elif test_case.name == "request only":
-            assert request == "500m"
-            assert limit is None
-        elif test_case.name == "limit only":
-            assert request is None
-            assert limit == "1"
-    else:
-        with pytest.raises(test_case.expected_error):
-            _resolve_cpu_request_limit(
-                test_case.config["resources"],
-                "driver",
-            )
-
-    print("test execution complete")
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TestCase(
-            name="explicit request exceeds limit",
-            expected_error=ValueError,
-            config={
-                "driver": Driver(
-                    resources={"cpu_request": "2", "cpu_limit": "1"},
-                ),
-            },
-        ),
-        TestCase(
-            name="driver effective request exceeds limit",
-            expected_error=ValueError,
-            config={
-                "driver": Driver(resources={"cpu": "2", "cpu_limit": "1"}),
-            },
-        ),
-        TestCase(
-            name="executor effective request exceeds limit",
-            expected_error=ValueError,
-            config={
-                "resources_per_executor": {"cpu": "2", "cpu_limit": "1"},
-            },
-        ),
-        TestCase(
-            name="invalid request quantity",
-            expected_error=ValueError,
-            config={
-                "resources_per_executor": {"cpu_request": "abc"},
-            },
-        ),
-        TestCase(
-            name="spark conf limit below effective request",
-            expected_error=ValueError,
-            config={
-                "resources_per_executor": {"cpu": "2"},
-                "spark_conf": {
-                    "spark.kubernetes.executor.limit.cores": "1",
-                },
-            },
-        ),
-        TestCase(
-            name="invalid spark conf cpu quantity",
-            expected_error=ValueError,
-            config={
-                "resources_per_executor": {"cpu_limit": "1"},
-                "spark_conf": {
-                    "spark.kubernetes.executor.request.cores": "abc",
-                },
-            },
-        ),
-    ],
-)
-def test_build_spark_connect_cr_cpu_validation(test_case: TestCase) -> None:
-    """Tests invalid CPU resource combinations."""
-
-    print("Executing test:", test_case.name)
-
-    with pytest.raises(test_case.expected_error):
-        build_spark_connect_cr(
-            name="test-session",
-            namespace="default",
-            **test_case.config,
-        )
 
     print("test execution complete")
 
@@ -1771,16 +1488,6 @@ def test_get_spark_job_executor_spec(test_case: TestCase) -> None:
     )
 
     print("test execution complete")
-
-
-@pytest.mark.parametrize("resource_key", ["cpu_request", "cpu_limit"])
-def test_get_spark_job_executor_spec_rejects_cpu_quantity(resource_key: str) -> None:
-    """Tests that batch jobs reject unsupported CPU quantity keys."""
-
-    with pytest.raises(ValueError, match="only supported for Spark Connect"):
-        get_spark_job_executor_spec(
-            resources_per_executor={resource_key: "500m"},
-        )
 
 
 @pytest.mark.parametrize(

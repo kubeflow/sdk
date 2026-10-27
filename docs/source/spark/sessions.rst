@@ -138,27 +138,30 @@ to executors (rather than to the session as a whole). These are for advanced
 cases — most sessions only need ``num_executors``, ``resources_per_executor``,
 and ``spark_conf`` above. See :doc:`api` for the current field list.
 
-**Configure physical CPU requests and limits:**
+**Configure physical CPU for Spark Connect:**
 
-``cpu`` sets Spark cores (executor cores become task slots), while
-``cpu_request`` and ``cpu_limit`` control the Kubernetes CPU resources of the
-server and executor pods:
+For Spark Connect sessions, ``cpu`` sets the physical Kubernetes CPU request
+and limit for the server or executor pod. The SDK writes the same value to
+``coreRequest`` and ``coreLimit``. It does not set Spark ``cores`` or derive
+Spark task slots from ``cpu``. When ``cpu`` is omitted, the SDK leaves the
+physical CPU fields unset, so Kubernetes and Spark defaults apply.
 
 .. list-table::
    :header-rows: 1
 
-   * - Key
-     - SparkConnect field
+   * - SDK setting
+     - SparkConnect CR
      - Meaning
-   * - ``cpu``
-     - ``spec.server.cores`` / ``spec.executor.cores``
-     - Spark cores; executor cores become task slots.
-   * - ``cpu_request``
-     - ``spec.server.coreRequest`` / ``spec.executor.coreRequest``
-     - Physical Kubernetes CPU request.
-   * - ``cpu_limit``
-     - ``spec.server.coreLimit`` / ``spec.executor.coreLimit``
-     - Physical Kubernetes CPU limit.
+   * - ``Driver.resources["cpu"]``
+     - ``spec.server.coreRequest`` and ``spec.server.coreLimit``
+     - Physical Kubernetes CPU request and limit for the server pod.
+   * - ``resources_per_executor["cpu"]`` or
+       ``Executor.resources_per_executor["cpu"]``
+     - ``spec.executor.coreRequest`` and ``spec.executor.coreLimit``
+     - Physical Kubernetes CPU request and limit for executor pods.
+
+The value can be a Kubernetes CPU quantity such as ``"500m"`` or ``"2"``.
+Requests and limits are always equal; there are no separate request/limit keys.
 
 .. code-block:: python
 
@@ -166,46 +169,20 @@ server and executor pods:
 
    spark = client.connect(
        num_executors=3,
-       resources_per_executor={
-           "cpu": "1",
-           "cpu_request": "500m",
-           "cpu_limit": "1",
-           "memory": "2Gi",
-       },
-       driver=Driver(
-           resources={
-               "cpu": "1",
-               "cpu_request": "500m",
-               "cpu_limit": "1",
-               "memory": "1Gi",
-           },
-       ),
+       resources_per_executor={"cpu": "2", "memory": "4Gi"},
+       driver=Driver(resources={"cpu": "500m", "memory": "1Gi"}),
    )
 
-``cpu`` and ``cpu_request``/``cpu_limit`` are independent. The example above
-runs one Spark task slot per executor with a 500m physical CPU request and a
-1 CPU limit.
-
-These keys are supported for Spark Connect sessions only; batch jobs support
-only ``cpu`` and ``memory`` and reject the new keys.
-
-The operator applies ``server.coreRequest``/``coreLimit`` directly to the
-Spark Connect server pod and maps ``executor.coreRequest``/``coreLimit`` to
-``spark.kubernetes.executor.request.cores``/``limit.cores`` for executor pods.
-
-Values must be positive Kubernetes CPU quantities supplied as ``str`` or
-``int``. Use strings for fractional quantities such as ``"500m"`` or
-``"0.5"``; Python ``float`` and ``bool`` values are rejected. The SDK
-rejects values above 1024 cores; this cap is an SDK guard, not a Spark
-Operator limit. The effective ``cpu_request`` must not exceed the effective
-``cpu_limit``.
+Spark task slots remain at Spark's default configuration unless you set them
+through ``spark_conf``. Batch jobs continue to use the existing ``cpu`` mapping
+and are unchanged.
 
 .. note::
 
-   This feature requires a Spark Operator version that includes
+   Physical CPU fields require a Spark Operator version that includes
    `kubeflow/spark-operator#3096
-   <https://github.com/kubeflow/spark-operator/pull/3096>`_. Server CPU
-   changes take effect only after the server pod is recreated.
+   <https://github.com/kubeflow/spark-operator/pull/3096>`_. Server CPU changes
+   take effect only after the server pod is recreated.
 
 **Create a DataFrame from a range:**
 
