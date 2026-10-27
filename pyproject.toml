@@ -80,14 +80,18 @@ Source = "https://github.com/kubeflow/sdk"
 path = "kubeflow/__init__.py"
 
 [tool.uv]
+# Security overrides - Review periodically and remove if parent constraints allow natural upgrade
+override-dependencies = [
+    # filelock==4.2.1 - Added 2026-10-27 for security fix - https://github.com/tox-dev/filelock/security/advisories/GHSA-567q-5qvw-pf92
+    "filelock==4.2.1",
+    "kubeflow-katib-api @ git+https://github.com/kubeflow/katib.git@master#subdirectory=api/python_api",
+    "kubeflow-spark-api @ git+https://github.com/kubeflow/spark-operator.git@master#subdirectory=api/python_api",
+    "kubeflow-trainer-api @ git+https://github.com/kubeflow/trainer.git@master#subdirectory=api/python_api",
+]
 package = true
 # Local development resolves the Kubeflow API packages from upstream `master` so contributors test
 # against unreleased changes. These overrides are not part of the published wheel metadata
-override-dependencies = [
-  "kubeflow-trainer-api @ git+https://github.com/kubeflow/trainer.git@master#subdirectory=api/python_api",
-  "kubeflow-katib-api @ git+https://github.com/kubeflow/katib.git@master#subdirectory=api/python_api",
-  "kubeflow-spark-api @ git+https://github.com/kubeflow/spark-operator.git@master#subdirectory=api/python_api",
-]
+
 
 [build-system]
 requires = ["hatchling"]
