@@ -24,12 +24,11 @@ kubectl apply -f "${MANIFEST_FILE}"
 
 # Replicate KFP artifact secret to target namespace if different from default
 if [[ "${TARGET_NAMESPACE}" != "default" ]]; then
-    kubectl get secret mlpipeline-minio-artifact -n default -o json \
-      | jq --arg ns "${TARGET_NAMESPACE}" '.metadata.namespace = $ns | del(.metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp)' \
-      | kubectl apply -f - 2>/dev/null || \
-    kubectl get secret mlpipeline-minio-artifact -n default -o yaml \
-      | sed "s/namespace: default/namespace: ${TARGET_NAMESPACE}/" \
-      | kubectl apply -f -
+    kubectl create secret generic mlpipeline-minio-artifact \
+      --namespace="${TARGET_NAMESPACE}" \
+      --from-literal=accesskey="minio" \
+      --from-literal=secretkey="minio123" \
+      --dry-run=client -o yaml | kubectl apply -f -
 fi
 
 echo "[INFO] Waiting for SeaweedFS deployment to roll out..."
