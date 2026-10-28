@@ -38,8 +38,8 @@ SPARK_APPLICATION_PLURAL = "sparkapplications"
 SPARK_APPLICATION_KIND = "SparkApplication"
 
 # Default values; keep major.minor aligned with pyspark-client in pyproject.toml
-DEFAULT_SPARK_VERSION = "4.0.4"
-DEFAULT_SPARK_IMAGE = "apache/spark:4.0.4"
+DEFAULT_SPARK_VERSION = "4.2.0"
+DEFAULT_SPARK_IMAGE = "apache/spark:4.2.0"
 DEFAULT_NUM_EXECUTORS = 1  # Kind-friendly: 1 driver + 1 executor = 2 cores
 
 # Minimal defaults for Kind / resource-constrained clusters (driver and executor)
