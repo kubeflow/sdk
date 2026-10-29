@@ -427,6 +427,36 @@ class TestRuntimePatchApplication:
             },
         }
 
+    def test_runtime_patch_rejects_second_patch(self, mock_kubernetes_backend):
+        """Test a second RuntimePatch is rejected instead of duplicating the manager key."""
+        job_spec = {}
+        RuntimePatch()(job_spec, None, mock_kubernetes_backend)
+
+        with pytest.raises(ValueError, match="Only one RuntimePatch is supported"):
+            RuntimePatch()(job_spec, None, mock_kubernetes_backend)
+
+        assert job_spec["spec"]["runtimePatches"] == [
+            {"manager": "trainer.kubeflow.org/kubeflow-sdk"}
+        ]
+
+    def test_runtime_patch_with_other_options(self, mock_kubernetes_backend):
+        """Test a single RuntimePatch still combines with other options."""
+        job_spec = {}
+        for option in [
+            Labels({"team": "ml"}),
+            RuntimePatch(),
+            ActiveDeadlineSeconds(seconds=60),
+        ]:
+            option(job_spec, None, mock_kubernetes_backend)
+
+        assert job_spec == {
+            "metadata": {"labels": {"team": "ml"}},
+            "spec": {
+                "runtimePatches": [{"manager": "trainer.kubeflow.org/kubeflow-sdk"}],
+                "activeDeadlineSeconds": 60,
+            },
+        }
+
 
 class TestActiveDeadlineSeconds:
     """Test ActiveDeadlineSeconds validation."""
