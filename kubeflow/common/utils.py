@@ -112,7 +112,7 @@ def validate_python_function(func: Callable) -> None:
         raise ValueError("Decorated functions are not supported.")
 
 
-def get_component_namespace(component_env_var: str, default: str = "kubeflow") -> str:
+def get_component_namespace(component_env_var: str, default: str = "kubeflow-system") -> str:
     """Get the namespace for a specific Kubeflow component control plane.
 
     Checks the component-specific environment variable first. If not found, falls back
