@@ -32,22 +32,18 @@ if [[ "${TARGET_NAMESPACE}" != "default" ]]; then
 fi
 
 echo "[INFO] Waiting for SeaweedFS deployment to roll out..."
-kubectl rollout status deployment/seaweedfs -n seaweedfs --timeout=90s
+kubectl rollout status deployment/seaweedfs -n seaweedfs --timeout=120s
+kubectl wait --for=condition=ready pod -l app=seaweedfs -n seaweedfs --timeout=60s
 
 # Obtain pod name
 POD_NAME="$(kubectl get pods -n seaweedfs -l app=seaweedfs -o jsonpath='{.items[0].metadata.name}')"
 
-echo "[INFO] Initializing default buckets ('mlpipeline', 'test-bucket')..."
-kubectl exec -n seaweedfs "${POD_NAME}" -- sh -c '
-  wget --spider -q http://localhost:8333/mlpipeline 2>/dev/null || \
-  wget --post-data="" --header="Content-Length: 0" -qO- --method=PUT http://localhost:8333/mlpipeline 2>/dev/null || true
+echo "[INFO] Initializing default bucket 'mlpipeline'..."
+kubectl exec -n seaweedfs "${POD_NAME}" -- /bin/sh -c '
+printf "PUT /mlpipeline HTTP/1.1\r\nHost: 127.0.0.1:8333\r\nConnection: close\r\n\r\n" | nc 127.0.0.1 8333'
 
-  wget --spider -q http://localhost:8333/test-bucket 2>/dev/null || \
-  wget --post-data="" --header="Content-Length: 0" -qO- --method=PUT http://localhost:8333/test-bucket 2>/dev/null || true
-'
-
-echo "[INFO] Uploading test spark_job.py script into SeaweedFS buckets..."
-kubectl exec -i -n seaweedfs "${POD_NAME}" -- sh -c 'cat << "PYEOF" > /tmp/spark_job.py
+echo "[INFO] Uploading test spark_job.py script into SeaweedFS..."
+kubectl exec -i -n seaweedfs "${POD_NAME}" -- /bin/sh -c 'cat << "PYEOF" > /tmp/spark_job.py
 import sys
 from pyspark.sql import SparkSession
 
@@ -58,8 +54,20 @@ if __name__ == "__main__":
     print(f"Successfully processed count: {count}")
     spark.stop()
 PYEOF
-wget --post-file=/tmp/spark_job.py --method=PUT -qO- http://localhost:8333/mlpipeline/spark_job.py 2>/dev/null || true
-wget --post-file=/tmp/spark_job.py --method=PUT -qO- http://localhost:8333/test-bucket/spark_job.py 2>/dev/null || true
+SIZE=$(wc -c < /tmp/spark_job.py | tr -d " ")
+{
+  printf "PUT /mlpipeline/spark_job.py HTTP/1.1\r\n"
+  printf "Host: 127.0.0.1:8333\r\n"
+  printf "Content-Length: %s\r\n" "$SIZE"
+  printf "Connection: close\r\n\r\n"
+  cat /tmp/spark_job.py
+} | nc 127.0.0.1 8333
+'
+
+# Verification step to ensure bucket exists
+echo "[INFO] Verifying bucket exists..."
+kubectl exec -n seaweedfs "${POD_NAME}" -- /bin/sh -c '
+printf "GET /mlpipeline HTTP/1.1\r\nHost: 127.0.0.1:8333\r\nConnection: close\r\n\r\n" | nc 127.0.0.1 8333 | grep -E "HTTP/1.1 (200|403)"
 '
 
 echo "[INFO] SeaweedFS setup completed successfully."
