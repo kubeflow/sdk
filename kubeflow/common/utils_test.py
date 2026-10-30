@@ -192,7 +192,7 @@ def test_validate_python_function(test_case):
                 "kwargs": {
                     "component_env_var": constants.KUBEFLOW_SPARK_NAMESPACE_ENV_VAR,
                 },
-                "expected_namespace": "kubeflow",
+                "expected_namespace": "kubeflow-system",
                 "expect_warning": False,
             },
         ),
