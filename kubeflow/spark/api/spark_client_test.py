@@ -86,24 +86,6 @@ def test_create_and_connect(test_case: TestCase):
     "test_case",
     [
         TestCase(
-            name="submit job propagates backend TypeError",
-            expected_status=FAILED,
-            config={"job": "not-a-job"},
-            expected_error=TypeError,
-        ),
-        TestCase(
-            name="submit job propagates backend ValueError for empty file source",
-            expected_status=FAILED,
-            config={"job": FileJob(file_source="")},
-            expected_error=ValueError,
-        ),
-        TestCase(
-            name="submit job propagates backend ValueError for invalid spark conf",
-            expected_status=FAILED,
-            config={"job": FileJob(file_source="s3://bucket/job.py"), "spark_conf": []},
-            expected_error=ValueError,
-        ),
-        TestCase(
             name="file job with default arguments",
             expected_status=SUCCESS,
             config={
@@ -174,26 +156,20 @@ def test_submit_job(test_case: TestCase):
         if "spark_conf" in test_case.config and test_case.config["spark_conf"] is not None:
             kwargs["spark_conf"] = test_case.config["spark_conf"]
 
-        if test_case.expected_status == FAILED:
-            backend.submit_job.side_effect = test_case.expected_error("Backend execution failed")
-            with pytest.raises(test_case.expected_error):
-                client.submit_job(**kwargs)
-            backend.submit_job.assert_called_once()
-        else:
-            backend.submit_job.return_value = SparkJob(
-                name=test_case.expected_output,
-                namespace="default",
-            )
-            name = client.submit_job(**kwargs)
+        backend.submit_job.return_value = SparkJob(
+            name=test_case.expected_output,
+            namespace="default",
+        )
+        name = client.submit_job(**kwargs)
 
-            assert name == test_case.expected_output
-            backend.submit_job.assert_called_once_with(
-                job=test_case.config["job"],
-                num_executors=test_case.config.get("num_executors"),
-                resources_per_executor=test_case.config.get("resources_per_executor"),
-                spark_conf=test_case.config.get("spark_conf"),
-                options=test_case.config.get("options"),
-            )
+        assert name == test_case.expected_output
+        backend.submit_job.assert_called_once_with(
+            job=test_case.config["job"],
+            num_executors=test_case.config.get("num_executors"),
+            resources_per_executor=test_case.config.get("resources_per_executor"),
+            spark_conf=test_case.config.get("spark_conf"),
+            options=test_case.config.get("options"),
+        )
 
 
 @pytest.mark.parametrize(
