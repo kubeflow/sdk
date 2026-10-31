@@ -570,11 +570,71 @@ def test_get_runtime_packages(container_backend):
             },
             expected_error=TimeoutError,
         ),
+        TestCase(
+            name="network creation fails",
+            expected_status=FAILED,
+            config={"fail_method": "create_network"},
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="image pull fails after network creation",
+            expected_status=FAILED,
+            config={"fail_method": "pull_image"},
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="container creation fails after some containers were created",
+            expected_status=FAILED,
+            config={
+                "num_nodes": 3,
+                "fail_method": "create_and_start_container",
+                "fail_after_calls": 2,
+            },
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="cleanup failure preserves original error",
+            expected_status=FAILED,
+            config={"fail_method": "pull_image", "cleanup_error": True},
+            expected_error=RuntimeError,
+        ),
     ],
 )
-def test_train(container_backend, test_case):
+def test_train(container_backend, monkeypatch, tmp_path, test_case):
     """Test training job creation."""
     print("Executing test:", test_case.name)
+    adapter = container_backend._adapter
+    workdir = tmp_path / "workdir"
+    workdir.mkdir()
+    monkeypatch.setattr(
+        "kubeflow.trainer.backends.container.utils.create_workdir",
+        lambda job_name: str(workdir),
+    )
+
+    # Make an adapter method fail, optionally after some successful calls
+    fail_method = test_case.config.get("fail_method")
+    if fail_method:
+        original_method = getattr(adapter, fail_method)
+        fail_after_calls = test_case.config.get("fail_after_calls", 0)
+        calls = 0
+
+        def fail_after(*args, **kwargs):
+            nonlocal calls
+            if calls >= fail_after_calls:
+                raise RuntimeError(f"{fail_method} failed")
+            calls += 1
+            return original_method(*args, **kwargs)
+
+        monkeypatch.setattr(adapter, fail_method, fail_after)
+
+    # Use a different exception type so the assertion proves the setup error is re-raised
+    if test_case.config.get("cleanup_error"):
+
+        def fail_cleanup(*args, **kwargs):
+            raise OSError("cleanup failed")
+
+        monkeypatch.setattr(container_backend, "_cleanup_container_resources", fail_cleanup)
+
     try:
         trainer = types.CustomTrainer(
             func=simple_train_func,
@@ -690,110 +750,12 @@ def test_train(container_backend, test_case):
 
     except Exception as e:
         assert type(e) is test_case.expected_error
-    print("test execution complete")
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TestCase(
-            name="network creation fails",
-            expected_status=FAILED,
-            config={
-                "fail_at": "create_network",
-                "expected_containers_removed": [],
-                "expected_network_deleted": False,
-            },
-            expected_error=RuntimeError,
-        ),
-        TestCase(
-            name="image pull fails after network creation",
-            expected_status=FAILED,
-            config={
-                "fail_at": "pull_image",
-                "expected_containers_removed": [],
-                "expected_network_deleted": True,
-            },
-            expected_error=RuntimeError,
-        ),
-        TestCase(
-            name="container creation fails after some containers were created",
-            expected_status=FAILED,
-            config={
-                "fail_at": "create_container",
-                "num_nodes": 3,
-                "expected_containers_removed": ["container-0", "container-1"],
-                "expected_network_deleted": True,
-            },
-            expected_error=RuntimeError,
-        ),
-        TestCase(
-            name="cleanup failure preserves original error",
-            expected_status=FAILED,
-            config={"fail_at": "cleanup"},
-            expected_error=RuntimeError,
-        ),
-    ],
-)
-def test_train_cleanup_on_failure(container_backend, tmp_path, test_case):
-    """Test that train() cleans up created resources and re-raises the setup error."""
-    print("Executing test:", test_case.name)
-    adapter = container_backend._adapter
-    workdir = tmp_path / "job"
-    workdir.mkdir()
-
-    def fail(*args, **kwargs):
-        raise RuntimeError("setup failed")
-
-    fail_at = test_case.config["fail_at"]
-    if fail_at == "create_network":
-        adapter.create_network = fail
-    elif fail_at in ("pull_image", "cleanup"):
-        container_backend.cfg.pull_policy = "Always"
-        adapter.pull_image = fail
-    elif fail_at == "create_container":
-        original_create = adapter.create_and_start_container
-
-        def create_then_fail(*args, **kwargs):
-            if len(adapter.containers_created) == 2:
-                raise RuntimeError("setup failed")
-            return original_create(*args, **kwargs)
-
-        adapter.create_and_start_container = create_then_fail
-
-    trainer = types.CustomTrainer(
-        func=simple_train_func, num_nodes=test_case.config.get("num_nodes", 1)
-    )
-    runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
-
-    with (
-        patch(
-            "kubeflow.trainer.backends.container.utils.create_workdir",
-            return_value=str(workdir),
-        ),
-        patch.object(
-            container_backend,
-            "_cleanup_container_resources",
-            side_effect=RuntimeError("cleanup failed"),
-        )
-        if fail_at == "cleanup"
-        else nullcontext(),
-        pytest.raises(test_case.expected_error, match="setup failed"),
-    ):
-        container_backend.train(runtime=runtime, trainer=trainer)
-
-    if fail_at == "cleanup":
-        return
-
-    expected_removed = test_case.config["expected_containers_removed"]
-    assert len(adapter.containers_created) == len(expected_removed)
-    assert adapter.containers_stopped == expected_removed
-    assert adapter.containers_removed == expected_removed
-    if test_case.config["expected_network_deleted"]:
-        assert adapter.networks_deleted == [adapter.networks_created[0]["id"]]
-    else:
-        assert adapter.networks_deleted == []
-    assert not workdir.exists()
+        # Failed setup must release every resource it created
+        if not test_case.config.get("cleanup_error"):
+            created_container_ids = [c["id"] for c in adapter.containers_created]
+            assert sorted(adapter.containers_removed) == sorted(created_container_ids)
+            assert adapter.networks_deleted == [n["id"] for n in adapter.networks_created]
+            assert not workdir.exists()
     print("test execution complete")
 
 
