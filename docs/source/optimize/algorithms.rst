@@ -32,7 +32,7 @@ Randomly samples hyperparameters from the search space:
 
 .. code-block:: python
 
-   from kubeflow.optimizer.types import RandomSearch
+   from kubeflow.optimizer import RandomSearch
 
    client.optimize(
        trial_template=template,
@@ -57,7 +57,7 @@ Uses a probabilistic model to guide the search:
 
 .. code-block:: python
 
-   from kubeflow.optimizer.types import BayesianOptimization
+   from kubeflow.optimizer import BayesianOptimization
 
    client.optimize(
        trial_template=template,
@@ -82,7 +82,7 @@ Exhaustively tries all combinations:
 
 .. code-block:: python
 
-   from kubeflow.optimizer.types import GridSearch
+   from kubeflow.optimizer import GridSearch
 
    # Grid search works best with discrete choices
    search_space = {
@@ -114,7 +114,7 @@ Controlling the Search
 
 .. code-block:: python
 
-   from kubeflow.optimizer.types import TrialConfig
+   from kubeflow.optimizer import TrialConfig
 
    client.optimize(
        trial_template=template,

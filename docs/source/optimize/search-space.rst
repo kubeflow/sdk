@@ -10,7 +10,7 @@ Use the ``Search`` class to define ranges for each hyperparameter:
 
 .. code-block:: python
 
-   from kubeflow.optimizer.types import Search
+   from kubeflow.optimizer import Search
 
    search_space = {
        "learning_rate": Search.loguniform(1e-5, 1e-1),
