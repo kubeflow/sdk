@@ -131,15 +131,9 @@ endif
 
 ##@ E2E Testing
 
-.PHONY: test-e2e-setup-cluster
-test-e2e-setup-cluster:  ## Setup Kind cluster for Spark E2E tests
-	@echo "Setting up E2E test cluster..."
-	@K8S_VERSION=$(K8S_VERSION) \
-	 SPARK_TEST_CLUSTER=$(SPARK_TEST_CLUSTER) \
-	 SPARK_TEST_NAMESPACE=$(SPARK_TEST_NAMESPACE) \
-	 SPARK_OPERATOR_VERSION=$(SPARK_OPERATOR_VERSION) \
-	 KIND=$(KIND) \
-	 ./hack/e2e-setup-cluster.sh
+# Spark E2E cluster lifecycle is owned by kubeflow/spark-operator's Makefile.
+# See .github/workflows/test-spark-examples.yaml.
+
 .PHONY: test-scripts
 test-scripts: uv-venv  ## Run GitHub Actions script tests
 	@uv sync

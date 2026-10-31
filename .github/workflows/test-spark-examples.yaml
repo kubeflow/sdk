@@ -28,7 +28,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kubernetes-version: ["1.32.0"]
+        kubernetes-version: ["1.32.11", "1.33.7", "1.34.3", "1.35.0"]
+        spark-operator-ref: ["master"]
 
     steps:
       - name: Free disk space (Ubuntu runner)
@@ -39,8 +40,15 @@ jobs:
           docker system prune -af || true
           df -h
 
-      - name: Checkout repository
+      - name: Checkout Kubeflow SDK repository
         uses: actions/checkout@v6
+
+      - name: Checkout Kubeflow Spark Operator repository
+        uses: actions/checkout@v6
+        with:
+          repository: kubeflow/spark-operator
+          ref: ${{ matrix.spark-operator-ref }}
+          path: spark-operator
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v7
@@ -59,32 +67,70 @@ jobs:
           # SDK's hack/e2e-run-notebook.sh calls `papermill` from PATH
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
-      - name: Install Kind, kubectl, and Helm
-        run: |
-          curl -Lo ./kind "https://kind.sigs.k8s.io/dl/v0.26.0/kind-linux-amd64" && chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind
-          curl -Lo ./kubectl "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && chmod +x ./kubectl && sudo mv ./kubectl /usr/local/bin/kubectl
-          curl -sSfL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-
-      - name: Checkout spark-operator
-        uses: actions/checkout@v6
+      - name: Set up Go
+        uses: actions/setup-go@v7
         with:
-          repository: kubeflow/spark-operator
-          path: spark-operator
-          fetch-depth: 1
+          go-version-file: spark-operator/go.mod
 
-      - name: Build Spark Operator image
+      - name: Install kubectl
         run: |
-          docker build -t ghcr.io/kubeflow/spark-operator/controller:local ./spark-operator
-        timeout-minutes: 10
+          curl -Lo ./kubectl "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && chmod +x ./kubectl && sudo mv ./kubectl /usr/local/bin/kubectl
 
-      - name: Setup Kind cluster with Spark Operator
+      # Cluster lifecycle (kind create, image load, Spark Operator deploy) is
+      # owned by the kubeflow/spark-operator repo, mirroring how test-e2e.yaml
+      # delegates to kubeflow/trainer, so it can later move to kubeflow/testing.
+      - name: Setup cluster
         run: |
-          make test-e2e-setup-cluster K8S_VERSION=${{ matrix.kubernetes-version }}
-        env:
-          SPARK_TEST_CLUSTER: spark-test
-          SPARK_TEST_NAMESPACE: spark-test
-          SPARK_OPERATOR_IMAGE_TAG: local
+          cd ./spark-operator
+          make deploy KIND_CLUSTER_NAME=spark-test KIND_K8S_VERSION=v${{ matrix.kubernetes-version }}
+          echo "KUBECONFIG=$PWD/.kube/config" >> "$GITHUB_ENV"
         timeout-minutes: 15
+
+      # The controller only reconciles namespaces in spark.jobNamespaces, and the
+      # chart only renders the "spark-operator-spark" ServiceAccount/Role there.
+      # SparkConnect servers get no default ServiceAccount, so point the chart
+      # fallback at that account or they never become Ready.
+      - name: Register Spark test namespace with Spark Operator
+        run: |
+          cd ./spark-operator
+          kubectl create namespace spark-test --dry-run=client -o yaml | kubectl apply -f -
+          HELM_BIN="$(make -s print-HELM | cut -d= -f2)"
+          "$HELM_BIN" upgrade --install spark-operator ./charts/spark-operator-chart/ \
+            -f charts/spark-operator-chart/ci/ci-values.yaml \
+            --set 'spark.jobNamespaces[0]=default' \
+            --set 'spark.jobNamespaces[1]=spark-test' \
+            --set 'controller.defaultServiceAccount=spark-operator-spark'
+
+      # The chart's controller rules omit endpoints/endpointslices, which
+      # SparkConnect's Service management needs to report Ready.
+      - name: Grant Spark Operator controller RBAC for endpoints/endpointslices
+        run: |
+          kubectl apply -f - <<'EOF'
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRole
+          metadata:
+            name: spark-operator-e2e-endpointslices
+          rules:
+            - apiGroups: [""]
+              resources: ["endpoints"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+            - apiGroups: ["discovery.k8s.io"]
+              resources: ["endpointslices"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: spark-operator-e2e-endpointslices
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: spark-operator-e2e-endpointslices
+          subjects:
+            - kind: ServiceAccount
+              name: spark-operator-controller
+              namespace: default
+          EOF
 
       - name: Run E2E test for Spark example Notebooks
         run: |
@@ -131,7 +177,6 @@ jobs:
             NOTEBOOK_OUTPUT=./artifacts/notebooks/spark_connect_simple.ipynb \
             PAPERMILL_TIMEOUT=600
         env:
-          SPARK_TEST_CLUSTER: spark-test
           SPARK_TEST_NAMESPACE: spark-test
         timeout-minutes: 40
 
@@ -143,3 +188,17 @@ jobs:
           name: ${{ matrix.kubernetes-version }}
           path: ./artifacts/notebooks/* # Path relative to the workspace root
           retention-days: 1 #
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          kubectl get pods -n spark-test
+          kubectl get sparkconnect -n spark-test -o yaml 2>/dev/null || true
+          kubectl get sparkapplication -n spark-test -o yaml 2>/dev/null || true
+          kubectl logs -n default -l app.kubernetes.io/component=controller --tail=200 || true
+
+      - name: Delete Kind cluster
+        if: always()
+        run: |
+          cd ./spark-operator
+          make kind-delete-cluster KIND_CLUSTER_NAME=spark-test
