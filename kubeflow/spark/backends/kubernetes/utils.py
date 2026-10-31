@@ -133,6 +133,16 @@ def _resolve_driver_resources(
     return cores, memory
 
 
+def _get_executor_resource_dict(
+    executor: Executor | None = None,
+    resources_per_executor: dict[str, str] | None = None,
+) -> dict[str, str] | None:
+    """Return executor resources using SDK precedence rules."""
+    if executor and executor.resources_per_executor:
+        return executor.resources_per_executor
+    return resources_per_executor
+
+
 def _resolve_executor_resources(
     executor: Executor | None = None,
     num_executors: int | None = None,
@@ -165,12 +175,7 @@ def _resolve_executor_resources(
     else:
         instances = constants.DEFAULT_NUM_EXECUTORS
 
-    resource_dict = None
-
-    if executor and executor.resources_per_executor:
-        resource_dict = executor.resources_per_executor
-    elif resources_per_executor:
-        resource_dict = resources_per_executor
+    resource_dict = _get_executor_resource_dict(executor, resources_per_executor)
 
     cores = constants.DEFAULT_EXECUTOR_CPU
     memory = _memory_kubernetes_to_spark(
@@ -302,6 +307,27 @@ def _validate_cpu_value(cpu: str | int | None) -> int:
         raise ValueError("CPU cores value is unrealistically large")
 
     return cores
+
+
+def _get_spark_connect_cpu_quantity(
+    resources: dict[str, str] | None,
+) -> str | None:
+    """Return the physical CPU quantity for a Spark Connect resource."""
+    if not resources or "cpu" not in resources:
+        return None
+
+    cpu = resources["cpu"]
+    _validate_cpu_value(cpu)
+    return str(cpu).strip()
+
+
+def _to_api_cpu_quantity(
+    value: str | None,
+) -> models.IoK8sApimachineryPkgApiResourceQuantity | None:
+    """Wrap a CPU quantity for the generated API model."""
+    if value is None:
+        return None
+    return models.IoK8sApimachineryPkgApiResourceQuantity(value)
 
 
 def apply_options(
@@ -443,6 +469,9 @@ def get_spark_connect_driver_spec(
 ) -> models.SparkV1alpha1ServerSpec:
     """Convert SDK Driver to API ServerSpec.
 
+    The ``cpu`` resource maps to equal physical CPU request and limit. Spark
+    ``cores`` is not set for Spark Connect.
+
     Args:
         driver: SDK Driver configuration.
 
@@ -453,7 +482,11 @@ def get_spark_connect_driver_spec(
         ValueError:
             If the configured driver resources are invalid.
     """
-    cores, memory = _resolve_driver_resources(driver)
+    memory = _memory_kubernetes_to_spark(constants.DEFAULT_DRIVER_MEMORY)
+    if driver and driver.resources and "memory" in driver.resources:
+        memory = _memory_kubernetes_to_spark(driver.resources["memory"])
+
+    cpu = _get_spark_connect_cpu_quantity(driver.resources if driver else None)
 
     template = None
 
@@ -466,8 +499,9 @@ def get_spark_connect_driver_spec(
         )
 
     return models.SparkV1alpha1ServerSpec(
-        cores=cores,
         memory=memory,
+        core_request=_to_api_cpu_quantity(cpu),
+        core_limit=_to_api_cpu_quantity(cpu),
         template=template,
     )
 
@@ -478,6 +512,9 @@ def get_spark_connect_executor_spec(
     resources_per_executor: dict | None = None,
 ) -> models.SparkV1alpha1ExecutorSpec:
     """Convert SDK Executor to API ExecutorSpec.
+
+    The ``cpu`` resource maps to equal physical CPU request and limit. Spark
+    ``cores`` is not set for Spark Connect.
 
     Precedence rules:
     - Instances: executor.num_instances > num_executors > default
@@ -495,16 +532,26 @@ def get_spark_connect_executor_spec(
         ValueError:
             If the configured executor resources are invalid.
     """
-    instances, cores, memory = _resolve_executor_resources(
-        executor,
-        num_executors,
-        resources_per_executor,
-    )
+    if executor and executor.num_instances is not None:
+        instances = executor.num_instances
+    elif num_executors is not None:
+        instances = num_executors
+    else:
+        instances = constants.DEFAULT_NUM_EXECUTORS
+
+    resource_dict = _get_executor_resource_dict(executor, resources_per_executor)
+
+    memory = _memory_kubernetes_to_spark(constants.DEFAULT_EXECUTOR_MEMORY)
+    if resource_dict and "memory" in resource_dict:
+        memory = _memory_kubernetes_to_spark(resource_dict["memory"])
+
+    cpu = _get_spark_connect_cpu_quantity(resource_dict)
 
     return models.SparkV1alpha1ExecutorSpec(
         instances=instances,
-        cores=cores,
         memory=memory,
+        core_request=_to_api_cpu_quantity(cpu),
+        core_limit=_to_api_cpu_quantity(cpu),
     )
 
 

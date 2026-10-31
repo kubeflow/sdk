@@ -548,6 +548,20 @@ def test_build_service_url(test_case: TestCase) -> None:
             },
         ),
         TestCase(
+            name="spark connect cr with fractional driver cpu",
+            expected_status=SUCCESS,
+            config={
+                "driver": Driver(resources={"cpu": "500m"}),
+            },
+        ),
+        TestCase(
+            name="spark connect cr with fractional executor cpu",
+            expected_status=SUCCESS,
+            config={
+                "resources_per_executor": {"cpu": "0.5"},
+            },
+        ),
+        TestCase(
             name="spark connect cr with service account",
             expected_status=SUCCESS,
             config={
@@ -671,9 +685,13 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.metadata.namespace == "default"
         assert spark_connect.spec.spark_version == constants.DEFAULT_SPARK_VERSION
         assert spark_connect.spec.executor.instances == constants.DEFAULT_NUM_EXECUTORS
-        assert spark_connect.spec.executor.cores == constants.DEFAULT_EXECUTOR_CPU
+        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.core_request is None
+        assert spark_connect.spec.executor.core_limit is None
         assert spark_connect.spec.executor.memory == "512m"
-        assert spark_connect.spec.server.cores == constants.DEFAULT_DRIVER_CPU
+        assert spark_connect.spec.server.cores is None
+        assert spark_connect.spec.server.core_request is None
+        assert spark_connect.spec.server.core_limit is None
         assert spark_connect.spec.server.memory == "512m"
         assert spark_connect.spec.spark_conf["spark.connect.grpc.binding.address"] == "0.0.0.0"
         assert "spark.jars" not in spark_connect.spec.spark_conf
@@ -682,8 +700,14 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.executor.instances == 3
 
     elif test_case.name == "spark connect cr with executor resources":
-        assert spark_connect.spec.executor.cores == 2
+        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.core_request is not None
+        assert spark_connect.spec.executor.core_limit is not None
+        assert spark_connect.spec.executor.core_request.actual_instance == "2"
+        assert spark_connect.spec.executor.core_limit.actual_instance == "2"
         assert spark_connect.spec.executor.memory == "4g"
+        assert spark_connect.spec.server.core_request is None
+        assert spark_connect.spec.server.core_limit is None
 
     elif test_case.name == "spark connect cr with spark conf":
         assert spark_connect.spec.spark_conf["spark.jars"] == "local:///opt/spark/jars/my.jar"
@@ -696,15 +720,39 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.image == "custom-spark:v1"
 
     elif test_case.name == "spark connect cr with driver resources":
-        assert spark_connect.spec.server.cores == 2
+        assert spark_connect.spec.server.cores is None
+        assert spark_connect.spec.server.core_request is not None
+        assert spark_connect.spec.server.core_limit is not None
+        assert spark_connect.spec.server.core_request.actual_instance == "2"
+        assert spark_connect.spec.server.core_limit.actual_instance == "2"
         assert spark_connect.spec.server.memory == "2g"
+        assert spark_connect.spec.executor.core_request is None
+        assert spark_connect.spec.executor.core_limit is None
+
+    elif test_case.name == "spark connect cr with fractional driver cpu":
+        assert spark_connect.spec.server.cores is None
+        assert spark_connect.spec.server.core_request is not None
+        assert spark_connect.spec.server.core_limit is not None
+        assert spark_connect.spec.server.core_request.actual_instance == "500m"
+        assert spark_connect.spec.server.core_limit.actual_instance == "500m"
+
+    elif test_case.name == "spark connect cr with fractional executor cpu":
+        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.core_request is not None
+        assert spark_connect.spec.executor.core_limit is not None
+        assert spark_connect.spec.executor.core_request.actual_instance == "0.5"
+        assert spark_connect.spec.executor.core_limit.actual_instance == "0.5"
 
     elif test_case.name == "spark connect cr with service account":
         assert spark_connect.spec.server.template.spec.service_account_name == "spark-sa"
 
     elif test_case.name == "spark connect cr with executor config":
         assert spark_connect.spec.executor.instances == 5
-        assert spark_connect.spec.executor.cores == 4
+        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.core_request is not None
+        assert spark_connect.spec.executor.core_limit is not None
+        assert spark_connect.spec.executor.core_request.actual_instance == "4"
+        assert spark_connect.spec.executor.core_limit.actual_instance == "4"
         assert spark_connect.spec.executor.memory == "8g"
 
     elif test_case.name == "spark connect cr with app name":
@@ -714,20 +762,36 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.executor.instances == 10
 
     elif test_case.name == "executor config overrides executor resources":
-        assert spark_connect.spec.executor.cores == 8
+        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.core_request is not None
+        assert spark_connect.spec.executor.core_limit is not None
+        assert spark_connect.spec.executor.core_request.actual_instance == "8"
+        assert spark_connect.spec.executor.core_limit.actual_instance == "8"
         assert spark_connect.spec.executor.memory == "16g"
 
     elif test_case.name == "kep107 level2 simple mode":
         assert spark_connect.spec.executor.instances == 5
-        assert spark_connect.spec.executor.cores == 5
+        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.core_request is not None
+        assert spark_connect.spec.executor.core_limit is not None
+        assert spark_connect.spec.executor.core_request.actual_instance == "5"
+        assert spark_connect.spec.executor.core_limit.actual_instance == "5"
         assert spark_connect.spec.executor.memory == "10g"
 
     elif test_case.name == "kep107 level3 advanced mode":
-        assert spark_connect.spec.server.cores == 4
+        assert spark_connect.spec.server.cores is None
+        assert spark_connect.spec.server.core_request is not None
+        assert spark_connect.spec.server.core_limit is not None
+        assert spark_connect.spec.server.core_request.actual_instance == "4"
+        assert spark_connect.spec.server.core_limit.actual_instance == "4"
         assert spark_connect.spec.server.memory == "8g"
         assert spark_connect.spec.server.template.spec.service_account_name == "spark-driver-prod"
         assert spark_connect.spec.executor.instances == 20
-        assert spark_connect.spec.executor.cores == 8
+        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.core_request is not None
+        assert spark_connect.spec.executor.core_limit is not None
+        assert spark_connect.spec.executor.core_request.actual_instance == "8"
+        assert spark_connect.spec.executor.core_limit.actual_instance == "8"
         assert spark_connect.spec.executor.memory == "32g"
 
     elif test_case.name == "spark connect cr with options":

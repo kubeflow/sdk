@@ -138,6 +138,52 @@ to executors (rather than to the session as a whole). These are for advanced
 cases — most sessions only need ``num_executors``, ``resources_per_executor``,
 and ``spark_conf`` above. See :doc:`api` for the current field list.
 
+**Configure physical CPU for Spark Connect:**
+
+For Spark Connect sessions, ``cpu`` sets the physical Kubernetes CPU request
+and limit for the server or executor pod. The SDK writes the same value to
+``coreRequest`` and ``coreLimit``. It does not set Spark ``cores`` or derive
+Spark task slots from ``cpu``. When ``cpu`` is omitted, the SDK leaves the
+physical CPU fields unset, so Kubernetes and Spark defaults apply.
+
+.. list-table::
+   :header-rows: 1
+
+   * - SDK setting
+     - SparkConnect CR
+     - Meaning
+   * - ``Driver.resources["cpu"]``
+     - ``spec.server.coreRequest`` and ``spec.server.coreLimit``
+     - Physical Kubernetes CPU request and limit for the server pod.
+   * - ``resources_per_executor["cpu"]`` or
+       ``Executor.resources_per_executor["cpu"]``
+     - ``spec.executor.coreRequest`` and ``spec.executor.coreLimit``
+     - Physical Kubernetes CPU request and limit for executor pods.
+
+The value can be a Kubernetes CPU quantity such as ``"500m"`` or ``"2"``.
+Requests and limits are always equal; there are no separate request/limit keys.
+
+.. code-block:: python
+
+   from kubeflow.spark import Driver
+
+   spark = client.connect(
+       num_executors=3,
+       resources_per_executor={"cpu": "2", "memory": "4Gi"},
+       driver=Driver(resources={"cpu": "500m", "memory": "1Gi"}),
+   )
+
+Spark task slots remain at Spark's default configuration unless you set them
+through ``spark_conf``. Batch jobs continue to use the existing ``cpu`` mapping
+and are unchanged.
+
+.. note::
+
+   Physical CPU fields require a Spark Operator version that includes
+   `kubeflow/spark-operator#3096
+   <https://github.com/kubeflow/spark-operator/pull/3096>`_. Server CPU changes
+   take effect only after the server pod is recreated.
+
 **Create a DataFrame from a range:**
 
 .. code-block:: python
