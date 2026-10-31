@@ -1187,6 +1187,17 @@ def test_validate_func_job(kubernetes_backend, test_case):
     print("Test execution complete.")
 
 
+def test_validate_func_job_without_func_args(kubernetes_backend):
+    """Test that required function arguments are validated when func_args is omitted."""
+    with pytest.raises(
+        ValueError,
+        match=r"^Invalid `job\.func_args`: missing a required argument: 'name'$",
+    ):
+        kubernetes_backend._validate_func_job(
+            FuncJob(func=sample_func_with_args),
+        )
+
+
 @pytest.mark.parametrize(
     "test_case",
     [

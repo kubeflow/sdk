@@ -934,10 +934,10 @@ class KubernetesBackend(RuntimeBackend):
                     "`job.func_args` values must contain only JSON-like primitive types."
                 )
 
-            try:
-                inspect.signature(job.func).bind(**job.func_args)
-            except TypeError as e:
-                raise ValueError(f"Invalid `job.func_args`: {e}") from e
+        try:
+            inspect.signature(job.func).bind(**(job.func_args or {}))
+        except TypeError as e:
+            raise ValueError(f"Invalid `job.func_args`: {e}") from e
 
     def submit_job(
         self,
