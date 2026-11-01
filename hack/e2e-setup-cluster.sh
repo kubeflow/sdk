@@ -338,6 +338,15 @@ print_status() {
     echo "  Or: ./hack/e2e-setup-cluster.sh --delete"
 }
 
+install_seaweedfs() {
+    phase_start "install_seaweedfs"
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+    "${script_dir}/manifests/seaweedfs/install.sh" "${NAMESPACE:-default}"
+    phase_end "install_seaweedfs"
+}
+
 main() {
     if [[ "${1:-}" == "--delete" ]]; then
         delete_cluster
@@ -358,6 +367,7 @@ main() {
         phase_end "kind_load_local_image"
     fi
     install_spark_operator
+    install_seaweedfs
     print_status
     local total_elapsed
     total_elapsed=$(($(date +%s) - main_start))

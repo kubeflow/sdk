@@ -111,6 +111,11 @@ jobs:
             PAPERMILL_TIMEOUT=600
 
           make test-e2e-notebook \
+            NOTEBOOK_INPUT=./examples/spark/batch_job_s3a_seaweedfs.ipynb \
+            NOTEBOOK_OUTPUT=./artifacts/notebooks/batch_job_s3a_seaweedfs.ipynb \
+            PAPERMILL_TIMEOUT=600
+
+          make test-e2e-notebook \
             NOTEBOOK_INPUT=./examples/spark/connect_existing_session.ipynb \
             NOTEBOOK_OUTPUT=./artifacts/notebooks/connect_existing_session.ipynb \
             PAPERMILL_TIMEOUT=600
