@@ -27,6 +27,9 @@ EXPERIMENT_PLURAL = "experiments"
 # The succeeded condition for the Experiment.
 EXPERIMENT_SUCCEEDED = "Succeeded"
 
+# The running condition for the Experiment.
+EXPERIMENT_RUNNING = "Running"
+
 # Label to identify Experiment's resources.
 EXPERIMENT_LABEL = "katib.kubeflow.org/experiment"
 
@@ -42,7 +45,8 @@ OPTIMIZATION_JOB_KIND = "OptimizationJob"
 # The default status for the OptimizationJob once users create it.
 OPTIMIZATION_JOB_CREATED = "Created"
 
-# The running status of the OptimizationJob, defined when at least one TrainJob is running.
+# The running status of the OptimizationJob, defined when Experiment CR has running condition
+# or at least one TrainJob is running.
 OPTIMIZATION_JOB_RUNNING = "Running"
 
 # The complete status of the OptimizationJob, defined when Experiment CR has succeeded condition.
