@@ -264,6 +264,17 @@ def test_init(test_case, monkeypatch):
                 "service_account_name": "model-sa",
             },
         ),
+        TestCase(
+            name="register_model forwards version_description",
+            expected_status=SUCCESS,
+            config={
+                "name": "test",
+                "uri": "s3://bucket/model",
+                "version": "v1",
+                "version_description": "Initial version",
+            },
+            expected_output={"version_description": "Initial version"},
+        ),
     ],
 )
 def test_register_model(test_case, client, mock_registry):
@@ -282,6 +293,8 @@ def test_register_model(test_case, client, mock_registry):
         assert test_case.expected_status == SUCCESS
         assert mock_registry.register_model.called
         forwarded = mock_registry.register_model.call_args[1]
+        # `description` is deprecated in model-registry in favour of `version_description`.
+        assert "description" not in forwarded
         for field, expected in test_case.expected_output.items():
             assert forwarded[field] == expected, (
                 f"expected {field}={expected!r}, got {forwarded[field]!r}"
