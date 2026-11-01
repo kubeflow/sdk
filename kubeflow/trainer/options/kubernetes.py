@@ -247,7 +247,8 @@ class RuntimePatch:
     Runtime patches allow controllers, admission webhooks, and custom clients to
     attach structured patches to a TrainJob without conflicting with each other.
     Each patch is keyed by a unique manager field, which is automatically set to
-    "trainer.kubeflow.org/kubeflow-sdk" by the SDK.
+    "trainer.kubeflow.org/kubeflow-sdk" by the SDK. Because that manager is fixed, pass at
+    most one RuntimePatch per TrainJob and put all changes into it.
 
     Supported backends:
         - Kubernetes
@@ -276,7 +277,8 @@ class RuntimePatch:
             backend: Backend instance for validation.
 
         Raises:
-            ValueError: If backend does not support runtime patches.
+            ValueError: If backend does not support runtime patches, or if a RuntimePatch
+                was already applied to the job specification.
         """
         from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
 
@@ -287,6 +289,12 @@ class RuntimePatch:
             )
         spec = job_spec.setdefault("spec", {})
         runtime_patches = spec.setdefault("runtimePatches", [])
+        # runtimePatches is a list-map keyed by manager, and the SDK manager is fixed.
+        if any(p.get("manager") == self.manager for p in runtime_patches):
+            raise ValueError(
+                "Only one RuntimePatch is supported per TrainJob. "
+                "Combine the changes into a single RuntimePatch."
+            )
         runtime_patches.append(_patch_to_dict(self))
 
 
