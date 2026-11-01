@@ -441,6 +441,16 @@ def get_optimization_job_data_type(
             expected_error=ValueError,
         ),
         TestCase(
+            name="unsafe string choice raises ValueError",
+            expected_status=FAILED,
+            config={
+                "search_space": {
+                    "optimizer": Search.choice(["adam", "it's"]),
+                },
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
             name="timeout error when creating job",
             expected_status=FAILED,
             config={

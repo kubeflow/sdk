@@ -27,9 +27,64 @@ from kubeflow.optimizer.types.algorithm_types import (
 from kubeflow.optimizer.types.optimization_types import Direction, Objective
 from kubeflow.optimizer.types.search_types import (
     CategoricalSearchSpace,
+    ChoiceParameterSpec,
     ContinuousSearchSpace,
     Distribution,
 )
+
+# Characters that cannot be written inside the quoted placeholder of the generated script.
+UNSAFE_CHOICE_CHARACTERS = ("'", "\\", "\n", "\r")
+
+
+class TrialParameterReference:
+    """Katib trial parameter that is rendered into the training script without quotes.
+
+    The trainer writes the function arguments into the script with `repr()`. A plain string
+    placeholder is written with quotes around it, so the value substituted by Katib always
+    reaches the training function as a string. This object is written as the bare
+    placeholder instead, so the substituted value is read as a Python literal.
+    """
+
+    def __init__(self, name: str):
+        self.name = name
+
+    def __repr__(self) -> str:
+        return f"${{trialParameters.{self.name}}}"
+
+
+def get_trial_parameter_func_arg(
+    name: str,
+    parameter: models.V1beta1ParameterSpec,
+) -> TrialParameterReference | str:
+    """Get the training function argument that references the Katib trial parameter.
+
+    Args:
+        name: Name of the parameter in the search space.
+        parameter: Katib ParameterSpec of the parameter.
+
+    Returns:
+        An unquoted reference when Katib substitutes a number or a boolean, so the training
+        function receives that type. A string placeholder otherwise, so the training function
+        receives a string.
+
+    Raises:
+        ValueError: If a string value cannot be written into the generated training script.
+    """
+    if parameter.parameter_type == constants.DOUBLE_PARAMETER or (
+        isinstance(parameter, ChoiceParameterSpec) and parameter.literal_values
+    ):
+        return TrialParameterReference(name)
+
+    choices = (parameter.feasible_space and parameter.feasible_space.list) or []
+    for choice in choices:
+        if any(character in choice for character in UNSAFE_CHOICE_CHARACTERS):
+            raise ValueError(
+                f"Search space parameter '{name}' has the value {choice!r}, which contains "
+                "a single quote, a backslash, or a line break. These values can't be passed "
+                "to the training function."
+            )
+
+    return f"${{trialParameters.{name}}}"
 
 
 def convert_value(raw_value: str, target_type: Any):
