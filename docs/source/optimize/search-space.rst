@@ -10,7 +10,7 @@ Use the ``Search`` class to define ranges for each hyperparameter:
 
 .. code-block:: python
 
-   from kubeflow.optimizer.types import Search
+   from kubeflow.optimizer import Search
 
    search_space = {
        "learning_rate": Search.loguniform(1e-5, 1e-1),
@@ -57,18 +57,6 @@ Choose from a fixed set of values:
 
 Best for: Batch size, number of layers, activation functions.
 
-Integer Range
-^^^^^^^^^^^^^
-
-Sample integers in a range:
-
-.. code-block:: python
-
-   # Any integer from 1 to 10
-   Search.randint(1, 10)
-
-Best for: Number of epochs, hidden layer sizes.
-
 Complete Example
 ----------------
 
@@ -85,7 +73,7 @@ Here's a realistic search space for training a neural network:
 
        # Architecture
        "hidden_size": Search.choice([128, 256, 512, 1024]),
-       "num_layers": Search.randint(2, 6),
+       "num_layers": Search.choice([2, 3, 4, 5, 6]),
 
        # Regularization
        "dropout": Search.uniform(0.0, 0.5),

@@ -18,9 +18,6 @@ Different algorithms have different trade-offs:
    * - **Random Search**
      - Quick exploration, simple problems
      - May miss optimal regions
-   * - **Bayesian Optimization**
-     - Expensive training, small budgets
-     - More overhead per trial
    * - **Grid Search**
      - Exhaustive search, few parameters
      - Doesn't scale well
@@ -32,7 +29,7 @@ Randomly samples hyperparameters from the search space:
 
 .. code-block:: python
 
-   from kubeflow.optimizer.types import RandomSearch
+   from kubeflow.optimizer import RandomSearch
 
    client.optimize(
        trial_template=template,
@@ -50,31 +47,6 @@ Randomly samples hyperparameters from the search space:
 
 **Cons:** No learning between trials, may miss optimal regions.
 
-Bayesian Optimization
----------------------
-
-Uses a probabilistic model to guide the search:
-
-.. code-block:: python
-
-   from kubeflow.optimizer.types import BayesianOptimization
-
-   client.optimize(
-       trial_template=template,
-       search_space=search_space,
-       algorithm=BayesianOptimization(),
-   )
-
-**When to use:**
-
-- Training is expensive (hours per run)
-- You have a limited compute budget
-- You want to minimize the number of trials
-
-**Pros:** Learns from previous trials, converges faster.
-
-**Cons:** Doesn't parallelize as well, more complex.
-
 Grid Search
 -----------
 
@@ -82,7 +54,7 @@ Exhaustively tries all combinations:
 
 .. code-block:: python
 
-   from kubeflow.optimizer.types import GridSearch
+   from kubeflow.optimizer import GridSearch, Search
 
    # Grid search works best with discrete choices
    search_space = {
@@ -114,12 +86,12 @@ Controlling the Search
 
 .. code-block:: python
 
-   from kubeflow.optimizer.types import TrialConfig
+   from kubeflow.optimizer import TrialConfig
 
    client.optimize(
        trial_template=template,
        search_space=search_space,
-       trial_config=TrialConfig(max_trials=20),  # Stop after 20 trials
+       trial_config=TrialConfig(num_trials=20),  # Stop after 20 trials
    )
 
 **Run trials in parallel:**
@@ -130,7 +102,7 @@ Controlling the Search
        trial_template=template,
        search_space=search_space,
        trial_config=TrialConfig(
-           max_trials=50,
+           num_trials=50,
            parallel_trials=5,  # Run 5 at a time
        ),
    )
@@ -146,11 +118,7 @@ Algorithm Recommendations
      - Recommended Algorithm
    * - First exploration of a new model
      - Random Search with 20-50 trials
-   * - Training takes hours per run
-     - Bayesian Optimization
    * - Only 2-3 hyperparameters to tune
      - Grid Search
    * - Large compute budget available
      - Random Search with many parallel trials
-   * - Need to find good config quickly
-     - Bayesian Optimization with early stopping
