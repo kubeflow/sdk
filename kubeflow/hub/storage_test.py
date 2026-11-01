@@ -65,3 +65,26 @@ def test_oci_upload_params_requires_base_image_and_oci_ref():
     """Test OCIUploadParams validates required fields."""
     with pytest.raises(ValidationError):
         OCIUploadParams()  # ty: ignore[missing-argument]
+
+
+def test_upload_to_s3_passes_region_to_s3_client(monkeypatch):
+    """Test the region from S3UploadParams is used to create the S3 client."""
+    pytest.importorskip("model_registry")
+    mock_connect = Mock(return_value=(Mock(), Mock()))
+    mock_upload = Mock(return_value="s3://bucket/prefix")
+    monkeypatch.setattr("model_registry.utils._connect_to_s3", mock_connect)
+    monkeypatch.setattr("model_registry.utils._upload_to_s3", mock_upload)
+
+    params = S3UploadParams(
+        bucket_name="bucket",
+        s3_prefix="prefix",
+        endpoint_url="https://s3.eu-west-1.amazonaws.com",
+        access_key_id="access-key",
+        secret_access_key="secret-key",
+        region="eu-west-1",
+    )
+    result = upload_artifact("/tmp/model", upload_params=params)
+
+    assert result == "s3://bucket/prefix"
+    assert mock_connect.call_args.kwargs["region"] == "eu-west-1"
+    assert mock_upload.call_args.kwargs["region"] == "eu-west-1"
