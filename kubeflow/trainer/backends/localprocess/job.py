@@ -76,6 +76,14 @@ class LocalJob(threading.Thread):
             # change working directory to venv before executing script
             os.chdir(self.execution_dir)
 
+            # Merge custom env vars with parent environment to prevent losing
+            # inherited variables like PATH, HOME, PYTHONPATH, etc.
+            # subprocess.Popen's env parameter replaces ALL env vars, so we must
+            # explicitly merge with os.environ (see subprocess.Popen documentation)
+            merged_env = os.environ.copy()
+            if self.env:
+                merged_env.update(self.env)
+
             self._process = subprocess.Popen(
                 self.command,
                 stdout=subprocess.PIPE,
@@ -83,7 +91,7 @@ class LocalJob(threading.Thread):
                 text=True,
                 encoding="utf-8",
                 bufsize=1,
-                env=self.env,
+                env=merged_env,
             )
             # set job status
             self._status = constants.TRAINJOB_RUNNING
