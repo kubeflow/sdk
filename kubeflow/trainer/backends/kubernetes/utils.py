@@ -192,7 +192,7 @@ def get_trainjob_node_step(
     pod_name: str,
     pod_spec: models.IoK8sApiCoreV1PodSpec,
     pod_status: models.IoK8sApiCoreV1PodStatus | None,
-    trainjob_runtime: types.Runtime,
+    is_mpi: bool,
     replicated_job_name: str,
     job_index: int,
 ) -> types.Step:
@@ -213,10 +213,7 @@ def get_trainjob_node_step(
 
     # For the MPI use-cases, the launcher container is always node-0
     # Thus, we should increase the index for other nodes.
-    if (
-        trainjob_runtime.trainer.command[0] == "mpirun"
-        and replicated_job_name != constants.LAUNCHER
-    ):
+    if is_mpi and replicated_job_name != constants.LAUNCHER:
         # TODO (andreyvelich): We should also override the device_count
         # based on OMPI_MCA_orte_set_default_slots value. Right now, it is hard to do
         # since we inject this env only to the Launcher Pod.
