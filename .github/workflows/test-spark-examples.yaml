@@ -86,6 +86,15 @@ jobs:
           SPARK_OPERATOR_IMAGE_TAG: local
         timeout-minutes: 15
 
+      - name: Setup Iceberg + MinIO fixtures
+        run: |
+          make test-e2e-setup-fixtures
+        env:
+          SPARK_E2E_LOAD_FIXTURE_IMAGES: "1"
+          SPARK_TEST_CLUSTER: spark-test
+          SPARK_TEST_NAMESPACE: spark-test
+        timeout-minutes: 10
+
       - name: Run E2E test for Spark example Notebooks
         run: |
           mkdir -p ./artifacts/notebooks
@@ -130,6 +139,11 @@ jobs:
             NOTEBOOK_INPUT=./examples/spark/spark_connect_simple.ipynb \
             NOTEBOOK_OUTPUT=./artifacts/notebooks/spark_connect_simple.ipynb \
             PAPERMILL_TIMEOUT=600
+
+          make test-e2e-notebook \
+            NOTEBOOK_INPUT=./examples/spark/iceberg_minio.ipynb \
+            NOTEBOOK_OUTPUT=./artifacts/notebooks/iceberg_minio.ipynb \
+            PAPERMILL_TIMEOUT=900
         env:
           SPARK_TEST_CLUSTER: spark-test
           SPARK_TEST_NAMESPACE: spark-test
