@@ -156,7 +156,7 @@ class LocalProcessBackend(RuntimeBackend):
                 types.TrainJob(
                     name=_job.name,
                     creation_timestamp=_job.created,
-                    runtime=runtime,
+                    runtime=_job.runtime,
                     num_nodes=1,
                     steps=[
                         types.Step(name=s.step_name, pod_name=s.step_name, status=s.job.status)
