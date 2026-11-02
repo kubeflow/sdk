@@ -70,3 +70,21 @@ def test_backend_selection(test_case):
         client = TrainerClient(backend_config=test_case["backend_config"])
         backend_name = client.backend.__class__.__name__
         assert backend_name == test_case["expected_backend"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        {"name": "status_with_wrong_spelling", "status": {"Completed"}},
+        {"name": "empty_status", "status": set()},
+    ],
+)
+def test_wait_for_job_status_invalid_status(test_case):
+    """Test that an invalid status fails fast instead of polling until the timeout."""
+    client = TrainerClient(backend_config=LocalProcessBackendConfig())
+    client.backend = Mock()
+
+    with pytest.raises(ValueError, match="subset"):
+        client.wait_for_job_status(name="test-job", status=test_case["status"])
+
+    client.backend.wait_for_job_status.assert_not_called()
