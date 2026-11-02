@@ -20,6 +20,7 @@ For the full documentation, see [Interactive Sessions](https://sdk.kubeflow.org/
 
 ### Batch Jobs
 
+- **batch_job_s3a.ipynb** - Submit a `FileJob` referencing an application script stored in S3 (`s3a://` URI)
 - **batch_job_lifecycle.ipynb** - Submit a `FileJob` and exercise the batch job lifecycle (`get_job`, `list_jobs`, `get_job_logs`, `delete_job`)
 - **batch_func_job_lifecycle.ipynb** - Submit a `FuncJob` and exercise the batch job lifecycle
 - **batch_failed_job.ipynb** - Submit a `FileJob` expected to fail and inspect the `FAILED` state

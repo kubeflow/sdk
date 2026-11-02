@@ -1,0 +1,73 @@
+# Copyright The Kubeflow Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: e2e-s3-seed
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      volumes:
+        - name: seed-files
+          configMap:
+            name: e2e-s3-seed-files
+            optional: true
+      containers:
+        - name: aws-cli
+          image: amazon/aws-cli:2.15.15
+          volumeMounts:
+            - name: seed-files
+              mountPath: /seed
+              readOnly: true
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -euo pipefail
+
+              echo "Creating buckets: ${E2E_S3_BUCKETS}"
+              for b in ${E2E_S3_BUCKETS}; do
+                echo "Ensuring bucket: ${b}"
+                aws --endpoint-url="${AWS_ENDPOINT_URL}" s3 mb "s3://${b}" || true
+              done
+
+              FIRST_BUCKET=$(echo "${E2E_S3_BUCKETS}" | awk '{print $1}')
+
+              if [ -n "${E2E_S3_SEED:-}" ]; then
+                for item in ${E2E_S3_SEED}; do
+                  s3_key="${item%%=*}"
+                  local_name="${item#*=}"
+                  filename="$(basename "${local_name}")"
+
+                  echo "Uploading /seed/${filename} to s3://${FIRST_BUCKET}/${s3_key}..."
+                  aws --endpoint-url="${AWS_ENDPOINT_URL}" s3 cp "/seed/${filename}" "s3://${FIRST_BUCKET}/${s3_key}"
+
+                  echo "Verifying s3://${FIRST_BUCKET}/${s3_key}..."
+                  aws --endpoint-url="${AWS_ENDPOINT_URL}" s3api head-object --bucket "${FIRST_BUCKET}" --key "${s3_key}"
+                done
+              fi
+
+              echo "Seeding completed and verified successfully."
+          env:
+            - name: E2E_S3_BUCKETS
+              value: "${E2E_S3_BUCKETS}"
+            - name: E2E_S3_SEED
+              value: "${E2E_S3_SEED}"
+          envFrom:
+            - secretRef:
+                name: e2e-s3-credentials
+            - configMapRef:
+                name: e2e-s3-config

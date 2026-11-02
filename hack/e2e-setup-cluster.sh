@@ -302,13 +302,14 @@ print_status() {
     echo "  Or: ./hack/e2e-setup-cluster.sh --delete"
 }
 
-install_seaweedfs() {
-    phase_start "install_seaweedfs"
+setup_object_store() {
+    [[ -n "${E2E_OBJECT_STORE:-}" ]] || return 0
+    phase_start "setup_object_store"
     local script_dir
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-    "${script_dir}/manifests/seaweedfs/install.sh" "${NAMESPACE:-default}"
-    phase_end "install_seaweedfs"
+    E2E_S3_CLIENT_NAMESPACES="${E2E_S3_CLIENT_NAMESPACES:-$NAMESPACE}" \
+        "${script_dir}/e2e/object-store/setup.sh"
+    phase_end "setup_object_store"
 }
 
 main() {
@@ -326,7 +327,7 @@ main() {
     setup_test_namespace
     load_spark_operator_images
     install_spark_operator
-    install_seaweedfs
+    setup_object_store
     print_status
     local total_elapsed
     total_elapsed=$(($(date +%s) - main_start))
