@@ -21,8 +21,8 @@ Quick Example
 .. code-block:: python
 
    from kubeflow.optimizer import OptimizerClient
-   from kubeflow.optimizer.types import Search, Objective
-   from kubeflow.trainer.types import TrainJobTemplate, CustomTrainer
+   from kubeflow.optimizer import Search, Objective
+   from kubeflow.trainer import TrainJobTemplate, CustomTrainer
 
    # Define what to optimize
    search_space = {
