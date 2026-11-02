@@ -21,12 +21,17 @@ This follows the same callable pattern as kubeflow.trainer.options for SDK consi
 """
 
 from dataclasses import dataclass
+import re
 
 from kubeflow_spark_api import models
 
 from kubeflow.spark.backends.base import RuntimeBackend
 
 SparkResource = models.SparkV1alpha1SparkConnect | models.SparkV1beta2SparkApplication
+
+DNS_1123_SUBDOMAIN_MAX_LENGTH = 253
+DNS_1123_SUBDOMAIN_PATTERN = r"[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*"
+_DNS_1123_SUBDOMAIN_RE = re.compile(DNS_1123_SUBDOMAIN_PATTERN)
 
 
 @dataclass
@@ -346,6 +351,26 @@ class Name:
 
     name: str
 
+    def __post_init__(self) -> None:
+        """Validate that name adheres to Kubernetes DNS-1123 subdomain rules."""
+        self._validate_name(self.name)
+
+    @staticmethod
+    def _validate_name(name: str) -> None:
+        if not isinstance(name, str):
+            raise ValueError(f"Name must be a string, got {type(name).__name__}.")
+        if not name or len(name) > DNS_1123_SUBDOMAIN_MAX_LENGTH:
+            raise ValueError(
+                f"Invalid name '{name}'. Name must be between 1 and "
+                f"{DNS_1123_SUBDOMAIN_MAX_LENGTH} characters."
+            )
+        if not _DNS_1123_SUBDOMAIN_RE.fullmatch(name):
+            raise ValueError(
+                f"Invalid name '{name}'. Name must follow DNS-1123 subdomain rules: "
+                "lowercase alphanumeric characters, '-' or '.', start and end with an "
+                "alphanumeric character (e.g. 'my-spark-app' or 'spark.app')."
+            )
+
     def __call__(self, resource: SparkResource, backend: RuntimeBackend) -> None:
         """Apply custom name to the Spark resource metadata.
 
@@ -354,7 +379,8 @@ class Name:
             backend: Backend instance for validation.
 
         Raises:
-            ValueError: If backend does not support custom names.
+            ValueError: If backend does not support custom names or name does not
+                follow DNS-1123 subdomain rules.
         """
         from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 
@@ -364,4 +390,5 @@ class Name:
                 f"Supported backends: KubernetesBackend"
             )
 
+        self._validate_name(self.name)
         resource.metadata.name = self.name

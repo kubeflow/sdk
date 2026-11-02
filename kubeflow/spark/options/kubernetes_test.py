@@ -580,6 +580,118 @@ def test_toleration_incompatible_backend(
                 "name": "my-custom-session",
             },
         ),
+        TestCase(
+            name="valid name - single character",
+            expected_status=SUCCESS,
+            config={
+                "name": "a",
+            },
+        ),
+        TestCase(
+            name="valid name - single digit",
+            expected_status=SUCCESS,
+            config={
+                "name": "0",
+            },
+        ),
+        TestCase(
+            name="valid name - dotted subdomain",
+            expected_status=SUCCESS,
+            config={
+                "name": "spark.connect.session",
+            },
+        ),
+        TestCase(
+            name="valid name - mixed alphanumeric with dots and hyphens",
+            expected_status=SUCCESS,
+            config={
+                "name": "spark-1.job-2.session",
+            },
+        ),
+        TestCase(
+            name="valid name - maximum 253 characters",
+            expected_status=SUCCESS,
+            config={
+                "name": "a" * 253,
+            },
+        ),
+        TestCase(
+            name="empty name",
+            expected_status=FAILED,
+            expected_error=ValueError,
+            expected_output="between 1 and 253 characters",
+            config={"name": ""},
+        ),
+        TestCase(
+            name="uppercase characters",
+            expected_status=FAILED,
+            expected_error=ValueError,
+            expected_output="DNS-1123 subdomain rules",
+            config={"name": "SparkSession"},
+        ),
+        TestCase(
+            name="underscore character",
+            expected_status=FAILED,
+            expected_error=ValueError,
+            expected_output="DNS-1123 subdomain rules",
+            config={"name": "spark_session"},
+        ),
+        TestCase(
+            name="trailing newline",
+            expected_status=FAILED,
+            expected_error=ValueError,
+            expected_output="DNS-1123 subdomain rules",
+            config={"name": "spark-session\n"},
+        ),
+        TestCase(
+            name="leading hyphen",
+            expected_status=FAILED,
+            expected_error=ValueError,
+            expected_output="DNS-1123 subdomain rules",
+            config={"name": "-spark-session"},
+        ),
+        TestCase(
+            name="trailing hyphen",
+            expected_status=FAILED,
+            expected_error=ValueError,
+            expected_output="DNS-1123 subdomain rules",
+            config={"name": "spark-session-"},
+        ),
+        TestCase(
+            name="leading dot",
+            expected_status=FAILED,
+            expected_error=ValueError,
+            expected_output="DNS-1123 subdomain rules",
+            config={"name": ".spark.session"},
+        ),
+        TestCase(
+            name="trailing dot",
+            expected_status=FAILED,
+            expected_error=ValueError,
+            expected_output="DNS-1123 subdomain rules",
+            config={"name": "spark.session."},
+        ),
+        TestCase(
+            name="consecutive dots",
+            expected_status=FAILED,
+            expected_error=ValueError,
+            expected_output="DNS-1123 subdomain rules",
+            config={"name": "spark..session"},
+        ),
+        TestCase(
+            name="name exceeds 253 characters",
+            expected_status=FAILED,
+            expected_error=ValueError,
+            expected_output="between 1 and 253 characters",
+            config={"name": "a" * 254},
+        ),
+        TestCase(
+            name="non-string name",
+            expected_status=FAILED,
+            expected_error=ValueError,
+            expected_output="must be a string",
+            config={"name": 12345},
+        ),
     ],
 )
 def test_name_option_basic(test_case: TestCase):
@@ -587,10 +699,15 @@ def test_name_option_basic(test_case: TestCase):
 
     print("Executing test:", test_case.name)
 
-    option = Name(test_case.config["name"])
-
-    assert option.name == test_case.config["name"]
-    assert test_case.expected_status == SUCCESS
+    if test_case.expected_status == SUCCESS:
+        option = Name(test_case.config["name"])
+        assert option.name == test_case.config["name"]
+    elif test_case.expected_status == FAILED:
+        with pytest.raises(
+            test_case.expected_error,
+            match=test_case.expected_output,
+        ):
+            Name(test_case.config["name"])
 
     print("test execution complete")
 
@@ -662,3 +779,11 @@ def test_name_option_incompatible_backend(
             option(resource, mock_non_k8s_backend)
 
     print("test execution complete")
+
+
+def test_name_option_call_validates_mutated_name(mock_k8s_backend, spark_connect_model):
+    """Test Name option __call__ validates name even if mutated after construction."""
+    option = Name("valid-initial-name")
+    option.name = "INVALID_MUTATED_NAME"
+    with pytest.raises(ValueError, match="DNS-1123 subdomain rules"):
+        option(spark_connect_model, mock_k8s_backend)
