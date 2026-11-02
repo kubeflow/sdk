@@ -362,7 +362,10 @@ class KubernetesBackend(RuntimeBackend):
 
             # Filter events related to OptimizationJob resources
             for event in event_response.items:
-                if not (event.metadata and event.involved_object and event.first_timestamp):
+                # Components using the events.k8s.io API (e.g. kube-scheduler) set eventTime
+                # instead of firstTimestamp.
+                event_time = event.first_timestamp or event.event_time
+                if not (event.metadata and event.involved_object and event_time):
                     continue
 
                 involved_object = event.involved_object
@@ -378,7 +381,7 @@ class KubernetesBackend(RuntimeBackend):
                             involved_object_name=involved_object.name,
                             message=event.message or "",
                             reason=event.reason or "",
-                            event_time=event.first_timestamp,
+                            event_time=event_time,
                         )
                     )
 
