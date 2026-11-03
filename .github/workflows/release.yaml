@@ -65,7 +65,6 @@ jobs:
       - name: Ensure release branch exists and contains version bump
         run: |
           set -euo pipefail
-          VERSION="${{ steps.vars.outputs.version }}"
           BRANCH="${{ steps.vars.outputs.branch }}"
           MAIN_SHA="${{ github.sha }}"
 
@@ -199,14 +198,14 @@ jobs:
           [[ -f "$CHANGELOG_FILE" ]] || { echo "ERROR: $CHANGELOG_FILE not found" >&2; exit 1; }
           HEADER_REGEX="^#\{1,2\} \\[${VERSION//./\\.}\\]"
           SECTION=$(sed -n "/$HEADER_REGEX/,\$p" "$CHANGELOG_FILE")
-          [[ -n "$SECTION" ]] || { echo "ERROR: No changelog section for $VERSION in "$CHANGELOG_FILE"" >&2; exit 1; }
+          [[ -n "$SECTION" ]] || { echo "ERROR: No changelog section for $VERSION in $CHANGELOG_FILE" >&2; exit 1; }
           NEXT_VERSION=$(echo "$SECTION" | grep -m1 "^#\{1,2\} \\[[0-9]" || true)
           if [[ -n "$NEXT_VERSION" ]]; then
               CHANGELOG=$(echo "$SECTION" | sed '1d' | sed '/^#\{1,2\} \[[0-9]/,$d')
           else
               CHANGELOG=$(echo "$SECTION" | sed '1d')
           fi
-          [[ -n "$CHANGELOG" ]] || { echo "ERROR: Empty changelog body for $VERSION in "$CHANGELOG_FILE"" >&2; exit 1; }
+          [[ -n "$CHANGELOG" ]] || { echo "ERROR: Empty changelog body for $VERSION in $CHANGELOG_FILE" >&2; exit 1; }
           {
             echo "changelog<<EOF"
             echo "$CHANGELOG"

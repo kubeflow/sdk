@@ -18,6 +18,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -34,3 +37,19 @@ jobs:
 
       - name: Verify boilerplate headers
         uses: kubeflow/testing/.github/actions/verify-boilerplate@master
+
+  code-quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v6
+
+      - name: Check shell script formatting
+        run: make shell-fmt-check
+
+      - name: Run shellcheck
+        run: make shell-lint
+
+      - name: Run actionlint
+        run: make actionlint

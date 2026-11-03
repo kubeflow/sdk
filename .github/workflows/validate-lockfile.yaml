@@ -115,7 +115,8 @@ jobs:
               fi
               # Match advisory line: "- GHSA-xxxx-xxxx-xxxx: ..." or "- PYSEC-xxxx-xxxx: ..." etc.
               if echo "$line" | grep -qP '^\- [A-Z]+-'; then
-                local advisory_id=$(echo "$line" | grep -oP '(?<=^- )[A-Z]+-[a-zA-Z0-9-]+')
+                local advisory_id
+                advisory_id=$(echo "$line" | grep -oP '(?<=^- )[A-Z]+-[a-zA-Z0-9-]+')
                 echo "${advisory_id}|${current_pkg}|${current_ver}"
               fi
             done < "$file"
