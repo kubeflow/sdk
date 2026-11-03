@@ -33,7 +33,7 @@ from kubeflow.trainer.types import types
 # --------------------------
 
 
-def _build_runtime() -> types.Runtime:
+def _build_runtime(command: tuple[str, ...] = constants.DEFAULT_COMMAND) -> types.Runtime:
     runtime_trainer = types.RuntimeTrainer(
         trainer_type=types.TrainerType.CUSTOM_TRAINER,
         framework="torch",
@@ -41,7 +41,7 @@ def _build_runtime() -> types.Runtime:
         device_count="1",
         image="example.com/image",
     )
-    runtime_trainer.set_command(constants.DEFAULT_COMMAND)
+    runtime_trainer.set_command(command)
     return types.Runtime(
         name="test-runtime",
         trainer=runtime_trainer,
@@ -568,9 +568,59 @@ def test_get_script_for_python_packages(test_case):
                 ),
             ],
         ),
+        TestCase(
+            name="mpi runtime on a windows client uses POSIX paths",
+            expected_status=SUCCESS,
+            config={
+                "func": sample_train_func,
+                "func_args": None,
+                "runtime": _build_runtime(command=constants.MPI_COMMAND),
+                "packages_to_install": ["requests"],
+                "client_os": "windows",
+            },
+            expected_output=[
+                "mpirun",
+                "--hostfile",
+                "/etc/mpi/hostfile",
+                "bash",
+                "-c",
+                (
+                    '\nif ! [ -x "$(command -v pip)" ]; then\n'
+                    "    python -m ensurepip || python -m ensurepip --user || "
+                    "apt-get install python-pip\n"
+                    "fi\n\n\n"
+                    "PACKAGES=(requests)\n"
+                    "PIP_OPTS=(--index-url https://pypi.org/simple)\n"
+                    'LOG_FILE="/home/mpiuser/pip_install.log"\n'
+                    'rm -f "$LOG_FILE"\n'
+                    "\n"
+                    "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
+                    '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
+                    '    echo "Successfully installed Python packages (user): ${PACKAGES[*]}"\n'
+                    "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
+                    '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
+                    '    echo "Successfully installed Python packages (system-wide): ${PACKAGES[*]}"\n'
+                    "else\n"
+                    '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
+                    '    cat "$LOG_FILE" >&2\n'
+                    "    exit 1\n"
+                    "fi\n\n"
+                    "\nread -r -d '' SCRIPT << EOM\n\n"
+                    "def sample_train_func() -> None:\n"
+                    '    """Sample training function."""\n'
+                    '    print("Hello World")\n\n'
+                    "sample_train_func()\n\n"
+                    "EOM\n"
+                    'printf "%s" "$SCRIPT" > "/home/mpiuser/utils_test.py"\n'
+                    'python "/home/mpiuser/utils_test.py"'
+                ),
+            ],
+        ),
     ],
 )
-def test_get_command_using_train_func(test_case: TestCase):
+def test_get_command_using_train_func(test_case: TestCase, monkeypatch):
+    if test_case.config.get("client_os") == "windows":
+        monkeypatch.setattr(utils, "os", SimpleNamespace(path=ntpath))
     try:
         command = utils.get_command_using_train_func(
             runtime=test_case.config["runtime"],
@@ -1067,6 +1117,22 @@ def _build_builtin_runtime() -> types.Runtime:
             ],
         ),
         TestCase(
+            name="file dataset on a windows client uses POSIX paths",
+            expected_status=SUCCESS,
+            config={
+                "fine_tuning_config": types.TorchTuneConfig(),
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(
+                        storage_uri="hf://tatsu-lab/alpaca/data/train.json",
+                    ),
+                ),
+                "client_os": "windows",
+            },
+            expected_output=[
+                "dataset.data_files=/workspace/dataset/data/train.json",
+            ],
+        ),
+        TestCase(
             name="invalid dtype raises ValueError",
             expected_status=FAILED,
             config={
@@ -1088,8 +1154,10 @@ def _build_builtin_runtime() -> types.Runtime:
         ),
     ],
 )
-def test_get_args_using_torchtune_config(test_case: TestCase):
+def test_get_args_using_torchtune_config(test_case: TestCase, monkeypatch):
     print("Executing test:", test_case.name)
+    if test_case.config.get("client_os") == "windows":
+        monkeypatch.setattr(utils, "os", SimpleNamespace(path=ntpath))
     try:
         args = utils.get_args_using_torchtune_config(
             test_case.config["fine_tuning_config"],
@@ -1103,43 +1171,6 @@ def test_get_args_using_torchtune_config(test_case: TestCase):
         assert test_case.expected_status == FAILED
         assert type(e) is test_case.expected_error
     print("test execution complete")
-
-
-@pytest.fixture
-def windows_client(monkeypatch):
-    """Make the module under test resolve os.path the way a Windows client does."""
-    monkeypatch.setattr(utils, "os", SimpleNamespace(path=ntpath))
-
-
-def test_get_command_using_train_func_mpi_paths(windows_client):
-    runtime = _build_runtime()
-    runtime.trainer.set_command(constants.MPI_COMMAND)
-
-    command = utils.get_command_using_train_func(
-        runtime=runtime,
-        train_func=sample_train_func,
-        train_func_parameters=None,
-        pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
-        packages_to_install=["requests"],
-    )
-
-    mpi_home = constants.DEFAULT_MPI_USER_HOME
-    assert f'LOG_FILE="{mpi_home}/pip_install.log"' in command[-1]
-    assert f'printf "%s" "$SCRIPT" > "{mpi_home}/utils_test.py"' in command[-1]
-    assert f'python "{mpi_home}/utils_test.py"' in command[-1]
-
-
-def test_get_args_using_torchtune_config_dataset_path(windows_client):
-    args = utils.get_args_using_torchtune_config(
-        types.TorchTuneConfig(),
-        types.Initializer(
-            dataset=types.HuggingFaceDatasetInitializer(
-                storage_uri="hf://tatsu-lab/alpaca/data/train.json",
-            ),
-        ),
-    )
-
-    assert args == ["dataset.data_files=/workspace/dataset/data/train.json"]
 
 
 def test_workspace_paths_on_windows_client(monkeypatch):
