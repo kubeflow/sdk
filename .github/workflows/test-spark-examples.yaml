@@ -85,7 +85,8 @@ jobs:
           SPARK_TEST_NAMESPACE: spark-test
           SPARK_OPERATOR_IMAGE_TAG: local
           E2E_OBJECT_STORE: seaweedfs
-          E2E_S3_SEED: "e2e/spark/spark_job.py=examples/spark/spark_job.py"
+          E2E_S3_BUCKETS: e2
+          E2E_S3_SEED: "spark/spark_job.py=examples/spark/spark_job.py"
         timeout-minutes: 15
 
       - name: Run e2e test for Spark example Notebooks
