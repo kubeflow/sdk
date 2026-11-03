@@ -16,7 +16,6 @@ from collections.abc import Callable, Iterator
 import copy
 import logging
 import multiprocessing
-import os
 import random
 import re
 import string
@@ -68,7 +67,10 @@ class KubernetesBackend(RuntimeBackend):
         enforce version compatibility and never raises.
         """
 
-        system_namespace = os.getenv("KUBEFLOW_SYSTEM_NAMESPACE", "kubeflow-system")
+        system_namespace = common_utils.get_component_namespace(
+            common_constants.KUBEFLOW_TRAINER_NAMESPACE_ENV_VAR,
+            default="kubeflow-system",
+        )
         config_map_name = "kubeflow-trainer-public"
 
         try:
@@ -82,7 +84,7 @@ class KubernetesBackend(RuntimeBackend):
                 f"unable to read 'kubeflow_trainer_version' from ConfigMap "
                 f"'{config_map_name}' in namespace '{system_namespace}': {e}. "
                 "If your Trainer control-plane is installed in a different namespace, "
-                "set the KUBEFLOW_SYSTEM_NAMESPACE environment variable accordingly."
+                "set the KUBEFLOW_TRAINER_NAMESPACE or KUBEFLOW_SYSTEM_NAMESPACE environment variable accordingly."
             )
             return
 

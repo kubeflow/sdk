@@ -32,6 +32,7 @@ from kubeflow_trainer_api import models
 from kubernetes import client
 import pytest
 
+import kubeflow.common.constants as common_constants
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.test.common import (
     DEFAULT_NAMESPACE,
@@ -924,6 +925,20 @@ def test_verify_backend(test_case):
         assert "Trainer control-plane version info is not available" not in combined
 
     print("test execution complete")
+
+
+def test_verify_backend_respects_trainer_namespace_env_var(monkeypatch):
+    """Test that verify_backend uses KUBEFLOW_TRAINER_NAMESPACE when set."""
+    monkeypatch.setenv(common_constants.KUBEFLOW_TRAINER_NAMESPACE_ENV_VAR, "custom-trainer-ns")
+    core_api = _build_core_api_mock({"kubeflow_trainer_version": "1.0.0"})
+
+    _, call_count = _run_verify_backend_with_core_api(core_api)
+
+    assert call_count == 1
+    core_api.read_namespaced_config_map.assert_called_with(
+        name="kubeflow-trainer-public",
+        namespace="custom-trainer-ns",
+    )
 
 
 # --------------------------
