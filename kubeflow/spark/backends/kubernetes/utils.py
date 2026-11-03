@@ -91,7 +91,7 @@ def read_pod_logs(
 
             logs = thread.get(common_constants.DEFAULT_TIMEOUT)
 
-            lines = logs.split("\n")
+            lines = logs.replace("\r\n", "\n").split("\n")
             # A trailing newline ends the last line, it does not start an empty one.
             if not lines[-1]:
                 lines.pop()
@@ -119,7 +119,7 @@ def _iter_log_lines(chunks: Iterable[bytes]) -> Iterator[str]:
     buffer = b""
     for chunk in chunks:
         buffer += chunk
-        *lines, buffer = buffer.split(b"\n")
+        *lines, buffer = buffer.replace(b"\r\n", b"\n").split(b"\n")
         for line in lines:
             yield line.decode("utf-8")
 
