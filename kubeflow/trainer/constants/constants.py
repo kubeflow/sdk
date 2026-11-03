@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import posixpath
 import textwrap
 
 # Common constants.
@@ -75,10 +76,10 @@ INITIALIZER_DEFAULT_IGNORE_PATTERNS = ["*.msgpack", "*.h5", "*.bin", "*.pt", "*.
 WORKSPACE_PATH = "/workspace"
 
 # The path where initializer downloads dataset.
-DATASET_PATH = os.path.join(WORKSPACE_PATH, "dataset")
+DATASET_PATH = posixpath.join(WORKSPACE_PATH, "dataset")
 
 # The path where initializer downloads model.
-MODEL_PATH = os.path.join(WORKSPACE_PATH, "model")
+MODEL_PATH = posixpath.join(WORKSPACE_PATH, "model")
 
 # The name of the ReplicatedJob to launch mpirun.
 LAUNCHER = "launcher"
