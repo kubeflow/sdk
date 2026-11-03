@@ -265,6 +265,20 @@ class LocalProcessBackend(RuntimeBackend):
         # remove the job from the list of jobs
         self.__local_jobs.remove(_job)
 
+    def get_gpu_status(self, name: str) -> list[dict[str, str]]:
+        """Get GPU status for the training nodes of a TrainJob.
+
+        Args:
+            name: Name of the TrainJob.
+
+        Raises:
+            NotImplementedError: GPU status is not supported in the localprocess backend.
+        """
+        raise NotImplementedError(
+            "GPU status is not supported in the localprocess backend. "
+            "Use the Kubernetes backend to get GPU metrics from the training nodes."
+        )
+
     def __get_job_status(self, job: LocalBackendJobs) -> str:
         if not job.steps:
             return constants.TRAINJOB_CREATED
