@@ -1227,6 +1227,18 @@ def test_resolve_executor_resources(test_case: TestCase) -> None:
             ],
         ),
         TestCase(
+            name="follow logs with a CRLF split across chunks",
+            expected_status=SUCCESS,
+            config={
+                "follow": True,
+                "chunks": [b"log line 1\r", b"\nlog line 2\r\n"],
+            },
+            expected_output=[
+                "log line 1",
+                "log line 2",
+            ],
+        ),
+        TestCase(
             name="timeout",
             expected_status=FAILED,
             expected_error=TimeoutError,
@@ -1325,6 +1337,11 @@ def test_read_pod_logs(test_case: TestCase) -> None:
             name="empty logs",
             config={"logs": ""},
             expected_output=[],
+        ),
+        TestCase(
+            name="crlf logs",
+            config={"logs": "log line 1\r\nlog line 2\r\n"},
+            expected_output=["log line 1", "log line 2"],
         ),
     ],
 )
