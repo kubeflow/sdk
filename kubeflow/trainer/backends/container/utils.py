@@ -30,7 +30,7 @@ from kubeflow.trainer.types import types
 logger = logging.getLogger(__name__)
 
 
-def create_workdir(job_name: str) -> str:
+def create_workdir(job_name: str) -> tuple[str, bool]:
     """
     Create per-job working directory on host.
 
@@ -40,13 +40,14 @@ def create_workdir(job_name: str) -> str:
         job_name: Name of the training job.
 
     Returns:
-        Absolute path to the working directory.
+        Absolute path to the working directory, and whether this call created it.
     """
     home_base = Path.home() / ".kubeflow" / "trainer" / "containers"
     home_base.mkdir(parents=True, exist_ok=True)
     workdir = str((home_base / f"{job_name}").resolve())
+    created = not os.path.isdir(workdir)
     os.makedirs(workdir, exist_ok=True)
-    return workdir
+    return workdir, created
 
 
 def get_training_script_code(trainer: types.CustomTrainer) -> str:
