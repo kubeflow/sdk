@@ -43,14 +43,12 @@ if [[ ! -f "${BACKEND_SCRIPT}" ]]; then
 fi
 
 echo "Running backend script for ${E2E_OBJECT_STORE}..."
-export E2E_S3_NAMESPACE E2E_S3_ENV_FILE E2E_S3_ACCESS_KEY E2E_S3_SECRET_KEY
-bash "${BACKEND_SCRIPT}"
+export E2E_S3_NAMESPACE E2E_S3_ACCESS_KEY E2E_S3_SECRET_KEY
+S3_ENDPOINT="$(bash "${BACKEND_SCRIPT}")"
 
-# Read backend-generated endpoint if written to env file, otherwise fallback
-if [[ -f "${E2E_S3_ENV_FILE}" ]] && grep -q "^S3_ENDPOINT=" "${E2E_S3_ENV_FILE}"; then
-  S3_ENDPOINT="$(grep "^S3_ENDPOINT=" "${E2E_S3_ENV_FILE}" | cut -d'=' -f2-)"
-else
-  S3_ENDPOINT="http://${E2E_OBJECT_STORE}.${E2E_S3_NAMESPACE}.svc.cluster.local:8333"
+if [[ -z "${S3_ENDPOINT}" ]]; then
+  echo "Error: Backend script did not output an S3 endpoint." >&2
+  exit 1
 fi
 
 # 2. Distribute Secret and ConfigMap to each client namespace

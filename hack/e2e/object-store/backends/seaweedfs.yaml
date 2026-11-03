@@ -12,17 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: seaweedfs-data
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -41,7 +30,7 @@ spec:
     spec:
       containers:
         - name: seaweedfs
-          image: chrislusf/seaweedfs:3.79
+          image: chrislusf/seaweedfs:3.79@sha256:21425305e04b355904ef350ff75a4e81b8afc5124f63e0485b946164b58562d3
           args:
             - "server"
             - "-dir=/data"
@@ -60,8 +49,7 @@ spec:
               mountPath: /data
       volumes:
         - name: data
-          persistentVolumeClaim:
-            claimName: seaweedfs-data
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
