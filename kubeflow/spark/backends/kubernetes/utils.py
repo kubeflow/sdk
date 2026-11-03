@@ -23,7 +23,7 @@ import os
 import re
 import textwrap
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse, urlunparse
 import uuid
 
 from kubeflow_spark_api import models
@@ -406,6 +406,31 @@ def validate_spark_connect_url(url: str) -> bool:
     if not parsed.port:
         raise ValueError("Port is required in Spark Connect URL")
     return True
+
+
+def add_spark_connect_token(url: str, token: str) -> str:
+    """Add an authentication token to a Spark Connect URL.
+
+    PySpark sends the token in the authorization header of its requests only when the token
+    comes from the URL, not from the session config.
+
+    Args:
+        url: Spark Connect URL (e.g., "sc://host:15002").
+        token: Authentication token.
+
+    Returns:
+        The URL with the token parameter, e.g. "sc://host:15002/;token=<token>".
+
+    Raises:
+        ValueError: If the URL already has a token parameter.
+    """
+    parsed = urlparse(url)
+    params = [param for param in parsed.path.lstrip("/").split(";") if param]
+    if any(param.partition("=")[0] == "token" for param in params):
+        raise ValueError("base_url already has a token parameter")
+
+    params.append(f"token={quote(token, safe='')}")
+    return urlunparse(parsed._replace(path="/;" + ";".join(params)))
 
 
 def build_service_url(info: SparkConnectInfo) -> str:
