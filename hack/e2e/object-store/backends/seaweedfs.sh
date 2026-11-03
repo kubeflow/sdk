@@ -47,8 +47,5 @@ kubectl -n "${NAMESPACE}" exec deploy/seaweedfs -- sh -c "
 "
 
 ENDPOINT="http://${SERVICE_NAME}.${NAMESPACE}.svc.cluster.local:${PORT}"
-echo "SeaweedFS is ready and configured at ${ENDPOINT}"
-
-if [[ -n "${E2E_S3_ENV_FILE:-}" ]]; then
-  echo "S3_ENDPOINT=${ENDPOINT}" >> "${E2E_S3_ENV_FILE}"
-fi
+echo "SeaweedFS is ready and configured at ${ENDPOINT}" >&2
+echo "${ENDPOINT}"
