@@ -710,6 +710,7 @@ class KubernetesBackend(RuntimeBackend):
                 reverse=True,
             )
             seen_step_keys: set[str] = set()
+            has_launcher = False
             for pod in sorted_pods:
                 # Pod must have labels to detect the TrainJob step.
                 # Every Pod always has a single TrainJob step.
@@ -742,6 +743,7 @@ class KubernetesBackend(RuntimeBackend):
                     constants.LAUNCHER,
                     constants.NODE,
                 }:
+                    has_launcher = has_launcher or role == constants.LAUNCHER
                     trainjob.steps.append(
                         utils.get_trainjob_node_step(
                             pod.metadata.name,
@@ -774,17 +776,20 @@ class KubernetesBackend(RuntimeBackend):
         else:
             # The TrainJob running status is defined when all training node (e.g. Pods) are
             # running or succeeded.
+            node_steps = [step for step in trainjob.steps if step.name.startswith(constants.NODE)]
             num_running_nodes = sum(
                 1
-                for step in trainjob.steps
-                if step.name.startswith(constants.NODE)
-                and (
-                    step.status == constants.TRAINJOB_RUNNING
-                    or step.status == constants.POD_SUCCEEDED
-                )
+                for step in node_steps
+                if step.status == constants.TRAINJOB_RUNNING
+                or step.status == constants.POD_SUCCEEDED
             )
 
-            if trainjob.num_nodes == num_running_nodes:
+            # For MPI, the launcher is the node-0 step and the number of node Pods depends on
+            # runLauncherAsNode, so wait for the launcher and then for every node Pod.
+            if trainjob.runtime.trainer.command[0] == "mpirun":
+                if has_launcher and num_running_nodes == len(node_steps):
+                    trainjob.status = constants.TRAINJOB_RUNNING
+            elif trainjob.num_nodes == num_running_nodes:
                 trainjob.status = constants.TRAINJOB_RUNNING
 
         return trainjob
