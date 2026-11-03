@@ -31,7 +31,7 @@ import pytest
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.optimizer.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.optimizer.constants import constants
-from kubeflow.optimizer.types.algorithm_types import RandomSearch
+from kubeflow.optimizer.types.algorithm_types import GridSearch, RandomSearch
 from kubeflow.optimizer.types.optimization_types import (
     Metric,
     Objective,
@@ -441,6 +441,71 @@ def get_optimization_job_data_type(
             expected_error=ValueError,
         ),
         TestCase(
+            name="grid search runs every combination by default",
+            expected_status=SUCCESS,
+            config={
+                "search_space": {
+                    "lr": Search.choice([0.001, 0.01, 0.1]),
+                    "batch_size": Search.choice([32, 64]),
+                },
+                "algorithm": GridSearch(),
+            },
+            expected_output=6,
+        ),
+        TestCase(
+            name="grid search keeps num_trials up to the number of combinations",
+            expected_status=SUCCESS,
+            config={
+                "search_space": {
+                    "lr": Search.choice([0.001, 0.01, 0.1]),
+                    "batch_size": Search.choice([32, 64]),
+                },
+                "algorithm": GridSearch(),
+                "trial_config": TrialConfig(num_trials=4),
+            },
+            expected_output=4,
+        ),
+        TestCase(
+            name="grid search keeps num_trials for a range with a step",
+            expected_status=SUCCESS,
+            config={
+                "search_space": {
+                    "lr": models.V1beta1ParameterSpec(
+                        parameterType=constants.DOUBLE_PARAMETER,
+                        feasibleSpace=models.V1beta1FeasibleSpace(min="0.1", max="0.5", step="0.1"),
+                    ),
+                },
+                "algorithm": GridSearch(),
+                "trial_config": TrialConfig(num_trials=3),
+            },
+            expected_output=3,
+        ),
+        TestCase(
+            name="grid search with more num_trials than combinations raises ValueError",
+            expected_status=FAILED,
+            config={
+                "search_space": {
+                    "lr": Search.choice([0.001, 0.01, 0.1]),
+                    "batch_size": Search.choice([32, 64]),
+                },
+                "algorithm": GridSearch(),
+                "trial_config": TrialConfig(num_trials=10),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="grid search with a continuous parameter raises ValueError",
+            expected_status=FAILED,
+            config={
+                "search_space": {
+                    "lr": Search.uniform(min=0.001, max=0.1),
+                    "batch_size": Search.choice([32, 64]),
+                },
+                "algorithm": GridSearch(),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
             name="timeout error when creating job",
             expected_status=FAILED,
             config={
@@ -488,6 +553,8 @@ def test_optimize(optimizer_backend, test_case):
         job_name = optimizer_backend.optimize(
             trial_template=trial_template,
             search_space=search_space,
+            trial_config=test_case.config.get("trial_config"),
+            algorithm=test_case.config.get("algorithm"),
         )
 
         assert test_case.expected_status == SUCCESS
@@ -508,6 +575,8 @@ def test_optimize(optimizer_backend, test_case):
         assert len(payload["spec"]["parameters"]) == len(search_space)
         assert payload["spec"]["objective"]["objectiveMetricName"] == "loss"
         assert payload["spec"]["algorithm"] is not None
+        if test_case.expected_output is not None:
+            assert payload["spec"]["maxTrialCount"] == test_case.expected_output
 
     except Exception as e:
         assert test_case.expected_status != SUCCESS

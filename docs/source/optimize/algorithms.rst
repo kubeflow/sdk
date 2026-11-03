@@ -84,7 +84,7 @@ Exhaustively tries all combinations:
 
    from kubeflow.optimizer.types import GridSearch
 
-   # Grid search works best with discrete choices
+   # Grid search needs discrete choices, e.g. Search.choice()
    search_space = {
        "learning_rate": Search.choice([0.001, 0.01, 0.1]),
        "batch_size": Search.choice([32, 64]),
