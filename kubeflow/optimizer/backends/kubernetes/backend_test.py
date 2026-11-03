@@ -23,9 +23,11 @@ from dataclasses import asdict
 import datetime
 import multiprocessing
 from typing import Any, TypeVar
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from kubeflow_katib_api import models
+from kubernetes import client
+from kubernetes.config import kube_config
 import pytest
 
 from kubeflow.common.types import KubernetesBackendConfig
@@ -48,10 +50,12 @@ from kubeflow.optimizer.types.search_types import (
 from kubeflow.test.common import (
     DEFAULT_NAMESPACE,
     FAILED,
+    NAMESPACE_RESOLUTION_TEST_CASES,
     RUNTIME,
     SUCCESS,
     TIMEOUT,
     TestCase,
+    namespace_test_kubeconfigs,
 )
 import kubeflow.trainer.constants.constants as trainer_constants
 from kubeflow.trainer.types import types as trainer_types
@@ -1172,4 +1176,42 @@ def test_get_job_events(optimizer_backend, test_case):
     except Exception as e:
         assert test_case.expected_status != SUCCESS
         assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize("test_case", NAMESPACE_RESOLUTION_TEST_CASES, ids=lambda tc: tc.name)
+def test_default_namespace_resolution(test_case, tmp_path, monkeypatch):
+    """The default namespace comes from the kubeconfig the API client is loaded from."""
+    print("Executing test:", test_case.name)
+
+    default_kubeconfig, config_file = namespace_test_kubeconfigs(test_case, tmp_path)
+    monkeypatch.setattr(kube_config, "KUBE_CONFIG_DEFAULT_LOCATION", default_kubeconfig)
+    context = test_case.config.get("context")
+    cfg = KubernetesBackendConfig(
+        namespace=test_case.config.get("namespace"),
+        config_file=config_file,
+        context=context,
+        client_configuration=(
+            client.Configuration() if test_case.config.get("client_configuration") else None
+        ),
+    )
+
+    with (
+        patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
+        patch("kubernetes.config.load_kube_config") as load_kube_config,
+        patch(
+            "kubeflow.trainer.backends.kubernetes.backend.KubernetesBackend.verify_backend",
+        ),
+    ):
+        backend = KubernetesBackend(cfg)
+
+    # The Optimizer backend and its embedded Trainer backend share the resolved namespace.
+    assert backend.namespace == test_case.expected_output
+    assert backend.trainer_backend.namespace == test_case.expected_output
+    if test_case.config.get("client_configuration"):
+        load_kube_config.assert_not_called()
+    else:
+        for load_call in load_kube_config.call_args_list:
+            assert load_call == call(config_file=config_file, context=context)
+        assert load_kube_config.call_count == 2
     print("test execution complete")

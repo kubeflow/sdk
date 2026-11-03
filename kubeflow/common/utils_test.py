@@ -11,10 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from unittest.mock import mock_open, patch
+
+from kubernetes.config import kube_config
 import pytest
 
 from kubeflow.common import utils
-from kubeflow.test.common import SUCCESS, TestCase
+from kubeflow.test.common import DEFAULT_NAMESPACE, SUCCESS, TestCase, write_kubeconfig
 
 # --------------------------
 # Test Helpers
@@ -148,3 +151,86 @@ def test_validate_python_function(test_case):
             utils.validate_python_function(func)
     else:
         utils.validate_python_function(func)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="without config_file the default kubeconfig is read",
+            expected_status=SUCCESS,
+            config={},
+            expected_output="default-ns",
+        ),
+        TestCase(
+            name="context is looked up in the default kubeconfig",
+            expected_status=SUCCESS,
+            config={"context": "other-ctx"},
+            expected_output="other-ns",
+        ),
+        TestCase(
+            name="config_file current context is used",
+            expected_status=SUCCESS,
+            config={"config_file": "team"},
+            expected_output="team-b",
+        ),
+        TestCase(
+            name="context is looked up in config_file",
+            expected_status=SUCCESS,
+            config={"config_file": "team", "context": "team-c-ctx"},
+            expected_output="team-c",
+        ),
+        TestCase(
+            name="unreadable config_file falls back to the default namespace",
+            expected_status=SUCCESS,
+            config={"config_file": "missing"},
+            expected_output=DEFAULT_NAMESPACE,
+        ),
+        TestCase(
+            name="in-cluster without config_file reads the service account namespace",
+            expected_status=SUCCESS,
+            config={"in_cluster": True},
+            expected_output="sa-ns",
+        ),
+        TestCase(
+            name="in-cluster with config_file reads config_file",
+            expected_status=SUCCESS,
+            config={"in_cluster": True, "config_file": "team"},
+            expected_output="team-b",
+        ),
+    ],
+)
+def test_get_default_target_namespace(test_case, tmp_path, monkeypatch):
+    """Test get_default_target_namespace across kubeconfig and in-cluster sources."""
+    print("Executing test:", test_case.name)
+
+    default_kubeconfig = write_kubeconfig(
+        tmp_path / "default-kubeconfig",
+        {"default-ctx": "default-ns", "other-ctx": "other-ns"},
+        "default-ctx",
+    )
+    team_kubeconfig = write_kubeconfig(
+        tmp_path / "team-kubeconfig",
+        {"team-b-ctx": "team-b", "team-c-ctx": "team-c"},
+        "team-b-ctx",
+    )
+    monkeypatch.setattr(kube_config, "KUBE_CONFIG_DEFAULT_LOCATION", default_kubeconfig)
+    config_file = {
+        None: None,
+        "team": team_kubeconfig,
+        "missing": str(tmp_path / "missing-kubeconfig"),
+    }[test_case.config.get("config_file")]
+
+    with (
+        patch(
+            "kubeflow.common.utils.is_running_in_k8s",
+            return_value=test_case.config.get("in_cluster", False),
+        ),
+        patch("kubeflow.common.utils.open", mock_open(read_data="sa-ns"), create=True),
+    ):
+        namespace = utils.get_default_target_namespace(
+            test_case.config.get("context"), config_file=config_file
+        )
+
+    assert namespace == test_case.expected_output
+    print("test execution complete")
