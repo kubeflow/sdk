@@ -57,6 +57,11 @@ Choose from a fixed set of values:
 
 Best for: Batch size, number of layers, activation functions.
 
+Numeric values from ``Search.uniform()``, ``Search.loguniform()``, and all-numeric
+``Search.choice()`` lists are passed to the training function as numbers. String
+categorical choices are passed as strings and must not contain quotes (``'``),
+backslashes, or newlines.
+
 Integer Range
 ^^^^^^^^^^^^^
 

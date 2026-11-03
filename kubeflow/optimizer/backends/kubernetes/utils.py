@@ -32,6 +32,52 @@ from kubeflow.optimizer.types.search_types import (
 )
 
 
+class TrialParameterPlaceholder:
+    """Placeholder inserted into trainer func_args for Katib trial substitution.
+
+    When rendered via ``dict``/``repr`` into the generated training script, numeric
+    parameters omit quotes so Katib substitution yields a Python numeric literal.
+    String categoricals keep quotes so substitution yields a string literal.
+    """
+
+    def __init__(self, name: str, *, quoted: bool) -> None:
+        self.name = name
+        self.quoted = quoted
+
+    def __repr__(self) -> str:
+        token = f"${{trialParameters.{self.name}}}"
+        return repr(token) if self.quoted else token
+
+
+def _is_numeric_literal(value: str) -> bool:
+    """Return True if value parses as an int or float literal."""
+    try:
+        float(value)
+    except ValueError:
+        return False
+    return True
+
+
+def should_quote_trial_parameter(param_spec: models.V1beta1ParameterSpec) -> bool:
+    """Decide whether a Katib trial parameter placeholder must be quoted in func_args.
+
+    Args:
+        param_spec: Katib parameter specification from the search space.
+
+    Returns:
+        False for doubles and all-numeric categorical lists; True otherwise.
+    """
+    if param_spec.parameter_type == constants.DOUBLE_PARAMETER:
+        return False
+
+    if param_spec.parameter_type == constants.CATEGORICAL_PARAMETERS:
+        choices = (param_spec.feasible_space and param_spec.feasible_space.list) or []
+        return not (bool(choices) and all(_is_numeric_literal(str(choice)) for choice in choices))
+
+    # Unknown parameter types keep quotes for safer script generation.
+    return True
+
+
 def convert_value(raw_value: str, target_type: Any):
     """Convert a string value to the target type, handling optional types.
 
