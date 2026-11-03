@@ -31,7 +31,7 @@ import kubeflow.common.utils as common_utils
 from kubeflow.optimizer.backends.base import RuntimeBackend
 from kubeflow.optimizer.backends.kubernetes import utils
 from kubeflow.optimizer.constants import constants
-from kubeflow.optimizer.types.algorithm_types import BaseAlgorithm, RandomSearch
+from kubeflow.optimizer.types.algorithm_types import BaseAlgorithm, GridSearch, RandomSearch
 from kubeflow.optimizer.types.optimization_types import (
     Metric,
     Objective,
@@ -89,6 +89,19 @@ class KubernetesBackend(RuntimeBackend):
         # Set defaults.
         objectives = objectives or [Objective()]
         algorithm = algorithm or RandomSearch()
+
+        # Katib's grid suggestion fails the Experiment when maxTrialCount is above the number of
+        # combinations, so run every combination by default.
+        if isinstance(algorithm, GridSearch):
+            num_combinations = utils.get_grid_search_num_combinations(search_space)
+            if num_combinations is not None and trial_config is None:
+                trial_config = TrialConfig(num_trials=num_combinations)
+            elif num_combinations is not None and trial_config.num_trials > num_combinations:
+                raise ValueError(
+                    f"GridSearch has {num_combinations} combinations, so num_trials can't be "
+                    f"more than {num_combinations}, got {trial_config.num_trials}."
+                )
+
         trial_config = trial_config or TrialConfig()
 
         # Iterate over search space to build the following values:
