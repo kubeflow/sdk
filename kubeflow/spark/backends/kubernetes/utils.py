@@ -136,7 +136,7 @@ def _resolve_driver_resources(
 def _resolve_executor_resources(
     executor: Executor | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict | None = None,
 ) -> tuple[int, int, str]:
     """Resolve executor configuration.
 
@@ -262,6 +262,9 @@ def _validate_cpu_value(cpu: str | int | None) -> int:
     if cpu is None:
         raise ValueError("CPU value cannot be None")
 
+    if isinstance(cpu, bool):
+        raise ValueError("Invalid CPU type 'bool'. Expected str or int.")
+
     if isinstance(cpu, int):
         cores = float(cpu)
 
@@ -279,7 +282,10 @@ def _validate_cpu_value(cpu: str | int | None) -> int:
                     f"Invalid CPU value '{cpu}'. Decimal milli-CPU values are not supported."
                 )
 
-            cores = int(milli_cpu) / 1000
+            try:
+                cores = int(milli_cpu) / 1000
+            except ValueError as e:
+                raise ValueError(f"Invalid CPU value '{cpu}'.") from e
 
         else:
             cores = float(cpu)
@@ -416,8 +422,7 @@ def build_service_url(info: SparkConnectInfo) -> str:
         info: SparkConnectInfo with service details.
 
     Returns:
-        Spark Connect URL
-        (e.g., "sc://my-session-server.default.svc.cluster.local:15002").
+        Spark Connect URL (e.g., "sc://my-session-server.default.svc:15002").
 
     Raises:
         RuntimeError: If ``info.service_name`` is not populated. An empty value
@@ -430,10 +435,7 @@ def build_service_url(info: SparkConnectInfo) -> str:
             "status.server.serviceName is not populated yet. The session is not "
             "ready to accept in-cluster connections."
         )
-    return (
-        f"sc://{info.service_name}.{info.namespace}.svc.cluster.local"
-        f":{constants.SPARK_CONNECT_PORT}"
-    )
+    return f"sc://{info.service_name}.{info.namespace}.svc:{constants.SPARK_CONNECT_PORT}"
 
 
 def get_spark_connect_driver_spec(
@@ -473,7 +475,7 @@ def get_spark_connect_driver_spec(
 def get_spark_connect_executor_spec(
     executor: Executor | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict | None = None,
 ) -> models.SparkV1alpha1ExecutorSpec:
     """Convert SDK Executor to API ExecutorSpec.
 
@@ -509,9 +511,8 @@ def get_spark_connect_executor_spec(
 def build_spark_connect_cr(
     name: str,
     namespace: str,
-    spark_version: str | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict | None = None,
     spark_conf: dict[str, str] | None = None,
     driver: Driver | None = None,
     executor: Executor | None = None,
@@ -529,7 +530,6 @@ def build_spark_connect_cr(
     Args:
         name: Session name.
         namespace: Kubernetes namespace.
-        spark_version: Spark version (default: `constants.DEFAULT_SPARK_VERSION`).
         num_executors: Number of executor instances (simple mode).
         resources_per_executor: Resource requirements per executor (simple mode).
         spark_conf: Spark configuration properties.
@@ -547,7 +547,7 @@ def build_spark_connect_cr(
     """
     _validate_spark_conf(spark_conf)
 
-    spark_version = spark_version or constants.DEFAULT_SPARK_VERSION
+    spark_version = constants.DEFAULT_SPARK_VERSION
 
     # Build server spec using conversion function
     server_spec = get_spark_connect_driver_spec(driver)
@@ -676,7 +676,7 @@ def get_spark_job_driver_spec(
 
 def get_spark_job_executor_spec(
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict | None = None,
 ) -> models.SparkV1beta2ExecutorSpec:
     """Build ExecutorSpec for SparkApplication.
 
@@ -790,7 +790,7 @@ def get_spark_application_cr_from_file_job(
     main_file: str,
     arguments: list[str] | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict | None = None,
     options: list | None = None,
     backend: Any | None = None,
     spark_conf: dict[str, str] | None = None,
@@ -853,7 +853,7 @@ def get_spark_application_cr_from_func_job(
     func: Callable,
     func_args: dict[str, Any] | None = None,
     num_executors: int | None = None,
-    resources_per_executor: dict[str, str] | None = None,
+    resources_per_executor: dict | None = None,
     options: list | None = None,
     backend: Any | None = None,
     spark_conf: dict[str, str] | None = None,
