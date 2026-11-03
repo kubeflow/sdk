@@ -1289,6 +1289,18 @@ def test_validate_job(kubernetes_backend, test_case):
             expected_error=ValueError,
         ),
         TestCase(
+            name="function job without required func_args",
+            expected_status=FAILED,
+            config={
+                "job": FuncJob(
+                    func=sample_func_with_args,
+                ),
+                "assert_not_submitted": True,
+            },
+            expected_output="missing a required argument: 'name'",
+            expected_error=ValueError,
+        ),
+        TestCase(
             name="valid function job submission",
             expected_status=SUCCESS,
             config={
@@ -1380,16 +1392,13 @@ def test_submit_job(kubernetes_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
 
+        if test_case.expected_output is not None:
+            assert test_case.expected_output in str(e)
+
+        if test_case.config.get("assert_not_submitted"):
+            kubernetes_backend.custom_api.create_namespaced_custom_object.assert_not_called()
+
     print("test execution complete")
-
-
-def test_submit_job_without_required_func_args(kubernetes_backend):
-    """Test KubernetesBackend.submit_job() rejects the job before calling Kubernetes."""
-
-    with pytest.raises(ValueError, match="missing a required argument: 'name'"):
-        kubernetes_backend.submit_job(job=FuncJob(func=sample_func_with_args))
-
-    kubernetes_backend.custom_api.create_namespaced_custom_object.assert_not_called()
 
 
 @pytest.mark.parametrize(
