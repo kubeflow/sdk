@@ -20,6 +20,7 @@ Tests the ContainerBackend class with mocked container adapters.
 
 from collections.abc import Iterator
 from contextlib import nullcontext
+import copy
 import os
 from pathlib import Path
 import shutil
@@ -35,6 +36,7 @@ from kubeflow.trainer.backends.container.adapters.base import (
 from kubeflow.trainer.backends.container.backend import ContainerBackend
 from kubeflow.trainer.backends.container.types import ContainerBackendConfig
 from kubeflow.trainer.constants import constants
+from kubeflow.trainer.options import Name
 from kubeflow.trainer.types import types
 
 
@@ -598,6 +600,18 @@ def test_get_runtime_packages(container_backend):
             config={"fail_method": "pull_image", "cleanup_error": True},
             expected_error=RuntimeError,
         ),
+        TestCase(
+            name="failed setup keeps a workdir it did not create",
+            expected_status=FAILED,
+            config={"fail_method": "pull_image", "existing_workdir": True},
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="name of an existing TrainJob is rejected",
+            expected_status=FAILED,
+            config={"existing_job_name": "my-job"},
+            expected_error=ValueError,
+        ),
     ],
 )
 def test_train(container_backend, monkeypatch, tmp_path, test_case):
@@ -608,8 +622,17 @@ def test_train(container_backend, monkeypatch, tmp_path, test_case):
     workdir.mkdir()
     monkeypatch.setattr(
         "kubeflow.trainer.backends.container.utils.create_workdir",
-        lambda job_name: str(workdir),
+        lambda job_name: (str(workdir), not test_case.config.get("existing_workdir")),
     )
+
+    existing_job_name = test_case.config.get("existing_job_name")
+    if existing_job_name:
+        container_backend.train(
+            trainer=types.CustomTrainer(func=simple_train_func),
+            options=[Name(existing_job_name)],
+        )
+        existing_containers = copy.deepcopy(adapter.containers_created)
+        existing_networks = copy.deepcopy(adapter.networks_created)
 
     # Make an adapter method fail, optionally after some successful calls
     fail_method = test_case.config.get("fail_method")
@@ -675,7 +698,10 @@ def test_train(container_backend, monkeypatch, tmp_path, test_case):
                 container_backend.train(runtime=runtime, trainer=trainer, initializer=initializer)
         else:
             job_name = container_backend.train(
-                runtime=runtime, trainer=trainer, initializer=initializer
+                runtime=runtime,
+                trainer=trainer,
+                initializer=initializer,
+                options=[Name(existing_job_name)] if existing_job_name else None,
             )
 
         assert test_case.expected_status == SUCCESS
@@ -750,12 +776,19 @@ def test_train(container_backend, monkeypatch, tmp_path, test_case):
 
     except Exception as e:
         assert type(e) is test_case.expected_error
+        if existing_job_name:
+            # The existing TrainJob and its resources are left untouched
+            assert adapter.containers_created == existing_containers
+            assert adapter.networks_created == existing_networks
+            assert adapter.containers_removed == []
+            assert adapter.networks_deleted == []
+            assert workdir.exists()
         # Failed setup must release every resource it created
-        if not test_case.config.get("cleanup_error"):
+        elif not test_case.config.get("cleanup_error"):
             created_container_ids = [c["id"] for c in adapter.containers_created]
             assert sorted(adapter.containers_removed) == sorted(created_container_ids)
             assert adapter.networks_deleted == [n["id"] for n in adapter.networks_created]
-            assert not workdir.exists()
+            assert workdir.exists() == bool(test_case.config.get("existing_workdir"))
     print("test execution complete")
 
 
