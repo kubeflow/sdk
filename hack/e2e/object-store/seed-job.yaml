@@ -28,7 +28,7 @@ spec:
             optional: true
       containers:
         - name: aws-cli
-          image: amazon/aws-cli:2.15.15
+          image: amazon/aws-cli:2.15.15@sha256:7bc0300438cf0db2ee3c3eebebc33dfc214999ab51a89c36279f64bf71bfa128
           volumeMounts:
             - name: seed-files
               mountPath: /seed
