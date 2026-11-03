@@ -84,6 +84,9 @@ jobs:
           SPARK_TEST_CLUSTER: spark-test
           SPARK_TEST_NAMESPACE: spark-test
           SPARK_OPERATOR_IMAGE_TAG: local
+          E2E_OBJECT_STORE: seaweedfs
+          E2E_S3_BUCKETS: e2e
+          E2E_S3_SEED: "spark/spark_job.py=examples/spark/spark_job.py"
         timeout-minutes: 15
 
       - name: Run E2E test for Spark example Notebooks
@@ -108,6 +111,12 @@ jobs:
           make test-e2e-notebook \
             NOTEBOOK_INPUT=./examples/spark/batch_failed_job.ipynb \
             NOTEBOOK_OUTPUT=./artifacts/notebooks/batch_failed_job.ipynb \
+            PAPERMILL_TIMEOUT=600
+
+          make test-e2e-notebook \
+            NOTEBOOK_INPUT=./examples/spark/batch_job_s3a.ipynb \
+            NOTEBOOK_OUTPUT=./artifacts/notebooks/batch_job_s3a.ipynb \
+            PAPERMILL_PARAMS="-p S3_ENDPOINT $S3_ENDPOINT -p S3_REGION $S3_REGION -p S3_BUCKET e2e -p S3_PREFIX spark -p S3_SECRET_NAME $S3_SECRET_NAME" \
             PAPERMILL_TIMEOUT=600
 
           make test-e2e-notebook \
