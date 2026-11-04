@@ -365,3 +365,91 @@ class Name:
             )
 
         resource.metadata.name = self.name
+
+
+@dataclass
+class Dependencies:
+    """Add JARs and Maven packages to Spark resources (.spec.deps).
+
+    Declares runtime dependencies for the Spark Connect server or Spark application
+    through the ``deps`` field of the custom resource. The Spark Operator passes them to
+    Spark as ``--jars``, ``--packages``, ``--exclude-packages`` and ``--repositories``.
+
+    Use this option when the Spark image does not already include a library you need,
+    for example a JDBC driver, a Delta Lake or Iceberg package.
+
+    Supported backends:
+        - Kubernetes
+
+    Args:
+        jars: JAR URIs to add to the driver and executor classpaths, e.g.
+            ``"local:///opt/spark/jars/my-plugin.jar"`` or an ``https://`` URL.
+        packages: Maven coordinates in ``"groupId:artifactId:version"`` form.
+        exclude_packages: Maven coordinates in ``"groupId:artifactId"`` form to exclude
+            while resolving ``packages``.
+        repositories: Additional remote Maven repositories to search for ``packages``,
+            e.g. an internal mirror for clusters without access to Maven Central.
+
+    Example::
+
+        from kubeflow.spark import Dependencies, SparkClient
+
+        client = SparkClient()
+
+        # Fetch a JDBC driver from Maven Central at startup
+        spark = client.connect(
+            options=[
+                Dependencies(packages=["org.postgresql:postgresql:42.7.4"]),
+            ],
+        )
+
+        # Resolve packages from an internal mirror and add a local JAR
+        spark = client.connect(
+            options=[
+                Dependencies(
+                    jars=["local:///opt/spark/jars/my-plugin.jar"],
+                    packages=["io.delta:delta-spark_2.13:4.0.0"],
+                    repositories=["https://maven.internal.example.com/releases"],
+                ),
+            ],
+        )
+    """
+
+    jars: list[str] | None = None
+    packages: list[str] | None = None
+    exclude_packages: list[str] | None = None
+    repositories: list[str] | None = None
+
+    def __call__(self, resource: SparkResource, backend: RuntimeBackend) -> None:
+        """Apply dependencies to the Spark resource.
+
+        Args:
+            resource: Spark resource to modify.
+            backend: Backend instance for validation.
+
+        Raises:
+            ValueError: If backend does not support dependencies.
+
+            TypeError: If the resource is not a supported Spark resource.
+        """
+        from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
+
+        if not isinstance(backend, KubernetesBackend):
+            raise ValueError(
+                f"Dependencies option is not compatible with {type(backend).__name__}. "
+                f"Supported backends: KubernetesBackend"
+            )
+
+        if isinstance(resource, models.SparkV1alpha1SparkConnect):
+            deps_model = models.SparkV1alpha1Dependencies
+        elif isinstance(resource, models.SparkV1beta2SparkApplication):
+            deps_model = models.SparkV1beta2Dependencies
+        else:
+            raise TypeError(f"Unsupported Spark resource type: {type(resource).__name__}")
+
+        resource.spec.deps = deps_model(
+            jars=self.jars,
+            packages=self.packages,
+            exclude_packages=self.exclude_packages,
+            repositories=self.repositories,
+        )
