@@ -16,6 +16,7 @@
 
 from kubeflow.spark.options.kubernetes import (
     Annotations,
+    DynamicAllocation,
     Labels,
     Name,
     NodeSelector,
@@ -24,6 +25,7 @@ from kubeflow.spark.options.kubernetes import (
 
 __all__ = [
     "Annotations",
+    "DynamicAllocation",
     "Labels",
     "Name",
     "NodeSelector",
