@@ -248,6 +248,11 @@ class LocalProcessBackend(RuntimeBackend):
             # Return if job has reached desired status
             if trainjob.status in status:
                 return trainjob
+            if (
+                constants.TRAINJOB_FAILED not in status
+                and trainjob.status == constants.TRAINJOB_FAILED
+            ):
+                raise RuntimeError(f"TrainJob {name} is Failed")
 
             time.sleep(polling_interval)
 
