@@ -150,6 +150,22 @@ DEFAULT_COMMAND = (
 # The default home directory for the MPI user.
 DEFAULT_MPI_USER_HOME = os.getenv("DEFAULT_MPI_USER_HOME", "/home/mpiuser")
 
+# Shell expression for the writable directory that holds the generated training script and the
+# pip install log on non-MPI runtimes. The container shell expands it to `TMPDIR` if set,
+# otherwise /tmp, so it must only be used inside double-quoted shell strings.
+DEFAULT_TEMPORARY_DIRECTORY = "${TMPDIR:-/tmp}"
+
+# Prepended to the non-MPI generated script. Python puts the script's directory (the temporary
+# directory) first on sys.path, so swap it for the working directory. Under safe path mode
+# (`-P` / `PYTHONSAFEPATH`) that entry is absent and sys.path is left untouched.
+PYTHON_IMPORT_PATH_PRELUDE = (
+    "import os\n"
+    "import sys\n\n"
+    "if sys.path and os.path.realpath(sys.path[0]) == "
+    "os.path.realpath(os.path.dirname(__file__)):\n"
+    "    sys.path[0] = os.getcwd()\n\n"
+)
+
 # The default command for the OpenMPI CustomTrainer.
 MPI_COMMAND = (
     "mpirun",

@@ -13,6 +13,9 @@
 # limitations under the License.
 
 import os
+import shlex
+import subprocess
+import sys
 import tempfile
 import time
 from unittest.mock import MagicMock, patch
@@ -25,12 +28,21 @@ import kubeflow.trainer.backends.kubernetes.utils as utils
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 
+MPI_FUNCTION_FILE = os.path.join(constants.DEFAULT_MPI_USER_HOME, "utils_test.py")
+MPI_INSTALLATION_LOG_FILE = os.path.join(
+    constants.DEFAULT_MPI_USER_HOME,
+    "pip_install.log",
+)
+NON_MPI_IMPORT_PATH_PRELUDE = constants.PYTHON_IMPORT_PATH_PRELUDE
+
 # --------------------------
 # Test Helpers
 # --------------------------
 
 
-def _build_runtime() -> types.Runtime:
+def _build_runtime(
+    command: tuple[str, ...] = constants.DEFAULT_COMMAND,
+) -> types.Runtime:
     runtime_trainer = types.RuntimeTrainer(
         trainer_type=types.TrainerType.CUSTOM_TRAINER,
         framework="torch",
@@ -38,7 +50,7 @@ def _build_runtime() -> types.Runtime:
         device_count="1",
         image="example.com/image",
     )
-    runtime_trainer.set_command(constants.DEFAULT_COMMAND)
+    runtime_trainer.set_command(command)
     return types.Runtime(
         name="test-runtime",
         trainer=runtime_trainer,
@@ -418,13 +430,14 @@ def test_get_script_for_python_packages(test_case):
                 "-c",
                 (
                     "\nread -r -d '' SCRIPT << EOM\n\n"
+                    f"{NON_MPI_IMPORT_PATH_PRELUDE}"
                     "def sample_train_func() -> None:\n"
                     '    """Sample training function."""\n'
                     '    print("Hello World")\n\n'
                     "sample_train_func(**{'batch_size': 128, 'learning_rate': 0.001, 'epochs': 20})\n\n"
                     "EOM\n"
-                    'printf "%s" "$SCRIPT" > "utils_test.py"\n'
-                    'python "utils_test.py"'
+                    'printf "%s" "$SCRIPT" > "${TMPDIR:-/tmp}/utils_test.py"\n'
+                    'python "${TMPDIR:-/tmp}/utils_test.py"'
                 ),
             ],
         ),
@@ -441,13 +454,14 @@ def test_get_script_for_python_packages(test_case):
                 "-c",
                 (
                     "\nread -r -d '' SCRIPT << EOM\n\n"
+                    f"{NON_MPI_IMPORT_PATH_PRELUDE}"
                     "def sample_train_func() -> None:\n"
                     '    """Sample training function."""\n'
                     '    print("Hello World")\n\n'
                     "sample_train_func()\n\n"
                     "EOM\n"
-                    'printf "%s" "$SCRIPT" > "utils_test.py"\n'
-                    'python "utils_test.py"'
+                    'printf "%s" "$SCRIPT" > "${TMPDIR:-/tmp}/utils_test.py"\n'
+                    'python "${TMPDIR:-/tmp}/utils_test.py"'
                 ),
             ],
         ),
@@ -488,13 +502,14 @@ def test_get_script_for_python_packages(test_case):
                 "-c",
                 (
                     "\nread -r -d '' SCRIPT << EOM\n\n"
+                    f"{NON_MPI_IMPORT_PATH_PRELUDE}"
                     "def sample_train_func() -> None:\n"
                     '    """Sample training function."""\n'
                     '    print("Hello World")\n\n'
                     "sample_train_func(**{'a': 1, 'b': 2})\n\n"
                     "EOM\n"
-                    'printf "%s" "$SCRIPT" > "utils_test.py"\n'
-                    'python "utils_test.py"'
+                    'printf "%s" "$SCRIPT" > "${TMPDIR:-/tmp}/utils_test.py"\n'
+                    'python "${TMPDIR:-/tmp}/utils_test.py"'
                 ),
             ],
         ),
@@ -511,13 +526,14 @@ def test_get_script_for_python_packages(test_case):
                 "-c",
                 (
                     "\nread -r -d '' SCRIPT << EOM\n\n"
+                    f"{NON_MPI_IMPORT_PATH_PRELUDE}"
                     "def sample_train_func_kwargs(a: int, b: str, c: float) -> str:\n"
                     '    """Sample training function with kwargs."""\n'
                     '    return "ok"\n\n'
                     "sample_train_func_kwargs(**{'a': 3, 'b': 'hi', 'c': 0.2})\n\n"
                     "EOM\n"
-                    'printf "%s" "$SCRIPT" > "utils_test.py"\n'
-                    'python "utils_test.py"'
+                    'printf "%s" "$SCRIPT" > "${TMPDIR:-/tmp}/utils_test.py"\n'
+                    'python "${TMPDIR:-/tmp}/utils_test.py"'
                 ),
             ],
         ),
@@ -540,7 +556,55 @@ def test_get_script_for_python_packages(test_case):
                     "fi\n\n\n"
                     "PACKAGES=(requests)\n"
                     "PIP_OPTS=(--index-url https://pypi.org/simple)\n"
-                    'LOG_FILE="pip_install.log"\n'
+                    'LOG_FILE="${TMPDIR:-/tmp}/pip_install.log"\n'
+                    'rm -f "$LOG_FILE"\n'
+                    "\n"
+                    "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
+                    '    --no-warn-script-location "${PIP_OPTS[@]}" --user "${PACKAGES[@]}" >"$LOG_FILE" 2>&1; then\n'
+                    '    echo "Successfully installed Python packages (user): ${PACKAGES[*]}"\n'
+                    "elif PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
+                    '    --no-warn-script-location "${PIP_OPTS[@]}" "${PACKAGES[@]}" >>"$LOG_FILE" 2>&1; then\n'
+                    '    echo "Successfully installed Python packages (system-wide): ${PACKAGES[*]}"\n'
+                    "else\n"
+                    '    echo "ERROR: Failed to install Python packages: ${PACKAGES[*]}" >&2\n'
+                    '    cat "$LOG_FILE" >&2\n'
+                    "    exit 1\n"
+                    "fi\n\n"
+                    "\nread -r -d '' SCRIPT << EOM\n\n"
+                    f"{NON_MPI_IMPORT_PATH_PRELUDE}"
+                    "def sample_train_func() -> None:\n"
+                    '    """Sample training function."""\n'
+                    '    print("Hello World")\n\n'
+                    "sample_train_func()\n\n"
+                    "EOM\n"
+                    'printf "%s" "$SCRIPT" > "${TMPDIR:-/tmp}/utils_test.py"\n'
+                    'python "${TMPDIR:-/tmp}/utils_test.py"'
+                ),
+            ],
+        ),
+        TestCase(
+            name="with MPI preserves mpiuser paths",
+            expected_status=SUCCESS,
+            config={
+                "func": sample_train_func,
+                "func_args": None,
+                "runtime": _build_runtime(constants.MPI_COMMAND),
+                "packages_to_install": ["requests"],
+            },
+            expected_output=[
+                "mpirun",
+                "--hostfile",
+                "/etc/mpi/hostfile",
+                "bash",
+                "-c",
+                (
+                    '\nif ! [ -x "$(command -v pip)" ]; then\n'
+                    "    python -m ensurepip || python -m ensurepip --user || "
+                    "apt-get install python-pip\n"
+                    "fi\n\n\n"
+                    "PACKAGES=(requests)\n"
+                    "PIP_OPTS=(--index-url https://pypi.org/simple)\n"
+                    f'LOG_FILE="{MPI_INSTALLATION_LOG_FILE}"\n'
                     'rm -f "$LOG_FILE"\n'
                     "\n"
                     "if PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet \\\n"
@@ -560,8 +624,8 @@ def test_get_script_for_python_packages(test_case):
                     '    print("Hello World")\n\n'
                     "sample_train_func()\n\n"
                     "EOM\n"
-                    'printf "%s" "$SCRIPT" > "utils_test.py"\n'
-                    'python "utils_test.py"'
+                    f'printf "%s" "$SCRIPT" > "{MPI_FUNCTION_FILE}"\n'
+                    f'python "{MPI_FUNCTION_FILE}"'
                 ),
             ],
         ),
@@ -582,6 +646,100 @@ def test_get_command_using_train_func(test_case: TestCase):
 
     except Exception as e:
         assert type(e) is test_case.expected_error
+
+
+@pytest.mark.parametrize(
+    "safe_path_enabled",
+    [False, True],
+    ids=["normal-path", "safe-path"],
+)
+def test_generated_command_runs_from_read_only_working_directory(
+    tmp_path,
+    safe_path_enabled,
+):
+    working_directory = tmp_path / "working-directory"
+    existing_python_path_directory = tmp_path / "existing-python-path"
+    temporary_directory = tmp_path / "temporary-directory"
+    generated_function_file = temporary_directory / "utils_test.py"
+    working_directory.mkdir()
+    existing_python_path_directory.mkdir()
+    temporary_directory.mkdir()
+
+    (working_directory / "working_directory_module.py").write_text(
+        'VALUE = "working-directory"\n',
+        encoding="utf-8",
+    )
+    # A module with the same name next to the generated script must never win over the
+    # working directory, which proves the prelude swapped the script directory out of sys.path.
+    (temporary_directory / "working_directory_module.py").write_text(
+        'VALUE = "temporary-directory"\n',
+        encoding="utf-8",
+    )
+    (existing_python_path_directory / "existing_python_path_module.py").write_text(
+        'VALUE = "existing-python-path"\n',
+        encoding="utf-8",
+    )
+
+    def training_function(expected_python_path):
+        import os
+
+        import existing_python_path_module
+        import working_directory_module
+
+        assert os.environ["PYTHONPATH"] == expected_python_path
+        print(f"{working_directory_module.VALUE}:{existing_python_path_module.VALUE}")
+
+    python_executable_command = (
+        "bash",
+        "-c",
+        constants.EXEC_FUNC_SCRIPT.replace("__ENTRYPOINT__", shlex.quote(sys.executable)),
+    )
+    command = utils.get_command_using_train_func(
+        runtime=_build_runtime(python_executable_command),
+        train_func=training_function,
+        train_func_parameters={"expected_python_path": str(existing_python_path_directory)},
+        pip_index_urls=constants.DEFAULT_PIP_INDEX_URLS,
+        packages_to_install=[],
+    )
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(existing_python_path_directory)
+    # The generated command resolves `${TMPDIR:-/tmp}` in the shell; point it at a per-test
+    # directory so the test proves the resolution and never touches /tmp.
+    environment["TMPDIR"] = str(temporary_directory)
+    if safe_path_enabled:
+        environment["PYTHONSAFEPATH"] = "1"
+    else:
+        environment.pop("PYTHONSAFEPATH", None)
+
+    working_directory.chmod(0o555)
+    try:
+        result = subprocess.run(
+            command,
+            cwd=working_directory,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    finally:
+        working_directory.chmod(0o755)
+
+    # chmod does not stop root, so assert directly that the script landed in TMPDIR.
+    assert generated_function_file.is_file()
+
+    if safe_path_enabled and sys.version_info >= (3, 11):
+        # Under PYTHONSAFEPATH the working directory must stay off sys.path, so the module that
+        # lives there is not importable. The existing PYTHONPATH entry is still honoured, which is
+        # what Python itself does when no prelude is involved.
+        assert result.returncode != 0
+        assert "ModuleNotFoundError" in result.stderr
+        assert "working_directory_module" in result.stderr
+        assert "existing_python_path_module" not in result.stderr
+    else:
+        # Normal path, or Python 3.10 which ignores PYTHONSAFEPATH: sys.path[0] is the generated
+        # script's directory, so the prelude swaps in the working directory.
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "working-directory:existing-python-path"
 
 
 @pytest.mark.parametrize(
