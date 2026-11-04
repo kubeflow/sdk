@@ -1,17 +1,17 @@
 Options Reference
 ==================
 
-Kubernetes-native customization shared by interactive sessions (:doc:`sessions`)
+Advanced resource configuration options shared by interactive sessions (:doc:`sessions`)
 and batch jobs (:doc:`batch-jobs`).
 
 Overview
 --------
 
 Beyond ``num_executors``, ``resources_per_executor``, and ``spark_conf``, both
-``connect()`` and ``submit_job()`` accept an ``options`` list for Kubernetes-native
-configuration — labels, annotations, node placement, tolerations, and naming. The options pattern is designed for extensibility: new
-option types can be added in future SDK versions without changing the core method
-signatures.
+``connect()`` and ``submit_job()`` accept an ``options`` list for advanced resource
+configuration — labels, annotations, node placement, tolerations, dependencies, and naming.
+The options pattern is designed for extensibility: new option types can be added in
+future SDK versions without changing the core method signatures.
 
 Labels and Annotations
 ------------------------
@@ -91,6 +91,36 @@ instances:
        ],
    )
 
+Dependencies
+------------
+
+Add JARs and Maven packages that the Spark image does not already include. The SDK
+writes them to the resource's ``spec.deps`` field and the Spark Operator passes them to
+Spark as ``--jars``, ``--packages``, ``--exclude-packages`` and ``--repositories``:
+
+.. code-block:: python
+
+   from kubeflow.spark import Dependencies, SparkClient
+
+   client = SparkClient()
+
+   spark = client.connect(
+       options=[
+           Dependencies(
+               jars=["local:///opt/spark/jars/my-plugin.jar"],
+               packages=["io.delta:delta-spark_2.13:4.0.0"],
+               exclude_packages=["org.slf4j:slf4j-api"],
+           ),
+       ],
+   )
+
+The SDK does not add any dependencies on its own. Spark 4.x images, including the
+default ``apache/spark:4.0.4`` image, already bundle Spark Connect.
+
+``Dependencies`` also works with ``submit_job()``. Prefer it over setting
+``spark.jars``, ``spark.jars.packages``, ``spark.jars.excludes`` or
+``spark.jars.repositories`` in ``spark_conf``.
+
 Custom Name
 -----------
 
@@ -123,5 +153,5 @@ Composing Options
 ------------------
 
 Options are composable — production setups typically combine several at once
-(name, labels, annotations, node selection, and tolerations together) to fully
+(name, labels, annotations, node selection, tolerations, and dependencies together) to fully
 describe how a session or job should run and be scheduled.

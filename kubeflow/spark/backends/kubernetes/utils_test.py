@@ -46,7 +46,7 @@ from kubeflow.spark.backends.kubernetes.utils import (
     read_pod_logs,
     validate_spark_connect_url,
 )
-from kubeflow.spark.options import Labels
+from kubeflow.spark.options import Dependencies, Labels
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
@@ -623,6 +623,18 @@ def test_build_service_url(test_case: TestCase) -> None:
             },
         ),
         TestCase(
+            name="spark connect cr with dependencies option",
+            expected_status=SUCCESS,
+            config={
+                "options": [
+                    Dependencies(
+                        jars=["local:///opt/spark/jars/my-plugin.jar"],
+                        packages=["org.postgresql:postgresql:42.7.4"],
+                    ),
+                ],
+            },
+        ),
+        TestCase(
             name="kep107 level3 advanced mode",
             expected_status=SUCCESS,
             config={
@@ -677,6 +689,7 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.server.memory == "512m"
         assert spark_connect.spec.spark_conf["spark.connect.grpc.binding.address"] == "0.0.0.0"
         assert "spark.jars" not in spark_connect.spec.spark_conf
+        assert spark_connect.spec.deps is None
 
     elif test_case.name == "spark connect cr with num executors":
         assert spark_connect.spec.executor.instances == 3
@@ -732,6 +745,15 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
 
     elif test_case.name == "spark connect cr with options":
         assert spark_connect.metadata.labels["team"] == "ml"
+
+    elif test_case.name == "spark connect cr with dependencies option":
+        assert spark_connect.spec.deps.jars == ["local:///opt/spark/jars/my-plugin.jar"]
+        assert spark_connect.spec.deps.packages == ["org.postgresql:postgresql:42.7.4"]
+        assert "spark.jars" not in spark_connect.spec.spark_conf
+        assert spark_connect.to_dict()["spec"]["deps"] == {
+            "jars": ["local:///opt/spark/jars/my-plugin.jar"],
+            "packages": ["org.postgresql:postgresql:42.7.4"],
+        }
 
     print("test execution complete")
 
