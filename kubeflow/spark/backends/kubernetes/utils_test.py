@@ -691,12 +691,16 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.spark_version == constants.DEFAULT_SPARK_VERSION
         assert spark_connect.spec.executor.instances == constants.DEFAULT_NUM_EXECUTORS
         assert spark_connect.spec.executor.cores is None
-        assert spark_connect.spec.executor.core_request is None
-        assert spark_connect.spec.executor.core_limit is None
+        assert spark_connect.spec.executor.core_request is not None
+        assert spark_connect.spec.executor.core_limit is not None
+        assert spark_connect.spec.executor.core_request.actual_instance == "1"
+        assert spark_connect.spec.executor.core_limit.actual_instance == "1"
         assert spark_connect.spec.executor.memory == "512m"
         assert spark_connect.spec.server.cores is None
-        assert spark_connect.spec.server.core_request is None
-        assert spark_connect.spec.server.core_limit is None
+        assert spark_connect.spec.server.core_request is not None
+        assert spark_connect.spec.server.core_limit is not None
+        assert spark_connect.spec.server.core_request.actual_instance == "1"
+        assert spark_connect.spec.server.core_limit.actual_instance == "1"
         assert spark_connect.spec.server.memory == "512m"
         assert spark_connect.spec.spark_conf["spark.connect.grpc.binding.address"] == "0.0.0.0"
         assert "spark.jars" not in spark_connect.spec.spark_conf
@@ -711,8 +715,8 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.executor.core_request.actual_instance == "2"
         assert spark_connect.spec.executor.core_limit.actual_instance == "2"
         assert spark_connect.spec.executor.memory == "4g"
-        assert spark_connect.spec.server.core_request is None
-        assert spark_connect.spec.server.core_limit is None
+        assert spark_connect.spec.server.core_request.actual_instance == "1"
+        assert spark_connect.spec.server.core_limit.actual_instance == "1"
 
     elif test_case.name == "spark connect cr with spark conf":
         assert spark_connect.spec.spark_conf["spark.jars"] == "local:///opt/spark/jars/my.jar"
@@ -731,8 +735,8 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.server.core_request.actual_instance == "2"
         assert spark_connect.spec.server.core_limit.actual_instance == "2"
         assert spark_connect.spec.server.memory == "2g"
-        assert spark_connect.spec.executor.core_request is None
-        assert spark_connect.spec.executor.core_limit is None
+        assert spark_connect.spec.executor.core_request.actual_instance == "1"
+        assert spark_connect.spec.executor.core_limit.actual_instance == "1"
 
     elif test_case.name == "spark connect cr with fractional driver cpu":
         assert spark_connect.spec.server.cores is None
@@ -1099,24 +1103,24 @@ def test_resolve_driver_resources(test_case: TestCase) -> None:
 
     print("Executing test:", test_case.name)
 
-    cores, memory = _resolve_driver_resources(
+    cpu, memory = _resolve_driver_resources(
         test_case.config.get("driver"),
     )
 
     assert test_case.expected_status == SUCCESS
 
     if test_case.name == "default driver resources":
-        assert cores == constants.DEFAULT_DRIVER_CPU
+        assert cpu == str(constants.DEFAULT_DRIVER_CPU)
         assert memory == _memory_kubernetes_to_spark(
             constants.DEFAULT_DRIVER_MEMORY,
         )
 
     elif test_case.name == "custom driver resources":
-        assert cores == 2
+        assert cpu == "2"
         assert memory == "4g"
 
     elif test_case.name == "fractional driver memory":
-        assert cores == 2
+        assert cpu == "2"
         assert memory == "1536m"
 
     print("test execution complete")
@@ -1176,7 +1180,7 @@ def test_resolve_executor_resources(test_case: TestCase) -> None:
 
     print("Executing test:", test_case.name)
 
-    instances, cores, memory = _resolve_executor_resources(
+    instances, cpu, memory = _resolve_executor_resources(
         executor=test_case.config.get("executor"),
         num_executors=test_case.config.get("num_executors"),
         resources_per_executor=test_case.config.get("resources_per_executor"),
@@ -1186,24 +1190,24 @@ def test_resolve_executor_resources(test_case: TestCase) -> None:
 
     if test_case.name == "default executor resources":
         assert instances == constants.DEFAULT_NUM_EXECUTORS
-        assert cores == constants.DEFAULT_EXECUTOR_CPU
+        assert cpu == str(constants.DEFAULT_EXECUTOR_CPU)
         assert memory == _memory_kubernetes_to_spark(
             constants.DEFAULT_EXECUTOR_MEMORY,
         )
 
     elif test_case.name == "simple executor parameters":
         assert instances == 3
-        assert cores == 2
+        assert cpu == "2"
         assert memory == "4g"
 
     elif test_case.name == "executor configuration precedence":
         assert instances == 5
-        assert cores == 8
+        assert cpu == "8"
         assert memory == "16g"
 
     elif test_case.name == "fractional executor memory":
         assert instances == constants.DEFAULT_NUM_EXECUTORS
-        assert cores == 2
+        assert cpu == "2"
         assert memory == "1536m"
 
     print("test execution complete")
@@ -1335,7 +1339,9 @@ def test_get_spark_job_driver_spec(test_case: TestCase) -> None:
 
     assert test_case.expected_status == SUCCESS
 
-    assert spec.cores == constants.DEFAULT_DRIVER_CPU
+    assert spec.cores is None
+    assert spec.core_request == str(constants.DEFAULT_DRIVER_CPU)
+    assert spec.core_limit == str(constants.DEFAULT_DRIVER_CPU)
     assert spec.memory == _memory_kubernetes_to_spark(
         constants.DEFAULT_DRIVER_MEMORY,
     )
@@ -1482,7 +1488,9 @@ def test_get_spark_job_executor_spec(test_case: TestCase) -> None:
     assert test_case.expected_status == SUCCESS
 
     assert spec.instances == constants.DEFAULT_NUM_EXECUTORS
-    assert spec.cores == constants.DEFAULT_EXECUTOR_CPU
+    assert spec.cores is None
+    assert spec.core_request == str(constants.DEFAULT_EXECUTOR_CPU)
+    assert spec.core_limit == str(constants.DEFAULT_EXECUTOR_CPU)
     assert spec.memory == _memory_kubernetes_to_spark(
         constants.DEFAULT_EXECUTOR_MEMORY,
     )
@@ -1583,7 +1591,9 @@ def test_get_spark_application_cr_from_file_job(test_case: TestCase, mock_k8s_ba
     if test_case.name == "minimal file job":
         assert app.spec.main_application_file == test_case.config["main_file"]
 
-        assert app.spec.driver.cores == constants.DEFAULT_DRIVER_CPU
+        assert app.spec.driver.cores is None
+        assert app.spec.driver.core_request == str(constants.DEFAULT_DRIVER_CPU)
+        assert app.spec.driver.core_limit == str(constants.DEFAULT_DRIVER_CPU)
         assert app.spec.driver.memory == _memory_kubernetes_to_spark(
             constants.DEFAULT_DRIVER_MEMORY,
         )
@@ -1593,7 +1603,9 @@ def test_get_spark_application_cr_from_file_job(test_case: TestCase, mock_k8s_ba
 
     elif test_case.name == "file job with executor configuration":
         assert app.spec.executor.instances == 3
-        assert app.spec.executor.cores == 2
+        assert app.spec.executor.cores is None
+        assert app.spec.executor.core_request == "2"
+        assert app.spec.executor.core_limit == "2"
         assert app.spec.executor.memory == "4g"
 
     elif test_case.name == "build spark application with options":
@@ -1725,7 +1737,9 @@ def test_get_spark_application_cr_from_func_job(
 
     elif test_case.name == "function job with executor configuration":
         assert app.spec.executor.instances == 3
-        assert app.spec.executor.cores == 2
+        assert app.spec.executor.cores is None
+        assert app.spec.executor.core_request == "2"
+        assert app.spec.executor.core_limit == "2"
         assert app.spec.executor.memory == "4g"
 
     elif test_case.name == "build spark application from function with options":
