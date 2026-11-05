@@ -101,6 +101,29 @@ Request GPU resources:
        ),
    )
 
+Configuring Resource Requests and Limits
+----------------------------------------
+
+By default, a resource dictionary applies the same values to Kubernetes requests and limits.
+Use ``Resources`` when a workload needs separate reservations and burst limits:
+
+.. code-block:: python
+
+   from kubeflow.trainer import CustomTrainer, Resources
+
+   client.train(
+       trainer=CustomTrainer(
+           func=train,
+           resources_per_node=Resources(
+               requests={"cpu": 4, "memory": "8Gi"},
+               limits={"cpu": 8, "memory": "16Gi"},
+           ),
+       ),
+   )
+
+This configuration is specific to Kubernetes scheduling. The requested resources are reserved
+for each training node, while limits define the maximum resources each node can consume.
+
 Tips and Best Practices
 -----------------------
 

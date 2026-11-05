@@ -445,6 +445,19 @@ def test_get_runtime_packages(container_backend):
             },
         ),
         TestCase(
+            name="train with GPU resource limits",
+            expected_status=SUCCESS,
+            config={
+                "num_nodes": 1,
+                "resources_per_node": types.Resources(
+                    requests={"gpu": "2"},
+                    limits={"gpu": "4"},
+                ),
+                "expected_containers": 1,
+                "expected_nproc_per_node": 4,
+            },
+        ),
+        TestCase(
             name="train multi-node with GPUs",
             expected_status=SUCCESS,
             config={

@@ -18,8 +18,31 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
+from pydantic import BaseModel, Field
+
 import kubeflow.common.constants as common_constants
 from kubeflow.trainer.constants import constants
+
+
+class Resources(BaseModel):
+    """Resource requests and limits for each training node.
+
+    Use separate requests and limits when a workload needs burst capacity without
+    reserving its peak usage for its entire lifetime.
+
+    Args:
+        requests: Resources reserved for each training node.
+        limits: Maximum resources available to each training node.
+    """
+
+    requests: dict[str, str | int] | None = Field(
+        default=None,
+        description="Resources reserved for each training node.",
+    )
+    limits: dict[str, str | int] | None = Field(
+        default=None,
+        description="Maximum resources available to each training node.",
+    )
 
 
 # Configuration for the Custom Trainer.
@@ -38,7 +61,8 @@ class CustomTrainer:
             Python packages. The first URL will be the index-url, and remaining ones
             are extra-index-urls.
         num_nodes (`Optional[int]`): The number of nodes to use for training.
-        resources_per_node (`Optional[dict]`): The computing resources to allocate per node.
+        resources_per_node: The computing resources to allocate per node. A dictionary applies
+            the same values to requests and limits. Use Resources to configure them separately.
           ```python
           resources_per_node = {"gpu": 4, "cpu": 5, "memory": "10G"}
           ```
@@ -58,7 +82,7 @@ class CustomTrainer:
         default_factory=lambda: list(constants.DEFAULT_PIP_INDEX_URLS)
     )
     num_nodes: int | None = None
-    resources_per_node: dict | None = None
+    resources_per_node: dict | Resources | None = None
     env: dict[str, str] | None = None
 
 
@@ -71,7 +95,8 @@ class CustomTrainerContainer:
     Args:
         image (`str`): The container image that encapsulates the entire model training process.
         num_nodes (`Optional[int]`): The number of nodes to use for training.
-        resources_per_node (`Optional[dict]`): The computing resources to allocate per node.
+        resources_per_node: The computing resources to allocate per node. A dictionary applies
+            the same values to requests and limits. Use Resources to configure them separately.
           ```python
           resources_per_node = {"gpu": 4, "cpu": 5, "memory": "10G"}
           ```
@@ -85,7 +110,7 @@ class CustomTrainerContainer:
 
     image: str
     num_nodes: int | None = None
-    resources_per_node: dict | None = None
+    resources_per_node: dict | Resources | None = None
     env: dict[str, str] | None = None
 
 
@@ -214,7 +239,8 @@ class TorchTuneConfig:
             including LoRA/QLoRA/DoRA, etc.
         dataset_preprocess_config (`Optional[TorchTuneInstructDataset]`):
             Configuration for the dataset preprocessing.
-        resources_per_node (`Optional[Dict]`): The computing resources to allocate per node.
+        resources_per_node: The computing resources to allocate per node. A dictionary applies
+            the same values to requests and limits. Use Resources to configure them separately.
     """
 
     dtype: DataType | None = None
@@ -224,7 +250,7 @@ class TorchTuneConfig:
     num_nodes: int | None = None
     peft_config: LoraConfig | None = None
     dataset_preprocess_config: TorchTuneInstructDataset | None = None
-    resources_per_node: dict | None = None
+    resources_per_node: dict | Resources | None = None
 
 
 # Configuration for the Builtin Trainer.
