@@ -130,7 +130,36 @@ def _resolve_driver_resources(
                 driver.resources["memory"],
             )
 
-    return cores, memory
+def _resolve_driver_resources(
+    driver: Driver | None = None,
+) -> tuple[str, str]:
+    """Resolve driver resource configuration.
+
+    Args:
+        driver: Driver configuration.
+
+    Returns:
+        Tuple of (cpu, memory).
+
+    Raises:
+        ValueError:
+            If the configured CPU or memory values are invalid.
+    """
+
+    cpu = str(constants.DEFAULT_DRIVER_CPU)
+    memory = _memory_kubernetes_to_spark(constants.DEFAULT_DRIVER_MEMORY)
+
+    if driver and driver.resources:
+        if "cpu" in driver.resources:
+            _validate_cpu_value(driver.resources["cpu"])
+            cpu = str(driver.resources["cpu"]).strip()
+
+        if "memory" in driver.resources:
+            memory = _memory_kubernetes_to_spark(
+                driver.resources["memory"],
+            )
+
+    return cpu, memory
 
 
 def _get_executor_resource_dict(
