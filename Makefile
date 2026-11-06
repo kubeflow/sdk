@@ -21,6 +21,23 @@ SHELL = /usr/bin/env bash -o pipefail
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 VENV_DIR := $(PROJECT_DIR)/.venv
 
+# Location to install E2E tool binaries to
+LOCALBIN ?= $(PROJECT_DIR)/bin
+
+# Tool versions
+K8S_VERSION ?= 1.32.11
+KIND_VERSION ?= v0.31.0
+HELM_VERSION ?= v3.19.0
+
+# Tool binaries
+KIND ?= $(LOCALBIN)/kind
+KUBECTL ?= $(LOCALBIN)/kubectl
+HELM ?= $(LOCALBIN)/helm
+
+# Host platform in the form used by the Kind, kubectl and Helm release downloads.
+HOST_OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
+HOST_ARCH := $(shell uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')
+
 # Setting SED for compatibility with macos
 ifeq ($(shell command -v gsed 2>/dev/null),)
     SED ?= $(shell command -v sed)
@@ -129,17 +146,51 @@ else
 	@uv run coverage html
 endif
 
+##@ Dependencies
+
+$(LOCALBIN):
+	@mkdir -p $(LOCALBIN)
+
+.PHONY: kind
+kind: $(LOCALBIN) ## Download Kind binary if required.
+	@if ! $(KIND) version 2>/dev/null | grep -q "kind $(KIND_VERSION) "; then \
+		echo "Installing Kind $(KIND_VERSION) into $(LOCALBIN)"; \
+		curl -sSfLo $(KIND) https://kind.sigs.k8s.io/dl/$(KIND_VERSION)/kind-$(HOST_OS)-$(HOST_ARCH); \
+		chmod +x $(KIND); \
+	fi
+
+.PHONY: kubectl
+kubectl: $(LOCALBIN) ## Download kubectl binary matching K8S_VERSION if required.
+	@if ! $(KUBECTL) version --client -o yaml 2>/dev/null | grep -q "gitVersion: v$(K8S_VERSION)$$"; then \
+		echo "Installing kubectl v$(K8S_VERSION) into $(LOCALBIN)"; \
+		curl -sSfLo $(KUBECTL) https://dl.k8s.io/release/v$(K8S_VERSION)/bin/$(HOST_OS)/$(HOST_ARCH)/kubectl; \
+		chmod +x $(KUBECTL); \
+	fi
+
+.PHONY: helm
+helm: $(LOCALBIN) ## Download Helm binary if required.
+	@if ! $(HELM) version --short 2>/dev/null | grep -q "^$(HELM_VERSION)+"; then \
+		echo "Installing Helm $(HELM_VERSION) into $(LOCALBIN)"; \
+		tmp_dir=$$(mktemp -d); \
+		curl -sSfL https://get.helm.sh/helm-$(HELM_VERSION)-$(HOST_OS)-$(HOST_ARCH).tar.gz | tar -xz -C $$tmp_dir; \
+		mv $$tmp_dir/$(HOST_OS)-$(HOST_ARCH)/helm $(HELM); \
+		rm -rf $$tmp_dir; \
+	fi
+
 ##@ E2E Testing
 
 .PHONY: test-e2e-setup-cluster
-test-e2e-setup-cluster:  ## Setup Kind cluster for Spark E2E tests
+test-e2e-setup-cluster: kind kubectl helm ## Setup Kind cluster for Spark E2E tests
 	@echo "Setting up E2E test cluster..."
 	@K8S_VERSION=$(K8S_VERSION) \
 	 SPARK_TEST_CLUSTER=$(SPARK_TEST_CLUSTER) \
 	 SPARK_TEST_NAMESPACE=$(SPARK_TEST_NAMESPACE) \
-	 SPARK_OPERATOR_VERSION=$(SPARK_OPERATOR_VERSION) \
-	 KIND=$(KIND) \
 	 ./hack/e2e-setup-cluster.sh
+
+.PHONY: test-e2e-delete-cluster
+test-e2e-delete-cluster: kind ## Delete the Kind cluster used for Spark E2E tests
+	@SPARK_TEST_CLUSTER=$(SPARK_TEST_CLUSTER) ./hack/e2e-setup-cluster.sh --delete
+
 .PHONY: test-scripts
 test-scripts: uv-venv  ## Run GitHub Actions script tests
 	@uv sync
