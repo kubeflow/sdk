@@ -1569,7 +1569,7 @@ requires-dist = [
     { name = "model-registry", marker = "extra == 'hub'", specifier = ">=0.3.14,<0.4" },
     { name = "podman", marker = "extra == 'podman'", specifier = ">=5.6.0" },
     { name = "pydantic", specifier = ">=2.10.0" },
-    { name = "pyspark-client", marker = "extra == 'spark'", specifier = "==4.2.0" },
+    { name = "pyspark-client", marker = "extra == 'spark'", specifier = "==4.2.1" },
     { name = "requests", specifier = ">=2.25.0" },
 ]
 provides-extras = ["docker", "hub", "pipelines", "podman", "spark"]
@@ -3015,7 +3015,7 @@ wheels = [
 
 [[package]]
 name = "pyspark-client"
-version = "4.2.0"
+version = "4.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "googleapis-common-protos" },
@@ -3030,7 +3030,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "zstandard" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/31/1b/b7fc2cb3cb34a9d71790bd556ac5802c2d93e861c6af850f6e97e3e92b7c/pyspark_client-4.2.0.tar.gz", hash = "sha256:4008fe5e537bf0e57e7243d03abfaac089b7c87316bd07024784d8ea726f5d41", size = 1675557, upload-time = "2026-07-14T22:41:58.134Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9f/a0/2bfff9d10cacc2e87765456e2590a65e623872cb3b841bf18fea01da9e62/pyspark_client-4.2.1.tar.gz", hash = "sha256:f009f71e1fd0f1efa7e252e18d848e612bc25fcda962a25ed67250dae2af90f5", size = 1678691, upload-time = "2026-10-27T17:33:04.173Z" }
 
 [[package]]
 name = "pytest"
