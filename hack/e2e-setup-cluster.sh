@@ -17,6 +17,7 @@ set -euo pipefail
 
 CLUSTER_NAME="${SPARK_TEST_CLUSTER:-spark-test}"
 NAMESPACE="${SPARK_TEST_NAMESPACE:-spark-test}"
+SPARK_OPERATOR_CHART_PATH="${SPARK_OPERATOR_CHART_PATH:-}"
 SPARK_OPERATOR_VERSION="${SPARK_OPERATOR_VERSION:-2.1.0}"
 SPARK_OPERATOR_IMAGE_TAG="${SPARK_OPERATOR_IMAGE_TAG:-latest}"
 K8S_VERSION="${K8S_VERSION:-1.32.0}"
@@ -109,7 +110,21 @@ install_spark_operator() {
     local install_start
     install_start=$(date +%s)
     phase_start "install_spark_operator"
-    log_info "Installing Spark Operator v${SPARK_OPERATOR_VERSION}..."
+    local chart_ref
+    local chart_version_args=()
+    if [[ -n "$SPARK_OPERATOR_CHART_PATH" ]]; then
+        chart_ref="$SPARK_OPERATOR_CHART_PATH"
+        log_info "Installing Spark Operator from local chart at ${chart_ref}..."
+    else
+        chart_ref="spark-operator/spark-operator"
+        chart_version_args=(--version "$SPARK_OPERATOR_VERSION")
+        log_info "Installing Spark Operator v${SPARK_OPERATOR_VERSION}..."
+
+        phase_start "helm_repo_update"
+        helm repo add spark-operator https://kubeflow.github.io/spark-operator 2>/dev/null || true
+        helm repo update
+        phase_end "helm_repo_update"
+    fi
 
     kubectl config use-context "kind-${CLUSTER_NAME}" 2>/dev/null || true
 
@@ -123,11 +138,6 @@ install_spark_operator() {
             fi
         fi
     fi
-
-    phase_start "helm_repo_update"
-    helm repo add spark-operator https://kubeflow.github.io/spark-operator 2>/dev/null || true
-    helm repo update
-    phase_end "helm_repo_update"
 
     phase_start "helm_install_or_upgrade"
     local helm_extra_args=(
@@ -143,17 +153,17 @@ install_spark_operator() {
     local helm_ret=0
     if helm list -n spark-operator 2>/dev/null | grep -q spark-operator; then
         log_info "Spark Operator already installed, upgrading..."
-        helm upgrade spark-operator spark-operator/spark-operator \
+        helm upgrade spark-operator "$chart_ref" \
             --namespace spark-operator \
-            --version "$SPARK_OPERATOR_VERSION" \
+            "${chart_version_args[@]}" \
             "${helm_extra_args[@]}" \
             --timeout "$helm_timeout" \
             --wait || helm_ret=$?
     else
-        helm install spark-operator spark-operator/spark-operator \
+        helm install spark-operator "$chart_ref" \
             --namespace spark-operator \
             --create-namespace \
-            --version "$SPARK_OPERATOR_VERSION" \
+            "${chart_version_args[@]}" \
             "${helm_extra_args[@]}" \
             --timeout "$helm_timeout" \
             --wait || helm_ret=$?
@@ -320,7 +330,11 @@ print_status() {
     echo "Cluster: $CLUSTER_NAME"
     echo "Kubernetes version: $K8S_VERSION"
     echo "Test namespace: $NAMESPACE"
-    echo "Spark Operator version: $SPARK_OPERATOR_VERSION"
+    if [[ -n "$SPARK_OPERATOR_CHART_PATH" ]]; then
+        echo "Spark Operator chart path: $SPARK_OPERATOR_CHART_PATH"
+    else
+        echo "Spark Operator version: $SPARK_OPERATOR_VERSION"
+    fi
     echo "Image tag: $SPARK_OPERATOR_IMAGE_TAG"
     echo ""
     echo "Spark Operator Deployment:"
