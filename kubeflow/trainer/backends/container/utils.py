@@ -30,6 +30,22 @@ from kubeflow.trainer.types import types
 logger = logging.getLogger(__name__)
 
 
+def workdir_path(job_name: str) -> str:
+    """
+    Return the host working directory path for a training job.
+
+    The path is under ~/.kubeflow/trainer/containers/<job_name> and is not created.
+
+    Args:
+        job_name: Name of the training job.
+
+    Returns:
+        Absolute path of the working directory.
+    """
+    home_base = Path.home() / ".kubeflow" / "trainer" / "containers"
+    return str((home_base / f"{job_name}").resolve())
+
+
 def create_workdir(job_name: str) -> str:
     """
     Create per-job working directory on host.
@@ -44,7 +60,7 @@ def create_workdir(job_name: str) -> str:
     """
     home_base = Path.home() / ".kubeflow" / "trainer" / "containers"
     home_base.mkdir(parents=True, exist_ok=True)
-    workdir = str((home_base / f"{job_name}").resolve())
+    workdir = workdir_path(job_name)
     os.makedirs(workdir, exist_ok=True)
     return workdir
 
