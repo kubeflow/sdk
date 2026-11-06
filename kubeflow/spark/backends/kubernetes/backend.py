@@ -1210,9 +1210,7 @@ class KubernetesBackend(RuntimeBackend):
         if polling_interval <= 0:
             raise ValueError("polling_interval must be positive.")
 
-        # An invalid or empty status can never match, so fail fast instead of polling until timeout.
         valid_statuses = set(SparkJobStatus)
-        # A bare str is iterable, so set("Completed") would yield characters rather than a status.
         if isinstance(status, str):
             raise ValueError(
                 f"status must be a set of SparkJobStatus values, e.g. "
