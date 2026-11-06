@@ -18,6 +18,7 @@ set -euo pipefail
 CLUSTER_NAME="${SPARK_TEST_CLUSTER:-spark-test}"
 NAMESPACE="${SPARK_TEST_NAMESPACE:-spark-test}"
 SPARK_OPERATOR_VERSION="${SPARK_OPERATOR_VERSION:-2.1.0}"
+SPARK_OPERATOR_CHART_PATH="${SPARK_OPERATOR_CHART_PATH:-}"
 SPARK_OPERATOR_IMAGE_TAG="${SPARK_OPERATOR_IMAGE_TAG:-latest}"
 K8S_VERSION="${K8S_VERSION:-1.32.0}"
 KIND_BIN="${KIND:-kind}"
@@ -130,6 +131,20 @@ install_spark_operator() {
     phase_end "helm_repo_update"
 
     phase_start "helm_install_or_upgrade"
+    local helm_chart="spark-operator/spark-operator"
+    local helm_chart_args=(--version "$SPARK_OPERATOR_VERSION")
+
+    if [[ -n "$SPARK_OPERATOR_CHART_PATH" ]]; then
+        if [[ ! -f "$SPARK_OPERATOR_CHART_PATH/Chart.yaml" ]]; then
+            log_error "Invalid Spark Operator Helm chart path: $SPARK_OPERATOR_CHART_PATH"
+            exit 1
+        fi
+
+        helm_chart="$SPARK_OPERATOR_CHART_PATH"
+        helm_chart_args=()
+        log_info "Using local Spark Operator Helm chart: $helm_chart"
+    fi
+
     local helm_extra_args=(
         --set webhook.enable=true
         --set image.registry=ghcr.io
@@ -143,17 +158,17 @@ install_spark_operator() {
     local helm_ret=0
     if helm list -n spark-operator 2>/dev/null | grep -q spark-operator; then
         log_info "Spark Operator already installed, upgrading..."
-        helm upgrade spark-operator spark-operator/spark-operator \
+        helm upgrade spark-operator "$helm_chart" \
             --namespace spark-operator \
-            --version "$SPARK_OPERATOR_VERSION" \
+            "${helm_chart_args[@]}" \
             "${helm_extra_args[@]}" \
             --timeout "$helm_timeout" \
             --wait || helm_ret=$?
     else
-        helm install spark-operator spark-operator/spark-operator \
+        helm install spark-operator "$helm_chart" \
             --namespace spark-operator \
             --create-namespace \
-            --version "$SPARK_OPERATOR_VERSION" \
+            "${helm_chart_args[@]}" \
             "${helm_extra_args[@]}" \
             --timeout "$helm_timeout" \
             --wait || helm_ret=$?

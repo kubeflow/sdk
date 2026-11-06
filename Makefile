@@ -136,8 +136,9 @@ test-e2e-setup-cluster:  ## Setup Kind cluster for Spark E2E tests
 	@echo "Setting up E2E test cluster..."
 	@K8S_VERSION=$(K8S_VERSION) \
 	 SPARK_TEST_CLUSTER=$(SPARK_TEST_CLUSTER) \
-	 SPARK_TEST_NAMESPACE=$(SPARK_TEST_NAMESPACE) \
 	 SPARK_OPERATOR_VERSION=$(SPARK_OPERATOR_VERSION) \
+	 SPARK_TEST_NAMESPACE=$(SPARK_TEST_NAMESPACE) \
+	 SPARK_OPERATOR_CHART_PATH=$(SPARK_OPERATOR_CHART_PATH) \
 	 KIND=$(KIND) \
 	 ./hack/e2e-setup-cluster.sh
 .PHONY: test-scripts

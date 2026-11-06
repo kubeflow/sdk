@@ -84,6 +84,7 @@ jobs:
           SPARK_TEST_CLUSTER: spark-test
           SPARK_TEST_NAMESPACE: spark-test
           SPARK_OPERATOR_IMAGE_TAG: local
+          SPARK_OPERATOR_CHART_PATH: ./spark-operator/charts/spark-operator-chart
         timeout-minutes: 15
 
       - name: Run E2E test for Spark example Notebooks
