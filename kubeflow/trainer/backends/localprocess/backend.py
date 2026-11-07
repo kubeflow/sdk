@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable, Iterator
+import copy
 from datetime import datetime
 import logging
 import random
@@ -102,6 +103,9 @@ class LocalProcessBackend(RuntimeBackend):
         # localprocess backend only supports CustomTrainer
         if not isinstance(trainer, types.CustomTrainer):
             raise ValueError("CustomTrainer must be set with LocalProcessBackend")
+
+        # Keep job-specific commands separate from the caller and earlier jobs.
+        runtime = copy.deepcopy(runtime)
 
         # create temp dir
         venv_dir = tempfile.mkdtemp(prefix=trainjob_name)
