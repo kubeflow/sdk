@@ -185,6 +185,7 @@ test-e2e-setup-cluster: kind kubectl helm ## Setup Kind cluster for Spark E2E te
 	@K8S_VERSION=$(K8S_VERSION) \
 	 SPARK_TEST_CLUSTER=$(SPARK_TEST_CLUSTER) \
 	 SPARK_TEST_NAMESPACE=$(SPARK_TEST_NAMESPACE) \
+	 SPARK_OPERATOR_NAMESPACE=$(SPARK_OPERATOR_NAMESPACE) \
 	 ./hack/e2e-setup-cluster.sh
 
 .PHONY: test-e2e-delete-cluster
@@ -225,5 +226,5 @@ NOTEBOOK_OUTPUT=$(PROJECT_DIR)/artifacts/notebooks/out.ipynb
 PAPERMILL_PARAMS=
 PAPERMILL_TIMEOUT=900
 .PHONY: test-e2e-notebook
-test-e2e-notebook: ## Run Jupyter Notebook with Papermill.
-	NOTEBOOK_INPUT=$(NOTEBOOK_INPUT) NOTEBOOK_OUTPUT=$(NOTEBOOK_OUTPUT) PAPERMILL_PARAMS="$(PAPERMILL_PARAMS)" PAPERMILL_TIMEOUT=$(PAPERMILL_TIMEOUT) ./hack/e2e-run-notebook.sh
+test-e2e-notebook: kubectl ## Run Jupyter Notebook with Papermill.
+	PATH="$(LOCALBIN):$$PATH" NOTEBOOK_INPUT=$(NOTEBOOK_INPUT) NOTEBOOK_OUTPUT=$(NOTEBOOK_OUTPUT) PAPERMILL_PARAMS="$(PAPERMILL_PARAMS)" PAPERMILL_TIMEOUT=$(PAPERMILL_TIMEOUT) ./hack/e2e-run-notebook.sh

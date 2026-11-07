@@ -29,7 +29,7 @@ SPARK_OPERATOR_CHART="${SPARK_OPERATOR_DIR}/charts/spark-operator-chart"
 export PATH="${BIN_DIR}:${PATH}"
 
 SPARK_OPERATOR_RELEASE="spark-operator"
-SPARK_OPERATOR_NAMESPACE="spark-operator"
+SPARK_OPERATOR_NAMESPACE="${SPARK_OPERATOR_NAMESPACE:-spark-operator}"
 
 IMAGE_TAG="local"
 CONTROLLER_IMAGE_REPOSITORY="kubeflow/spark-operator/controller"
@@ -128,6 +128,11 @@ current_kind_cluster() {
     echo "$name"
 }
 
+cluster_server_version() {
+    kubectl version -o yaml 2>/dev/null |
+        awk '/serverVersion/ {f=1} f && /gitVersion/ {print $2; exit}'
+}
+
 ensure_cluster() {
     phase_start "ensure_cluster"
     local existing
@@ -135,6 +140,12 @@ ensure_cluster() {
         KIND_CLUSTER_NAME="$existing"
         CLUSTER_REUSED=true
         log_info "Reusing Kind cluster from current kubectl context: kind-${KIND_CLUSTER_NAME}"
+        local server_version
+        server_version="$(cluster_server_version)"
+        if [[ "$server_version" != "v${K8S_VERSION}" ]]; then
+            log_warn "Reused cluster runs Kubernetes ${server_version:-unknown}, but K8S_VERSION=${K8S_VERSION} was requested"
+            log_warn "Run 'make test-e2e-delete-cluster' or switch kubectl context to test against a fresh v${K8S_VERSION} cluster"
+        fi
         kubectl get nodes
         phase_end "ensure_cluster (reused)"
         return 0
@@ -279,7 +290,7 @@ print_status() {
     log_info "=== Cluster Status ==="
     if [[ "$CLUSTER_REUSED" == true ]]; then
         echo "Cluster: kind-$KIND_CLUSTER_NAME (reused from current kubectl context)"
-        echo "Kubernetes version: $(kubectl version -o yaml 2>/dev/null | awk '/serverVersion/ {f=1} f && /gitVersion/ {print $2; exit}')"
+        echo "Kubernetes version: $(cluster_server_version)"
     else
         echo "Cluster: kind-$KIND_CLUSTER_NAME"
         echo "Kubernetes version: $K8S_VERSION"
