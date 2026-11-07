@@ -260,6 +260,9 @@ Install container support: `pip install kubeflow[docker]` or `pip install kubefl
 ```python
 from kubeflow.trainer import TrainerClient, ContainerBackendConfig, CustomTrainer
 
+def train_fn():
+    print("Local training started!")
+
 # Switch to local container execution
 client = TrainerClient(backend_config=ContainerBackendConfig())
 
