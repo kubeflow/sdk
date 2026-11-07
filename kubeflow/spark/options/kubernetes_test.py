@@ -23,6 +23,7 @@ from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.backends.kubernetes.backend import KubernetesBackend
 from kubeflow.spark.options import (
     Annotations,
+    Dependencies,
     Labels,
     Name,
     NodeSelector,
@@ -660,5 +661,102 @@ def test_name_option_incompatible_backend(
             match=test_case.expected_output,
         ):
             option(resource, mock_non_k8s_backend)
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="apply jars only",
+            expected_status=SUCCESS,
+            config={
+                "kwargs": {"jars": ["local:///opt/spark/jars/my-plugin.jar"]},
+            },
+            expected_output={
+                "jars": ["local:///opt/spark/jars/my-plugin.jar"],
+                "packages": None,
+                "exclude_packages": None,
+                "repositories": None,
+            },
+        ),
+        TestCase(
+            name="apply all dependency types",
+            expected_status=SUCCESS,
+            config={
+                "kwargs": {
+                    "jars": ["https://repo.example.com/a.jar"],
+                    "packages": ["io.delta:delta-spark_2.13:4.0.0"],
+                    "exclude_packages": ["org.slf4j:slf4j-api"],
+                    "repositories": ["https://maven.internal.example.com/releases"],
+                },
+            },
+            expected_output={
+                "jars": ["https://repo.example.com/a.jar"],
+                "packages": ["io.delta:delta-spark_2.13:4.0.0"],
+                "exclude_packages": ["org.slf4j:slf4j-api"],
+                "repositories": ["https://maven.internal.example.com/releases"],
+            },
+        ),
+    ],
+)
+def test_dependencies_apply_to_crd(
+    test_case: TestCase,
+    mock_k8s_backend,
+    spark_connect_model,
+    spark_application_model,
+):
+    """Test Dependencies option sets .spec.deps on both resource types."""
+
+    print("Executing test:", test_case.name)
+
+    option = Dependencies(**test_case.config["kwargs"])
+
+    for resource, deps_model in [
+        (spark_connect_model, models.SparkV1alpha1Dependencies),
+        (spark_application_model, models.SparkV1beta2Dependencies),
+    ]:
+        assert resource.spec.deps is None
+
+        option(resource, mock_k8s_backend)
+
+        assert isinstance(resource.spec.deps, deps_model)
+        for field_name, expected in test_case.expected_output.items():
+            assert getattr(resource.spec.deps, field_name) == expected
+
+    assert test_case.expected_status == SUCCESS
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="incompatible backend",
+            expected_status=FAILED,
+            expected_error=ValueError,
+            expected_output="not compatible",
+            config={"kwargs": {"jars": ["local:///a.jar"]}},
+        ),
+    ],
+)
+def test_dependencies_incompatible_backend(
+    test_case: TestCase,
+    mock_non_k8s_backend,
+    spark_connect_model,
+    spark_application_model,
+):
+    """Test Dependencies option with incompatible backend."""
+
+    print("Executing test:", test_case.name)
+
+    option = Dependencies(**test_case.config["kwargs"])
+
+    for resource in [spark_connect_model, spark_application_model]:
+        with pytest.raises(test_case.expected_error, match=test_case.expected_output):
+            option(resource, mock_non_k8s_backend)
+        assert resource.spec.deps is None
 
     print("test execution complete")
