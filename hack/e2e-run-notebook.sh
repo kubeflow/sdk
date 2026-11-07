@@ -47,11 +47,11 @@ print_results() {
         echo "=== Spark Pods in ${namespace} ==="
         kubectl get pods -n "${namespace}" || true
         echo "=== SparkConnect Resources in ${namespace} ==="
-        kubectl get sparkconnect -n "${namespace}" 2>/dev/null || true
+        kubectl get sparkconnects -n "${namespace}" 2>/dev/null || true
         echo "=== SparkApplication Resources in ${namespace} ==="
         kubectl get sparkapplications -n "${namespace}" 2>/dev/null || true
         echo "=== Spark Connect Server Logs in ${namespace} ==="
-        kubectl logs -n "${namespace}" -l app.kubernetes.io/component=server --tail=100 || true
+        kubectl logs -n "${namespace}" -l spark-role=connect-server --tail=100 || true
         echo "=== Spark Driver Logs in ${namespace} ==="
         kubectl logs -n "${namespace}" -l spark-role=driver --tail=100 || true
     else
