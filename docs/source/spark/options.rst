@@ -121,6 +121,16 @@ default ``apache/spark:4.0.4`` image, already bundle Spark Connect.
 ``spark.jars``, ``spark.jars.packages``, ``spark.jars.excludes`` or
 ``spark.jars.repositories`` in ``spark_conf``.
 
+.. note::
+
+   **Operator version.** With ``connect()``, ``Dependencies`` needs a Spark Operator
+   whose ``SparkConnect`` CRD has ``.spec.deps``: a release newer than v2.5.2 that
+   includes `kubeflow/spark-operator#3120
+   <https://github.com/kubeflow/spark-operator/pull/3120>`_. Upgrade the operator's
+   CRDs as well as the controller, because Helm does not upgrade CRDs on
+   ``helm upgrade``. ``submit_job()`` works with any supported Spark Operator release,
+   because ``SparkApplication`` has always had ``.spec.deps``.
+
 Custom Name
 -----------
 
