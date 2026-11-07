@@ -167,7 +167,8 @@ class TrainerClient:
             The unique name generated for the TrainJob.
 
         Raises:
-            ValueError: If input arguments are invalid.
+            ValueError: If input arguments are invalid, for example when CustomTrainer
+                func_args contain a value that cannot be passed to the training function.
             TimeoutError: Timeout occurred while creating the TrainJob.
             RuntimeError: Failed to create the TrainJob.
 
@@ -179,6 +180,9 @@ class TrainerClient:
             >>> job_id = client.train(runtime="torch-distributed", trainer=CustomTrainer(func=train_fn))
             >>> print(job_id)
         """
+        if isinstance(trainer, types.CustomTrainer):
+            common_utils.validate_func_args(trainer.func_args)
+
         return self.backend.train(
             runtime=runtime,
             initializer=initializer,

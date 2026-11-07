@@ -16,6 +16,7 @@
 Unit tests for TrainerClient backend selection.
 """
 
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
@@ -23,6 +24,7 @@ import pytest
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.trainer.api.trainer_client import TrainerClient
 from kubeflow.trainer.backends.localprocess.types import LocalProcessBackendConfig
+from kubeflow.trainer.types import types
 
 
 @pytest.mark.parametrize(
@@ -70,3 +72,32 @@ def test_backend_selection(test_case):
         client = TrainerClient(backend_config=test_case["backend_config"])
         backend_name = client.backend.__class__.__name__
         assert backend_name == test_case["expected_backend"]
+
+
+def _train_fn(data_dir):
+    print(data_dir)
+
+
+def test_train_rejects_unsupported_func_args():
+    """TrainerClient.train fails before submission when func_args cannot be rendered."""
+    client = TrainerClient(backend_config=LocalProcessBackendConfig())
+    client.backend = Mock()
+
+    with pytest.raises(ValueError, match="func_args\\['data_dir'\\] has unsupported value"):
+        client.train(
+            trainer=types.CustomTrainer(func=_train_fn, func_args={"data_dir": Path("/data")})
+        )
+
+    client.backend.train.assert_not_called()
+
+
+def test_train_passes_literal_func_args_to_backend():
+    """TrainerClient.train forwards a CustomTrainer with literal func_args unchanged."""
+    client = TrainerClient(backend_config=LocalProcessBackendConfig())
+    client.backend = Mock()
+    trainer = types.CustomTrainer(func=_train_fn, func_args={"data_dir": "/data"})
+
+    client.train(trainer=trainer)
+
+    client.backend.train.assert_called_once()
+    assert client.backend.train.call_args.kwargs["trainer"] is trainer
