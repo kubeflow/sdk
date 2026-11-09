@@ -150,8 +150,7 @@ Want to test without a Kubernetes cluster? Use the local backend:
 
 .. code-block:: python
 
-   from kubeflow.trainer import TrainerClient
-   from kubeflow.trainer.backends.localprocess import LocalProcessBackendConfig
+   from kubeflow.trainer import LocalProcessBackendConfig, TrainerClient
 
    # Run locally instead of on Kubernetes
    client = TrainerClient(backend_config=LocalProcessBackendConfig())
