@@ -29,7 +29,7 @@ dependencies = [
   "kubernetes>=27.2.0,<36.0.0",       # 36.0.0 has multiple regressions; see kubernetes-client/python#2592, #2596
   "pydantic>=2.10.0",
   "requests>=2.25.0",
-  "kubeflow-trainer-api>=2.3.0,<2.4",
+  "kubeflow-trainer-api>=2.3.0,<2.5",
   "kubeflow-katib-api>=0.19.0,<0.20",
 ]
 
@@ -41,8 +41,8 @@ spark = [
   # Match major.minor of pyspark-client to Spark constants declared in kubeflow.spark.backends.kubernetes.constants
   # Ensure pyspark-client and the spark image align with the Spark version used in the Spark operator image
   # https://github.com/kubeflow/spark-operator/blob/master/Dockerfile#L17
-  "pyspark-client==4.0.4",
-  "kubeflow-spark-api>=2.4.0,<2.5",
+  "pyspark-client==4.2.1",
+  "kubeflow-spark-api>=2.4.0,<2.7",
 ]
 hub = ["model-registry>=0.3.14,<0.4"]
 pipelines = ["kfp[kubernetes]>=2.17.0,<2.18"]
