@@ -1612,7 +1612,7 @@ dependencies = [
 [[package]]
 name = "kubeflow-spark-api"
 version = "2.5.0rc0"
-source = { git = "https://github.com/kubeflow/spark-operator.git?subdirectory=api%2Fpython_api&rev=master#3dd93f7f0e1a1c81b5b5182ef519e72f50b9ca27" }
+source = { git = "https://github.com/kubeflow/spark-operator.git?subdirectory=api%2Fpython_api&rev=master#d016731891486919669002d87d142a93900a781b" }
 dependencies = [
     { name = "pydantic" },
 ]
