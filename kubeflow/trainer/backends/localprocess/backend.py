@@ -79,8 +79,8 @@ class LocalProcessBackend(RuntimeBackend):
         options: list | None = None,
     ) -> str:
         if runtime is None:
-            raise ValueError("Runtime must be provided for LocalProcessBackend")
-        if isinstance(runtime, str):
+            runtime = self.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
+        elif isinstance(runtime, str):
             runtime = self.get_runtime(runtime)
 
         # Process options to extract configuration
