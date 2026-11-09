@@ -70,3 +70,17 @@ def test_backend_selection(test_case):
         client = TrainerClient(backend_config=test_case["backend_config"])
         backend_name = client.backend.__class__.__name__
         assert backend_name == test_case["expected_backend"]
+
+
+def test_context_manager():
+    """Test TrainerClient context manager support."""
+    with (
+        patch.object(TrainerClient, "close") as mock_close,
+        patch("kubernetes.config.load_kube_config"),
+        patch("kubernetes.client.CustomObjectsApi"),
+        patch("kubernetes.client.CoreV1Api"),
+        TrainerClient() as client,
+    ):
+        assert isinstance(client, TrainerClient)
+
+    mock_close.assert_called_once()
