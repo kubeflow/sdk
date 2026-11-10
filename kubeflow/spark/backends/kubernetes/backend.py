@@ -115,10 +115,6 @@ class KubernetesBackend(RuntimeBackend):
         self.core_api = client.CoreV1Api()
         self.verify_backend()
 
-    # ------------------------------------------------------------------
-    # Spark Connect sessions
-    # ------------------------------------------------------------------
-
     def verify_backend(self) -> None:
         """Verify that the Spark Operator control plane exposes version metadata.
 
@@ -146,6 +142,10 @@ class KubernetesBackend(RuntimeBackend):
                 f"set the {common_constants.KUBEFLOW_SPARK_NAMESPACE_ENV_VAR} environment variable accordingly."
             )
             return
+
+    # ------------------------------------------------------------------
+    # Spark Connect sessions
+    # ------------------------------------------------------------------
 
     def _create_session(
         self,
