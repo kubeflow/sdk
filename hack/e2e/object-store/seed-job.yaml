@@ -41,7 +41,12 @@ spec:
               echo "Creating buckets: ${E2E_S3_BUCKETS}"
               for b in ${E2E_S3_BUCKETS}; do
                 echo "Ensuring bucket: ${b}"
-                aws --endpoint-url="${AWS_ENDPOINT_URL}" s3 mb "s3://${b}" || true
+                if ! aws --endpoint-url="${AWS_ENDPOINT_URL}" s3api head-bucket --bucket "${b}" >/dev/null 2>&1; then
+                  echo "Bucket ${b} does not exist, creating..."
+                  aws --endpoint-url="${AWS_ENDPOINT_URL}" s3 mb "s3://${b}"
+                fi
+                echo "Verifying bucket: ${b}"
+                aws --endpoint-url="${AWS_ENDPOINT_URL}" s3api head-bucket --bucket "${b}"
               done
 
               FIRST_BUCKET=$(echo "${E2E_S3_BUCKETS}" | awk '{print $1}')

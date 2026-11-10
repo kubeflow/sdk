@@ -76,15 +76,15 @@ PRIMARY_CLIENT_NS="${E2E_S3_CLIENT_NAMESPACES%% *}"
 
 kubectl delete configmap e2e-s3-seed-files -n "${PRIMARY_CLIENT_NS}" --ignore-not-found
 if [ -n "${E2E_S3_SEED}" ]; then
-  CM_CMD="kubectl create configmap e2e-s3-seed-files -n ${PRIMARY_CLIENT_NS}"
+  cm_cmd=(kubectl create configmap e2e-s3-seed-files -n "${PRIMARY_CLIENT_NS}")
   for item in ${E2E_S3_SEED}; do
     local_path="${item#*=}"
     if [[ "${local_path}" != /* ]]; then
       local_path="${REPO_ROOT}/${local_path}"
     fi
-    CM_CMD="${CM_CMD} --from-file=$(basename "${local_path}")=${local_path}"
+    cm_cmd+=(--from-file="$(basename "${local_path}")=${local_path}")
   done
-  eval "${CM_CMD} --dry-run=client -o yaml | kubectl apply -f -"
+  "${cm_cmd[@]}" --dry-run=client -o yaml | kubectl apply -f -
 fi
 
 echo "Running seed Job in namespace '${PRIMARY_CLIENT_NS}'..."
