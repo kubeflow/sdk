@@ -81,7 +81,7 @@ def validate_python_function(func: Callable) -> None:
     if not inspect.isfunction(func):
         raise ValueError("Function must be a Python function.")
 
-    if inspect.iscoroutinefunction(func):
+    if inspect.iscoroutinefunction(func) or inspect.isasyncgenfunction(func):
         raise ValueError("Async functions are not supported.")
 
     if func.__name__ == "<lambda>":

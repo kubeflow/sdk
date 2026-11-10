@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from collections.abc import AsyncIterator
+
 import pytest
 
 from kubeflow.common import utils
@@ -29,6 +31,10 @@ def sample_function() -> None:
 async def sample_async_function() -> None:
     """Sample async function for testing."""
     pass
+
+
+async def sample_async_generator() -> AsyncIterator[int]:
+    yield 1
 
 
 def sample_decorator(func):
@@ -125,6 +131,13 @@ def test_validate_wait_for_job_status(test_case):
             name="async function",
             expected_status=SUCCESS,
             config={"func": sample_async_function},
+            expected_error=ValueError,
+            expected_output="Async functions are not supported.",
+        ),
+        TestCase(
+            name="async generator function",
+            expected_status=SUCCESS,
+            config={"func": sample_async_generator},
             expected_error=ValueError,
             expected_output="Async functions are not supported.",
         ),
