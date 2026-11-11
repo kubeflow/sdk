@@ -128,6 +128,6 @@ def test_wait_for_container(adapter: PodmanClientAdapter) -> None:
 
 
 def test_wait_for_container_timeout(adapter: PodmanClientAdapter) -> None:
-    adapter.client.containers.get.return_value.wait.side_effect = RuntimeError("timed out")
+    adapter.client.containers.get.return_value.wait.side_effect = RuntimeError("timeout reached")
     with pytest.raises(TimeoutError, match="did not exit within 15 seconds"):
         adapter.wait_for_container("container-123", timeout=15)
