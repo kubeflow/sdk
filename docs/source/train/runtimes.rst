@@ -93,13 +93,14 @@ If the built-in runtimes don't have what you need, use a custom container instea
 
 .. code-block:: python
 
-   from kubeflow.trainer.types import CustomTrainerContainer
+   from kubeflow.trainer import CustomTrainerContainer
+   from kubeflow.trainer.options import TrainerCommand
 
    client.train(
        trainer=CustomTrainerContainer(
            image="my-registry/my-training-image:latest",
-           command=["python", "train.py"],
-       )
+       ),
+       options=[TrainerCommand(command=["python", "train.py"])],
    )
 
 This gives you full control over the environment.
