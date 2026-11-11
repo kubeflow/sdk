@@ -118,16 +118,6 @@ build_spark_operator_images() {
     phase_end "build_spark_operator_images"
 }
 
-current_kind_cluster() {
-    local context name
-    context="$(kubectl config current-context 2>/dev/null)" || return 1
-    [[ "$context" == kind-* ]] || return 1
-    name="${context#kind-}"
-    kind get clusters 2>/dev/null | grep -qx "$name" || return 1
-    kubectl cluster-info --request-timeout=10s &>/dev/null || return 1
-    echo "$name"
-}
-
 cluster_server_version() {
     kubectl version -o yaml 2>/dev/null |
         awk '/serverVersion/ {f=1} f && /gitVersion/ {print $2; exit}'
@@ -135,31 +125,10 @@ cluster_server_version() {
 
 ensure_cluster() {
     phase_start "ensure_cluster"
-    local existing
-    if existing="$(current_kind_cluster)"; then
-        KIND_CLUSTER_NAME="$existing"
-        CLUSTER_REUSED=true
-        log_info "Reusing Kind cluster from current kubectl context: kind-${KIND_CLUSTER_NAME}"
-        local server_version
-        server_version="$(cluster_server_version)"
-        if [[ "$server_version" != "v${K8S_VERSION}" ]]; then
-            log_warn "Reused cluster runs Kubernetes ${server_version:-unknown}, but K8S_VERSION=${K8S_VERSION} was requested"
-            log_warn "Run 'make test-e2e-delete-cluster' or switch kubectl context to test against a fresh v${K8S_VERSION} cluster"
-        fi
-        kubectl get nodes
-        phase_end "ensure_cluster (reused)"
-        return 0
-    fi
-
-    local context
-    context="$(kubectl config current-context 2>/dev/null || true)"
-    if [[ -n "$context" && "$context" != "kind-${CLUSTER_NAME}" ]]; then
-        log_info "Current kubectl context '$context' is not a reachable Kind cluster; using a dedicated one"
-    fi
-
     KIND_CLUSTER_NAME="$CLUSTER_NAME"
     if kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
-        log_warn "Kind cluster '$CLUSTER_NAME' already exists; reusing it"
+        CLUSTER_REUSED=true
+        log_info "Reusing existing Kind cluster: kind-${CLUSTER_NAME}"
     else
         log_info "Creating Kind cluster: $CLUSTER_NAME (Kubernetes $K8S_VERSION, 1 control-plane + 2 workers)"
         kind create cluster \
@@ -169,7 +138,17 @@ ensure_cluster() {
             --wait 60s
         log_info "Cluster created with Kubernetes $K8S_VERSION"
     fi
-    kubectl config use-context "kind-${CLUSTER_NAME}"
+    kind export kubeconfig --name "$CLUSTER_NAME"
+
+    if [[ "$CLUSTER_REUSED" == true ]]; then
+        local server_version
+        server_version="$(cluster_server_version)"
+        if [[ "$server_version" != "v${K8S_VERSION}" ]]; then
+            log_warn "Reused cluster runs Kubernetes ${server_version:-unknown}, but K8S_VERSION=${K8S_VERSION} was requested"
+            log_warn "Run 'make test-e2e-delete-cluster' to recreate it with v${K8S_VERSION}"
+        fi
+        kubectl get nodes
+    fi
     phase_end "ensure_cluster"
 }
 
@@ -289,7 +268,7 @@ print_status() {
     echo ""
     log_info "=== Cluster Status ==="
     if [[ "$CLUSTER_REUSED" == true ]]; then
-        echo "Cluster: kind-$KIND_CLUSTER_NAME (reused from current kubectl context)"
+        echo "Cluster: kind-$KIND_CLUSTER_NAME (reused)"
         echo "Kubernetes version: $(cluster_server_version)"
     else
         echo "Cluster: kind-$KIND_CLUSTER_NAME"

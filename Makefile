@@ -37,6 +37,7 @@ HELM ?= $(LOCALBIN)/helm
 # Host platform in the form used by the Kind, kubectl and Helm release downloads.
 HOST_OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 HOST_ARCH := $(shell uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')
+SHA256SUM := $(shell command -v sha256sum >/dev/null 2>&1 && echo sha256sum || echo "shasum -a 256")
 
 # Setting SED for compatibility with macos
 ifeq ($(shell command -v gsed 2>/dev/null),)
@@ -154,27 +155,41 @@ $(LOCALBIN):
 .PHONY: kind
 kind: $(LOCALBIN) ## Download Kind binary if required.
 	@if ! $(KIND) version 2>/dev/null | grep -q "kind $(KIND_VERSION) "; then \
+		set -eu; \
 		echo "Installing Kind $(KIND_VERSION) into $(LOCALBIN)"; \
-		curl -sSfLo $(KIND) https://kind.sigs.k8s.io/dl/$(KIND_VERSION)/kind-$(HOST_OS)-$(HOST_ARCH); \
-		chmod +x $(KIND); \
+		tmp_dir=$$(mktemp -d); trap 'rm -rf "$$tmp_dir"' EXIT; \
+		url=https://kind.sigs.k8s.io/dl/$(KIND_VERSION)/kind-$(HOST_OS)-$(HOST_ARCH); \
+		curl -sSfLo "$$tmp_dir/kind" "$$url"; \
+		sum=$$(curl -sSfL "$$url.sha256sum" | awk '{print $$1}'); \
+		[ -n "$$sum" ] && echo "$$sum  $$tmp_dir/kind" | $(SHA256SUM) -c - >/dev/null; \
+		chmod +x "$$tmp_dir/kind"; mv "$$tmp_dir/kind" $(KIND); \
 	fi
 
 .PHONY: kubectl
 kubectl: $(LOCALBIN) ## Download kubectl binary matching K8S_VERSION if required.
 	@if ! $(KUBECTL) version --client -o yaml 2>/dev/null | grep -q "gitVersion: v$(K8S_VERSION)$$"; then \
+		set -eu; \
 		echo "Installing kubectl v$(K8S_VERSION) into $(LOCALBIN)"; \
-		curl -sSfLo $(KUBECTL) https://dl.k8s.io/release/v$(K8S_VERSION)/bin/$(HOST_OS)/$(HOST_ARCH)/kubectl; \
-		chmod +x $(KUBECTL); \
+		tmp_dir=$$(mktemp -d); trap 'rm -rf "$$tmp_dir"' EXIT; \
+		url=https://dl.k8s.io/release/v$(K8S_VERSION)/bin/$(HOST_OS)/$(HOST_ARCH)/kubectl; \
+		curl -sSfLo "$$tmp_dir/kubectl" "$$url"; \
+		sum=$$(curl -sSfL "$$url.sha256"); \
+		[ -n "$$sum" ] && echo "$$sum  $$tmp_dir/kubectl" | $(SHA256SUM) -c - >/dev/null; \
+		chmod +x "$$tmp_dir/kubectl"; mv "$$tmp_dir/kubectl" $(KUBECTL); \
 	fi
 
 .PHONY: helm
 helm: $(LOCALBIN) ## Download Helm binary if required.
 	@if ! $(HELM) version --short 2>/dev/null | grep -q "^$(HELM_VERSION)+"; then \
+		set -eu; \
 		echo "Installing Helm $(HELM_VERSION) into $(LOCALBIN)"; \
-		tmp_dir=$$(mktemp -d); \
-		curl -sSfL https://get.helm.sh/helm-$(HELM_VERSION)-$(HOST_OS)-$(HOST_ARCH).tar.gz | tar -xz -C $$tmp_dir; \
-		mv $$tmp_dir/$(HOST_OS)-$(HOST_ARCH)/helm $(HELM); \
-		rm -rf $$tmp_dir; \
+		tmp_dir=$$(mktemp -d); trap 'rm -rf "$$tmp_dir"' EXIT; \
+		archive=helm-$(HELM_VERSION)-$(HOST_OS)-$(HOST_ARCH).tar.gz; \
+		curl -sSfLo "$$tmp_dir/$$archive" "https://get.helm.sh/$$archive"; \
+		sum=$$(curl -sSfL "https://get.helm.sh/$$archive.sha256sum" | awk '{print $$1}'); \
+		[ -n "$$sum" ] && echo "$$sum  $$tmp_dir/$$archive" | $(SHA256SUM) -c - >/dev/null; \
+		tar -xzf "$$tmp_dir/$$archive" -C "$$tmp_dir"; \
+		mv "$$tmp_dir/$(HOST_OS)-$(HOST_ARCH)/helm" $(HELM); \
 	fi
 
 ##@ E2E Testing
