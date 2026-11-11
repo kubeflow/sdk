@@ -18,39 +18,57 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  example-validation:
-    runs-on: ubuntu-latest
+  spark-e2e-test:
+    name: Spark E2E Test
+    runs-on: cncf-ubuntu-16-64-x86
+
+    defaults:
+      run:
+        working-directory: . # Execute make from the root of the SDK repo
+
     strategy:
       fail-fast: false
       matrix:
-        kubernetes-version: ["1.32.0"]
+        kubernetes-version: ["1.32.11", "1.33.7", "1.34.3", "1.35.0"]
+        spark-operator-ref: ["master"]
+
+    env:
+      SPARK_TEST_CLUSTER: spark-test
+      SPARK_TEST_NAMESPACE: spark-test
+      SPARK_OPERATOR_NAMESPACE: spark-operator
 
     steps:
-      - name: Free disk space (Ubuntu runner)
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/share/boost
-          sudo apt-get clean
-          docker system prune -af || true
-          df -h
-
-      - name: Checkout repository
+      - name: Checkout Kubeflow SDK repository
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
-      - name: Set up Python 3.11
+      - name: Checkout Kubeflow Spark Operator repository
+        uses: actions/checkout@v6
+        with:
+          repository: kubeflow/spark-operator
+          ref: ${{ matrix.spark-operator-ref }}
+          path: spark-operator
+          persist-credentials: false
+
+      - name: Setup Python
         uses: actions/setup-python@v7
         with:
-          python-version: '3.11'
+          python-version: 3.11
 
-      - name: Install uv and dependencies
+      - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
+
       - name: Install Python dependencies
         run: |
           echo "Installing Kubeflow SDK from source with the Notebook dependencies"
@@ -59,87 +77,66 @@ jobs:
           # SDK's hack/e2e-run-notebook.sh calls `papermill` from PATH
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
-      - name: Install Kind, kubectl, and Helm
-        run: |
-          curl -Lo ./kind "https://kind.sigs.k8s.io/dl/v0.26.0/kind-linux-amd64" && chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind
-          curl -Lo ./kubectl "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && chmod +x ./kubectl && sudo mv ./kubectl /usr/local/bin/kubectl
-          curl -sSfL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-
-      - name: Checkout spark-operator
-        uses: actions/checkout@v6
-        with:
-          repository: kubeflow/spark-operator
-          path: spark-operator
-          fetch-depth: 1
-
-      - name: Build Spark Operator image
-        run: |
-          docker build -t ghcr.io/kubeflow/spark-operator/controller:local ./spark-operator
-        timeout-minutes: 10
-
-      - name: Setup Kind cluster with Spark Operator
+      - name: Setup cluster
         run: |
           make test-e2e-setup-cluster K8S_VERSION=${{ matrix.kubernetes-version }}
-        env:
-          SPARK_TEST_CLUSTER: spark-test
-          SPARK_TEST_NAMESPACE: spark-test
-          SPARK_OPERATOR_IMAGE_TAG: local
-        timeout-minutes: 15
+        timeout-minutes: 30
 
-      - name: Run E2E test for Spark example Notebooks
+      - name: Run e2e test for Spark example Notebooks
         run: |
-          mkdir -p ./artifacts/notebooks
+          mkdir -p artifacts/notebooks # Create the output directory
+          OUT=./artifacts/notebooks/${{ matrix.kubernetes-version }}
 
           make test-e2e-notebook \
             NOTEBOOK_INPUT=./examples/spark/batch_job_lifecycle.ipynb \
-            NOTEBOOK_OUTPUT=./artifacts/notebooks/batch_job_lifecycle.ipynb \
+            NOTEBOOK_OUTPUT=${OUT}_batch_job_lifecycle.ipynb \
             PAPERMILL_TIMEOUT=600
 
           make test-e2e-notebook \
             NOTEBOOK_INPUT=./examples/spark/batch_func_job_lifecycle.ipynb \
-            NOTEBOOK_OUTPUT=./artifacts/notebooks/batch_func_job_lifecycle.ipynb \
+            NOTEBOOK_OUTPUT=${OUT}_batch_func_job_lifecycle.ipynb \
             PAPERMILL_TIMEOUT=600
 
           make test-e2e-notebook \
             NOTEBOOK_INPUT=./examples/spark/batch_job_options.ipynb \
-            NOTEBOOK_OUTPUT=./artifacts/notebooks/batch_job_options.ipynb \
+            NOTEBOOK_OUTPUT=${OUT}_batch_job_options.ipynb \
             PAPERMILL_TIMEOUT=600
 
           make test-e2e-notebook \
             NOTEBOOK_INPUT=./examples/spark/batch_failed_job.ipynb \
-            NOTEBOOK_OUTPUT=./artifacts/notebooks/batch_failed_job.ipynb \
+            NOTEBOOK_OUTPUT=${OUT}_batch_failed_job.ipynb \
             PAPERMILL_TIMEOUT=600
 
           make test-e2e-notebook \
             NOTEBOOK_INPUT=./examples/spark/connect_existing_session.ipynb \
-            NOTEBOOK_OUTPUT=./artifacts/notebooks/connect_existing_session.ipynb \
+            NOTEBOOK_OUTPUT=${OUT}_connect_existing_session.ipynb \
             PAPERMILL_TIMEOUT=600
 
           make test-e2e-notebook \
             NOTEBOOK_INPUT=./examples/spark/demo_existing_sparkconnect.ipynb \
-            NOTEBOOK_OUTPUT=./artifacts/notebooks/demo_existing_sparkconnect.ipynb \
+            NOTEBOOK_OUTPUT=${OUT}_demo_existing_sparkconnect.ipynb \
             PAPERMILL_TIMEOUT=600
 
           make test-e2e-notebook \
             NOTEBOOK_INPUT=./examples/spark/spark_advanced_options.ipynb \
-            NOTEBOOK_OUTPUT=./artifacts/notebooks/spark_advanced_options.ipynb \
+            NOTEBOOK_OUTPUT=${OUT}_spark_advanced_options.ipynb \
             PAPERMILL_PARAMS='-p DRIVER_CPU 500m -p DRIVER_MEMORY 512Mi -p EXECUTOR_CPU 500m -p EXECUTOR_MEMORY 512Mi -p NUM_EXECUTORS 1' \
             PAPERMILL_TIMEOUT=600
 
           make test-e2e-notebook \
             NOTEBOOK_INPUT=./examples/spark/spark_connect_simple.ipynb \
-            NOTEBOOK_OUTPUT=./artifacts/notebooks/spark_connect_simple.ipynb \
+            NOTEBOOK_OUTPUT=${OUT}_spark_connect_simple.ipynb \
             PAPERMILL_TIMEOUT=600
-        env:
-          SPARK_TEST_CLUSTER: spark-test
-          SPARK_TEST_NAMESPACE: spark-test
         timeout-minutes: 40
-
 
       - name: Upload Artifacts to GitHub
         uses: actions/upload-artifact@v6
         if: always() # Ensure artifacts are uploaded even if previous steps fail
         with:
-          name: ${{ matrix.kubernetes-version }}
+          name: spark-${{ matrix.kubernetes-version }}
           path: ./artifacts/notebooks/* # Path relative to the workspace root
-          retention-days: 1 #
+          retention-days: 1
+
+      - name: Delete cluster
+        if: always()
+        run: make test-e2e-delete-cluster

@@ -23,5 +23,5 @@ htmlcov/
 # Documentation build
 docs/_build/
 
-# Local E2E: cloned for building Spark Operator image (SPARK_OPERATOR_IMAGE_TAG=local)
+# Local E2E: Spark Operator checkout used by hack/e2e-setup-cluster.sh
 spark-operator/
