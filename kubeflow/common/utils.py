@@ -134,7 +134,7 @@ def get_component_namespace(component_env_var: str, default: str = "kubeflow-sys
             f"{constants.KUBEFLOW_SYSTEM_NAMESPACE_ENV_VAR} is deprecated and will be removed "
             f"in a future release. Please set {component_env_var} for component-scoped configuration. "
             f"Both environment variables are honored during the transition period.",
-            UserWarning,
+            DeprecationWarning,
             stacklevel=2,
         )
         return os.environ[constants.KUBEFLOW_SYSTEM_NAMESPACE_ENV_VAR]
