@@ -1,0 +1,88 @@
+# Copyright The Kubeflow Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: e2e-s3-seed
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      volumes:
+        - name: seed-files
+          configMap:
+            name: e2e-s3-seed-files
+            optional: true
+      containers:
+        - name: aws-cli
+          image: amazon/aws-cli:2.40.1@sha256:4ade0fe3e60e0b9e1fb0910f86c6d992baf4e12d3172c25a3c8c11f6c81cee08
+          volumeMounts:
+            - name: seed-files
+              mountPath: /seed
+              readOnly: true
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -euo pipefail
+
+              echo "Waiting for S3 API with authentication enforced..."
+              ready=0
+              for i in $(seq 1 30); do
+                if aws --endpoint-url="${AWS_ENDPOINT_URL}" s3api list-buckets >/dev/null 2>&1 \
+                    && ! aws --endpoint-url="${AWS_ENDPOINT_URL}" --no-sign-request s3api list-buckets >/dev/null 2>&1; then
+                  ready=1; break
+                fi
+                sleep 2
+              done
+              [ "${ready}" = 1 ] || { echo "S3 API not ready or anonymous access is allowed" >&2; exit 1; }
+
+              echo "Creating buckets: ${E2E_S3_BUCKETS}"
+              for b in ${E2E_S3_BUCKETS}; do
+                echo "Ensuring bucket: ${b}"
+                if ! aws --endpoint-url="${AWS_ENDPOINT_URL}" s3api head-bucket --bucket "${b}" >/dev/null 2>&1; then
+                  echo "Bucket ${b} does not exist, creating..."
+                  aws --endpoint-url="${AWS_ENDPOINT_URL}" s3 mb "s3://${b}"
+                fi
+                echo "Verifying bucket: ${b}"
+                aws --endpoint-url="${AWS_ENDPOINT_URL}" s3api head-bucket --bucket "${b}"
+              done
+
+              if [ -n "${E2E_S3_SEED:-}" ]; then
+                  i=0
+                  for item in ${E2E_S3_SEED}; do
+                    dest="${item%%=*}"
+                    case "${dest}" in */*) ;; *) echo "E2E_S3_SEED entry '${item}' must be <bucket>/<key>=<path>" >&2; exit 1 ;; esac
+                    bucket="${dest%%/*}"
+                    key="${dest#*/}"
+
+                    echo "Uploading seed-${i} to s3://${bucket}/${key}..."
+                    aws --endpoint-url="${AWS_ENDPOINT_URL}" s3 cp "/seed/seed-${i}" "s3://${bucket}/${key}"
+                    aws --endpoint-url="${AWS_ENDPOINT_URL}" s3api head-object --bucket "${bucket}" --key "${key}"
+                    i=$((i + 1))
+                  done
+              fi
+
+              echo "Seeding completed and verified successfully."
+          env:
+            - name: E2E_S3_BUCKETS
+              value: "${E2E_S3_BUCKETS}"
+            - name: E2E_S3_SEED
+              value: "${E2E_S3_SEED}"
+          envFrom:
+            - secretRef:
+                name: e2e-s3-credentials
+            - configMapRef:
+                name: e2e-s3-config

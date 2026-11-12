@@ -25,6 +25,7 @@ For the full documentation, see [Interactive Sessions](https://sdk.kubeflow.org/
 - **batch_failed_job.ipynb** - Submit a `FileJob` expected to fail and inspect the `FAILED` state
 - **batch_job_options.ipynb** - Submit a batch job with Kubernetes options (labels, annotations, node selector, tolerations, custom name)
   See the [Options Reference](https://sdk.kubeflow.org/en/latest/spark/options.html) for details on Kubernetes options.
+- **batch_job_s3a.ipynb** - Submit a `FileJob` referencing an application script stored in S3 (`s3a://` URI)
 - **spark_job.py** - A simple Spark application used as the remote `file_source` for the batch job examples
 
 ## Prerequisites
