@@ -75,6 +75,22 @@ using ``num_executors`` and ``resources_per_executor``.
    Interactive sessions can override the ServiceAccount per session with
    ``Driver(service_account=...)``; batch jobs have no per-job override.
 
+.. note::
+
+   **Control Plane Version Discovery**
+
+   When control plane version checks are enabled, ``SparkClient`` discovers the
+   installed Spark Operator version via a ConfigMap in the control plane namespace.
+   The target namespace is resolved using the following order of precedence:
+
+   1. The ``KUBEFLOW_SPARK_NAMESPACE`` environment variable.
+   2. The ``KUBEFLOW_SYSTEM_NAMESPACE`` environment variable.
+   3. Defaults to **``kubeflow-system``**.
+
+   When deploying the Spark Operator with version discovery enabled, ensure the
+   version ConfigMap is deployed in the ``kubeflow-system`` namespace, or configure
+   ``KUBEFLOW_SPARK_NAMESPACE`` to point to your custom operator namespace.
+
 Two Ways to Run Spark
 -----------------------
 
