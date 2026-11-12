@@ -30,7 +30,7 @@ spec:
     spec:
       containers:
         - name: seaweedfs
-          image: chrislusf/seaweedfs:3.79@sha256:21425305e04b355904ef350ff75a4e81b8afc5124f63e0485b946164b58562d3
+          image: ghcr.io/chrislusf/seaweedfs:4.50@sha256:c2658820e763294a9e9de7b36c81e59b879e3459148351aee4e31a126ca64860
           args:
             - "server"
             - "-dir=/data"
@@ -44,6 +44,12 @@ spec:
               name: master
             - containerPort: 8080
               name: volume
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: 8333
+            periodSeconds: 2
+            failureThreshold: 30
           volumeMounts:
             - name: data
               mountPath: /data

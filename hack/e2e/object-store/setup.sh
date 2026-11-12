@@ -23,14 +23,14 @@ E2E_OBJECT_STORE="${E2E_OBJECT_STORE:-seaweedfs}"
 E2E_S3_NAMESPACE="${E2E_S3_NAMESPACE:-seaweedfs}"
 E2E_S3_CLIENT_NAMESPACES="${E2E_S3_CLIENT_NAMESPACES:-default}"
 E2E_S3_BUCKETS="${E2E_S3_BUCKETS:-test-bucket}"
+# Whitespace-separated "<bucket>/<key>=<path>" entries (must not contain spaces).
 E2E_S3_SEED="${E2E_S3_SEED:-}"
 E2E_S3_REGION="${E2E_S3_REGION:-us-east-1}"
 E2E_S3_ENV_FILE="${E2E_S3_ENV_FILE:-.e2e/object-store.env}"
 
 # Generate random credentials per run if not explicitly provided
-RAND_ID="$(head -c 16 /dev/urandom | xxd -p | head -c 8 || date +%s | tail -c 8)"
-E2E_S3_ACCESS_KEY="${E2E_S3_ACCESS_KEY:-ak-${RAND_ID}}"
-E2E_S3_SECRET_KEY="${E2E_S3_SECRET_KEY:-sk-${RAND_ID}}"
+E2E_S3_ACCESS_KEY="${E2E_S3_ACCESS_KEY:-$(openssl rand -hex 10)}"
+E2E_S3_SECRET_KEY="${E2E_S3_SECRET_KEY:-$(openssl rand -hex 20)}"
 
 mkdir -p "$(dirname "${E2E_S3_ENV_FILE}")"
 rm -f "${E2E_S3_ENV_FILE}"
@@ -77,12 +77,14 @@ PRIMARY_CLIENT_NS="${E2E_S3_CLIENT_NAMESPACES%% *}"
 kubectl delete configmap e2e-s3-seed-files -n "${PRIMARY_CLIENT_NS}" --ignore-not-found
 if [ -n "${E2E_S3_SEED}" ]; then
   cm_cmd=(kubectl create configmap e2e-s3-seed-files -n "${PRIMARY_CLIENT_NS}")
+  i=0
   for item in ${E2E_S3_SEED}; do
     local_path="${item#*=}"
     if [[ "${local_path}" != /* ]]; then
       local_path="${REPO_ROOT}/${local_path}"
     fi
-    cm_cmd+=(--from-file="$(basename "${local_path}")=${local_path}")
+    cm_cmd+=(--from-file="seed-${i}=${local_path}")
+    i=$((i + 1))
   done
   "${cm_cmd[@]}" --dry-run=client -o yaml | kubectl apply -f -
 fi
@@ -94,7 +96,17 @@ export E2E_S3_BUCKETS E2E_S3_SEED
 envsubst '${E2E_S3_BUCKETS} ${E2E_S3_SEED}' < "${SCRIPT_DIR}/seed-job.yaml" | kubectl apply -n "${PRIMARY_CLIENT_NS}" -f -
 
 echo "Waiting for seed Job to complete..."
-kubectl wait --for=condition=complete job/e2e-s3-seed -n "${PRIMARY_CLIENT_NS}" --timeout=120s || (kubectl logs -n "${PRIMARY_CLIENT_NS}" -l job-name=e2e-s3-seed --tail=50 && kubectl describe job/e2e-s3-seed -n "${PRIMARY_CLIENT_NS}" && exit 1)
+for _ in $(seq 1 60); do
+  succeeded="$(kubectl get job/e2e-s3-seed -n "${PRIMARY_CLIENT_NS}" -o jsonpath='{.status.succeeded}')"
+  failed="$(kubectl get job/e2e-s3-seed -n "${PRIMARY_CLIENT_NS}" -o jsonpath='{.status.failed}')"
+  [[ "${succeeded:-0}" -ge 1 ]] && break
+  if [[ "${failed:-0}" -ge 1 || "${_}" -eq 60 ]]; then
+    kubectl logs -n "${PRIMARY_CLIENT_NS}" -l job-name=e2e-s3-seed --tail=100 || true
+    kubectl describe job/e2e-s3-seed -n "${PRIMARY_CLIENT_NS}" || true
+    exit 1
+  fi
+  sleep 2
+done
 
 # 4. Write full outputs to env file and GITHUB_ENV if present
 cat << ENV_EOF > "${E2E_S3_ENV_FILE}"

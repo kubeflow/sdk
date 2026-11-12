@@ -28,7 +28,7 @@ spec:
             optional: true
       containers:
         - name: aws-cli
-          image: amazon/aws-cli:2.15.15@sha256:76e05762337b3941d4af9c5e9dfb1cee3e8b88d615788ffd38be4e5a793570c7
+          image: amazon/aws-cli:2.40.1@sha256:4ade0fe3e60e0b9e1fb0910f86c6d992baf4e12d3172c25a3c8c11f6c81cee08
           volumeMounts:
             - name: seed-files
               mountPath: /seed
@@ -37,6 +37,17 @@ spec:
           args:
             - |
               set -euo pipefail
+
+              echo "Waiting for S3 API with authentication enforced..."
+              ready=0
+              for i in $(seq 1 30); do
+                if aws --endpoint-url="${AWS_ENDPOINT_URL}" s3api list-buckets >/dev/null 2>&1 \
+                    && ! aws --endpoint-url="${AWS_ENDPOINT_URL}" --no-sign-request s3api list-buckets >/dev/null 2>&1; then
+                  ready=1; break
+                fi
+                sleep 2
+              done
+              [ "${ready}" = 1 ] || { echo "S3 API not ready or anonymous access is allowed" >&2; exit 1; }
 
               echo "Creating buckets: ${E2E_S3_BUCKETS}"
               for b in ${E2E_S3_BUCKETS}; do
@@ -49,20 +60,19 @@ spec:
                 aws --endpoint-url="${AWS_ENDPOINT_URL}" s3api head-bucket --bucket "${b}"
               done
 
-              FIRST_BUCKET=$(echo "${E2E_S3_BUCKETS}" | awk '{print $1}')
-
               if [ -n "${E2E_S3_SEED:-}" ]; then
-                for item in ${E2E_S3_SEED}; do
-                  s3_key="${item%%=*}"
-                  local_name="${item#*=}"
-                  filename="$(basename "${local_name}")"
+                  i=0
+                  for item in ${E2E_S3_SEED}; do
+                    dest="${item%%=*}"
+                    case "${dest}" in */*) ;; *) echo "E2E_S3_SEED entry '${item}' must be <bucket>/<key>=<path>" >&2; exit 1 ;; esac
+                    bucket="${dest%%/*}"
+                    key="${dest#*/}"
 
-                  echo "Uploading /seed/${filename} to s3://${FIRST_BUCKET}/${s3_key}..."
-                  aws --endpoint-url="${AWS_ENDPOINT_URL}" s3 cp "/seed/${filename}" "s3://${FIRST_BUCKET}/${s3_key}"
-
-                  echo "Verifying s3://${FIRST_BUCKET}/${s3_key}..."
-                  aws --endpoint-url="${AWS_ENDPOINT_URL}" s3api head-object --bucket "${FIRST_BUCKET}" --key "${s3_key}"
-                done
+                    echo "Uploading seed-${i} to s3://${bucket}/${key}..."
+                    aws --endpoint-url="${AWS_ENDPOINT_URL}" s3 cp "/seed/seed-${i}" "s3://${bucket}/${key}"
+                    aws --endpoint-url="${AWS_ENDPOINT_URL}" s3api head-object --bucket "${bucket}" --key "${key}"
+                    i=$((i + 1))
+                  done
               fi
 
               echo "Seeding completed and verified successfully."
