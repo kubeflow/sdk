@@ -60,14 +60,25 @@ Best for: Batch size, number of layers, activation functions.
 Integer Range
 ^^^^^^^^^^^^^
 
-Sample integers in a range:
+``Search`` does not currently create Katib integer ranges. Use ``Search.choice``
+when you want the SDK to choose from a fixed set of integer values.
+
+When reading an Experiment created through Katib YAML, the UI, or another client,
+``get_job()`` and ``list_jobs()`` return an ``IntegerSearchSpace`` for each Katib
+``int`` parameter. Its ``min`` and ``max`` are integers, and ``step`` is an integer
+when the Experiment specifies one. A Katib ``double`` parameter returns a
+``ContinuousSearchSpace`` with floating point bounds.
 
 .. code-block:: python
 
-   # Any integer from 1 to 10
-   Search.randint(1, 10)
+   from kubeflow.optimizer import OptimizerClient
 
-Best for: Number of epochs, hidden layer sizes.
+   client = OptimizerClient()
+   job = client.get_job("existing-katib-experiment")
+   integer_range = job.search_space["batch_size"]
+   print(integer_range.min, integer_range.max, integer_range.step)
+
+Integer readback does not change how ``Search`` creates new Experiments.
 
 Complete Example
 ----------------
@@ -85,7 +96,7 @@ Here's a realistic search space for training a neural network:
 
        # Architecture
        "hidden_size": Search.choice([128, 256, 512, 1024]),
-       "num_layers": Search.randint(2, 6),
+       "num_layers": Search.choice([2, 3, 4, 5, 6]),
 
        # Regularization
        "dropout": Search.uniform(0.0, 0.5),

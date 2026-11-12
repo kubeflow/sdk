@@ -12,9 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from kubeflow_katib_api import models
 import pytest
 
-from kubeflow.optimizer.backends.kubernetes.utils import convert_value
+from kubeflow.optimizer.backends.kubernetes.utils import (
+    convert_value,
+    get_search_space_from_katib_spec,
+)
+from kubeflow.optimizer.types.search_types import (
+    ContinuousSearchSpace,
+    Distribution,
+    IntegerSearchSpace,
+)
 from kubeflow.test.common import FAILED, SUCCESS, TestCase
 
 
@@ -47,3 +56,43 @@ def test_convert_value(test_case: TestCase):
         assert result == test_case.expected_output
         assert isinstance(result, type(test_case.expected_output))
     print("test execution complete")
+
+
+@pytest.mark.parametrize("step", [None, "16"])
+def test_get_search_space_preserves_integer_bounds_and_step(step: str | None) -> None:
+    """Integer Katib parameters should retain their discrete search space."""
+    parameter = models.V1beta1ParameterSpec(
+        name="batch_size",
+        parameterType="int",
+        feasibleSpace=models.V1beta1FeasibleSpace(
+            min="16", max="128", step=step, distribution="uniform"
+        ),
+    )
+
+    search_space = get_search_space_from_katib_spec([parameter])["batch_size"]
+
+    assert isinstance(search_space, IntegerSearchSpace)
+    assert type(search_space.min) is int
+    assert type(search_space.max) is int
+    assert search_space.min == 16
+    assert search_space.max == 128
+    assert search_space.step == (int(step) if step else None)
+    assert search_space.distribution is Distribution.UNIFORM
+
+
+def test_get_search_space_keeps_double_parameters_continuous() -> None:
+    """Double Katib parameters continue to return floating bounds."""
+    parameter = models.V1beta1ParameterSpec(
+        name="learning_rate",
+        parameterType="double",
+        feasibleSpace=models.V1beta1FeasibleSpace(
+            min="0.001", max="0.1", distribution="logUniform"
+        ),
+    )
+
+    search_space = get_search_space_from_katib_spec([parameter])["learning_rate"]
+
+    assert isinstance(search_space, ContinuousSearchSpace)
+    assert type(search_space.min) is float
+    assert type(search_space.max) is float
+    assert search_space.distribution is Distribution.LOG_UNIFORM

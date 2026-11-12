@@ -29,6 +29,7 @@ from kubeflow.optimizer.types.search_types import (
     CategoricalSearchSpace,
     ContinuousSearchSpace,
     Distribution,
+    IntegerSearchSpace,
 )
 
 
@@ -97,7 +98,7 @@ def get_objectives_from_katib_spec(objective: models.V1beta1ObjectiveSpec) -> li
 
 def get_search_space_from_katib_spec(
     parameters: list[models.V1beta1ParameterSpec],
-) -> dict[str, ContinuousSearchSpace | CategoricalSearchSpace]:
+) -> dict[str, ContinuousSearchSpace | IntegerSearchSpace | CategoricalSearchSpace]:
     search_space = {}
 
     for p in parameters:
@@ -107,6 +108,21 @@ def get_search_space_from_katib_spec(
 
             search_space[p.name] = CategoricalSearchSpace(
                 choices=[str(v) for v in p.feasible_space.list]
+            )
+        elif p.parameter_type == constants.INT_PARAMETER:
+            if not (
+                p.feasible_space
+                and p.feasible_space.min
+                and p.feasible_space.max
+                and p.feasible_space.distribution
+            ):
+                raise ValueError(f"Katib integer parameters are invalid: {parameters}")
+
+            search_space[p.name] = IntegerSearchSpace(
+                min=int(p.feasible_space.min),
+                max=int(p.feasible_space.max),
+                distribution=Distribution(p.feasible_space.distribution),
+                step=int(p.feasible_space.step) if p.feasible_space.step is not None else None,
             )
         else:
             if not (

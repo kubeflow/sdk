@@ -56,4 +56,5 @@ METRICS_COLLECTOR_CONTAINER = "metrics-logger-and-collector"
 
 # Katib search space parameter types.
 DOUBLE_PARAMETER = "double"
+INT_PARAMETER = "int"
 CATEGORICAL_PARAMETERS = "categorical"
