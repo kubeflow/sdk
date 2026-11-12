@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""API clients for Kubeflow Trainer."""
+
 # ruff: noqa
 
 # import apis into api package

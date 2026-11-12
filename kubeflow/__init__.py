@@ -12,4 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Top-level package for the Kubeflow SDK."""
+
 __version__ = "0.5.0"
