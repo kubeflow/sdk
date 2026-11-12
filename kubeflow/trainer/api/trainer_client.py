@@ -324,6 +324,10 @@ class TrainerClient:
             >>> print(job.status)
         """
         common_utils.validate_wait_for_job_status(polling_interval, timeout)
+        if not status or not status.issubset(constants.TRAINJOB_STATUSES):
+            raise ValueError(
+                f"Expected status {status} must be a non-empty subset of {constants.TRAINJOB_STATUSES}"
+            )
 
         return self.backend.wait_for_job_status(
             name=name,
