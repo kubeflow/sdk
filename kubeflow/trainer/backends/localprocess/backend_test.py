@@ -465,6 +465,18 @@ def test_get_job_logs(local_backend, test_case):
             config={"name": BASIC_TRAIN_JOB_NAME, "timeout": 10, "polling_interval": -1},
             expected_error=ValueError,
         ),
+        TestCase(
+            name="invalid status set error",
+            expected_status=FAILED,
+            config={"name": BASIC_TRAIN_JOB_NAME, "status": {"InvalidStatus"}},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="empty status set error",
+            expected_status=FAILED,
+            config={"name": BASIC_TRAIN_JOB_NAME, "status": set()},
+            expected_error=ValueError,
+        ),
     ],
 )
 def test_wait_for_job_status(local_backend, test_case):

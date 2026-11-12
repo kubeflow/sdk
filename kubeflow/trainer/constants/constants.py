@@ -46,6 +46,14 @@ TRAINJOB_COMPLETE = "Complete"
 # The failed status of the TrainJob, defined when TrainJob CR has failed condition.
 TRAINJOB_FAILED = "Failed"
 
+# Valid statuses for a TrainJob.
+TRAINJOB_STATUSES = {
+    TRAINJOB_CREATED,
+    TRAINJOB_RUNNING,
+    TRAINJOB_COMPLETE,
+    TRAINJOB_FAILED,
+}
+
 # The succeeded phase of the Pods.
 POD_SUCCEEDED = "Succeeded"
 

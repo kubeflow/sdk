@@ -229,6 +229,10 @@ class LocalProcessBackend(RuntimeBackend):
                 f"Polling interval must be strictly less than timeout. "
                 f"Received polling_interval={polling_interval}, timeout={timeout}"
             )
+        if not status or not status.issubset(constants.TRAINJOB_STATUSES):
+            raise ValueError(
+                f"Expected status {status} must be a non-empty subset of {constants.TRAINJOB_STATUSES}"
+            )
 
         # find first match or fallback
         _job = next((_job for _job in self.__local_jobs if _job.name == name), None)
