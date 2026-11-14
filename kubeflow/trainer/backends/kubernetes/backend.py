@@ -449,6 +449,7 @@ class KubernetesBackend(RuntimeBackend):
         self,
         name: str,
         follow: bool = False,
+        tail_lines: int | None = None,
         step: str = constants.NODE + "-0",
     ) -> Iterator[str]:
         """Get the TrainJob logs"""
@@ -464,7 +465,10 @@ class KubernetesBackend(RuntimeBackend):
         # Remove the number for the node step.
         container_name = re.sub(r"-\d+$", "", step)
         yield from self._read_pod_logs(
-            pod_name=pod_name, container_name=container_name, follow=follow
+            pod_name=pod_name,
+            container_name=container_name,
+            follow=follow,
+            tail_lines=tail_lines,
         )
 
     def wait_for_job_status(
@@ -626,7 +630,13 @@ class KubernetesBackend(RuntimeBackend):
             ),
         )
 
-    def _read_pod_logs(self, pod_name: str, container_name: str, follow: bool) -> Iterator[str]:
+    def _read_pod_logs(
+        self,
+        pod_name: str,
+        container_name: str,
+        follow: bool,
+        tail_lines: int | None = None,
+    ) -> Iterator[str]:
         """Read logs from a pod container."""
         try:
             if follow:
@@ -636,6 +646,7 @@ class KubernetesBackend(RuntimeBackend):
                     namespace=self.namespace,
                     container=container_name,
                     follow=True,
+                    tail_lines=tail_lines,
                 )
 
                 # Stream logs incrementally.
@@ -645,6 +656,7 @@ class KubernetesBackend(RuntimeBackend):
                     name=pod_name,
                     namespace=self.namespace,
                     container=container_name,
+                    tail_lines=tail_lines,
                 )
 
                 yield from logs.splitlines()

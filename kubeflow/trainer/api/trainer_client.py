@@ -236,15 +236,16 @@ class TrainerClient:
         self,
         name: str,
         step: str = constants.NODE + "-0",
-        follow: bool | None = False,
+        follow: bool = False,
+        tail_lines: int | None = None,
     ) -> Iterator[str]:
         """Get logs from a specific step of a TrainJob.
 
         Args:
             name: Name of the TrainJob.
-            step: Step of the TrainJob to collect logs from, like "dataset-initializer"
-                or "node-0". Defaults to "node-0".
-            follow: Whether to stream logs in realtime as they are produced. Defaults to False.
+            step: Step of the TrainJob to collect logs from, like dataset-initializer or node-0.
+            follow: Whether to stream logs in realtime as they are produced.
+            tail_lines: Number of lines from the end of the logs to return. If None, returns all available logs.
 
         Returns:
             Iterator of log lines.
@@ -259,7 +260,7 @@ class TrainerClient:
             >>> for logline in client.get_job_logs(name="s8d44aa4fb6d", follow=True):
             ...     print(logline)
         """
-        return self.backend.get_job_logs(name=name, follow=follow, step=step)
+        return self.backend.get_job_logs(name=name, follow=follow, tail_lines=tail_lines, step=step)
 
     def get_job_events(self, name: str) -> list[types.Event]:
         """Get events for a TrainJob.

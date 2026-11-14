@@ -98,7 +98,12 @@ class MockContainerAdapter(BaseContainerClientAdapter):
                 return Mock(id=container_id, status=container["status"])
         return None
 
-    def container_logs(self, container_id: str, follow: bool) -> Iterator[str]:
+    def container_logs(
+        self,
+        container_id: str,
+        follow: bool,
+        tail_lines: int | None = None,
+    ) -> Iterator[str]:
         if follow:
             yield f"Log line 1 from {container_id}\n"
             yield f"Log line 2 from {container_id}\n"
