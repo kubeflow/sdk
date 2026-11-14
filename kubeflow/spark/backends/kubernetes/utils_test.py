@@ -685,7 +685,7 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.metadata.namespace == "default"
         assert spark_connect.spec.spark_version == constants.DEFAULT_SPARK_VERSION
         assert spark_connect.spec.executor.instances == constants.DEFAULT_NUM_EXECUTORS
-        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.cores == constants.DEFAULT_EXECUTOR_CPU
         assert spark_connect.spec.executor.core_request is not None
         assert spark_connect.spec.executor.core_limit is not None
         assert spark_connect.spec.executor.core_request.actual_instance == "1"
@@ -704,7 +704,7 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.executor.instances == 3
 
     elif test_case.name == "spark connect cr with executor resources":
-        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.cores == 2
         assert spark_connect.spec.executor.core_request is not None
         assert spark_connect.spec.executor.core_limit is not None
         assert spark_connect.spec.executor.core_request.actual_instance == "2"
@@ -741,7 +741,7 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.server.core_limit.actual_instance == "500m"
 
     elif test_case.name == "spark connect cr with fractional executor cpu":
-        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.cores == 1
         assert spark_connect.spec.executor.core_request is not None
         assert spark_connect.spec.executor.core_limit is not None
         assert spark_connect.spec.executor.core_request.actual_instance == "0.5"
@@ -752,7 +752,7 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
 
     elif test_case.name == "spark connect cr with executor config":
         assert spark_connect.spec.executor.instances == 5
-        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.cores == 4
         assert spark_connect.spec.executor.core_request is not None
         assert spark_connect.spec.executor.core_limit is not None
         assert spark_connect.spec.executor.core_request.actual_instance == "4"
@@ -766,7 +766,7 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.executor.instances == 10
 
     elif test_case.name == "executor config overrides executor resources":
-        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.cores == 8
         assert spark_connect.spec.executor.core_request is not None
         assert spark_connect.spec.executor.core_limit is not None
         assert spark_connect.spec.executor.core_request.actual_instance == "8"
@@ -775,7 +775,7 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
 
     elif test_case.name == "kep107 level2 simple mode":
         assert spark_connect.spec.executor.instances == 5
-        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.cores == 5
         assert spark_connect.spec.executor.core_request is not None
         assert spark_connect.spec.executor.core_limit is not None
         assert spark_connect.spec.executor.core_request.actual_instance == "5"
@@ -791,7 +791,7 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
         assert spark_connect.spec.server.memory == "8g"
         assert spark_connect.spec.server.template.spec.service_account_name == "spark-driver-prod"
         assert spark_connect.spec.executor.instances == 20
-        assert spark_connect.spec.executor.cores is None
+        assert spark_connect.spec.executor.cores == 8
         assert spark_connect.spec.executor.core_request is not None
         assert spark_connect.spec.executor.core_limit is not None
         assert spark_connect.spec.executor.core_request.actual_instance == "8"
@@ -1496,7 +1496,7 @@ def test_get_spark_job_executor_spec(test_case: TestCase) -> None:
     assert test_case.expected_status == SUCCESS
 
     assert spec.instances == constants.DEFAULT_NUM_EXECUTORS
-    assert spec.cores is None
+    assert spec.cores == constants.DEFAULT_EXECUTOR_CPU
     assert spec.core_request == str(constants.DEFAULT_EXECUTOR_CPU)
     assert spec.core_limit == str(constants.DEFAULT_EXECUTOR_CPU)
     assert spec.memory == _memory_kubernetes_to_spark(
@@ -1611,7 +1611,7 @@ def test_get_spark_application_cr_from_file_job(test_case: TestCase, mock_k8s_ba
 
     elif test_case.name == "file job with executor configuration":
         assert app.spec.executor.instances == 3
-        assert app.spec.executor.cores is None
+        assert app.spec.executor.cores == 2
         assert app.spec.executor.core_request == "2"
         assert app.spec.executor.core_limit == "2"
         assert app.spec.executor.memory == "4g"
@@ -1745,7 +1745,7 @@ def test_get_spark_application_cr_from_func_job(
 
     elif test_case.name == "function job with executor configuration":
         assert app.spec.executor.instances == 3
-        assert app.spec.executor.cores is None
+        assert app.spec.executor.cores == 2
         assert app.spec.executor.core_request == "2"
         assert app.spec.executor.core_limit == "2"
         assert app.spec.executor.memory == "4g"
