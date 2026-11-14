@@ -510,6 +510,7 @@ def get_spark_connect_executor_spec(
 
     return models.SparkV1alpha1ExecutorSpec(
         instances=instances,
+        cores=_validate_cpu_value(cpu),
         core_request=quantity,
         core_limit=quantity,
         memory=memory,
@@ -707,6 +708,7 @@ def get_spark_job_executor_spec(
 
     return models.SparkV1beta2ExecutorSpec(
         instances=instances,
+        cores=_validate_cpu_value(cpu),
         core_request=cpu,
         core_limit=cpu,
         memory=memory,
