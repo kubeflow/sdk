@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -20,7 +20,6 @@ resolution-markers = [
 [manifest]
 overrides = [
     { name = "kubeflow-katib-api", git = "https://github.com/kubeflow/katib.git?subdirectory=api%2Fpython_api&rev=master" },
-    { name = "kubeflow-spark-api", git = "https://github.com/kubeflow/spark-operator.git?subdirectory=api%2Fpython_api&rev=master" },
     { name = "kubeflow-trainer-api", git = "https://github.com/kubeflow/trainer.git?subdirectory=api%2Fpython_api&rev=master" },
 ]
 
@@ -1563,7 +1562,7 @@ requires-dist = [
     { name = "docker", marker = "extra == 'docker'", specifier = ">=6.1.3" },
     { name = "kfp", extras = ["kubernetes"], marker = "extra == 'pipelines'", specifier = ">=2.17.0,<2.18" },
     { name = "kubeflow-katib-api", specifier = ">=0.19.0,<0.20" },
-    { name = "kubeflow-spark-api", marker = "extra == 'spark'", specifier = ">=2.4.0,<2.5" },
+    { name = "kubeflow-spark-api", marker = "extra == 'spark'", specifier = ">=2.6.0rc0,<2.7" },
     { name = "kubeflow-trainer-api", specifier = ">=2.3.0,<2.4" },
     { name = "kubernetes", specifier = ">=27.2.0,<36.0.0" },
     { name = "model-registry", marker = "extra == 'hub'", specifier = ">=0.3.14,<0.4" },
@@ -1611,10 +1610,14 @@ dependencies = [
 
 [[package]]
 name = "kubeflow-spark-api"
-version = "2.5.0rc0"
-source = { git = "https://github.com/kubeflow/spark-operator.git?subdirectory=api%2Fpython_api&rev=master#3dd93f7f0e1a1c81b5b5182ef519e72f50b9ca27" }
+version = "2.6.0rc0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/46/4c/3fcf435cb449368c97ebeb76037f0d2c68a2ce680a4a5f206e182f32c83f/kubeflow_spark_api-2.6.0rc0.tar.gz", hash = "sha256:e3f8f718dc185534994885684f6c316d3154c8f7d5eb87526e2f49b14cadf870", size = 220794, upload-time = "2026-11-06T19:05:30.879Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/f9/2c509d629ddba96900dd7e59814f83971774de3f5fda7a653117ce4aa8fa/kubeflow_spark_api-2.6.0rc0-py3-none-any.whl", hash = "sha256:4296becd04b737a47b31966727f8f6556622f9da1862ea4770cd5e3ddecc3e9e", size = 837583, upload-time = "2026-11-06T19:05:29.216Z" },
 ]
 
 [[package]]
