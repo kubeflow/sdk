@@ -160,6 +160,9 @@ class KubernetesBackend(RuntimeBackend):
             backend=self,  # Pass backend for option validation
         )
 
+        # The Name option may override the auto-generated name.
+        name = spark_connect.metadata.name
+
         logger.info("Creating SparkConnect session '%s'", name)
 
         try:
