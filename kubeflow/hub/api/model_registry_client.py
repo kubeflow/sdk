@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
 from kubeflow.hub.types.types import StorageConfig
 
@@ -83,12 +84,13 @@ class ModelRegistryClient:
                 "model-registry is not installed. Install it with:\n\n"  # fmt: skip
                 "  pip install 'kubeflow[hub]'\n"
             ) from e
+        parsed_url = urlsplit(base_url if "://" in base_url else f"https://{base_url}")
+        is_http = parsed_url.scheme == "http"
 
-        is_http = base_url.startswith("http://")
         if is_secure is None:
             is_secure = not is_http
         if port is None:
-            port = 8080 if is_http else 443
+            port = parsed_url.port or (8080 if is_http else 443)
 
         self._registry = ModelRegistry(
             server_address=base_url,
