@@ -35,6 +35,59 @@ from kubeflow.test.common import FAILED, SUCCESS, TestCase
     "test_case",
     [
         TestCase(
+            name="default backend initialization",
+            expected_status=SUCCESS,
+            config={},
+        ),
+        TestCase(
+            name="custom namespace initialization",
+            expected_status=SUCCESS,
+            config={"namespace": "spark"},
+        ),
+        TestCase(
+            name="invalid backend config",
+            expected_status=FAILED,
+            config={"backend_config": "invalid"},
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_init(test_case: TestCase):
+    """Test SparkClient initialization scenarios."""
+    print(f"Testing {test_case.name}...")
+
+    try:
+        if "namespace" in test_case.config:
+            with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock:
+                SparkClient(
+                    backend_config=KubernetesBackendConfig(namespace=test_case.config["namespace"])
+                )
+                mock.assert_called_once()
+        elif "backend_config" in test_case.config:
+            SparkClient(backend_config=test_case.config["backend_config"])
+        else:
+            with patch("kubeflow.spark.api.spark_client.KubernetesBackend"):
+                client = SparkClient()
+                assert client.backend is not None
+
+        # If we reach here but expected an exception, fail
+        assert test_case.expected_status == SUCCESS, (
+            f"Expected exception but none was raised for {test_case.name}"
+        )
+    except Exception as e:
+        # If we got an exception but expected success, fail
+        assert test_case.expected_status == FAILED, f"Unexpected exception in {test_case.name}: {e}"
+        # Validate the exception type if specified
+        if test_case.expected_error:
+            assert isinstance(e, test_case.expected_error), (
+                f"Expected exception type '{test_case.expected_error.__name__}' but got '{type(e).__name__}: {str(e)}'"
+            )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
             name="connect to existing server",
             expected_status=SUCCESS,
             config={"base_url": "sc://spark-server:15002"},
@@ -47,65 +100,23 @@ from kubeflow.test.common import FAILED, SUCCESS, TestCase
             expected_output="authenticated-session",
         ),
         TestCase(
-            name="invalid url scheme",
+            name="connect with invalid url scheme raises error",
             expected_status=FAILED,
             config={"base_url": "http://spark-server:15002"},
             expected_error=ValueError,
         ),
         TestCase(
-            name="url without host",
+            name="connect with url without host raises error",
             expected_status=FAILED,
             config={"base_url": "sc://:15002"},
             expected_error=ValueError,
         ),
         TestCase(
-            name="url without port",
+            name="connect with url without port raises error",
             expected_status=FAILED,
             config={"base_url": "sc://spark-server"},
             expected_error=ValueError,
         ),
-    ],
-)
-def test_connect_existing_server(test_case: TestCase):
-    """Test connect() against an existing Spark Connect server."""
-    print(f"Testing {test_case.name}...")
-
-    with (
-        patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend,
-        patch("kubeflow.spark.api.spark_client.SparkSession") as mock_session,
-    ):
-        backend = mock_backend.return_value
-        builder = mock_session.builder.remote.return_value
-        builder.getOrCreate.return_value = test_case.expected_output
-        builder.config.return_value.getOrCreate.return_value = test_case.expected_output
-
-        client = SparkClient()
-
-        if test_case.expected_status == FAILED:
-            with pytest.raises(test_case.expected_error):
-                client.connect(base_url=test_case.config["base_url"])
-            mock_session.builder.remote.assert_not_called()
-        else:
-            session = client.connect(
-                base_url=test_case.config["base_url"],
-                token=test_case.config.get("token"),
-            )
-
-            assert session == test_case.expected_output
-            mock_session.builder.remote.assert_called_once_with(test_case.config["base_url"])
-            if "token" in test_case.config:
-                builder.config.assert_called_once_with(
-                    "spark.connect.authenticate.token", test_case.config["token"]
-                )
-            else:
-                builder.config.assert_not_called()
-
-        backend.create_and_connect.assert_not_called()
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
         TestCase(
             name="create session with default arguments",
             expected_status=SUCCESS,
@@ -126,49 +137,73 @@ def test_connect_existing_server(test_case: TestCase):
             expected_output="configured-session",
         ),
         TestCase(
-            name="session creation times out",
+            name="create session timeout raises error",
             expected_status=FAILED,
             config={},
             expected_error=TimeoutError,
         ),
         TestCase(
-            name="session creation fails",
+            name="create session failure raises error",
             expected_status=FAILED,
             config={},
             expected_error=RuntimeError,
         ),
     ],
 )
-def test_connect_create_session(test_case: TestCase):
-    """Test connect() delegation to KubernetesBackend when no base_url is given."""
+def test_connect(test_case: TestCase):
+    """Test connect() against an existing server and delegation to KubernetesBackend."""
     print(f"Testing {test_case.name}...")
 
-    with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
+    with (
+        patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend,
+        patch("kubeflow.spark.api.spark_client.SparkSession") as mock_session,
+    ):
         backend = mock_backend.return_value
+        builder = mock_session.builder.remote.return_value
         client = SparkClient()
 
         if test_case.expected_status == FAILED:
-            backend.create_and_connect.side_effect = test_case.expected_error(
-                "Session creation failed"
-            )
-            with pytest.raises(test_case.expected_error):
-                client.connect()
+            if test_case.expected_error is ValueError:
+                with pytest.raises(ValueError):
+                    client.connect(**test_case.config)
+                mock_session.builder.remote.assert_not_called()
+                backend.create_and_connect.assert_not_called()
+            else:
+                backend.create_and_connect.side_effect = test_case.expected_error(
+                    "Failed to create session"
+                )
+                with pytest.raises(test_case.expected_error):
+                    client.connect(**test_case.config)
+                backend.create_and_connect.assert_called_once()
+        elif "base_url" in test_case.config:
+            builder.getOrCreate.return_value = test_case.expected_output
+            builder.config.return_value.getOrCreate.return_value = test_case.expected_output
+            session = client.connect(**test_case.config)
+
+            assert session == test_case.expected_output
+            mock_session.builder.remote.assert_called_once_with(test_case.config["base_url"])
+            if "token" in test_case.config:
+                builder.config.assert_called_once_with(
+                    "spark.connect.authenticate.token", test_case.config["token"]
+                )
+            else:
+                builder.config.assert_not_called()
+            backend.create_and_connect.assert_not_called()
         else:
             backend.create_and_connect.return_value = test_case.expected_output
             session = client.connect(**test_case.config)
 
             assert session == test_case.expected_output
-
-        backend.create_and_connect.assert_called_once_with(
-            num_executors=test_case.config.get("num_executors"),
-            resources_per_executor=test_case.config.get("resources_per_executor"),
-            spark_conf=test_case.config.get("spark_conf"),
-            driver=None,
-            executor=None,
-            options=test_case.config.get("options"),
-            timeout=test_case.config.get("timeout", 300),
-            connect_timeout=test_case.config.get("connect_timeout", 120),
-        )
+            backend.create_and_connect.assert_called_once_with(
+                num_executors=test_case.config.get("num_executors"),
+                resources_per_executor=test_case.config.get("resources_per_executor"),
+                spark_conf=test_case.config.get("spark_conf"),
+                driver=None,
+                executor=None,
+                options=test_case.config.get("options"),
+                timeout=test_case.config.get("timeout", 300),
+                connect_timeout=test_case.config.get("connect_timeout", 120),
+            )
 
 
 @pytest.mark.parametrize(
@@ -195,6 +230,11 @@ def test_connect_create_session(test_case: TestCase):
             expected_status=SUCCESS,
             expected_output=[],
         ),
+        TestCase(
+            name="list sessions backend failure raises error",
+            expected_status=FAILED,
+            expected_error=RuntimeError,
+        ),
     ],
 )
 def test_list_sessions(test_case: TestCase):
@@ -203,13 +243,19 @@ def test_list_sessions(test_case: TestCase):
 
     with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
         backend = mock_backend.return_value
-        backend.list_sessions.return_value = test_case.expected_output
-
         client = SparkClient()
-        sessions = client.list_sessions()
 
-        assert sessions == test_case.expected_output
-        backend.list_sessions.assert_called_once_with()
+        if test_case.expected_status == FAILED:
+            backend.list_sessions.side_effect = test_case.expected_error("Failed to list sessions")
+            with pytest.raises(test_case.expected_error):
+                client.list_sessions()
+            backend.list_sessions.assert_called_once_with()
+        else:
+            backend.list_sessions.return_value = test_case.expected_output
+            sessions = client.list_sessions()
+
+            assert sessions == test_case.expected_output
+            backend.list_sessions.assert_called_once_with()
 
 
 @pytest.mark.parametrize(
@@ -244,14 +290,14 @@ def test_get_session(test_case: TestCase):
         if test_case.expected_status == FAILED:
             backend.get_session.side_effect = test_case.expected_error("Session not found")
             with pytest.raises(test_case.expected_error):
-                client.get_session(test_case.config["session_name"])
+                client.get_session(name=test_case.config["session_name"])
+            backend.get_session.assert_called_once_with(test_case.config["session_name"])
         else:
             backend.get_session.return_value = test_case.expected_output
-            session = client.get_session(test_case.config["session_name"])
+            session = client.get_session(name=test_case.config["session_name"])
 
             assert session == test_case.expected_output
-
-        backend.get_session.assert_called_once_with(test_case.config["session_name"])
+            backend.get_session.assert_called_once_with(test_case.config["session_name"])
 
 
 @pytest.mark.parametrize(
@@ -263,7 +309,7 @@ def test_get_session(test_case: TestCase):
             config={"session_name": "session-1"},
         ),
         TestCase(
-            name="delete session not found raises error",
+            name="delete nonexistent session raises error",
             expected_status=FAILED,
             config={"session_name": "nonexistent-session"},
             expected_error=RuntimeError,
@@ -281,11 +327,11 @@ def test_delete_session(test_case: TestCase):
         if test_case.expected_status == FAILED:
             backend.delete_session.side_effect = test_case.expected_error("Session not found")
             with pytest.raises(test_case.expected_error):
-                client.delete_session(test_case.config["session_name"])
+                client.delete_session(name=test_case.config["session_name"])
+            backend.delete_session.assert_called_once_with(test_case.config["session_name"])
         else:
-            client.delete_session(test_case.config["session_name"])
-
-        backend.delete_session.assert_called_once_with(test_case.config["session_name"])
+            client.delete_session(name=test_case.config["session_name"])
+            backend.delete_session.assert_called_once_with(test_case.config["session_name"])
 
 
 @pytest.mark.parametrize(
@@ -310,7 +356,7 @@ def test_delete_session(test_case: TestCase):
             expected_output=["log stream 1", "log stream 2"],
         ),
         TestCase(
-            name="get session logs without a driver pod raises error",
+            name="get session logs without driver pod raises error",
             expected_status=FAILED,
             config={"session_name": "session-1"},
             expected_error=RuntimeError,
@@ -324,78 +370,37 @@ def test_get_session_logs(test_case: TestCase):
     with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock_backend:
         backend = mock_backend.return_value
         client = SparkClient()
-        follow = test_case.config.get("follow", False)
 
         if test_case.expected_status == FAILED:
             backend.get_session_logs.side_effect = test_case.expected_error("No driver pod")
             with pytest.raises(test_case.expected_error):
-                list(client.get_session_logs(test_case.config["session_name"]))
+                list(client.get_session_logs(name=test_case.config["session_name"]))
+            backend.get_session_logs.assert_called_once_with(
+                test_case.config["session_name"],
+                follow=False,
+            )
         else:
             backend.get_session_logs.return_value = iter(test_case.expected_output)
+
             if "follow" in test_case.config:
                 logs = list(
-                    client.get_session_logs(test_case.config["session_name"], follow=follow)
+                    client.get_session_logs(
+                        name=test_case.config["session_name"],
+                        follow=test_case.config["follow"],
+                    )
+                )
+                backend.get_session_logs.assert_called_once_with(
+                    test_case.config["session_name"],
+                    follow=test_case.config["follow"],
                 )
             else:
-                logs = list(client.get_session_logs(test_case.config["session_name"]))
+                logs = list(client.get_session_logs(name=test_case.config["session_name"]))
+                backend.get_session_logs.assert_called_once_with(
+                    test_case.config["session_name"],
+                    follow=False,
+                )
 
             assert logs == test_case.expected_output
-
-        backend.get_session_logs.assert_called_once_with(
-            test_case.config["session_name"], follow=follow
-        )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TestCase(
-            name="default backend initialization",
-            expected_status=SUCCESS,
-            config={},
-        ),
-        TestCase(
-            name="custom namespace initialization",
-            expected_status=SUCCESS,
-            config={"namespace": "spark"},
-        ),
-        TestCase(
-            name="invalid backend config",
-            expected_status=FAILED,
-            config={"backend_config": "invalid"},
-            expected_error=ValueError,
-        ),
-    ],
-)
-def test_create_and_connect(test_case: TestCase):
-    """Test SparkClient initialization scenarios."""
-
-    try:
-        if "namespace" in test_case.config:
-            with patch("kubeflow.spark.api.spark_client.KubernetesBackend") as mock:
-                SparkClient(
-                    backend_config=KubernetesBackendConfig(namespace=test_case.config["namespace"])
-                )
-                mock.assert_called_once()
-        elif "backend_config" in test_case.config:
-            SparkClient(backend_config=test_case.config["backend_config"])
-        else:
-            with patch("kubeflow.spark.api.spark_client.KubernetesBackend"):
-                client = SparkClient()
-                assert client.backend is not None
-
-        # If we reach here but expected an exception, fail
-        assert test_case.expected_status == SUCCESS, (
-            f"Expected exception but none was raised for {test_case.name}"
-        )
-    except Exception as e:
-        # If we got an exception but expected success, fail
-        assert test_case.expected_status == FAILED, f"Unexpected exception in {test_case.name}: {e}"
-        # Validate the exception type if specified
-        if test_case.expected_error:
-            assert isinstance(e, test_case.expected_error), (
-                f"Expected exception type '{test_case.expected_error.__name__}' but got '{type(e).__name__}: {str(e)}'"
-            )
 
 
 @pytest.mark.parametrize(
