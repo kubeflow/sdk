@@ -209,6 +209,23 @@ def test_get_container_devices(test_case: TestCase):
                 },
             ),
         ),
+        TestCase(
+            name="fractional float quantity is passed as a string",
+            expected_status=SUCCESS,
+            config={"resources_per_node": {"cpu": 0.5, "memory": "1Gi", "gpu": 2.0}},
+            expected_output=models.IoK8sApiCoreV1ResourceRequirements(
+                limits={
+                    "cpu": models.IoK8sApimachineryPkgApiResourceQuantity("0.5"),
+                    "memory": models.IoK8sApimachineryPkgApiResourceQuantity("1Gi"),
+                    "nvidia.com/gpu": models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                },
+                requests={
+                    "cpu": models.IoK8sApimachineryPkgApiResourceQuantity("0.5"),
+                    "memory": models.IoK8sApimachineryPkgApiResourceQuantity("1Gi"),
+                    "nvidia.com/gpu": models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                },
+            ),
+        ),
     ],
 )
 def test_get_resources_per_node(test_case: TestCase):
