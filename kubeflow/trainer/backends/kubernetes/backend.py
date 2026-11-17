@@ -182,6 +182,13 @@ class KubernetesBackend(RuntimeBackend):
 
     def get_runtime(self, name: str) -> types.Runtime:
         """Prefer namespaced runtime, fall back to cluster-scoped only if it does not exist"""
+        runtime = self.__get_namespaced_runtime(name)
+        if runtime is not None:
+            return runtime
+        return self.__get_cluster_runtime(name)
+
+    def __get_namespaced_runtime(self, name: str) -> types.Runtime | None:
+        """Get a namespaced TrainingRuntime, or None if it does not exist."""
         try:
             ns_thread = self.custom_api.get_namespaced_custom_object(
                 constants.GROUP,
@@ -209,7 +216,10 @@ class KubernetesBackend(RuntimeBackend):
             raise RuntimeError(
                 f"Failed to get {types.RuntimeKind.TRAINING_RUNTIME}: {self.namespace}/{name}"
             ) from e
+        return None
 
+    def __get_cluster_runtime(self, name: str) -> types.Runtime:
+        """Get a cluster-scoped ClusterTrainingRuntime."""
         try:
             cluster_thread = self.custom_api.get_cluster_custom_object(
                 constants.GROUP,
@@ -230,6 +240,27 @@ class KubernetesBackend(RuntimeBackend):
             raise RuntimeError(
                 f"Failed to get Runtime: {name} (checked both namespaced and cluster scope)"
             ) from e
+
+    def __get_runtime_from_ref(
+        self, runtime_ref: models.TrainerV1alpha1RuntimeRef
+    ) -> types.Runtime:
+        """Get the runtime a TrainJob actually references.
+
+        The runtimeRef names its kind, so the lookup goes to that scope directly
+        instead of preferring a namespaced runtime that happens to share the name.
+        A runtimeRef without a kind falls back to the same lookup as get_runtime().
+        """
+        if runtime_ref.kind == types.RuntimeKind.CLUSTER_TRAINING_RUNTIME.value:
+            return self.__get_cluster_runtime(runtime_ref.name)
+        if runtime_ref.kind == types.RuntimeKind.TRAINING_RUNTIME.value:
+            runtime = self.__get_namespaced_runtime(runtime_ref.name)
+            if runtime is None:
+                raise RuntimeError(
+                    f"Failed to get {types.RuntimeKind.TRAINING_RUNTIME}: "
+                    f"{self.namespace}/{runtime_ref.name} not found"
+                )
+            return runtime
+        return self.get_runtime(runtime_ref.name)
 
     def get_runtime_packages(self, runtime: types.Runtime):
         if runtime.trainer.trainer_type == types.TrainerType.BUILTIN_TRAINER:
@@ -400,7 +431,7 @@ class KubernetesBackend(RuntimeBackend):
                     runtime is not None
                     and trainjob.spec
                     and trainjob.spec.runtime_ref
-                    and trainjob.spec.runtime_ref.name != runtime.name
+                    and not self.__references_runtime(trainjob.spec.runtime_ref, runtime)
                 ):
                     continue
 
@@ -654,6 +685,15 @@ class KubernetesBackend(RuntimeBackend):
                 f"Failed to read logs for the pod {self.namespace}/{pod_name}"
             ) from e
 
+    @staticmethod
+    def __references_runtime(
+        runtime_ref: models.TrainerV1alpha1RuntimeRef, runtime: types.Runtime
+    ) -> bool:
+        """Whether runtime_ref points at runtime. Kind is compared when the ref has one."""
+        if runtime_ref.name != runtime.name:
+            return False
+        return not runtime_ref.kind or runtime_ref.kind == runtime.kind.value
+
     def __get_trainjob_from_cr(
         self,
         trainjob_cr: models.TrainerV1alpha1TrainJob,
@@ -670,7 +710,7 @@ class KubernetesBackend(RuntimeBackend):
         name = trainjob_cr.metadata.name
         namespace = trainjob_cr.metadata.namespace
 
-        runtime = self.get_runtime(trainjob_cr.spec.runtime_ref.name)
+        runtime = self.__get_runtime_from_ref(trainjob_cr.spec.runtime_ref)
 
         # Construct the TrainJob from the CR.
         trainjob = types.TrainJob(

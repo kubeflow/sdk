@@ -1874,3 +1874,93 @@ def test_get_job_events(kubernetes_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+def _train_job_with_runtime_kind(
+    train_job_name: str, runtime_kind: types.RuntimeKind
+) -> models.TrainerV1alpha1TrainJob:
+    """A TrainJob CR whose runtimeRef points at TORCH_RUNTIME of the given kind."""
+    train_job = add_status(create_train_job(train_job_name=train_job_name))
+    train_job.spec.runtime_ref.kind = runtime_kind.value
+    return train_job
+
+
+@pytest.mark.parametrize(
+    "runtime_kind",
+    [types.RuntimeKind.CLUSTER_TRAINING_RUNTIME, types.RuntimeKind.TRAINING_RUNTIME],
+)
+def test_get_job_resolves_runtime_by_ref_kind(kubernetes_backend, runtime_kind):
+    """get_job returns the runtime the TrainJob references, not a same-named one.
+
+    The mocked API serves both a namespaced TrainingRuntime and a
+    ClusterTrainingRuntime for every name, so a lookup by name alone would
+    always pick the namespaced one.
+    """
+    train_job = _train_job_with_runtime_kind(BASIC_TRAIN_JOB_NAME, runtime_kind)
+
+    def get_namespaced(*args, **kwargs):
+        if args[3] == constants.TRAINJOB_PLURAL:
+            mock_thread = Mock()
+            mock_thread.get.return_value = normalize_model(
+                train_job, models.TrainerV1alpha1TrainJob
+            )
+            return mock_thread
+        return get_namespaced_custom_object_response(*args, **kwargs)
+
+    kubernetes_backend.custom_api.get_namespaced_custom_object.side_effect = get_namespaced
+
+    job = kubernetes_backend.get_job(BASIC_TRAIN_JOB_NAME)
+
+    assert job.runtime.name == TORCH_RUNTIME
+    assert job.runtime.kind == runtime_kind
+
+
+def test_get_job_missing_namespaced_runtime_does_not_fall_back(kubernetes_backend):
+    """A runtimeRef of kind TrainingRuntime must not resolve to a ClusterTrainingRuntime."""
+    train_job = _train_job_with_runtime_kind(
+        BASIC_TRAIN_JOB_NAME, types.RuntimeKind.TRAINING_RUNTIME
+    )
+
+    def get_namespaced(*args, **kwargs):
+        if args[3] == constants.TRAINJOB_PLURAL:
+            mock_thread = Mock()
+            mock_thread.get.return_value = normalize_model(
+                train_job, models.TrainerV1alpha1TrainJob
+            )
+            return mock_thread
+        raise client.ApiException(status=404)
+
+    kubernetes_backend.custom_api.get_namespaced_custom_object.side_effect = get_namespaced
+
+    with pytest.raises(RuntimeError):
+        kubernetes_backend.get_job(BASIC_TRAIN_JOB_NAME)
+
+    kubernetes_backend.custom_api.get_cluster_custom_object.assert_not_called()
+
+
+def test_list_jobs_filters_by_runtime_kind(kubernetes_backend):
+    """list_jobs(runtime=...) skips TrainJobs that reference a same-named runtime of another kind."""
+    cluster_job = _train_job_with_runtime_kind(
+        "cluster-job", types.RuntimeKind.CLUSTER_TRAINING_RUNTIME
+    )
+    namespaced_job = _train_job_with_runtime_kind(
+        "namespaced-job", types.RuntimeKind.TRAINING_RUNTIME
+    )
+
+    def list_namespaced(*args, **kwargs):
+        mock_thread = Mock()
+        mock_thread.get.return_value = normalize_model(
+            models.TrainerV1alpha1TrainJobList(items=[cluster_job, namespaced_job]),
+            models.TrainerV1alpha1TrainJobList,
+        )
+        return mock_thread
+
+    kubernetes_backend.custom_api.list_namespaced_custom_object.side_effect = list_namespaced
+
+    cluster_runtime = kubernetes_backend.get_runtime(TORCH_RUNTIME)
+    cluster_runtime.kind = types.RuntimeKind.CLUSTER_TRAINING_RUNTIME
+
+    jobs = kubernetes_backend.list_jobs(runtime=cluster_runtime)
+
+    assert [job.name for job in jobs] == ["cluster-job"]
+    assert jobs[0].runtime.kind == types.RuntimeKind.CLUSTER_TRAINING_RUNTIME
