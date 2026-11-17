@@ -138,17 +138,24 @@ def conditional_error_handler(*args, **kwargs):
 def list_namespaced_pod_response(*args, **kwargs):
     """Return a mock pod list response for the requested TrainJob."""
     label_selector = kwargs.get("label_selector", "")
-    pod_list = (
-        get_mock_pod_list_with_restarts()
-        if JOB_WITH_POD_RESTARTS in label_selector
-        else get_mock_pod_list()
-    )
+    if label_selector == constants.ALL_TRAINJOBS_POD_LABEL_SELECTOR:
+        # list_jobs() lists the Pods of all TrainJobs returned by list_namespaced_custom_object.
+        pod_list = models.IoK8sApiCoreV1PodList(
+            items=[
+                *get_mock_pod_list("basic-job-1").items,
+                *get_mock_pod_list("basic-job-2").items,
+            ]
+        )
+    elif JOB_WITH_POD_RESTARTS in label_selector:
+        pod_list = get_mock_pod_list_with_restarts()
+    else:
+        pod_list = get_mock_pod_list()
     mock_thread = Mock()
     mock_thread.get.return_value = pod_list
     return mock_thread
 
 
-def get_mock_pod_list():
+def get_mock_pod_list(trainjob_name: str = BASIC_TRAIN_JOB_NAME):
     """Create a mocked Kubernetes PodList object with pods for different training steps."""
     return models.IoK8sApiCoreV1PodList(
         items=[
@@ -158,7 +165,7 @@ def get_mock_pod_list():
                     name="dataset-initializer-pod",
                     namespace=DEFAULT_NAMESPACE,
                     labels={
-                        constants.JOBSET_NAME_LABEL: BASIC_TRAIN_JOB_NAME,
+                        constants.JOBSET_NAME_LABEL: trainjob_name,
                         constants.JOBSET_RJOB_NAME_LABEL: constants.DATASET_INITIALIZER,
                         constants.JOB_INDEX_LABEL: "0",
                     },
@@ -180,7 +187,7 @@ def get_mock_pod_list():
                     name="model-initializer-pod",
                     namespace=DEFAULT_NAMESPACE,
                     labels={
-                        constants.JOBSET_NAME_LABEL: BASIC_TRAIN_JOB_NAME,
+                        constants.JOBSET_NAME_LABEL: trainjob_name,
                         constants.JOBSET_RJOB_NAME_LABEL: constants.MODEL_INITIALIZER,
                         constants.JOB_INDEX_LABEL: "0",
                     },
@@ -202,7 +209,7 @@ def get_mock_pod_list():
                     name="node-0-pod",
                     namespace=DEFAULT_NAMESPACE,
                     labels={
-                        constants.JOBSET_NAME_LABEL: BASIC_TRAIN_JOB_NAME,
+                        constants.JOBSET_NAME_LABEL: trainjob_name,
                         constants.JOBSET_RJOB_NAME_LABEL: constants.NODE,
                         constants.JOB_INDEX_LABEL: "0",
                     },
@@ -1639,6 +1646,75 @@ def test_list_jobs(kubernetes_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+def test_list_jobs_sends_constant_number_of_requests(kubernetes_backend):
+    """list_jobs() lists all Pods once and resolves each runtime once, not once per TrainJob."""
+    trainjob_names = [f"basic-job-{i}" for i in range(1, 51)]
+    trainjob_list = normalize_model(
+        models.TrainerV1alpha1TrainJobList(
+            items=[add_status(create_train_job(train_job_name=n)) for n in trainjob_names]
+        ),
+        models.TrainerV1alpha1TrainJobList,
+    )
+    kubernetes_backend.custom_api.list_namespaced_custom_object.side_effect = None
+    kubernetes_backend.custom_api.list_namespaced_custom_object.return_value = Mock(
+        get=Mock(return_value=trainjob_list)
+    )
+    pod_list = models.IoK8sApiCoreV1PodList(
+        items=[pod for n in trainjob_names for pod in get_mock_pod_list(n).items]
+    )
+    kubernetes_backend.core_api.list_namespaced_pod.side_effect = None
+    kubernetes_backend.core_api.list_namespaced_pod.return_value = Mock(
+        get=Mock(return_value=pod_list)
+    )
+
+    jobs = kubernetes_backend.list_jobs()
+
+    assert [j.name for j in jobs] == trainjob_names
+    assert all(
+        [s.pod_name for s in j.steps]
+        == ["dataset-initializer-pod", "model-initializer-pod", "node-0-pod"]
+        for j in jobs
+    )
+    kubernetes_backend.core_api.list_namespaced_pod.assert_called_once_with(
+        DEFAULT_NAMESPACE,
+        label_selector=constants.ALL_TRAINJOBS_POD_LABEL_SELECTOR,
+        async_req=True,
+    )
+    # All TrainJobs reference the same runtime, so it is fetched once.
+    kubernetes_backend.custom_api.get_namespaced_custom_object.assert_called_once()
+
+
+def test_list_jobs_trainjob_without_pods(kubernetes_backend):
+    """A TrainJob whose Pods are gone keeps its status and gets no steps."""
+    kubernetes_backend.core_api.list_namespaced_pod.side_effect = None
+    kubernetes_backend.core_api.list_namespaced_pod.return_value = Mock(
+        get=Mock(return_value=get_mock_pod_list("basic-job-1"))
+    )
+
+    jobs = kubernetes_backend.list_jobs()
+
+    assert [j.name for j in jobs] == ["basic-job-1", "basic-job-2"]
+    assert len(jobs[0].steps) == 3
+    assert jobs[1].steps == []
+    assert jobs[1].status == constants.TRAINJOB_COMPLETE
+
+
+def test_list_jobs_no_matching_runtime_skips_pod_listing(kubernetes_backend):
+    """Pods are not listed when the runtime filter excludes every TrainJob."""
+    other_runtime = types.Runtime(
+        name="other-runtime",
+        trainer=types.RuntimeTrainer(
+            trainer_type=types.TrainerType.CUSTOM_TRAINER,
+            framework="torch",
+            image="example.com/test-runtime",
+        ),
+        kind=types.RuntimeKind.TRAINING_RUNTIME,
+    )
+
+    assert kubernetes_backend.list_jobs(runtime=other_runtime) == []
+    kubernetes_backend.core_api.list_namespaced_pod.assert_not_called()
 
 
 @pytest.mark.parametrize(
