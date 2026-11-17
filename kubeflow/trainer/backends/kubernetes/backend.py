@@ -317,6 +317,7 @@ class KubernetesBackend(RuntimeBackend):
                 name = None
                 trainer_overrides = {}
                 runtime_patches = None
+                active_deadline_seconds = None
 
                 if options:
                     for option in options:
@@ -331,6 +332,7 @@ class KubernetesBackend(RuntimeBackend):
                     spec_section = job_spec.get("spec", {})
                     trainer_overrides = spec_section.get("trainer", {})
                     runtime_patches = spec_section.get("runtimePatches")
+                    active_deadline_seconds = spec_section.get("activeDeadlineSeconds")
 
                 # Generate unique name for the TrainJob if not provided
                 train_job_name = name or (
@@ -345,6 +347,7 @@ class KubernetesBackend(RuntimeBackend):
                     trainer=trainer,
                     trainer_overrides=trainer_overrides,
                     runtime_patches=runtime_patches,
+                    active_deadline_seconds=active_deadline_seconds,
                 )
 
                 # Build the TrainJob.
@@ -821,6 +824,7 @@ class KubernetesBackend(RuntimeBackend):
         | None = None,
         trainer_overrides: dict[str, Any] | None = None,
         runtime_patches: list[dict[str, Any]] | None = None,
+        active_deadline_seconds: int | None = None,
     ) -> models.TrainerV1alpha1TrainJobSpec:
         """Get TrainJob spec from the given parameters."""
 
@@ -871,6 +875,7 @@ class KubernetesBackend(RuntimeBackend):
             runtimeRef=models.TrainerV1alpha1RuntimeRef(name=runtime.name, kind=runtime.kind.value),
             trainer=trainer_cr if trainer_cr != models.TrainerV1alpha1Trainer() else None,
             runtimePatches=runtime_patch_models,
+            activeDeadlineSeconds=active_deadline_seconds,
         )
 
         # Add initializer if users define it.

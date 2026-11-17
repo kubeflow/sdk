@@ -28,9 +28,6 @@ SPARK_CONNECT_PORT = 15002
 # Session name prefix
 SESSION_NAME_PREFIX = "spark-connect"
 
-# Spark Connect Maven package (required for Connect server main class on classpath)
-SPARK_CONNECT_PACKAGE_SCALA_VERSION = "2.13"
-
 # Spark job name prefix
 JOB_NAME_PREFIX = "spark-job"
 
@@ -40,9 +37,9 @@ SPARK_APPLICATION_VERSION = "v1beta2"
 SPARK_APPLICATION_PLURAL = "sparkapplications"
 SPARK_APPLICATION_KIND = "SparkApplication"
 
-# Default values; keep major.minor aligned with pyspark-connect in pyproject.toml
-DEFAULT_SPARK_VERSION = "4.0.1"
-DEFAULT_SPARK_IMAGE = "apache/spark:4.0.1"
+# Default values; keep major.minor aligned with pyspark-client in pyproject.toml
+DEFAULT_SPARK_VERSION = "4.0.4"
+DEFAULT_SPARK_IMAGE = "apache/spark:4.0.4"
 DEFAULT_NUM_EXECUTORS = 1  # Kind-friendly: 1 driver + 1 executor = 2 cores
 
 # Minimal defaults for Kind / resource-constrained clusters (driver and executor)
@@ -51,7 +48,6 @@ DEFAULT_DRIVER_CPU = 1
 DEFAULT_DRIVER_MEMORY = "512Mi"
 DEFAULT_EXECUTOR_CPU = 1
 DEFAULT_EXECUTOR_MEMORY = "512Mi"
-DEFAULT_SERVICE_ACCOUNT = "spark-operator-spark"
 
 # Function-based Spark job script
 FUNC_JOB_VOLUME_NAME = "spark-app-source"

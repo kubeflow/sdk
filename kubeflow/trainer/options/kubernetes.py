@@ -45,6 +45,9 @@ class ContainerPatch:
         if not self.name or not self.name.strip():
             raise ValueError("Container name must be a non-empty string")
 
+        if self.security_context is not None and not isinstance(self.security_context, dict):
+            raise ValueError("security_context must be a dictionary")
+
         if self.env is not None:
             if not isinstance(self.env, list):
                 raise ValueError("env must be a list of dictionaries")
@@ -116,6 +119,37 @@ class PodSpecPatch:
     affinity: dict | None = None
     tolerations: list[dict] | None = None
     scheduling_gates: list[dict] | None = None
+
+    def __post_init__(self):
+        """Validate pod spec patch configuration."""
+        if self.security_context is not None and not isinstance(self.security_context, dict):
+            raise ValueError("security_context must be a dictionary")
+        if self.node_selector is not None and not isinstance(self.node_selector, dict):
+            raise ValueError("node_selector must be a dictionary")
+        if self.affinity is not None and not isinstance(self.affinity, dict):
+            raise ValueError("affinity must be a dictionary")
+        if self.volumes is not None and (
+            not isinstance(self.volumes, list) or not all(isinstance(v, dict) for v in self.volumes)
+        ):
+            raise ValueError("volumes must be a list of dictionaries")
+
+        if self.image_pull_secrets is not None and (
+            not isinstance(self.image_pull_secrets, list)
+            or not all(isinstance(s, dict) for s in self.image_pull_secrets)
+        ):
+            raise ValueError("image_pull_secrets must be a list of dictionaries")
+
+        if self.tolerations is not None and (
+            not isinstance(self.tolerations, list)
+            or not all(isinstance(t, dict) for t in self.tolerations)
+        ):
+            raise ValueError("tolerations must be a list of dictionaries")
+
+        if self.scheduling_gates is not None and (
+            not isinstance(self.scheduling_gates, list)
+            or not all(isinstance(g, dict) for g in self.scheduling_gates)
+        ):
+            raise ValueError("scheduling_gates must be a list of dictionaries")
 
 
 @dataclass
@@ -477,3 +511,57 @@ class TrainerArgs:
         spec = job_spec.setdefault("spec", {})
         trainer_spec = spec.setdefault("trainer", {})
         trainer_spec["args"] = self.args
+
+
+@dataclass
+class ActiveDeadlineSeconds:
+    """Set the active deadline on the TrainJob (.spec.activeDeadlineSeconds).
+
+    Specifies the duration in seconds relative to the TrainJob creation time
+    that the TrainJob may be active before the system tries to terminate it.
+    Once reached, all running Pods are terminated and the TrainJob status
+    becomes Failed with reason: DeadlineExceeded.
+
+    This value overrides any default set in the referenced Runtime. The field
+    is immutable, so it cannot be changed after the TrainJob is created.
+
+    Supported backends:
+        - Kubernetes
+
+    Args:
+        seconds: Duration in seconds. Must be a positive integer (minimum 1).
+    """
+
+    seconds: int
+
+    def __post_init__(self):
+        """Validate the active deadline seconds configuration."""
+        if type(self.seconds) is not int or self.seconds < 1:
+            raise ValueError("activeDeadlineSeconds must be a positive integer (minimum 1)")
+
+    def __call__(
+        self,
+        job_spec: dict[str, Any],
+        trainer: CustomTrainer | BuiltinTrainer | None,
+        backend: RuntimeBackend,
+    ) -> None:
+        """Apply active deadline seconds to the job specification.
+
+        Args:
+            job_spec: Job specification dictionary to modify.
+            trainer: Optional trainer instance for context.
+            backend: Backend instance for validation.
+
+        Raises:
+            ValueError: If backend does not support active deadline.
+        """
+        from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
+
+        if not isinstance(backend, KubernetesBackend):
+            raise ValueError(
+                f"ActiveDeadlineSeconds option is not compatible with {type(backend).__name__}. "
+                f"Supported backends: KubernetesBackend"
+            )
+
+        spec = job_spec.setdefault("spec", {})
+        spec["activeDeadlineSeconds"] = self.seconds

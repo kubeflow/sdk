@@ -31,7 +31,7 @@ from kubeflow.common.telemetry import (
     _NoOpTracer,
     get_tracer,
 )
-from kubeflow.trainer.test.common import SUCCESS, TestCase
+from kubeflow.test.common import SUCCESS, TestCase
 
 
 @pytest.mark.parametrize(

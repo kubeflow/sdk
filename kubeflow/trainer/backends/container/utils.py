@@ -23,6 +23,7 @@ from pathlib import Path
 import shlex
 
 from kubeflow.common.constants import UNKNOWN
+from kubeflow.common.utils import validate_python_function
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 
@@ -64,6 +65,7 @@ def get_training_script_code(trainer: types.CustomTrainer) -> str:
     import inspect
     import textwrap
 
+    validate_python_function(trainer.func)
     code = inspect.getsource(trainer.func)
     code = textwrap.dedent(code)
     if trainer.func_args is None:

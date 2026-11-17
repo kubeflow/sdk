@@ -1,3 +1,17 @@
+# Copyright The Kubeflow Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from collections.abc import Callable
 import inspect
 import os
@@ -8,6 +22,7 @@ from string import Template
 import textwrap
 from typing import Any
 
+from kubeflow.common.utils import validate_python_function
 from kubeflow.trainer.backends.localprocess import constants as local_exec_constants
 from kubeflow.trainer.backends.localprocess.types import LocalRuntimeTrainer
 from kubeflow.trainer.constants import constants
@@ -192,11 +207,8 @@ def get_command_using_train_func(
     if not runtime.trainer:
         raise ValueError(f"Runtime must have a trainer: {runtime}")
 
-    # Check if training function is callable.
-    if not callable(train_func):
-        raise ValueError(
-            f"Training function must be callable, got function type: {type(train_func)}"
-        )
+    # Validate the training function.
+    validate_python_function(train_func)
 
     # Extract the function implementation.
     func_code = inspect.getsource(train_func)
