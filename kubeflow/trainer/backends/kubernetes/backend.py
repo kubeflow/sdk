@@ -27,7 +27,8 @@ from typing import Any
 import uuid
 
 from kubeflow_trainer_api import models
-from kubernetes import client, config, stream, watch
+from kubernetes import client, config, watch
+from kubernetes.stream import stream
 
 import kubeflow.common.constants as common_constants
 from kubeflow.common.types import KubernetesBackendConfig
