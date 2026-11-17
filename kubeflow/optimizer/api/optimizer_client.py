@@ -281,7 +281,8 @@ class OptimizerClient:
 
         This provides additional clarity about the state of the OptimizationJob
         when logs alone are not sufficient. Events include information about
-        trial state changes, errors, and other significant occurrences.
+        trial state changes, errors, and other significant occurrences, from the
+        OptimizationJob, its Trials, and the TrainJobs that run those Trials.
 
         Args:
             name: Name of the OptimizationJob.
