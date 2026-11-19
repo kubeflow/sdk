@@ -37,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kubernetes-version: ["1.32.11", "1.33.7", "1.34.3", "1.35.0"]
+        kubernetes-version: ["1.34.3", "1.35.8", "1.36.4", "1.37.0"]
         spark-operator-ref: ["master"]
 
     env:

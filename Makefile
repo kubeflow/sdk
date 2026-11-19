@@ -25,16 +25,16 @@ VENV_DIR := $(PROJECT_DIR)/.venv
 LOCALBIN ?= $(PROJECT_DIR)/bin
 
 # Tool versions
-K8S_VERSION ?= 1.32.11
-KIND_VERSION ?= v0.31.0
-HELM_VERSION ?= v3.19.0
+K8S_VERSION ?= 1.37.0
+KIND_VERSION ?= v0.33.0
+HELM_VERSION ?= v3.20.2
 
 # Tool binaries
 KIND ?= $(LOCALBIN)/kind
 KUBECTL ?= $(LOCALBIN)/kubectl
 HELM ?= $(LOCALBIN)/helm
 
-# Host platform in the form used by the Kind, kubectl and Helm release downloads.
+# Host platform in the form used by the kubectl release downloads.
 HOST_OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 HOST_ARCH := $(shell uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')
 SHA256SUM := $(shell command -v sha256sum >/dev/null 2>&1 && echo sha256sum || echo "shasum -a 256")
@@ -154,16 +154,7 @@ $(LOCALBIN):
 
 .PHONY: kind
 kind: $(LOCALBIN) ## Download Kind binary if required.
-	@if ! $(KIND) version 2>/dev/null | grep -q "kind $(KIND_VERSION) "; then \
-		set -eu; \
-		echo "Installing Kind $(KIND_VERSION) into $(LOCALBIN)"; \
-		tmp_dir=$$(mktemp -d); trap 'rm -rf "$$tmp_dir"' EXIT; \
-		url=https://kind.sigs.k8s.io/dl/$(KIND_VERSION)/kind-$(HOST_OS)-$(HOST_ARCH); \
-		curl -sSfLo "$$tmp_dir/kind" "$$url"; \
-		sum=$$(curl -sSfL "$$url.sha256sum" | awk '{print $$1}'); \
-		[ -n "$$sum" ] && echo "$$sum  $$tmp_dir/kind" | $(SHA256SUM) -c - >/dev/null; \
-		chmod +x "$$tmp_dir/kind"; mv "$$tmp_dir/kind" $(KIND); \
-	fi
+	GOBIN=$(LOCALBIN) go install sigs.k8s.io/kind@$(KIND_VERSION)
 
 .PHONY: kubectl
 kubectl: $(LOCALBIN) ## Download kubectl binary matching K8S_VERSION if required.
@@ -180,17 +171,7 @@ kubectl: $(LOCALBIN) ## Download kubectl binary matching K8S_VERSION if required
 
 .PHONY: helm
 helm: $(LOCALBIN) ## Download Helm binary if required.
-	@if ! $(HELM) version --short 2>/dev/null | grep -q "^$(HELM_VERSION)+"; then \
-		set -eu; \
-		echo "Installing Helm $(HELM_VERSION) into $(LOCALBIN)"; \
-		tmp_dir=$$(mktemp -d); trap 'rm -rf "$$tmp_dir"' EXIT; \
-		archive=helm-$(HELM_VERSION)-$(HOST_OS)-$(HOST_ARCH).tar.gz; \
-		curl -sSfLo "$$tmp_dir/$$archive" "https://get.helm.sh/$$archive"; \
-		sum=$$(curl -sSfL "https://get.helm.sh/$$archive.sha256sum" | awk '{print $$1}'); \
-		[ -n "$$sum" ] && echo "$$sum  $$tmp_dir/$$archive" | $(SHA256SUM) -c - >/dev/null; \
-		tar -xzf "$$tmp_dir/$$archive" -C "$$tmp_dir"; \
-		mv "$$tmp_dir/$(HOST_OS)-$(HOST_ARCH)/helm" $(HELM); \
-	fi
+	GOBIN=$(LOCALBIN) go install helm.sh/helm/v3/cmd/helm@$(HELM_VERSION)
 
 ##@ E2E Testing
 

@@ -17,7 +17,7 @@ set -euo pipefail
 
 CLUSTER_NAME="${SPARK_TEST_CLUSTER:-spark-test}"
 NAMESPACE="${SPARK_TEST_NAMESPACE:-spark-test}"
-K8S_VERSION="${K8S_VERSION:-1.32.11}"
+K8S_VERSION="${K8S_VERSION:-1.37.0}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN_DIR="${REPO_ROOT}/bin"
