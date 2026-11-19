@@ -23,7 +23,9 @@ import pytest
 from kubeflow.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.backends.localprocess.backend import LocalProcessBackend
 from kubeflow.trainer.backends.localprocess.constants import LOCAL_RUNTIME_IMAGE
+from kubeflow.trainer.backends.localprocess.job import LocalJob
 from kubeflow.trainer.backends.localprocess.types import (
+    LocalBackendStep,
     LocalProcessBackendConfig,
     LocalRuntimeTrainer,
 )
@@ -420,16 +422,78 @@ def test_list_jobs(local_backend, test_case):
             config={"job_name": "nonexistent-job", "step": "train"},
             expected_error=ValueError,
         ),
+        TestCase(
+            name="get_logs_default_returns_train_only",
+            expected_status=SUCCESS,
+            config={},
+        ),
+        TestCase(
+            name="get_logs_step_train_returns_train",
+            expected_status=SUCCESS,
+            config={"step": "train"},
+        ),
+        TestCase(
+            name="get_logs_step_node0_maps_to_train",
+            expected_status=SUCCESS,
+            config={"step": constants.NODE + "-0"},
+        ),
+        TestCase(
+            name="get_logs_unknown_step_returns_empty",
+            expected_status=SUCCESS,
+            config={"step": "does-not-exist", "expected_empty": True},
+        ),
     ],
 )
-def test_get_job_logs(local_backend, test_case):
+def test_get_job_logs(local_backend, mock_train_environment, test_case):
     """Test LocalProcessBackend.get_job_logs()."""
-    job_name = test_case.config.get("job_name")
-    step = test_case.config.get("step", "train")
+    # mock_train_environment fixture is required to avoid real subprocess execution
+    _ = mock_train_environment
 
     if test_case.expected_status == FAILED:
+        job_name = test_case.config.get("job_name")
+        step = test_case.config.get("step", "train")
         with pytest.raises(test_case.expected_error):
             list(local_backend.get_job_logs(job_name, step=step))
+        return
+
+    runtime = types.Runtime(
+        name=TORCH_RUNTIME,
+        trainer=types.RuntimeTrainer(
+            trainer_type=types.TrainerType.CUSTOM_TRAINER,
+            framework="torch",
+            num_nodes=1,
+            image=LOCAL_RUNTIME_IMAGE,
+        ),
+        kind=types.RuntimeKind.TRAINING_RUNTIME,
+    )
+    trainer = types.CustomTrainer(func=dummy_training_function)
+    job_name = local_backend.train(runtime=runtime, trainer=trainer, options=[])
+
+    # Seed stdout so scope can be observed. Add a second registered step with
+    # distinct output to ensure the default "node-0" request returns only the
+    # "train" step's logs and does not aggregate every step (regression).
+    for jb in local_backend._LocalProcessBackend__local_jobs:
+        if jb.name == job_name:
+            for s in jb.steps or []:
+                if s.step_name == "train":
+                    s.job._stdout = "train log line\n"
+                else:
+                    s.job._stdout = "other log line\n"
+            other_job = LocalJob(name=f"{job_name}-other", command="echo other")
+            other_job._stdout = "other log line\n"
+            jb.steps.append(LocalBackendStep(step_name="other-step", job=other_job))
+
+    expected_empty = test_case.config.get("expected_empty", False)
+
+    if "step" not in test_case.config:
+        logs = list(local_backend.get_job_logs(job_name))
+    else:
+        logs = list(local_backend.get_job_logs(job_name, step=test_case.config["step"]))
+
+    if expected_empty:
+        assert logs == []
+    else:
+        assert logs == ["train log line"]
 
 
 @pytest.mark.parametrize(
