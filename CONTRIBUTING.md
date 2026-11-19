@@ -26,6 +26,14 @@ To install all dependencies (including dev tools) and create virtual environment
 make install-dev
 ```
 
+#### Windows
+
+`make install-dev` installs `kubeflow-trainer-api`, `kubeflow-katib-api` and `kubeflow-spark-api` from git (see `override-dependencies` under `[tool.uv]` in [pyproject.toml](./pyproject.toml)). Some generated files in those repos have long paths, so on Windows the checkout can fail with `Filename too long`. Enable long paths in git before running it:
+
+```sh
+git config --global core.longpaths true
+```
+
 ### Coding Style
 Make sure to install [pre-commit](https://pre-commit.com/) (`uv pip install pre-commit`) and run `pre-commit install` from the root of the repository at least once before creating git commits.
 
