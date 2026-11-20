@@ -776,18 +776,13 @@ class ContainerBackend(RuntimeBackend):
         """Get logs for a training job by querying container runtime."""
         containers = self._get_job_containers(name)
 
-        # Check if requesting logs from all node containers (default behavior)
-        want_all_nodes = step == constants.NODE + "-0"
-
         for container in sorted(containers, key=lambda c: c["name"]):
             container_step = container["labels"].get(f"{self.label_prefix}/step", "")
 
-            # If want_all_nodes, only show node containers, not initializers
-            if want_all_nodes:
-                if not container_step.startswith(constants.NODE):
-                    continue
-            # Otherwise, match the specific step (could be initializer or node)
-            elif container_step != step:
+            # Match the requested step exactly. The default step is "node-0", so by
+            # default only the node-0 container's logs are returned (consistent
+            # with the Kubernetes backend and TrainerClient's documented contract).
+            if container_step != step:
                 continue
 
             try:
