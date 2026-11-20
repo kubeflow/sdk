@@ -347,10 +347,18 @@ class KubernetesBackend(RuntimeBackend):
         # Get the OptimizationJob to ensure it exists
         job = self.get_job(name)
 
-        # Create set of all OptimizationJob-related resource names
+        # Create set of all OptimizationJob-related resource names. Each Trial
+        # runs as a TrainJob with the same name, so the Trial names also match
+        # the TrainJob events.
         optimization_job_resources = {name}
         for trial in job.trials:
             optimization_job_resources.add(trial.name)
+
+        optimization_job_kinds = {
+            constants.EXPERIMENT_KIND,
+            constants.TRIAL_KIND,
+            trainer_constants.TRAINJOB_KIND,
+        }
 
         events = []
         try:
@@ -369,7 +377,7 @@ class KubernetesBackend(RuntimeBackend):
 
                 # Check if event is related to OptimizationJob resources
                 if (
-                    involved_object.kind in {constants.EXPERIMENT_KIND, constants.TRIAL_KIND}
+                    involved_object.kind in optimization_job_kinds
                     and involved_object.name in optimization_job_resources
                 ):
                     events.append(

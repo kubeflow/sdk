@@ -222,6 +222,36 @@ def mock_list_namespaced_event(*args, **kwargs):
                 reason="Running",
                 firstTimestamp=datetime.datetime(2025, 6, 1, 10, 31, 0),
             ),
+            # Event on the TrainJob that runs the Trial; it shares the Trial name.
+            models.IoK8sApiCoreV1Event(
+                metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                    name="test-event-trainjob",
+                    namespace=DEFAULT_NAMESPACE,
+                ),
+                involvedObject=models.IoK8sApiCoreV1ObjectReference(
+                    kind=trainer_constants.TRAINJOB_KIND,
+                    name=BASIC_TRIAL_NAME,
+                    namespace=DEFAULT_NAMESPACE,
+                ),
+                message="TrainJob failed: JobSet creation failed",
+                reason="Failed",
+                firstTimestamp=datetime.datetime(2025, 6, 1, 10, 32, 0),
+            ),
+            # TrainJob that does not belong to this OptimizationJob.
+            models.IoK8sApiCoreV1Event(
+                metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                    name="test-event-other-trainjob",
+                    namespace=DEFAULT_NAMESPACE,
+                ),
+                involvedObject=models.IoK8sApiCoreV1ObjectReference(
+                    kind=trainer_constants.TRAINJOB_KIND,
+                    name="unrelated-trainjob",
+                    namespace=DEFAULT_NAMESPACE,
+                ),
+                message="TrainJob created",
+                reason="Created",
+                firstTimestamp=datetime.datetime(2025, 6, 1, 10, 33, 0),
+            ),
             # Non-matching event (Pod kind) to test filtering
             models.IoK8sApiCoreV1Event(
                 metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
@@ -1146,6 +1176,13 @@ def test_delete_job(optimizer_backend, test_case):
                     message="Trial started",
                     reason="Running",
                     event_time=datetime.datetime(2025, 6, 1, 10, 31, 0),
+                ),
+                Event(
+                    involved_object_kind=trainer_constants.TRAINJOB_KIND,
+                    involved_object_name=BASIC_TRIAL_NAME,
+                    message="TrainJob failed: JobSet creation failed",
+                    reason="Failed",
+                    event_time=datetime.datetime(2025, 6, 1, 10, 32, 0),
                 ),
             ],
         ),
