@@ -45,8 +45,8 @@ def get_container_devices(
     Get the device type and device count for the given container.
     """
 
-    # If containers resource limits are empty, return Unknown.
-    if resources is None or resources.limits is None:
+    # If the container resource limits are empty, there is no device to report.
+    if resources is None or not resources.limits:
         return None
 
     # TODO (andreyvelich): We should discuss how to get container device type.
@@ -76,7 +76,15 @@ def get_container_devices(
         device = constants.CPU_LABEL
         device_count = resources.limits[constants.CPU_LABEL].actual_instance
     else:
-        raise Exception(f"Unknown device type in the container resources: {resources.limits}")
+        # Device plugins advertise extended resources as "<domain>/<resource>", e.g.
+        # "rdma/hca_shared_devices_a". There is no generic name for those, so use the
+        # resource key itself as the device. Sorting keeps the choice stable when a
+        # container requests more than one.
+        custom_keys = sorted(k for k in resources.limits if "/" in k)
+        if not custom_keys:
+            raise Exception(f"Unknown device type in the container resources: {resources.limits}")
+        device = custom_keys[0]
+        device_count = resources.limits[device].actual_instance
     if device_count is None:
         raise Exception(f"Failed to get device count for resources: {resources.limits}")
 

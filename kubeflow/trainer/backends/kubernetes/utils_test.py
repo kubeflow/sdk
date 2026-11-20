@@ -101,6 +101,85 @@ def sample_train_func_kwargs(a: int, b: str, c: float) -> str:
             },
             expected_output=("npu", "2.0"),
         ),
+        TestCase(
+            name="custom resource limit falls back to the resource key",
+            expected_status=SUCCESS,
+            config={
+                "resources": models.IoK8sApiCoreV1ResourceRequirements(
+                    limits={
+                        "rdma/hca_shared_devices_a": models.IoK8sApimachineryPkgApiResourceQuantity(
+                            1
+                        ),
+                    }
+                )
+            },
+            expected_output=("rdma/hca_shared_devices_a", "1.0"),
+        ),
+        TestCase(
+            name="custom resource is preferred over plain resource in fallback",
+            expected_status=SUCCESS,
+            config={
+                "resources": models.IoK8sApiCoreV1ResourceRequirements(
+                    limits={
+                        "memory": models.IoK8sApimachineryPkgApiResourceQuantity("1Gi"),
+                        "rdma/hca_shared_devices_a": models.IoK8sApimachineryPkgApiResourceQuantity(
+                            1
+                        ),
+                    }
+                )
+            },
+            expected_output=("rdma/hca_shared_devices_a", "1.0"),
+        ),
+        TestCase(
+            name="multiple custom resources pick the first in sorted order",
+            expected_status=SUCCESS,
+            config={
+                "resources": models.IoK8sApiCoreV1ResourceRequirements(
+                    limits={
+                        "rdma/hca_shared_devices_b": models.IoK8sApimachineryPkgApiResourceQuantity(
+                            2
+                        ),
+                        "rdma/hca_shared_devices_a": models.IoK8sApimachineryPkgApiResourceQuantity(
+                            1
+                        ),
+                    }
+                )
+            },
+            expected_output=("rdma/hca_shared_devices_a", "1.0"),
+        ),
+        TestCase(
+            name="unrecognized resource without a custom key still raises",
+            expected_status=FAILED,
+            config={
+                "resources": models.IoK8sApiCoreV1ResourceRequirements(
+                    limits={
+                        "memory": models.IoK8sApimachineryPkgApiResourceQuantity("1Gi"),
+                    }
+                )
+            },
+            expected_error=Exception,
+        ),
+        TestCase(
+            name="cpu limit takes priority over custom resource",
+            expected_status=SUCCESS,
+            config={
+                "resources": models.IoK8sApiCoreV1ResourceRequirements(
+                    limits={
+                        constants.CPU_LABEL: models.IoK8sApimachineryPkgApiResourceQuantity(4),
+                        "rdma/hca_shared_devices_a": models.IoK8sApimachineryPkgApiResourceQuantity(
+                            1
+                        ),
+                    }
+                )
+            },
+            expected_output=("cpu", "4.0"),
+        ),
+        TestCase(
+            name="empty limits returns None",
+            expected_status=SUCCESS,
+            config={"resources": models.IoK8sApiCoreV1ResourceRequirements(limits={})},
+            expected_output=None,
+        ),
     ],
 )
 def test_get_container_devices(test_case: TestCase):
