@@ -104,40 +104,41 @@ def read_pod_logs(
 
 def _resolve_driver_resources(
     driver: Driver | None = None,
-) -> tuple[int, str]:
+) -> tuple[str, str]:
     """Resolve driver resource configuration.
 
     Args:
         driver: Driver configuration.
 
     Returns:
-        Tuple of (cores, memory).
+        Tuple of (cpu, memory).
 
     Raises:
         ValueError:
             If the configured CPU or memory values are invalid.
     """
 
-    cores = constants.DEFAULT_DRIVER_CPU
+    cpu = str(constants.DEFAULT_DRIVER_CPU)
     memory = _memory_kubernetes_to_spark(constants.DEFAULT_DRIVER_MEMORY)
 
     if driver and driver.resources:
         if "cpu" in driver.resources:
-            cores = _validate_cpu_value(driver.resources["cpu"])
+            _validate_cpu_value(driver.resources["cpu"])
+            cpu = str(driver.resources["cpu"]).strip()
 
         if "memory" in driver.resources:
             memory = _memory_kubernetes_to_spark(
                 driver.resources["memory"],
             )
 
-    return cores, memory
+    return cpu, memory
 
 
 def _resolve_executor_resources(
     executor: Executor | None = None,
     num_executors: int | None = None,
     resources_per_executor: dict | None = None,
-) -> tuple[int, int, str]:
+) -> tuple[int, str, str]:
     """Resolve executor configuration.
 
     Args:
@@ -151,7 +152,7 @@ def _resolve_executor_resources(
             Resource requirements.
 
     Returns:
-        Tuple containing ``(instances, cores, memory)``.
+        Tuple containing ``(instances, cpu, memory)``.
 
     Raises:
         ValueError:
@@ -172,21 +173,22 @@ def _resolve_executor_resources(
     elif resources_per_executor:
         resource_dict = resources_per_executor
 
-    cores = constants.DEFAULT_EXECUTOR_CPU
+    cpu = str(constants.DEFAULT_EXECUTOR_CPU)
     memory = _memory_kubernetes_to_spark(
         constants.DEFAULT_EXECUTOR_MEMORY,
     )
 
     if resource_dict:
         if "cpu" in resource_dict:
-            cores = _validate_cpu_value(resource_dict["cpu"])
+            _validate_cpu_value(resource_dict["cpu"])
+            cpu = str(resource_dict["cpu"]).strip()
 
         if "memory" in resource_dict:
             memory = _memory_kubernetes_to_spark(
                 resource_dict["memory"],
             )
 
-    return instances, cores, memory
+    return instances, cpu, memory
 
 
 def _memory_kubernetes_to_spark(memory: str) -> str:
@@ -453,7 +455,7 @@ def get_spark_connect_driver_spec(
         ValueError:
             If the configured driver resources are invalid.
     """
-    cores, memory = _resolve_driver_resources(driver)
+    cpu, memory = _resolve_driver_resources(driver)
 
     template = None
 
@@ -465,8 +467,11 @@ def get_spark_connect_driver_spec(
             )
         )
 
+    quantity = models.IoK8sApimachineryPkgApiResourceQuantity(cpu)
+
     return models.SparkV1alpha1ServerSpec(
-        cores=cores,
+        core_request=quantity,
+        core_limit=quantity,
         memory=memory,
         template=template,
     )
@@ -495,15 +500,19 @@ def get_spark_connect_executor_spec(
         ValueError:
             If the configured executor resources are invalid.
     """
-    instances, cores, memory = _resolve_executor_resources(
+    instances, cpu, memory = _resolve_executor_resources(
         executor,
         num_executors,
         resources_per_executor,
     )
 
+    quantity = models.IoK8sApimachineryPkgApiResourceQuantity(cpu)
+
     return models.SparkV1alpha1ExecutorSpec(
         instances=instances,
-        cores=cores,
+        cores=_validate_cpu_value(cpu),
+        core_request=quantity,
+        core_limit=quantity,
         memory=memory,
     )
 
@@ -664,12 +673,13 @@ def get_spark_job_driver_spec(
 
     Raises:
         ValueError:
-            If the default driver resource configuration is invalid.
+            If the configured driver resources are invalid.
     """
-    cores, memory = _resolve_driver_resources(driver)
+    cpu, memory = _resolve_driver_resources(driver)
 
     return models.SparkV1beta2DriverSpec(
-        cores=cores,
+        core_request=cpu,
+        core_limit=cpu,
         memory=memory,
     )
 
@@ -691,14 +701,16 @@ def get_spark_job_executor_spec(
         ValueError:
             If the configured executor resources are invalid.
     """
-    instances, cores, memory = _resolve_executor_resources(
+    instances, cpu, memory = _resolve_executor_resources(
         num_executors=num_executors,
         resources_per_executor=resources_per_executor,
     )
 
     return models.SparkV1beta2ExecutorSpec(
         instances=instances,
-        cores=cores,
+        cores=_validate_cpu_value(cpu),
+        core_request=cpu,
+        core_limit=cpu,
         memory=memory,
     )
 
