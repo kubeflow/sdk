@@ -256,6 +256,10 @@ def get_resources_per_node(
     for k, v in resources_per_node.items():
         key = k.lower() if k.lower() in standard_resources or k.lower().startswith("mig-") else k
         key = resource_aliases.get(key, key)
+        # The TrainJob CRD accepts a quantity only as an integer or a string, so a
+        # fractional float (e.g. 0.5 CPU) must be sent as a string.
+        if isinstance(v, float) and not v.is_integer():
+            v = str(v)
         resources[key] = models.IoK8sApimachineryPkgApiResourceQuantity(v)
 
     # Optional alias for MIG: "mig-<profile>" -> "nvidia.com/mig-<profile>"
