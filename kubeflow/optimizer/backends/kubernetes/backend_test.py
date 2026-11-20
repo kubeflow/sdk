@@ -21,6 +21,7 @@ log retrieval, event filtering, and status waiting.
 
 from dataclasses import asdict
 import datetime
+import logging
 import multiprocessing
 from typing import Any, TypeVar
 from unittest.mock import Mock, patch
@@ -71,6 +72,8 @@ T = TypeVar("T")
 BASIC_OPTIMIZATION_JOB_NAME = "basic-opt-job"
 BASIC_TRIAL_NAME = "basic-trial"
 BASIC_TRIAL_NAME_2 = "basic-trial-2"
+UNREADABLE_OPTIMIZATION_JOB_NAME = "katib-opt-job"
+UNREADABLE_TRIAL_NAME = "katib-trial"
 
 # --------------------------
 # Fixtures
@@ -280,6 +283,14 @@ def create_experiment_cr(
             creationTimestamp=datetime.datetime(2025, 6, 1, 10, 30, 0),
         ),
         spec=models.V1beta1ExperimentSpec(
+            trialTemplate=models.V1beta1TrialTemplate(
+                primaryContainerName=trainer_constants.NODE,
+                trialSpec={
+                    "apiVersion": trainer_constants.API_VERSION,
+                    "kind": trainer_constants.TRAINJOB_KIND,
+                    "spec": {},
+                },
+            ),
             parameters=[
                 models.V1beta1ParameterSpec(
                     name="lr",
@@ -303,6 +314,13 @@ def create_experiment_cr(
         ),
         status=status,
     )
+
+
+def create_unreadable_experiment_cr(**spec_changes: Any) -> models.V1beta1Experiment:
+    """Create an Experiment the SDK can't represent, as if created with the Katib UI or YAML."""
+    experiment = create_experiment_cr(name=UNREADABLE_OPTIMIZATION_JOB_NAME)
+    experiment.spec = experiment.spec.model_copy(update=spec_changes)
+    return experiment
 
 
 def create_trial_cr(
@@ -691,6 +709,145 @@ def test_list_jobs(optimizer_backend, test_case):
     except Exception as e:
         assert test_case.expected_status != SUCCESS
         assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+# Experiments created outside the SDK that it can't represent.
+UNREADABLE_EXPERIMENT_TEST_CASES = [
+    TestCase(
+        name="unsupported algorithm",
+        config={
+            "spec_changes": {
+                "algorithm": models.V1beta1AlgorithmSpec(algorithmName="bayesianoptimization"),
+            },
+        },
+    ),
+    TestCase(
+        name="discrete parameter",
+        config={
+            "spec_changes": {
+                "parameters": [
+                    models.V1beta1ParameterSpec(
+                        name="batch_size",
+                        parameterType="discrete",
+                        feasibleSpace=models.V1beta1FeasibleSpace(list=["16", "32"]),
+                    ),
+                ],
+            },
+        },
+    ),
+    TestCase(
+        name="normal distribution",
+        config={
+            "spec_changes": {
+                "parameters": [
+                    models.V1beta1ParameterSpec(
+                        name="lr",
+                        parameterType=constants.DOUBLE_PARAMETER,
+                        feasibleSpace=models.V1beta1FeasibleSpace(
+                            min="0.001",
+                            max="0.1",
+                            distribution="normal",
+                        ),
+                    ),
+                ],
+            },
+        },
+    ),
+    TestCase(
+        name="batch Job trial template",
+        config={
+            "spec_changes": {
+                "trial_template": models.V1beta1TrialTemplate(
+                    primaryContainerName="training-container",
+                    trialSpec={"apiVersion": "batch/v1", "kind": "Job", "spec": {}},
+                ),
+            },
+        },
+    ),
+    TestCase(
+        name="missing maxTrialCount",
+        config={"spec_changes": {"max_trial_count": None}},
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    UNREADABLE_EXPERIMENT_TEST_CASES
+    + [
+        TestCase(
+            name="runtime error when listing trials",
+            expected_status=FAILED,
+            config={"spec_changes": {}, "trials_error": True},
+            expected_error=RuntimeError,
+        ),
+    ],
+)
+def test_list_jobs_skips_unreadable_experiments(optimizer_backend, test_case, caplog):
+    """Test KubernetesBackend.list_jobs skips Experiments it can't represent."""
+    print("Executing test:", test_case.name)
+    experiments = [
+        create_experiment_cr(name=BASIC_OPTIMIZATION_JOB_NAME),
+        create_unreadable_experiment_cr(**test_case.config["spec_changes"]),
+    ]
+
+    def patched_list(*args, **kwargs):
+        mock_thread = Mock()
+        if args[3] == constants.EXPERIMENT_PLURAL:
+            mock_thread.get.return_value = normalize_model(
+                models.V1beta1ExperimentList(items=experiments),
+                models.V1beta1ExperimentList,
+            )
+            return mock_thread
+        if test_case.config.get("trials_error"):
+            raise RuntimeError()
+        if kwargs["label_selector"].endswith(f"={UNREADABLE_OPTIMIZATION_JOB_NAME}"):
+            mock_thread.get.return_value = normalize_model(
+                models.V1beta1TrialList(items=[create_trial_cr(name=UNREADABLE_TRIAL_NAME)]),
+                models.V1beta1TrialList,
+            )
+            return mock_thread
+        return list_namespaced_custom_object_response(*args, **kwargs)
+
+    def patched_trainer_get_job(name: str) -> TrainJob:
+        # Trials of a batch Job template have no TrainJob behind them.
+        if name == UNREADABLE_TRIAL_NAME:
+            raise RuntimeError(f"Failed to get TrainJob: {name}")
+        return mock_trainer_get_job(name)
+
+    optimizer_backend.custom_api.list_namespaced_custom_object.side_effect = patched_list
+    optimizer_backend.trainer_backend.get_job = Mock(side_effect=patched_trainer_get_job)
+
+    try:
+        with caplog.at_level(logging.WARNING):
+            jobs = optimizer_backend.list_jobs()
+
+        assert test_case.expected_status == SUCCESS
+        assert [asdict(j) for j in jobs] == [asdict(get_optimization_job_data_type())]
+        assert f"Skipping Experiment {UNREADABLE_OPTIMIZATION_JOB_NAME}" in caplog.text
+
+    except Exception as e:
+        assert test_case.expected_status != SUCCESS
+        assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize("test_case", UNREADABLE_EXPERIMENT_TEST_CASES)
+def test_get_job_rejects_unreadable_experiment(optimizer_backend, test_case):
+    """Test KubernetesBackend.get_job raises ValueError for Experiments it can't represent."""
+    print("Executing test:", test_case.name)
+    experiment = create_unreadable_experiment_cr(**test_case.config["spec_changes"])
+
+    def patched_get(*args, **kwargs):
+        mock_thread = Mock()
+        mock_thread.get.return_value = normalize_model(experiment, models.V1beta1Experiment)
+        return mock_thread
+
+    optimizer_backend.custom_api.get_namespaced_custom_object.side_effect = patched_get
+
+    with pytest.raises(ValueError):
+        optimizer_backend.get_job(name=UNREADABLE_OPTIMIZATION_JOB_NAME)
     print("test execution complete")
 
 

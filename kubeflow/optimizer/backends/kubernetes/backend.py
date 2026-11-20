@@ -180,7 +180,10 @@ class KubernetesBackend(RuntimeBackend):
         return optimization_job_name
 
     def list_jobs(self) -> list[OptimizationJob]:
-        """List of the created OptimizationJobs"""
+        """List of the created OptimizationJobs.
+
+        Experiments the SDK can't represent are skipped with a warning.
+        """
         result = []
 
         try:
@@ -200,7 +203,20 @@ class KubernetesBackend(RuntimeBackend):
                 return result
 
             for optimization_job in optimization_job_list.items:
-                result.append(self.__get_optimization_job_from_cr(optimization_job))
+                # Experiments created outside the SDK (Katib UI, YAML, Katib SDK) can use
+                # algorithms, parameter types or trial templates the SDK can't represent.
+                # Skip them so they don't hide the OptimizationJobs the SDK can read.
+                try:
+                    result.append(self.__get_optimization_job_from_cr(optimization_job))
+                except ValueError as e:
+                    logger.warning(
+                        "Skipping %s %s: %s",
+                        constants.EXPERIMENT_KIND,
+                        optimization_job.metadata.name
+                        if optimization_job.metadata
+                        else "<unknown>",
+                        e,
+                    )
 
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(
@@ -478,8 +494,22 @@ class KubernetesBackend(RuntimeBackend):
             and optimization_job_cr.spec.parallel_trial_count
             and optimization_job_cr.metadata.creation_timestamp
         ):
-            raise Exception(
+            raise ValueError(
                 f"{constants.OPTIMIZATION_JOB_KIND} CR is invalid: {optimization_job_cr}"
+            )
+
+        # Trials are read back as TrainJobs, so other trial templates (e.g. batch Jobs)
+        # can't be represented. Check before listing the Trials.
+        trial_template = optimization_job_cr.spec.trial_template
+        trial_kind = (
+            trial_template.trial_spec.get("kind")
+            if trial_template and trial_template.trial_spec
+            else None
+        )
+        if trial_kind != trainer_constants.TRAINJOB_KIND:
+            raise ValueError(
+                f"{constants.EXPERIMENT_KIND} {optimization_job_cr.metadata.name} must use "
+                f"{trainer_constants.TRAINJOB_KIND} trials, got: {trial_kind}"
             )
 
         optimization_job = OptimizationJob(
