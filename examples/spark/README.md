@@ -27,6 +27,11 @@ For the full documentation, see [Interactive Sessions](https://sdk.kubeflow.org/
   See the [Options Reference](https://sdk.kubeflow.org/en/latest/spark/options.html) for details on Kubernetes options.
 - **spark_job.py** - A simple Spark application used as the remote `file_source` for the batch job examples
 
+### Kubeflow Pipelines (KFP)
+
+- **spark_pipeline.py** - An executable Kubeflow Pipelines script defining KFP v2 components for Spark batch submission, polling, log inspection, and resource cleanup with CLI compilation
+- **spark_pipeline.ipynb** - Interactive notebook walking through component definitions, pipeline graph composition, and KFP v2 YAML compilation
+
 ## Prerequisites
 
 Install spark and notebook dependencies:
