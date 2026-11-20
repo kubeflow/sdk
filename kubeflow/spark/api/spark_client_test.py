@@ -82,6 +82,64 @@ def test_create_and_connect(test_case: TestCase):
 
 
 @pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="connect without a token",
+            expected_status=SUCCESS,
+            config={"base_url": "sc://server:15002"},
+            expected_output="sc://server:15002",
+        ),
+        TestCase(
+            name="token is added to the url",
+            expected_status=SUCCESS,
+            config={"base_url": "sc://server:15002", "token": "team-token"},
+            expected_output="sc://server:15002/;token=team-token",
+        ),
+        TestCase(
+            name="token keeps the existing url parameters",
+            expected_status=SUCCESS,
+            config={"base_url": "sc://server:15002/;use_ssl=true", "token": "team-token"},
+            expected_output="sc://server:15002/;use_ssl=true;token=team-token",
+        ),
+        TestCase(
+            name="token is url encoded",
+            expected_status=SUCCESS,
+            config={"base_url": "sc://server:15002/", "token": "a=b;c/d"},
+            expected_output="sc://server:15002/;token=a%3Db%3Bc%2Fd",
+        ),
+        TestCase(
+            name="token and a url with a token raise ValueError",
+            expected_status=FAILED,
+            config={"base_url": "sc://server:15002/;token=other", "token": "team-token"},
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_connect(test_case: TestCase):
+    """Test SparkClient.connect with an existing Spark Connect server."""
+    print("Executing test:", test_case.name)
+
+    with patch("kubeflow.spark.api.spark_client.KubernetesBackend"):
+        client = SparkClient()
+
+    with patch("kubeflow.spark.api.spark_client.SparkSession") as mock_spark_session:
+        try:
+            client.connect(**test_case.config)
+
+            assert test_case.expected_status == SUCCESS
+            mock_spark_session.builder.remote.assert_called_once_with(test_case.expected_output)
+            mock_spark_session.builder.remote.return_value.config.assert_not_called()
+
+        except Exception as e:
+            assert test_case.expected_status == FAILED
+            assert type(e) is test_case.expected_error
+            mock_spark_session.builder.remote.assert_not_called()
+
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
     "job,spark_conf,options,backend_error,expected_error",
     [
         (
