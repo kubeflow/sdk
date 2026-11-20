@@ -1196,3 +1196,60 @@ def test_create_adapter_error_message_format():
         # Guard the patch target: the failure must come from the mocked adapter, not from
         # a genuinely unavailable Docker daemon.
         assert mock_docker.called
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="whole log in one chunk",
+            expected_status=SUCCESS,
+            config={"chunks": ["epoch 1\nepoch 2\nepoch 3\n"]},
+            expected_output=["epoch 1", "epoch 2", "epoch 3"],
+        ),
+        TestCase(
+            name="line split across chunks",
+            expected_status=SUCCESS,
+            config={"chunks": ["epoch 1 lo", "ss=0.9\nepoch 2", " loss=0.5\n"]},
+            expected_output=["epoch 1 loss=0.9", "epoch 2 loss=0.5"],
+        ),
+        TestCase(
+            name="crlf line endings, including across chunks",
+            expected_status=SUCCESS,
+            config={"chunks": ["epoch 1\r", "\nepoch 2\r\n"]},
+            expected_output=["epoch 1", "epoch 2"],
+        ),
+        TestCase(
+            name="no trailing newline",
+            expected_status=SUCCESS,
+            config={"chunks": ["epoch 1\nepoch 2"]},
+            expected_output=["epoch 1", "epoch 2"],
+        ),
+        TestCase(
+            name="blank lines are kept",
+            expected_status=SUCCESS,
+            config={"chunks": ["a\n\nb\n"]},
+            expected_output=["a", "", "b"],
+        ),
+        TestCase(
+            name="empty chunks",
+            expected_status=SUCCESS,
+            config={"chunks": ["", "a\n", ""]},
+            expected_output=["a"],
+        ),
+    ],
+)
+def test_get_job_logs_yields_lines(container_backend, test_case):
+    """Test that get_job_logs yields one log line per item, like the Kubernetes backend."""
+    print("Executing test:", test_case.name)
+    trainer = types.CustomTrainer(func=simple_train_func, num_nodes=1)
+    runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
+    job_name = container_backend.train(runtime=runtime, trainer=trainer)
+
+    chunks = test_case.config["chunks"]
+    container_backend._adapter.container_logs = lambda container_id, follow: iter(chunks)
+
+    for follow in (False, True):
+        logs = list(container_backend.get_job_logs(job_name, follow=follow))
+        assert logs == test_case.expected_output
+    print("test execution complete")

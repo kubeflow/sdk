@@ -791,7 +791,7 @@ class ContainerBackend(RuntimeBackend):
                 continue
 
             try:
-                yield from self._adapter.container_logs(container["id"], follow)
+                yield from _iter_log_lines(self._adapter.container_logs(container["id"], follow))
             except Exception as e:
                 logger.warning(f"Failed to get logs for {container['name']}: {e}")
                 yield f"Error getting logs: {e}\n"
@@ -885,3 +885,20 @@ class ContainerBackend(RuntimeBackend):
         # Remove working directory if configured
         if self.cfg.auto_remove and workdir_host and os.path.isdir(workdir_host):
             shutil.rmtree(workdir_host, ignore_errors=True)
+
+
+def _iter_log_lines(chunks: Iterator[str]) -> Iterator[str]:
+    """Re-split raw container log chunks into complete lines.
+
+    Docker and Podman return the whole log as one string when not following, and
+    stream frames that can split or merge lines when following. Yield one line per
+    item without the line terminator, matching the Kubernetes backend.
+    """
+    buffer = ""
+    for chunk in chunks:
+        buffer += chunk
+        while "\n" in buffer:
+            line, buffer = buffer.split("\n", 1)
+            yield line.rstrip("\r")
+    if buffer:
+        yield buffer.rstrip("\r")
