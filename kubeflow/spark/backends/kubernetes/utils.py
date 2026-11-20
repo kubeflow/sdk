@@ -813,8 +813,10 @@ def get_spark_application_cr_from_file_job(
 
     Raises:
         ValueError:
-            If the executor resource configuration is invalid.
+            If the executor resource configuration or spark_conf is invalid.
     """
+    _validate_spark_conf(spark_conf)
+
     spark_application = models.SparkV1beta2SparkApplication(
         api_version=f"{constants.SPARK_APPLICATION_GROUP}/{constants.SPARK_APPLICATION_VERSION}",
         kind=constants.SPARK_APPLICATION_KIND,

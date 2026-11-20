@@ -1553,6 +1553,51 @@ def test_get_spark_application_cr_from_file_job(test_case: TestCase, mock_k8s_ba
     "test_case",
     [
         TestCase(
+            name="spark_conf not a dict",
+            expected_status=FAILED,
+            config={"spark_conf": ["spark.app.name=test"]},
+            expected_error=ValueError,
+            expected_output="spark_conf must be a dictionary.",
+        ),
+        TestCase(
+            name="spark_conf non-string key",
+            expected_status=FAILED,
+            config={"spark_conf": {123: "value"}},
+            expected_error=ValueError,
+            expected_output="All spark_conf keys must be strings.",
+        ),
+        TestCase(
+            name="spark_conf non-string value",
+            expected_status=FAILED,
+            config={"spark_conf": {"spark.executor.cores": 2}},
+            expected_error=ValueError,
+            expected_output="All spark_conf values must be strings.",
+        ),
+    ],
+)
+def test_get_spark_application_cr_from_file_job_invalid_spark_conf(
+    test_case: TestCase,
+    mock_k8s_backend,
+) -> None:
+    """Tests that get_spark_application_cr_from_file_job validates spark_conf."""
+    with pytest.raises(ValueError) as exc_info:
+        get_spark_application_cr_from_file_job(
+            name="test-job",
+            namespace="default",
+            main_file="s3://bucket/job.py",
+            backend=mock_k8s_backend,
+            spark_conf=test_case.config["spark_conf"],
+        )
+
+    assert type(exc_info.value) is test_case.expected_error
+    assert isinstance(test_case.expected_output, str)
+    assert test_case.expected_output in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
             name="minimal function job",
             expected_status=SUCCESS,
             config={
