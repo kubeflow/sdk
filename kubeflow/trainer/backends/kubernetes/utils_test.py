@@ -226,6 +226,20 @@ def test_get_resources_per_node(test_case: TestCase):
 
 
 @pytest.mark.parametrize(
+    "resources_per_node",
+    [
+        {"gpu": 1, "nvidia.com/gpu": 2},
+        {"storage": "10Gi", "ephemeral-storage": "20Gi"},
+        {"mig-1g.5gb": 1, "nvidia.com/mig-1g.5gb": 2},
+    ],
+)
+def test_get_resources_per_node_rejects_alias_collisions(resources_per_node):
+    """Reject resource aliases that normalize to the same Kubernetes key."""
+    with pytest.raises(ValueError, match="conflicting resource keys"):
+        utils.get_resources_per_node(resources_per_node)
+
+
+@pytest.mark.parametrize(
     "test_case",
     [
         TestCase(
