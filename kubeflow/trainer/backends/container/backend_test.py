@@ -570,11 +570,71 @@ def test_get_runtime_packages(container_backend):
             },
             expected_error=TimeoutError,
         ),
+        TestCase(
+            name="network creation fails",
+            expected_status=FAILED,
+            config={"fail_method": "create_network"},
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="image pull fails after network creation",
+            expected_status=FAILED,
+            config={"fail_method": "pull_image"},
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="container creation fails after some containers were created",
+            expected_status=FAILED,
+            config={
+                "num_nodes": 3,
+                "fail_method": "create_and_start_container",
+                "fail_after_calls": 2,
+            },
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="cleanup failure preserves original error",
+            expected_status=FAILED,
+            config={"fail_method": "pull_image", "cleanup_error": True},
+            expected_error=RuntimeError,
+        ),
     ],
 )
-def test_train(container_backend, test_case):
+def test_train(container_backend, monkeypatch, tmp_path, test_case):
     """Test training job creation."""
     print("Executing test:", test_case.name)
+    adapter = container_backend._adapter
+    workdir = tmp_path / "workdir"
+    workdir.mkdir()
+    monkeypatch.setattr(
+        "kubeflow.trainer.backends.container.utils.create_workdir",
+        lambda job_name: str(workdir),
+    )
+
+    # Make an adapter method fail, optionally after some successful calls
+    fail_method = test_case.config.get("fail_method")
+    if fail_method:
+        original_method = getattr(adapter, fail_method)
+        fail_after_calls = test_case.config.get("fail_after_calls", 0)
+        calls = 0
+
+        def fail_after(*args, **kwargs):
+            nonlocal calls
+            if calls >= fail_after_calls:
+                raise RuntimeError(f"{fail_method} failed")
+            calls += 1
+            return original_method(*args, **kwargs)
+
+        monkeypatch.setattr(adapter, fail_method, fail_after)
+
+    # Use a different exception type so the assertion proves the setup error is re-raised
+    if test_case.config.get("cleanup_error"):
+
+        def fail_cleanup(*args, **kwargs):
+            raise OSError("cleanup failed")
+
+        monkeypatch.setattr(container_backend, "_cleanup_container_resources", fail_cleanup)
+
     try:
         trainer = types.CustomTrainer(
             func=simple_train_func,
@@ -690,6 +750,12 @@ def test_train(container_backend, test_case):
 
     except Exception as e:
         assert type(e) is test_case.expected_error
+        # Failed setup must release every resource it created
+        if not test_case.config.get("cleanup_error"):
+            created_container_ids = [c["id"] for c in adapter.containers_created]
+            assert sorted(adapter.containers_removed) == sorted(created_container_ids)
+            assert adapter.networks_deleted == [n["id"] for n in adapter.networks_created]
+            assert not workdir.exists()
     print("test execution complete")
 
 
