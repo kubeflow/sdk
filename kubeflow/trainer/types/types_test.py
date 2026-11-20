@@ -15,6 +15,7 @@
 import pytest
 
 from kubeflow.test.common import FAILED, SUCCESS, TestCase
+from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 
 
@@ -179,3 +180,43 @@ def test_hugging_face_dataset_initializer(test_case: TestCase):
         assert test_case.expected_status == FAILED
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="HuggingFaceModelInitializer isolates default ignore_patterns",
+            expected_status=SUCCESS,
+            config={
+                "cls": types.HuggingFaceModelInitializer,
+                "storage_uri": "hf://org/model",
+            },
+        ),
+        TestCase(
+            name="S3ModelInitializer isolates default ignore_patterns",
+            expected_status=SUCCESS,
+            config={
+                "cls": types.S3ModelInitializer,
+                "storage_uri": "s3://bucket/model",
+            },
+        ),
+    ],
+)
+def test_model_initializer_ignore_patterns_isolated(test_case: TestCase) -> None:
+    """Test that default ignore_patterns lists are not shared across instances or global config."""
+    initializer_cls = test_case.config["cls"]
+    storage_uri = test_case.config["storage_uri"]
+    original_patterns = list(constants.INITIALIZER_DEFAULT_IGNORE_PATTERNS)
+
+    try:
+        first = initializer_cls(storage_uri=storage_uri)
+        second = initializer_cls(storage_uri=storage_uri)
+
+        assert first.ignore_patterns is not None
+        first.ignore_patterns.append("*.onnx")
+
+        assert second.ignore_patterns == original_patterns
+        assert original_patterns == constants.INITIALIZER_DEFAULT_IGNORE_PATTERNS
+    finally:
+        constants.INITIALIZER_DEFAULT_IGNORE_PATTERNS[:] = original_patterns
