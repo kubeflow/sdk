@@ -1874,3 +1874,232 @@ def test_get_job_events(kubernetes_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+class MockWSClient:
+    """Simulate the kubernetes.stream.WSClient returned by exec-based streaming."""
+
+    def __init__(self, stdout: str = "", stderr: str = "", returncode: int | None = 0):
+        self._stdout = stdout
+        self._stderr = stderr
+        self._returncode = returncode
+
+    def run_forever(self, timeout=None):
+        pass
+
+    def read_stdout(self) -> str:
+        return self._stdout
+
+    def read_stderr(self) -> str:
+        return self._stderr
+
+    @property
+    def returncode(self) -> int | None:
+        return self._returncode
+
+    def close(self):
+        pass
+
+
+GPU_CSV_ROW_0 = "0, GPU-12345, NVIDIA A100, 40, 50, 20, 40000, 2000, 150, P0"
+GPU_CSV_ROW_1 = "1, GPU-67890, NVIDIA L4, 55, 70, 30, 23000, 8000, 80, P2"
+
+
+def _expected_gpu(
+    node: str,
+    index: str,
+    uuid: str,
+    name: str,
+    temperature: str,
+    utilization: str,
+    memory_utilization: str,
+    memory: str,
+    power: str,
+    pstate: str,
+) -> dict[str, str]:
+    """Build the expected GPU status dict for a parsed nvidia-smi row."""
+    return {
+        "node": node,
+        "index": index,
+        "uuid": uuid,
+        "name": name,
+        "temperature": temperature,
+        "utilization": utilization,
+        "memory_utilization": memory_utilization,
+        "memory": memory,
+        "power": power,
+        "pstate": pstate,
+    }
+
+
+@pytest.mark.parametrize(
+    "test_case,job,mock_stream",
+    [
+        (
+            TestCase(
+                name="valid flow with gpu status",
+                expected_status=SUCCESS,
+                config={"name": BASIC_TRAIN_JOB_NAME},
+                expected_output=[
+                    _expected_gpu(
+                        "node-0",
+                        "0",
+                        "GPU-12345",
+                        "NVIDIA A100",
+                        "40C",
+                        "50%",
+                        "20%",
+                        "2000/40000 MiB",
+                        "150W",
+                        "P0",
+                    )
+                ],
+            ),
+            get_train_job_data_type(TORCH_RUNTIME, BASIC_TRAIN_JOB_NAME),
+            Mock(return_value=MockWSClient(stdout=GPU_CSV_ROW_0)),
+        ),
+        (
+            TestCase(
+                name="merge gpu metrics across nodes and devices",
+                expected_status=SUCCESS,
+                config={"name": BASIC_TRAIN_JOB_NAME},
+                expected_output=[
+                    _expected_gpu(
+                        "node-0",
+                        "0",
+                        "GPU-12345",
+                        "NVIDIA A100",
+                        "40C",
+                        "50%",
+                        "20%",
+                        "2000/40000 MiB",
+                        "150W",
+                        "P0",
+                    ),
+                    _expected_gpu(
+                        "node-0",
+                        "1",
+                        "GPU-67890",
+                        "NVIDIA L4",
+                        "55C",
+                        "70%",
+                        "30%",
+                        "8000/23000 MiB",
+                        "80W",
+                        "P2",
+                    ),
+                    _expected_gpu(
+                        "node-1",
+                        "0",
+                        "GPU-12345",
+                        "NVIDIA A100",
+                        "40C",
+                        "50%",
+                        "20%",
+                        "2000/40000 MiB",
+                        "150W",
+                        "P0",
+                    ),
+                    _expected_gpu(
+                        "node-1",
+                        "1",
+                        "GPU-67890",
+                        "NVIDIA L4",
+                        "55C",
+                        "70%",
+                        "30%",
+                        "8000/23000 MiB",
+                        "80W",
+                        "P2",
+                    ),
+                ],
+            ),
+            get_train_job_with_restarted_pods_data_type(TORCH_RUNTIME, BASIC_TRAIN_JOB_NAME),
+            Mock(return_value=MockWSClient(stdout=f"{GPU_CSV_ROW_0}\n{GPU_CSV_ROW_1}")),
+        ),
+        (
+            TestCase(
+                name="empty csv output returns empty list",
+                expected_status=SUCCESS,
+                config={"name": BASIC_TRAIN_JOB_NAME},
+                expected_output=[],
+            ),
+            get_train_job_data_type(TORCH_RUNTIME, BASIC_TRAIN_JOB_NAME),
+            Mock(return_value=MockWSClient(stdout="")),
+        ),
+        (
+            TestCase(
+                name="short csv rows are skipped",
+                expected_status=SUCCESS,
+                config={"name": BASIC_TRAIN_JOB_NAME},
+                expected_output=[
+                    _expected_gpu(
+                        "node-0",
+                        "0",
+                        "GPU-12345",
+                        "NVIDIA A100",
+                        "40C",
+                        "50%",
+                        "20%",
+                        "2000/40000 MiB",
+                        "150W",
+                        "P0",
+                    )
+                ],
+            ),
+            get_train_job_data_type(TORCH_RUNTIME, BASIC_TRAIN_JOB_NAME),
+            Mock(return_value=MockWSClient(stdout=f"0, GPU-12345\n    \n{GPU_CSV_ROW_0}")),
+        ),
+        (
+            TestCase(
+                name="exec api error raises runtime error",
+                expected_status=FAILED,
+                config={"name": BASIC_TRAIN_JOB_NAME},
+                expected_output=None,
+                expected_error=RuntimeError,
+            ),
+            get_train_job_data_type(TORCH_RUNTIME, BASIC_TRAIN_JOB_NAME),
+            Mock(side_effect=client.ApiException(status=403, reason="Forbidden")),
+        ),
+        (
+            TestCase(
+                name="nvidia-smi failure raises runtime error",
+                expected_status=FAILED,
+                config={"name": BASIC_TRAIN_JOB_NAME},
+                expected_output=None,
+                expected_error=RuntimeError,
+            ),
+            get_train_job_data_type(TORCH_RUNTIME, BASIC_TRAIN_JOB_NAME),
+            Mock(
+                return_value=MockWSClient(stderr="Command 'nvidia-smi' not found", returncode=127)
+            ),
+        ),
+        (
+            TestCase(
+                name="exec timeout raises timeout error",
+                expected_status=FAILED,
+                config={"name": BASIC_TRAIN_JOB_NAME},
+                expected_output=None,
+                expected_error=TimeoutError,
+            ),
+            get_train_job_data_type(TORCH_RUNTIME, BASIC_TRAIN_JOB_NAME),
+            Mock(return_value=MockWSClient(returncode=None)),
+        ),
+    ],
+)
+def test_get_gpu_status(
+    kubernetes_backend, test_case: TestCase, job: types.TrainJob, mock_stream: Mock
+):
+    """Test KubernetesBackend.get_gpu_status success and failure paths."""
+    print("Executing test:", test_case.name)
+
+    kubernetes_backend.get_job = Mock(return_value=job)
+
+    with patch("kubeflow.trainer.backends.kubernetes.backend.stream", new=mock_stream):
+        try:
+            status = kubernetes_backend.get_gpu_status(**test_case.config)
+            assert test_case.expected_status == SUCCESS
+            assert status == test_case.expected_output
+        except Exception as e:
+            assert type(e) is test_case.expected_error
+    print("test execution complete")

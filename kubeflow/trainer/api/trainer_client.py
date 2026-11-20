@@ -261,6 +261,36 @@ class TrainerClient:
         """
         return self.backend.get_job_logs(name=name, follow=follow, step=step)
 
+    def get_gpu_status(self, name: str) -> list[dict[str, str]]:
+        """Get GPU status for the training nodes of a TrainJob.
+
+        This retrieves real-time GPU metrics from the training nodes of the specified
+        TrainJob. Metrics are collected from the running training pods using nvidia-smi.
+
+        Args:
+            name: Name of the TrainJob.
+
+        Returns:
+            A list of dicts, one per GPU, containing the following keys: ``node``,
+            ``index``, ``uuid``, ``name``, ``temperature``, ``utilization``,
+            ``memory_utilization``, ``memory``, ``power`` and ``pstate``.
+            An empty list is a valid result and means no GPUs are reporting status
+            for this TrainJob.
+
+        Raises:
+            TimeoutError: Timeout occurred while getting the TrainJob or running nvidia-smi.
+            RuntimeError: Failed to get the TrainJob or to run nvidia-smi.
+            NotImplementedError: If the client uses the LocalProcess or Container backend.
+
+        Examples:
+            >>> from kubeflow.trainer import TrainerClient
+            >>> client = TrainerClient()
+            >>> gpu_status = client.get_gpu_status("s8d44aa4fb6d")
+            >>> for gpu in gpu_status:
+            ...     print(gpu["name"], gpu["utilization"], gpu["temperature"])
+        """
+        return self.backend.get_gpu_status(name=name)
+
     def get_job_events(self, name: str) -> list[types.Event]:
         """Get events for a TrainJob.
 
