@@ -961,6 +961,18 @@ def test_get_job_logs(container_backend, test_case):
             config={"wait_status": constants.TRAINJOB_COMPLETE, "container_exit_code": 1},
             expected_error=RuntimeError,
         ),
+        TestCase(
+            name="invalid status set",
+            expected_status=FAILED,
+            config={"status": {"InvalidStatus"}},
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="empty status set",
+            expected_status=FAILED,
+            config={"status": set()},
+            expected_error=ValueError,
+        ),
     ],
 )
 def test_wait_for_job_status(container_backend, test_case):
@@ -1001,6 +1013,9 @@ def test_wait_for_job_status(container_backend, test_case):
             container_backend.wait_for_job_status(
                 job_name, status={test_case.config["wait_status"]}, timeout=5, polling_interval=1
             )
+
+        else:
+            container_backend.wait_for_job_status(job_name, status=test_case.config["status"])
 
     except Exception as e:
         assert type(e) is test_case.expected_error

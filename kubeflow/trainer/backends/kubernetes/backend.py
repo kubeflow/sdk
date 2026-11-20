@@ -475,14 +475,10 @@ class KubernetesBackend(RuntimeBackend):
         polling_interval: int = 2,
         callbacks: list[Callable[[types.TrainJob], None]] | None = None,
     ) -> types.TrainJob:
-        job_statuses = {
-            constants.TRAINJOB_CREATED,
-            constants.TRAINJOB_RUNNING,
-            constants.TRAINJOB_COMPLETE,
-            constants.TRAINJOB_FAILED,
-        }
-        if not status.issubset(job_statuses):
-            raise ValueError(f"Expected status {status} must be a subset of {job_statuses}")
+        if not status or not status.issubset(constants.TRAINJOB_STATUSES):
+            raise ValueError(
+                f"Expected status {status} must be a non-empty subset of {constants.TRAINJOB_STATUSES}"
+            )
 
         if polling_interval <= 0:
             raise ValueError(

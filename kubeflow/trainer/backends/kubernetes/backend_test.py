@@ -1707,6 +1707,15 @@ def test_get_job_logs(kubernetes_backend, test_case):
             expected_error=ValueError,
         ),
         TestCase(
+            name="empty status set error",
+            expected_status=FAILED,
+            config={
+                "name": BASIC_TRAIN_JOB_NAME,
+                "status": set(),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
             name="polling interval is more than timeout error",
             expected_status=FAILED,
             config={

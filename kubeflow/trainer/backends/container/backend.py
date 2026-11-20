@@ -840,6 +840,11 @@ class ContainerBackend(RuntimeBackend):
         polling_interval: int = 2,
         callbacks: list[Callable[[types.TrainJob], None]] | None = None,
     ) -> types.TrainJob:
+        if not status or not status.issubset(constants.TRAINJOB_STATUSES):
+            raise ValueError(
+                f"Expected status {status} must be a non-empty subset of {constants.TRAINJOB_STATUSES}"
+            )
+
         import time
 
         end = time.time() + timeout
