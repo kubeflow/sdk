@@ -16,6 +16,7 @@
 
 from unittest.mock import patch
 
+from pyspark.sql.connect.client.core import DefaultChannelBuilder
 import pytest
 
 from kubeflow.common.types import KubernetesBackendConfig
@@ -173,3 +174,89 @@ def test_submit_job_success(job, options):
             spark_conf=None,
             options=options,
         )
+
+
+@pytest.mark.parametrize("base_url", ["sc://server", "sc://:15002", "https://server:15002"])
+def test_connect_validates_base_url_before_composing_the_token(base_url: str):
+    """Test that an invalid base_url is rejected even when a token is given."""
+
+    with (
+        patch("kubeflow.spark.api.spark_client.KubernetesBackend"),
+        patch("kubeflow.spark.api.spark_client.SparkSession"),
+    ):
+        client = SparkClient()
+
+        with pytest.raises(ValueError):
+            client.connect(base_url=base_url, token="team-token")
+
+
+@pytest.mark.parametrize("base_url", ["sc://server:15002", "sc://server:15002/"])
+def test_connect_passes_the_url_through_without_a_token(base_url: str):
+    """Test that connect mode leaves a token-less URL as it was given."""
+
+    with (
+        patch("kubeflow.spark.api.spark_client.KubernetesBackend"),
+        patch("kubeflow.spark.api.spark_client.SparkSession") as mock_session,
+    ):
+        client = SparkClient()
+
+        client.connect(base_url=base_url)
+
+        mock_session.builder.remote.assert_called_once_with(base_url)
+        mock_session.builder.remote.return_value.getOrCreate.assert_called_once_with()
+
+
+@pytest.mark.parametrize("base_url", ["sc://server:15002", "sc://server:15002/"])
+def test_connect_sends_the_token_in_the_url(base_url: str):
+    """Test that the token reaches PySpark as a URL parameter, not as a config."""
+
+    with (
+        patch("kubeflow.spark.api.spark_client.KubernetesBackend"),
+        patch("kubeflow.spark.api.spark_client.SparkSession") as mock_session,
+    ):
+        client = SparkClient()
+
+        client.connect(base_url=base_url, token="team-token")
+
+        mock_session.builder.remote.assert_called_once_with("sc://server:15002/;token=team-token")
+        mock_session.builder.remote.return_value.config.assert_not_called()
+        mock_session.builder.remote.return_value.getOrCreate.assert_called_once_with()
+
+
+def test_connect_keeps_existing_url_parameters():
+    """Test that URLs already carrying parameters keep them next to the token."""
+
+    with (
+        patch("kubeflow.spark.api.spark_client.KubernetesBackend"),
+        patch("kubeflow.spark.api.spark_client.SparkSession") as mock_session,
+    ):
+        client = SparkClient()
+
+        client.connect(base_url="sc://server:15002/;use_ssl=true", token="team-token")
+
+        mock_session.builder.remote.assert_called_once_with(
+            "sc://server:15002/;use_ssl=true;token=team-token"
+        )
+
+
+def test_connect_quotes_a_token_with_delimiters():
+    """Test that a token keeps its meaning through PySpark's URL decoding."""
+
+    token = "team token;session=1&=x"
+
+    with (
+        patch("kubeflow.spark.api.spark_client.KubernetesBackend"),
+        patch("kubeflow.spark.api.spark_client.SparkSession") as mock_session,
+    ):
+        client = SparkClient()
+
+        client.connect(base_url="sc://server:15002", token=token)
+
+        composed = mock_session.builder.remote.call_args.args[0]
+
+    assert composed == "sc://server:15002/;token=team%20token%3Bsession%3D1%26%3Dx"
+
+    builder = DefaultChannelBuilder(composed)
+
+    assert builder.endpoint == "server:15002"
+    assert builder.token == token
