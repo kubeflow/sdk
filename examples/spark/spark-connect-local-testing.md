@@ -1,6 +1,6 @@
 # Local Spark Connect Server Testing Guide
 
-This guide shows how to run a local Spark Connect server and test `SparkClient.connect(url=...)`.
+This guide shows how to run a local Spark Connect server and test `SparkClient.connect(base_url=...)`.
 
 ## Prerequisites
 
@@ -45,7 +45,7 @@ from kubeflow.common.types import KubernetesBackendConfig
 client = SparkClient(backend_config=KubernetesBackendConfig(namespace='default'))
 
 # Connect to existing Spark Connect server
-spark = client.connect(url='sc://localhost:15002')
+spark = client.connect(base_url='sc://localhost:15002')
 
 # Test with a simple DataFrame operation
 df = spark.createDataFrame([(1, 'Alice'), (2, 'Bob'), (3, 'Charlie')], ['id', 'name'])
