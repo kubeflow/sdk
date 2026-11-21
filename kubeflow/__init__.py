@@ -12,4 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
+
 __version__ = "0.5.0"
+
+# Silent by default: library code should never print to stderr unless a
+# downstream application opts in by configuring the "kubeflow" logger.
+logging.getLogger(__name__).addHandler(logging.NullHandler())
