@@ -301,8 +301,8 @@ def test_get_runtime_packages(local_backend, test_case):
             expected_error=ValueError,
         ),
         TestCase(
-            name="train fails without runtime",
-            expected_status=FAILED,
+            name="train uses default runtime when runtime is omitted",
+            expected_status=SUCCESS,
             config={
                 "runtime": None,
                 "trainer": types.CustomTrainer(
@@ -310,7 +310,6 @@ def test_get_runtime_packages(local_backend, test_case):
                 ),
                 "options": [],
             },
-            expected_error=ValueError,
         ),
         TestCase(
             name="train fails without custom trainer",
@@ -352,8 +351,6 @@ def test_train(local_backend, mock_train_environment, test_case):
         error_msg = str(exc_info.value)
         if "rejects kubernetes" in test_case.name:
             assert "not compatible with" in error_msg
-        elif "without runtime" in test_case.name:
-            assert "Runtime must be provided" in error_msg
         elif "without custom trainer" in test_case.name:
             assert "CustomTrainer must be set" in error_msg
     else:
