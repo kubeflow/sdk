@@ -1161,6 +1161,49 @@ def test_resolve_executor_resources(test_case: TestCase) -> None:
             expected_status=SUCCESS,
             config={
                 "follow": False,
+                "logs": "log line 1\nlog line 2",
+            },
+            expected_output=[
+                "log line 1",
+                "log line 2",
+            ],
+        ),
+        TestCase(
+            name="read logs with a trailing newline",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+                "logs": "log line 1\nlog line 2\n",
+            },
+            expected_output=[
+                "log line 1",
+                "log line 2",
+            ],
+        ),
+        TestCase(
+            name="read logs with blank lines",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+                "logs": "log line 1\n\nlog line 2\n\n",
+            },
+            expected_output=["log line 1", "", "log line 2", ""],
+        ),
+        TestCase(
+            name="read empty logs",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+                "logs": "",
+            },
+            expected_output=[],
+        ),
+        TestCase(
+            name="read logs with CRLF line endings",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+                "logs": "log line 1\r\nlog line 2\r\n",
             },
             expected_output=[
                 "log line 1",
@@ -1227,6 +1270,24 @@ def test_resolve_executor_resources(test_case: TestCase) -> None:
             ],
         ),
         TestCase(
+            name="follow logs with blank lines",
+            expected_status=SUCCESS,
+            config={
+                "follow": True,
+                "chunks": [b"log line 1\n\nlog line 2\n\n"],
+            },
+            expected_output=["log line 1", "", "log line 2", ""],
+        ),
+        TestCase(
+            name="follow empty logs",
+            expected_status=SUCCESS,
+            config={
+                "follow": True,
+                "chunks": [b""],
+            },
+            expected_output=[],
+        ),
+        TestCase(
             name="follow logs with a CRLF split across chunks",
             expected_status=SUCCESS,
             config={
@@ -1258,8 +1319,8 @@ def test_read_pod_logs(test_case: TestCase) -> None:
     core_api = Mock()
     thread = Mock()
 
-    if test_case.name == "read logs":
-        thread.get.return_value = "log line 1\nlog line 2"
+    if "logs" in test_case.config:
+        thread.get.return_value = test_case.config["logs"]
 
     elif test_case.config.get("follow"):
         stream = Mock()
@@ -1286,7 +1347,7 @@ def test_read_pod_logs(test_case: TestCase) -> None:
 
         assert logs == test_case.expected_output
 
-        if test_case.name == "read logs":
+        if not test_case.config["follow"]:
             core_api.read_namespaced_pod_log.assert_called_once_with(
                 name="driver-pod",
                 namespace="default",
@@ -1311,60 +1372,6 @@ def test_read_pod_logs(test_case: TestCase) -> None:
                     pod_name="driver-pod",
                 )
             )
-
-    print("test execution complete")
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TestCase(
-            name="trailing newline",
-            config={"logs": "ready\n"},
-            expected_output=["ready"],
-        ),
-        TestCase(
-            name="no trailing newline",
-            config={"logs": "log line 1\nlog line 2"},
-            expected_output=["log line 1", "log line 2"],
-        ),
-        TestCase(
-            name="blank lines",
-            config={"logs": "log line 1\n\nlog line 2\n\n"},
-            expected_output=["log line 1", "", "log line 2", ""],
-        ),
-        TestCase(
-            name="empty logs",
-            config={"logs": ""},
-            expected_output=[],
-        ),
-        TestCase(
-            name="crlf logs",
-            config={"logs": "log line 1\r\nlog line 2\r\n"},
-            expected_output=["log line 1", "log line 2"],
-        ),
-    ],
-)
-def test_read_pod_logs_follow_parity(test_case: TestCase) -> None:
-    """Tests that read_pod_logs yields the same lines with and without follow."""
-
-    print("Executing test:", test_case.name)
-
-    logs = test_case.config["logs"]
-
-    core_api = Mock()
-    core_api.read_namespaced_pod_log.return_value.get.return_value = logs
-    read_lines = list(read_pod_logs(core_api=core_api, namespace="default", pod_name="driver-pod"))
-
-    core_api = Mock()
-    stream = core_api.read_namespaced_pod_log.return_value.get.return_value.stream
-    stream.return_value = iter([logs.encode("utf-8")])
-    followed_lines = list(
-        read_pod_logs(core_api=core_api, namespace="default", pod_name="driver-pod", follow=True)
-    )
-
-    assert read_lines == test_case.expected_output
-    assert followed_lines == test_case.expected_output
 
     print("test execution complete")
 
