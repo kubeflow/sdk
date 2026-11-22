@@ -287,14 +287,23 @@ class ContainerBackend(RuntimeBackend):
             + uuid.uuid4().hex[: constants.JOB_NAME_UUID_LENGTH]
         )
 
+        if self._adapter.list_containers(
+            filters={"label": [f"{self.label_prefix}/trainjob-name={trainjob_name}"]}
+        ):
+            raise ValueError(
+                f"TrainJob with name '{trainjob_name}' already exists. "
+                "Delete it first with delete_job() or use a different name."
+            )
+
         logger.debug(f"Starting training job: {trainjob_name}")
         # Track created resources so a failure at any setup step can clean them up.
         workdir: str | None = None
+        created_workdir = False
         network_id: str | None = None
         container_ids: list[str] = []
         try:
             # Create per-job working directory on host (for outputs, checkpoints, etc.)
-            workdir = container_utils.create_workdir(trainjob_name)
+            workdir, created_workdir = container_utils.create_workdir(trainjob_name)
             logger.debug(f"Created working directory: {workdir}")
 
             # Create network for multi-node communication and initializers
@@ -474,7 +483,7 @@ class ContainerBackend(RuntimeBackend):
                 )
 
                 # Remove working directory if it was created
-                if workdir and os.path.isdir(workdir):
+                if created_workdir and os.path.isdir(workdir):
                     shutil.rmtree(workdir, ignore_errors=True)
 
             except Exception as cleanup_error:
