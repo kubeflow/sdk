@@ -442,6 +442,8 @@ def test_create_session(kubernetes_backend, test_case):
 
     except Exception as e:
         assert type(e) is test_case.expected_error
+        # The error must name the resource that was sent, not the auto-generated name.
+        assert str(e).endswith(f"/{test_case.config['session_name']}")
     print("test execution complete")
 
 
