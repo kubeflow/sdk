@@ -66,6 +66,7 @@ FORBIDDEN = "forbidden"
 # In all tests runtime name is equal to the framework name.
 TORCH_RUNTIME = "torch"
 TORCH_TUNE_RUNTIME = "torchtune"
+MPI_RUNTIME = "mpi"
 
 # Device count = GPU resources per node (1) × num_nodes (2) = 2
 RUNTIME_DEVICES = "2"
@@ -77,6 +78,17 @@ JOB_WITH_POD_RESTARTS = "job-with-pod-restarts"
 TRAIN_JOBS = "trainjobs"
 TRAIN_JOB_WITH_BUILT_IN_TRAINER = "train-job-with-built-in-trainer"
 TRAIN_JOB_WITH_CUSTOM_TRAINER = "train-job-with-custom-trainer"
+MPI_JOB_RUNNING = "mpi-job-running"
+MPI_JOB_WITH_PENDING_LAUNCHER = "mpi-job-with-pending-launcher"
+MPI_JOB_WITHOUT_LAUNCHER = "mpi-job-without-launcher"
+
+# Launcher and node Pod phases of MPI TrainJobs without conditions, laid out like the
+# deepspeed-distributed runtime (numNodes: 1, runLauncherAsNode: true).
+MPI_TRAIN_JOB_POD_PHASES = {
+    MPI_JOB_RUNNING: ("Running", "Running"),
+    MPI_JOB_WITH_PENDING_LAUNCHER: (constants.POD_PENDING, "Running"),
+    MPI_JOB_WITHOUT_LAUNCHER: (None, "Running"),
+}
 
 
 # --------------------------
@@ -138,11 +150,13 @@ def conditional_error_handler(*args, **kwargs):
 def list_namespaced_pod_response(*args, **kwargs):
     """Return a mock pod list response for the requested TrainJob."""
     label_selector = kwargs.get("label_selector", "")
-    pod_list = (
-        get_mock_pod_list_with_restarts()
-        if JOB_WITH_POD_RESTARTS in label_selector
-        else get_mock_pod_list()
-    )
+    mpi_job_name = next((name for name in MPI_TRAIN_JOB_POD_PHASES if name in label_selector), None)
+    if mpi_job_name:
+        pod_list = get_mock_mpi_pod_list(mpi_job_name)
+    elif JOB_WITH_POD_RESTARTS in label_selector:
+        pod_list = get_mock_pod_list_with_restarts()
+    else:
+        pod_list = get_mock_pod_list()
     mock_thread = Mock()
     mock_thread.get.return_value = pod_list
     return mock_thread
@@ -258,6 +272,28 @@ def get_mock_pod_list_with_restarts() -> models.IoK8sApiCoreV1PodList:
         restarted_pods.append(restarted_pod)
 
     return models.IoK8sApiCoreV1PodList(items=[*old_pods, *restarted_pods])
+
+
+def get_mock_mpi_pod_list(train_job_name: str) -> models.IoK8sApiCoreV1PodList:
+    """Create the launcher and node Pods of an MPI TrainJob."""
+    launcher_phase, node_phase = MPI_TRAIN_JOB_POD_PHASES[train_job_name]
+    node_pod = next(
+        pod
+        for pod in get_mock_pod_list().items
+        if pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL] == constants.NODE
+    )
+    node_pod.metadata.labels[constants.JOBSET_NAME_LABEL] = train_job_name
+    node_pod.status.phase = node_phase
+    pods = [node_pod]
+
+    if launcher_phase:
+        launcher_pod = copy.deepcopy(node_pod)
+        launcher_pod.metadata.name = "launcher-0-pod"
+        launcher_pod.metadata.labels[constants.JOBSET_RJOB_NAME_LABEL] = constants.LAUNCHER
+        launcher_pod.status.phase = launcher_phase
+        pods.insert(0, launcher_pod)
+
+    return models.IoK8sApiCoreV1PodList(items=pods)
 
 
 def get_resource_requirements() -> models.IoK8sApiCoreV1ResourceRequirements:
@@ -426,7 +462,12 @@ def get_namespaced_custom_object_response(*args, **kwargs):
         raise client.ApiException(status=404)
     if args[4] == FORBIDDEN:
         raise client.ApiException(status=403)
-    if args[3] == TRAIN_JOBS:  # TODO: review this.
+    if args[3] == TRAIN_JOBS and args[4] in MPI_TRAIN_JOB_POD_PHASES:
+        mock_thread.get.return_value = create_train_job(
+            train_job_name=args[4],
+            runtime_name=MPI_RUNTIME,
+        )
+    elif args[3] == TRAIN_JOBS:  # TODO: review this.
         mock_thread.get.return_value = add_status(create_train_job(train_job_name=args[4]))
     elif args[3] == constants.TRAINING_RUNTIME_PLURAL:
         # Return a namespaced TrainingRuntime for the requested name.
@@ -625,6 +666,7 @@ def create_train_job(
     initializer: types.Initializer | None = None,
     command: list | None = None,
     args: list | None = None,
+    runtime_name: str = TORCH_RUNTIME,
 ) -> models.TrainerV1alpha1TrainJob:
     """Create a mock TrainJob object."""
     return models.TrainerV1alpha1TrainJob(
@@ -637,7 +679,7 @@ def create_train_job(
         ),
         spec=models.TrainerV1alpha1TrainJobSpec(
             runtimeRef=models.TrainerV1alpha1RuntimeRef(
-                name=TORCH_RUNTIME, kind=types.RuntimeKind.TRAINING_RUNTIME.value
+                name=runtime_name, kind=types.RuntimeKind.TRAINING_RUNTIME.value
             ),
             trainer=None,
             initializer=(
@@ -696,9 +738,16 @@ def create_training_runtime(
             labels={constants.RUNTIME_FRAMEWORK_LABEL: name},
         ),
         spec=models.TrainerV1alpha1TrainingRuntimeSpec(
-            mlPolicy=models.TrainerV1alpha1MLPolicy(
-                torch={},
-                numNodes=2,
+            mlPolicy=(
+                models.TrainerV1alpha1MLPolicy(
+                    mpi=models.TrainerV1alpha1MPIMLPolicySource(runLauncherAsNode=True),
+                    numNodes=1,
+                )
+                if name == MPI_RUNTIME
+                else models.TrainerV1alpha1MLPolicy(
+                    torch={},
+                    numNodes=2,
+                )
             ),
             template=models.TrainerV1alpha1JobSetTemplateSpec(
                 metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
@@ -815,6 +864,55 @@ def get_train_job_data_type(
         ],
         num_nodes=2,
         status="Complete",
+    )
+
+
+def get_mpi_train_job_data_type(train_job_name: str, status: str) -> types.TrainJob:
+    """Create the expected MPI TrainJob, where the launcher is node-0."""
+    launcher_phase, node_phase = MPI_TRAIN_JOB_POD_PHASES[train_job_name]
+
+    trainer = types.RuntimeTrainer(
+        trainer_type=types.TrainerType.CUSTOM_TRAINER,
+        framework=MPI_RUNTIME,
+        device="gpu",
+        device_count="1",
+        num_nodes=1,
+        image="example.com/test-runtime",
+    )
+    trainer.set_command(constants.MPI_COMMAND)
+
+    steps = [
+        types.Step(
+            name="node-1",
+            status=node_phase,
+            pod_name="node-0-pod",
+            device="gpu",
+            device_count="1",
+        )
+    ]
+    if launcher_phase:
+        steps.insert(
+            0,
+            types.Step(
+                name="node-0",
+                status=launcher_phase,
+                pod_name="launcher-0-pod",
+                device="gpu",
+                device_count="1",
+            ),
+        )
+
+    return types.TrainJob(
+        name=train_job_name,
+        creation_timestamp=datetime.datetime(2025, 6, 1, 10, 30, 0),
+        runtime=types.Runtime(
+            name=MPI_RUNTIME,
+            trainer=trainer,
+            kind=types.RuntimeKind.TRAINING_RUNTIME,
+        ),
+        steps=steps,
+        num_nodes=1,
+        status=status,
     )
 
 
@@ -1565,6 +1663,30 @@ def test_train(kubernetes_backend, test_case):
             ),
         ),
         TestCase(
+            name="mpi job is running when the launcher and node pods run",
+            expected_status=SUCCESS,
+            config={"name": MPI_JOB_RUNNING},
+            expected_output=get_mpi_train_job_data_type(
+                MPI_JOB_RUNNING, constants.TRAINJOB_RUNNING
+            ),
+        ),
+        TestCase(
+            name="mpi job is created while the launcher pod is pending",
+            expected_status=SUCCESS,
+            config={"name": MPI_JOB_WITH_PENDING_LAUNCHER},
+            expected_output=get_mpi_train_job_data_type(
+                MPI_JOB_WITH_PENDING_LAUNCHER, constants.TRAINJOB_CREATED
+            ),
+        ),
+        TestCase(
+            name="mpi job is created before the launcher pod exists",
+            expected_status=SUCCESS,
+            config={"name": MPI_JOB_WITHOUT_LAUNCHER},
+            expected_output=get_mpi_train_job_data_type(
+                MPI_JOB_WITHOUT_LAUNCHER, constants.TRAINJOB_CREATED
+            ),
+        ),
+        TestCase(
             name="timeout error when getting job",
             expected_status=FAILED,
             config={"name": TIMEOUT},
@@ -1696,6 +1818,16 @@ def test_get_job_logs(kubernetes_backend, test_case):
                 runtime_name=TORCH_RUNTIME,
                 train_job_name=BASIC_TRAIN_JOB_NAME,
             ),
+        ),
+        TestCase(
+            name="wait for running status of an mpi job",
+            expected_status=SUCCESS,
+            config={
+                "name": MPI_JOB_RUNNING,
+                "status": {constants.TRAINJOB_RUNNING},
+                "polling_interval": 1,
+                "timeout": 2,
+            },
         ),
         TestCase(
             name="invalid status set error",
