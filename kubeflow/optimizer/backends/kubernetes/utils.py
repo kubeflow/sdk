@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from dataclasses import fields
+import math
 from types import NoneType, UnionType
 from typing import Any, Union, get_args, get_origin
 
@@ -124,3 +125,34 @@ def get_search_space_from_katib_spec(
             )
 
     return search_space
+
+
+def get_grid_search_num_combinations(
+    search_space: dict[str, models.V1beta1ParameterSpec],
+) -> int | None:
+    """Get the number of search space combinations that Katib's grid suggestion tries.
+
+    Args:
+        search_space: Search space parameters by name.
+
+    Returns:
+        The number of combinations, or None if a parameter is a range with a step, since Katib
+        builds that grid with floating point arithmetic.
+
+    Raises:
+        ValueError: If a double parameter has no step, since it has no finite grid.
+    """
+    for name, param_spec in search_space.items():
+        if (
+            param_spec.parameter_type == constants.DOUBLE_PARAMETER
+            and not param_spec.feasible_space.step
+        ):
+            raise ValueError(
+                f"GridSearch needs a finite search space, but parameter {name} is continuous. "
+                "Use Search.choice() for it."
+            )
+
+    if not all(param_spec.feasible_space.list for param_spec in search_space.values()):
+        return None
+
+    return math.prod(len(param_spec.feasible_space.list) for param_spec in search_space.values())
