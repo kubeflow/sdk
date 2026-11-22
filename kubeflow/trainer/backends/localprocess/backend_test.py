@@ -111,6 +111,41 @@ def test_list_runtimes(local_backend, test_case):
     assert all(isinstance(rt, types.Runtime) for rt in runtimes)
 
 
+def test_train_preserves_supplied_runtime(
+    local_backend: LocalProcessBackend, mock_train_environment: dict[str, Mock]
+) -> None:
+    """Preparing a local job must not replace the caller's runtime trainer."""
+    runtime = local_backend.get_runtime(TORCH_RUNTIME)
+    original_trainer = runtime.trainer
+    local_backend.train(
+        runtime=runtime,
+        trainer=types.CustomTrainer(func=dummy_training_function),
+        options=[Name("first")],
+    )
+    assert runtime.trainer is original_trainer
+
+
+def test_train_runtime_isolated_between_jobs(
+    local_backend: LocalProcessBackend, mock_train_environment: dict[str, Mock]
+) -> None:
+    """Reusing a runtime must not rewrite the first job's runtime metadata."""
+    runtime = local_backend.get_runtime(TORCH_RUNTIME)
+    trainer = types.CustomTrainer(func=dummy_training_function)
+    local_backend.train(runtime=runtime, trainer=trainer, options=[Name("first")])
+    first = local_backend.get_job("first")
+    first_trainer = first.runtime.trainer
+    mock_train_environment["get_trainer"].return_value = LocalRuntimeTrainer(
+        trainer_type=types.TrainerType.CUSTOM_TRAINER,
+        framework="torch",
+        packages=["torch"],
+        image=LOCAL_RUNTIME_IMAGE,
+    )
+    local_backend.train(runtime=runtime, trainer=trainer, options=[Name("second")])
+    second = local_backend.get_job("second")
+    assert first.runtime is not second.runtime
+    assert first.runtime.trainer is first_trainer
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
