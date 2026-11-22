@@ -21,7 +21,10 @@ from pyspark.sql import SparkSession
 from kubeflow.common.types import KubernetesBackendConfig
 import kubeflow.common.utils as common_utils
 from kubeflow.spark.backends.kubernetes import KubernetesBackend
-from kubeflow.spark.backends.kubernetes.utils import validate_spark_connect_url
+from kubeflow.spark.backends.kubernetes.utils import (
+    add_spark_connect_token,
+    validate_spark_connect_url,
+)
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
@@ -81,7 +84,9 @@ class SparkClient:
         Args:
             base_url: Optional URL to existing Spark Connect server (e.g., "sc://server:15002").
                  If provided, connects to existing server. If None, creates new session.
-            token: Optional authentication token for existing server.
+            token: Optional authentication token for existing server. It's added to `base_url`
+                as the token parameter, so PySpark connects with TLS unless the host is
+                localhost.
             num_executors: Number of executor instances (create mode only).
             resources_per_executor: Resource requirements per executor as dict.
                 Format: `{"cpu": "5", "memory": "10Gi"}` (create mode only).
@@ -107,10 +112,9 @@ class SparkClient:
         """
         if base_url:
             validate_spark_connect_url(base_url)
-            builder = SparkSession.builder.remote(base_url)
             if token:
-                builder = builder.config("spark.connect.authenticate.token", token)
-            return builder.getOrCreate()
+                base_url = add_spark_connect_token(base_url, token)
+            return SparkSession.builder.remote(base_url).getOrCreate()
 
         return self.backend.create_and_connect(
             num_executors=num_executors,
