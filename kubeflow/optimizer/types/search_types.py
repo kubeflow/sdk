@@ -90,5 +90,22 @@ class ContinuousSearchSpace:
 
 
 @dataclass
+class IntegerSearchSpace:
+    """Integer Katib range returned when reading an Experiment.
+
+    Args:
+        min: Lower bound of the range.
+        max: Upper bound of the range.
+        distribution: Sampling distribution.
+        step: Spacing between valid values, if specified by Katib.
+    """
+
+    min: int
+    max: int
+    distribution: Distribution
+    step: int | None = None
+
+
+@dataclass
 class CategoricalSearchSpace:
     choices: list

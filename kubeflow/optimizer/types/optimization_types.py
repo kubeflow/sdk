@@ -18,7 +18,11 @@ from enum import Enum
 
 import kubeflow.common.constants as common_constants
 from kubeflow.optimizer.types.algorithm_types import GridSearch, RandomSearch
-from kubeflow.optimizer.types.search_types import CategoricalSearchSpace, ContinuousSearchSpace
+from kubeflow.optimizer.types.search_types import (
+    CategoricalSearchSpace,
+    ContinuousSearchSpace,
+    IntegerSearchSpace,
+)
 from kubeflow.trainer.types.types import TrainJob
 
 
@@ -111,6 +115,7 @@ class OptimizationJob:
 
     Args:
         name (`str`): The name of the OptimizationJob.
+        search_space: Parameter ranges returned by Katib. Integer ranges retain their step.
         objectives (`list[Objective]`): The objective configuration. Currently, only the
             first metric defined in the objectives list is optimized. Any additional metrics are
             collected and displayed in the Trial results.
@@ -122,7 +127,7 @@ class OptimizationJob:
     """
 
     name: str
-    search_space: dict[str, ContinuousSearchSpace | CategoricalSearchSpace]
+    search_space: dict[str, ContinuousSearchSpace | IntegerSearchSpace | CategoricalSearchSpace]
     objectives: list[Objective]
     algorithm: GridSearch | RandomSearch
     trial_config: TrialConfig
