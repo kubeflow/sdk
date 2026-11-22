@@ -141,7 +141,7 @@ class LocalProcessBackend(RuntimeBackend):
 
         self.__register_job(
             train_job_name=trainjob_name,
-            step_name="train",
+            step_name=_DEFAULT_TRAIN_STEP_NAME,
             job=train_job,
             runtime=runtime,
         )
@@ -207,10 +207,11 @@ class LocalProcessBackend(RuntimeBackend):
         # Resolve the public default step ("node-0") to the local backend's
         # single training step when no step is literally named "node-0".
         resolved_step = step
-        if step == constants.NODE + "-0" and not any(_s.step_name == step for _s in _job[0].steps):
+        steps = _job[0].steps or []
+        if step == constants.NODE + "-0" and not any(_s.step_name == step for _s in steps):
             resolved_step = _DEFAULT_TRAIN_STEP_NAME
 
-        for _step in _job[0].steps:
+        for _step in steps:
             if _step.step_name != resolved_step:
                 continue
             # Flatten the generator and pass through flags so it behaves as expected

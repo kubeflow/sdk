@@ -945,10 +945,15 @@ def test_get_job_logs(container_backend, test_case):
             runtime=runtime, trainer=trainer, initializer=initializer
         )
 
+        if "step" in test_case.config:
+            logs = list(
+                container_backend.get_job_logs(
+                    job_name, follow=test_case.config["follow"], step=test_case.config["step"]
+                )
+            )
+        else:
+            logs = list(container_backend.get_job_logs(job_name, follow=test_case.config["follow"]))
         step = test_case.config.get("step", constants.NODE + "-0")
-        logs = list(
-            container_backend.get_job_logs(job_name, follow=test_case.config["follow"], step=step)
-        )
 
         assert test_case.expected_status == SUCCESS
         assert len(logs) > 0
