@@ -70,3 +70,40 @@ def test_backend_selection(test_case):
         client = TrainerClient(backend_config=test_case["backend_config"])
         backend_name = client.backend.__class__.__name__
         assert backend_name == test_case["expected_backend"]
+
+
+def test_preview_train_job_delegates_to_backend():
+    """TrainerClient passes preview inputs through to its backend."""
+    client = TrainerClient(backend_config=LocalProcessBackendConfig())
+    client.backend = Mock()
+    expected_preview = {"kind": "TrainJob"}
+    client.backend.preview_train_job.return_value = expected_preview
+    initializer = Mock()
+    trainer = Mock()
+    options = [Mock()]
+
+    result = client.preview_train_job(
+        runtime="runtime",
+        initializer=initializer,
+        trainer=trainer,
+        options=options,
+    )
+
+    assert result == expected_preview
+    client.backend.preview_train_job.assert_called_once_with(
+        runtime="runtime",
+        initializer=initializer,
+        trainer=trainer,
+        options=options,
+    )
+
+
+def test_preview_train_job_rejects_unsupported_backend():
+    """Non-Kubernetes backends report that TrainJob preview is unsupported."""
+    client = TrainerClient(backend_config=LocalProcessBackendConfig())
+
+    with pytest.raises(
+        NotImplementedError,
+        match="LocalProcessBackend does not support previewing TrainJobs",
+    ):
+        client.preview_train_job()
