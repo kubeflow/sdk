@@ -18,6 +18,7 @@ Unit tests for runtime_loader module.
 Tests runtime loading from various sources including GitHub, HTTP, and filesystem.
 """
 
+import copy
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -639,4 +640,48 @@ def test_parse_runtime_yaml_extracts_image(test_case):
 
     except Exception as e:
         assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="parse ClusterTrainingRuntime preserves kind",
+            expected_status=SUCCESS,
+            config={
+                "kind": base_types.RuntimeKind.CLUSTER_TRAINING_RUNTIME.value,
+                "expected_kind": base_types.RuntimeKind.CLUSTER_TRAINING_RUNTIME,
+            },
+        ),
+        TestCase(
+            name="parse TrainingRuntime preserves kind",
+            expected_status=SUCCESS,
+            config={
+                "kind": base_types.RuntimeKind.TRAINING_RUNTIME.value,
+                "expected_kind": base_types.RuntimeKind.TRAINING_RUNTIME,
+            },
+        ),
+        TestCase(
+            name="parse unsupported kind raises ValueError",
+            expected_status=FAILED,
+            config={
+                "kind": "UnsupportedRuntime",
+            },
+            expected_error=ValueError,
+        ),
+    ],
+)
+def test_parse_runtime_yaml_preserves_kind(test_case):
+    """Test that _parse_runtime_yaml preserves the RuntimeKind declared in the YAML."""
+    print("Executing test:", test_case.name)
+    runtime_yaml = copy.deepcopy(SAMPLE_RUNTIME_YAML)
+    runtime_yaml["kind"] = test_case.config["kind"]
+
+    if test_case.expected_status == FAILED:
+        with pytest.raises(test_case.expected_error):
+            runtime_loader._parse_runtime_yaml(runtime_yaml, "test")
+    else:
+        runtime = runtime_loader._parse_runtime_yaml(runtime_yaml, "test")
+        assert runtime.kind == test_case.config["expected_kind"]
     print("test execution complete")

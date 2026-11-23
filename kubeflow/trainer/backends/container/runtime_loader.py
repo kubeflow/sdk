@@ -353,9 +353,7 @@ def _parse_runtime_yaml(data: dict[str, Any], source: str = "unknown") -> base_t
     """
     # Require CRD-like schema strictly. Accept both ClusterTrainingRuntime
     # and TrainingRuntime kinds.
-    if not (
-        data.get("kind") in {"ClusterTrainingRuntime", "TrainingRuntime"} and data.get("metadata")
-    ):
+    if not (data.get("kind") in {k.value for k in base_types.RuntimeKind} and data.get("metadata")):
         raise ValueError(
             f"Runtime YAML from {source} must be a ClusterTrainingRuntime CRD-shaped document"
         )
@@ -416,7 +414,7 @@ def _parse_runtime_yaml(data: dict[str, Any], source: str = "unknown") -> base_t
             num_nodes=num_nodes,
             image=image,
         ),
-        kind=base_types.RuntimeKind.TRAINING_RUNTIME,
+        kind=base_types.RuntimeKind(data["kind"]),
     )
 
 
