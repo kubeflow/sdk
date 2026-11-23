@@ -92,8 +92,14 @@ class PodmanClientAdapter(BaseContainerClientAdapter):
         labels: dict[str, str],
         volumes: dict[str, dict[str, str]],
         working_dir: str,
+        gpu_count: int | None = None,
     ) -> str:
         """Create and start a Podman container."""
+        devices = None
+        if gpu_count:
+            # Requires NVIDIA CDI specs (nvidia-ctk cdi generate).
+            devices = [f"nvidia.com/gpu={i}" for i in range(gpu_count)]
+
         container = self.client.containers.run(
             image=image,
             command=command,
@@ -103,6 +109,7 @@ class PodmanClientAdapter(BaseContainerClientAdapter):
             environment=environment,
             labels=labels,
             volumes=volumes,
+            devices=devices,
             detach=True,
             remove=False,
         )

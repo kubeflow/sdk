@@ -86,8 +86,16 @@ class DockerClientAdapter(BaseContainerClientAdapter):
         labels: dict[str, str],
         volumes: dict[str, dict[str, str]],
         working_dir: str,
+        gpu_count: int | None = None,
     ) -> str:
         """Create and start a Docker container."""
+        device_requests = None
+        if gpu_count:
+            import docker.types  # type: ignore
+
+            # Requires the NVIDIA Container Toolkit (or Docker Desktop with WSL2 GPU support).
+            device_requests = [docker.types.DeviceRequest(count=gpu_count, capabilities=[["gpu"]])]
+
         container = self.client.containers.run(
             image=image,
             command=tuple(command),
@@ -98,6 +106,7 @@ class DockerClientAdapter(BaseContainerClientAdapter):
             environment=environment,
             labels=labels,
             volumes=volumes,
+            device_requests=device_requests,
             auto_remove=False,
         )
         return container.id

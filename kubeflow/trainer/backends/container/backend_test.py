@@ -73,6 +73,7 @@ class MockContainerAdapter(BaseContainerClientAdapter):
         labels: dict[str, str],
         volumes: dict[str, dict[str, str]],
         working_dir: str,
+        gpu_count: int | None = None,
     ) -> str:
         container_id = f"container-{len(self.containers_created)}"
         self.containers_created.append(
@@ -86,6 +87,7 @@ class MockContainerAdapter(BaseContainerClientAdapter):
                 "labels": labels,
                 "volumes": volumes,
                 "working_dir": working_dir,
+                "gpu_count": gpu_count,
                 "status": "running",
                 "exit_code": None,
             }
@@ -432,6 +434,7 @@ def test_get_runtime_packages(container_backend):
                 "resources_per_node": {"gpu": "1"},
                 "expected_containers": 1,
                 "expected_nproc_per_node": 1,
+                "expected_gpu_count": 1,
             },
         ),
         TestCase(
@@ -442,6 +445,7 @@ def test_get_runtime_packages(container_backend):
                 "resources_per_node": {"gpu": "4"},
                 "expected_containers": 1,
                 "expected_nproc_per_node": 4,
+                "expected_gpu_count": 4,
             },
         ),
         TestCase(
@@ -452,6 +456,7 @@ def test_get_runtime_packages(container_backend):
                 "resources_per_node": {"gpu": "2"},
                 "expected_containers": 2,
                 "expected_nproc_per_node": 2,
+                "expected_gpu_count": 2,
             },
         ),
         TestCase(
@@ -462,6 +467,7 @@ def test_get_runtime_packages(container_backend):
                 "resources_per_node": {"cpu": "16"},
                 "expected_containers": 1,
                 "expected_nproc_per_node": 1,
+                "expected_gpu_count": None,
             },
         ),
         TestCase(
@@ -709,6 +715,11 @@ def test_train(container_backend, monkeypatch, tmp_path, test_case):
             assert f"--nproc_per_node={expected_nproc}" in command_str, (
                 f"Expected --nproc_per_node={expected_nproc} in command, but got: {command_str}"
             )
+
+        # Every node container must get the requested GPUs, not just the process count
+        if "expected_gpu_count" in test_case.config:
+            for container in container_backend._adapter.containers_created:
+                assert container["gpu_count"] == test_case.config["expected_gpu_count"]
 
         # Check initializer assertions
         if initializer:

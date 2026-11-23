@@ -338,9 +338,11 @@ class ContainerBackend(RuntimeBackend):
             # For GPU training: spawn one process per GPU for optimal utilization
             # For CPU training: use single process (PyTorch parallelizes internally via threads)
             nproc_per_node = 1  # Default for CPU training
+            gpu_count = None  # GPUs to pass through to each node container
             if trainer.resources_per_node and "gpu" in trainer.resources_per_node:
                 try:
-                    nproc_per_node = int(trainer.resources_per_node["gpu"])
+                    gpu_count = int(trainer.resources_per_node["gpu"])
+                    nproc_per_node = gpu_count
                     logger.debug(f"Using {nproc_per_node} processes per node (1 per GPU)")
                 except (ValueError, TypeError):
                     logger.warning(
@@ -434,6 +436,7 @@ class ContainerBackend(RuntimeBackend):
                     labels=labels,
                     volumes=volumes,
                     working_dir=constants.WORKSPACE_PATH,
+                    gpu_count=gpu_count,
                 )
 
                 logger.debug(f"Started container {container_name} (ID: {container_id[:12]})")

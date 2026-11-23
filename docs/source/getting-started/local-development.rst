@@ -143,6 +143,30 @@ because the default socket path differs across operating systems.
    verify the socket path by running ``docker context inspect`` and check
    the ``Host`` value in the output.
 
+GPU Access
+~~~~~~~~~~
+
+Set ``resources_per_node={"gpu": N}`` to give each node container ``N`` GPUs. The backend
+passes the GPUs through to the container and starts one training process per GPU.
+
+.. code-block:: python
+
+   trainer = CustomTrainer(
+       func=train_model,
+       num_nodes=1,
+       resources_per_node={"gpu": 1},
+   )
+
+Requirements:
+
+* **Docker on Linux**: NVIDIA drivers and the
+  `NVIDIA Container Toolkit <https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html>`_.
+* **Docker Desktop on Windows**: the WSL2 backend with a recent NVIDIA driver.
+* **Podman**: NVIDIA CDI specs, generated with ``nvidia-ctk cdi generate``.
+
+To check that GPUs reach containers, run
+``docker run --rm --gpus all <your-training-image> nvidia-smi``.
+
 Kubernetes Backend
 -------------------
 

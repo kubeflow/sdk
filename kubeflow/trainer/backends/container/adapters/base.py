@@ -73,6 +73,7 @@ class BaseContainerClientAdapter(abc.ABC):
         labels: dict[str, str],
         volumes: dict[str, dict[str, str]],
         working_dir: str,
+        gpu_count: int | None = None,
     ) -> str:
         """
         Create and start a container.
@@ -86,6 +87,7 @@ class BaseContainerClientAdapter(abc.ABC):
             labels: Container labels
             volumes: Volume mounts
             working_dir: Working directory
+            gpu_count: Number of GPUs to expose to the container, or None for no GPU access
 
         Returns:
             Container ID
