@@ -611,6 +611,11 @@ def test_wait_for_session_ready(kubernetes_backend, test_case):
             config={"name": SPARK_CONNECT_READY},
         ),
         TestCase(
+            name="valid flow with tail_lines",
+            expected_status=SUCCESS,
+            config={"name": SPARK_CONNECT_READY, "tail_lines": 50},
+        ),
+        TestCase(
             name="timeout error when reading pod logs",
             expected_status=FAILED,
             config={"pod_name": TIMEOUT, "name": SPARK_CONNECT_READY},
@@ -649,6 +654,7 @@ def test_get_session_logs(kubernetes_backend, test_case):
                     kubernetes_backend.get_session_logs(
                         test_case.config["name"],
                         follow=False,
+                        tail_lines=test_case.config.get("tail_lines"),
                     )
                 )
 
@@ -660,6 +666,7 @@ def test_get_session_logs(kubernetes_backend, test_case):
                     namespace=DEFAULT_NAMESPACE,
                     pod_name=pod_name,
                     follow=False,
+                    tail_lines=test_case.config.get("tail_lines"),
                 )
 
             else:
@@ -1880,6 +1887,17 @@ def test_wait_for_job_status(kubernetes_backend, test_case):
             ],
         ),
         TestCase(
+            name="read logs with tail_lines",
+            expected_status=SUCCESS,
+            config={
+                "tail_lines": 50,
+            },
+            expected_output=[
+                "log line 1",
+                "log line 2",
+            ],
+        ),
+        TestCase(
             name="driver pod missing",
             expected_status=FAILED,
             config={
@@ -1939,6 +1957,7 @@ def test_get_job_logs(kubernetes_backend, test_case):
                     kubernetes_backend.get_job_logs(
                         "spark-job",
                         follow=test_case.config.get("follow", False),
+                        tail_lines=test_case.config.get("tail_lines"),
                     )
                 )
 
@@ -1949,6 +1968,7 @@ def test_get_job_logs(kubernetes_backend, test_case):
                     namespace=kubernetes_backend.namespace,
                     pod_name="spark-job-driver",
                     follow=test_case.config.get("follow", False),
+                    tail_lines=test_case.config.get("tail_lines"),
                 )
 
             elif "driver_pod_name" in test_case.config:

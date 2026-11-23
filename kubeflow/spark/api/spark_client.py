@@ -152,7 +152,13 @@ class SparkClient:
         """
         self.backend.delete_session(name)
 
-    def get_session_logs(self, name: str, follow: bool = False) -> Iterator[str]:
+    def get_session_logs(
+        self,
+        name: str,
+        follow: bool = False,
+        *,
+        tail_lines: int | None = None,
+    ) -> Iterator[str]:
         """Get logs from a SparkConnect session.
 
         Args:
@@ -162,10 +168,14 @@ class SparkClient:
             follow:
                 Whether to stream logs continuously.
 
+            tail_lines:
+                Number of lines from the end of the logs to return. If None,
+                returns all available logs.
+
         Returns:
             Iterator of log lines from the SparkConnect driver pod.
         """
-        return self.backend.get_session_logs(name, follow=follow)
+        return self.backend.get_session_logs(name, follow=follow, tail_lines=tail_lines)
 
     # ------------------------------------------------------------------
     # Spark batch jobs
@@ -298,12 +308,16 @@ class SparkClient:
         self,
         name: str,
         follow: bool = False,
+        *,
+        tail_lines: int | None = None,
     ) -> Iterator[str]:
         """Get logs from a Spark job.
 
         Args:
             name: Spark job name.
             follow: Whether to stream logs in realtime.
+            tail_lines: Number of lines from the end of the logs to return. If None,
+                returns all available logs.
 
         Returns:
             Iterator of log lines.
@@ -311,4 +325,5 @@ class SparkClient:
         return self.backend.get_job_logs(
             name=name,
             follow=follow,
+            tail_lines=tail_lines,
         )

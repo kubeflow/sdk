@@ -123,12 +123,16 @@ class RuntimeBackend(abc.ABC):
         self,
         name: str,
         follow: bool = False,
+        *,
+        tail_lines: int | None = None,
     ) -> Iterator[str]:
         """Get logs from a SparkConnect session.
 
         Args:
             name: Session name.
             follow: If True, stream logs continuously.
+            tail_lines: Number of lines from the end of the logs to return. If None,
+                returns all available logs.
 
         Returns:
             Iterator of log lines.
@@ -238,12 +242,16 @@ class RuntimeBackend(abc.ABC):
         self,
         name: str,
         follow: bool = False,
+        *,
+        tail_lines: int | None = None,
     ) -> Iterator[str]:
         """Get logs from a Spark job.
 
         Args:
             name: Name of the Spark job.
             follow: Whether to stream logs in real time.
+            tail_lines: Number of lines from the end of the logs to return. If None,
+                returns all available logs.
 
         Returns:
             Iterator over log lines.
