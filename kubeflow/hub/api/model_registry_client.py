@@ -166,7 +166,7 @@ class ModelRegistryClient:
             version=version,
             author=author,
             owner=owner,
-            description=version_description,
+            version_description=version_description,
             metadata=metadata,
             storage_key=storage.storage_key,
             storage_path=storage.storage_path,
