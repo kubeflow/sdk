@@ -20,9 +20,8 @@ Quick Example
 
 .. code-block:: python
 
-   from kubeflow.optimizer import OptimizerClient
-   from kubeflow.optimizer.types import Search, Objective
-   from kubeflow.trainer.types import TrainJobTemplate, CustomTrainer
+   from kubeflow.optimizer import Objective, OptimizerClient, Search
+   from kubeflow.trainer import CustomTrainer, TrainJobTemplate
 
    # Define what to optimize
    search_space = {
@@ -36,13 +35,15 @@ Quick Example
    job_name = client.optimize(
        trial_template=TrainJobTemplate(trainer=CustomTrainer(func=train)),
        search_space=search_space,
-       objectives=[Objective(name="accuracy", type="maximize")],
+       objectives=[Objective(metric="accuracy", direction="maximize")],
    )
 
-   # Get best results
+   # Wait for the job to finish, then get the best results
+   client.wait_for_job_status(job_name)
    best = client.get_best_results(job_name)
-   print(f"Best hyperparameters: {best.hyperparameters}")
-   print(f"Best accuracy: {best.metrics['accuracy']}")
+   print(f"Best hyperparameters: {best.parameters}")
+   for metric in best.metrics:
+       print(f"Best {metric.name}: {metric.latest}")
 
 How It Works
 ------------
@@ -52,8 +53,8 @@ How It Works
 3. **Run optimization** - Kubeflow tries different combinations
 4. **Get best results** - Retrieve the winning configuration
 
-Kubeflow uses Katib under the hood, which supports various search algorithms
-like random search, Bayesian optimization, and more.
+Kubeflow uses Katib under the hood. The SDK currently supports random search
+and grid search.
 
 Guides
 ------
@@ -91,13 +92,13 @@ Common Patterns
 
 .. code-block:: python
 
-   objectives=[Objective(name="accuracy", type="maximize")]
+   objectives=[Objective(metric="accuracy", direction="maximize")]
 
 **Minimize loss:**
 
 .. code-block:: python
 
-   objectives=[Objective(name="loss", type="minimize")]
+   objectives=[Objective(metric="loss", direction="minimize")]
 
 **Get logs from the best trial:**
 
@@ -112,4 +113,4 @@ Common Patterns
 
    job = client.get_job(job_name)
    print(f"Status: {job.status}")
-   print(f"Trials completed: {job.completed_trials}")
+   print(f"Trials created: {len(job.trials)}")
