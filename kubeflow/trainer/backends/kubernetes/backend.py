@@ -394,17 +394,34 @@ class KubernetesBackend(RuntimeBackend):
             if not trainjob_list:
                 return result
 
-            for trainjob in trainjob_list.items:
-                # If runtime object is set, we check the TrainJob's runtime reference.
-                if (
+            # If runtime object is set, we check the TrainJob's runtime reference.
+            trainjobs = [
+                trainjob
+                for trainjob in trainjob_list.items
+                if not (
                     runtime is not None
                     and trainjob.spec
                     and trainjob.spec.runtime_ref
                     and trainjob.spec.runtime_ref.name != runtime.name
-                ):
-                    continue
+                )
+            ]
+            if not trainjobs:
+                return result
 
-                result.append(self.__get_trainjob_from_cr(trainjob))
+            # Fetch the Pods of all TrainJobs with one request and resolve each runtime once,
+            # instead of sending these requests for every TrainJob.
+            pods_by_trainjob = self.__list_pods_by_trainjob()
+            runtimes: dict[str, types.Runtime] = {}
+
+            for trainjob in trainjobs:
+                trainjob_name = trainjob.metadata.name if trainjob.metadata else None
+                result.append(
+                    self.__get_trainjob_from_cr(
+                        trainjob,
+                        pods=pods_by_trainjob.get(trainjob_name, []),
+                        runtimes=runtimes,
+                    )
+                )
 
         except multiprocessing.TimeoutError as e:
             raise TimeoutError(
@@ -654,10 +671,46 @@ class KubernetesBackend(RuntimeBackend):
                 f"Failed to read logs for the pod {self.namespace}/{pod_name}"
             ) from e
 
+    def __list_pods_by_trainjob(self) -> dict[str, list[models.IoK8sApiCoreV1Pod]]:
+        """List the Pods of all TrainJobs in the namespace, grouped by TrainJob name."""
+        try:
+            response = self.core_api.list_namespaced_pod(
+                self.namespace,
+                label_selector=constants.ALL_TRAINJOBS_POD_LABEL_SELECTOR,
+                async_req=True,
+            ).get(common_constants.DEFAULT_TIMEOUT)
+        except multiprocessing.TimeoutError as e:
+            raise TimeoutError(
+                f"Timeout to list {constants.TRAINJOB_KIND}s' steps in namespace: {self.namespace}"
+            ) from e
+
+        pod_list = models.IoK8sApiCoreV1PodList.from_dict(response.to_dict())
+        pods_by_trainjob: dict[str, list[models.IoK8sApiCoreV1Pod]] = {}
+        for pod in pod_list.items if pod_list else []:
+            trainjob_name = (
+                pod.metadata.labels.get(constants.JOBSET_NAME_LABEL)
+                if pod.metadata and pod.metadata.labels
+                else None
+            )
+            if trainjob_name:
+                pods_by_trainjob.setdefault(trainjob_name, []).append(pod)
+
+        return pods_by_trainjob
+
     def __get_trainjob_from_cr(
         self,
         trainjob_cr: models.TrainerV1alpha1TrainJob,
+        pods: list[models.IoK8sApiCoreV1Pod] | None = None,
+        runtimes: dict[str, types.Runtime] | None = None,
     ) -> types.TrainJob:
+        """Build the TrainJob from its CR.
+
+        Args:
+            trainjob_cr: The TrainJob custom resource.
+            pods: The TrainJob's Pods. If not set, they are listed from the API server.
+            runtimes: Runtimes already resolved by name, shared between calls so that
+                list_jobs() fetches each runtime once. Missing runtimes are added to it.
+        """
         if not (
             trainjob_cr.metadata
             and trainjob_cr.metadata.name
@@ -670,7 +723,13 @@ class KubernetesBackend(RuntimeBackend):
         name = trainjob_cr.metadata.name
         namespace = trainjob_cr.metadata.namespace
 
-        runtime = self.get_runtime(trainjob_cr.spec.runtime_ref.name)
+        runtime_name = trainjob_cr.spec.runtime_ref.name
+        if runtimes is None:
+            runtime = self.get_runtime(runtime_name)
+        else:
+            if runtime_name not in runtimes:
+                runtimes[runtime_name] = self.get_runtime(runtime_name)
+            runtime = runtimes[runtime_name]
 
         # Construct the TrainJob from the CR.
         trainjob = types.TrainJob(
@@ -689,20 +748,22 @@ class KubernetesBackend(RuntimeBackend):
 
         # Add the TrainJob components, e.g. trainer nodes and initializer.
         try:
-            response = self.core_api.list_namespaced_pod(
-                namespace,
-                label_selector=constants.POD_LABEL_SELECTOR.format(trainjob_name=name),
-                async_req=True,
-            ).get(common_constants.DEFAULT_TIMEOUT)
+            if pods is None:
+                response = self.core_api.list_namespaced_pod(
+                    namespace,
+                    label_selector=constants.POD_LABEL_SELECTOR.format(trainjob_name=name),
+                    async_req=True,
+                ).get(common_constants.DEFAULT_TIMEOUT)
 
-            # Convert Pod to the correct format.
-            # This is required to convert Pod's container resources into API object from str
-            pod_list = models.IoK8sApiCoreV1PodList.from_dict(response.to_dict())
-            if not pod_list:
-                return trainjob
+                # Convert Pod to the correct format.
+                # This is required to convert Pod's container resources into API object from str
+                pod_list = models.IoK8sApiCoreV1PodList.from_dict(response.to_dict())
+                if not pod_list:
+                    return trainjob
+                pods = pod_list.items
 
             sorted_pods = sorted(
-                pod_list.items,
+                pods,
                 key=lambda pod: (
                     pod.metadata is not None and pod.metadata.creation_timestamp is not None,
                     pod.metadata.creation_timestamp if pod.metadata else None,
