@@ -26,10 +26,28 @@ def is_running_in_k8s() -> bool:
     return os.path.isdir("/var/run/secrets/kubernetes.io/")
 
 
-def get_default_target_namespace(context: str | None = None) -> str:
-    if not is_running_in_k8s():
+def get_default_target_namespace(
+    context: str | None = None, *, config_file: str | None = None
+) -> str:
+    """Get the namespace to use when none is set explicitly.
+
+    Args:
+        context: Kubeconfig context to read the namespace from. Defaults to the current
+            context.
+        config_file: Kubeconfig file to read. Defaults to the standard kubeconfig lookup.
+            Pass the same file the Kubernetes client is loaded from, so the namespace and
+            the API server come from the same kubeconfig.
+
+    Returns:
+        The namespace of the selected kubeconfig context, the in-cluster service account
+        namespace when running in a Pod without config_file, or "default".
+    """
+    # An explicit kubeconfig is loaded even in a Pod, so read the namespace from it too.
+    if config_file or not is_running_in_k8s():
         try:
-            all_contexts, current_context = config.list_kube_config_contexts()
+            all_contexts, current_context = config.list_kube_config_contexts(
+                config_file=config_file
+            )
             # If context is set, we should get namespace from it.
             if context:
                 for c in all_contexts:

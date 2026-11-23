@@ -30,16 +30,19 @@ import uuid
 
 from kubeflow_trainer_api import models
 from kubernetes import client
+from kubernetes.config import kube_config
 import pytest
 
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.test.common import (
     DEFAULT_NAMESPACE,
     FAILED,
+    NAMESPACE_RESOLUTION_TEST_CASES,
     RUNTIME,
     SUCCESS,
     TIMEOUT,
     TestCase,
+    namespace_test_kubeconfigs,
 )
 from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
 import kubeflow.trainer.backends.kubernetes.utils as utils
@@ -1873,4 +1876,36 @@ def test_get_job_events(kubernetes_backend, test_case):
 
     except Exception as e:
         assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+@pytest.mark.parametrize("test_case", NAMESPACE_RESOLUTION_TEST_CASES, ids=lambda tc: tc.name)
+def test_default_namespace_resolution(test_case, tmp_path, monkeypatch):
+    """The default namespace comes from the kubeconfig the API client is loaded from."""
+    print("Executing test:", test_case.name)
+
+    default_kubeconfig, config_file = namespace_test_kubeconfigs(test_case, tmp_path)
+    monkeypatch.setattr(kube_config, "KUBE_CONFIG_DEFAULT_LOCATION", default_kubeconfig)
+    context = test_case.config.get("context")
+    cfg = KubernetesBackendConfig(
+        namespace=test_case.config.get("namespace"),
+        config_file=config_file,
+        context=context,
+        client_configuration=(
+            client.Configuration() if test_case.config.get("client_configuration") else None
+        ),
+    )
+
+    with (
+        patch("kubeflow.common.utils.is_running_in_k8s", return_value=False),
+        patch("kubernetes.config.load_kube_config") as load_kube_config,
+        patch.object(KubernetesBackend, "verify_backend"),
+    ):
+        backend = KubernetesBackend(cfg)
+
+    assert backend.namespace == test_case.expected_output
+    if test_case.config.get("client_configuration"):
+        load_kube_config.assert_not_called()
+    else:
+        load_kube_config.assert_called_once_with(config_file=config_file, context=context)
     print("test execution complete")
