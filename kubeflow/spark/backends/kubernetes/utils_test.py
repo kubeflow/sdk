@@ -1179,6 +1179,30 @@ def test_resolve_executor_resources(test_case: TestCase) -> None:
             ],
         ),
         TestCase(
+            name="read logs with tail_lines",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+                "tail_lines": 2,
+            },
+            expected_output=[
+                "log line 1",
+                "log line 2",
+            ],
+        ),
+        TestCase(
+            name="follow logs with tail_lines",
+            expected_status=SUCCESS,
+            config={
+                "follow": True,
+                "tail_lines": 2,
+            },
+            expected_output=[
+                "log line 1",
+                "log line 2",
+            ],
+        ),
+        TestCase(
             name="timeout",
             expected_status=FAILED,
             expected_error=TimeoutError,
@@ -1198,10 +1222,13 @@ def test_read_pod_logs(test_case: TestCase) -> None:
     core_api = Mock()
     thread = Mock()
 
-    if test_case.name == "read logs":
+    follow = test_case.config.get("follow", False)
+    tail_lines = test_case.config.get("tail_lines")
+
+    if test_case.expected_status == SUCCESS and not follow:
         thread.get.return_value = "log line 1\nlog line 2"
 
-    elif test_case.name == "follow logs":
+    elif test_case.expected_status == SUCCESS:
         stream = Mock()
         stream.stream.return_value = iter(
             [
@@ -1225,24 +1252,27 @@ def test_read_pod_logs(test_case: TestCase) -> None:
                 core_api=core_api,
                 namespace="default",
                 pod_name="driver-pod",
-                follow=test_case.config["follow"],
+                follow=follow,
+                tail_lines=tail_lines,
             )
         )
 
         assert logs == test_case.expected_output
 
-        if test_case.name == "read logs":
+        if not follow:
             core_api.read_namespaced_pod_log.assert_called_once_with(
                 name="driver-pod",
                 namespace="default",
+                tail_lines=tail_lines,
                 async_req=True,
             )
 
-        elif test_case.name == "follow logs":
+        else:
             core_api.read_namespaced_pod_log.assert_called_once_with(
                 name="driver-pod",
                 namespace="default",
                 follow=True,
+                tail_lines=tail_lines,
                 _preload_content=False,
                 async_req=True,
             )

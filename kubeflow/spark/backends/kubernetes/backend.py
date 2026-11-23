@@ -766,6 +766,8 @@ class KubernetesBackend(RuntimeBackend):
         self,
         name: str,
         follow: bool = False,
+        *,
+        tail_lines: int | None = None,
     ) -> Iterator[str]:
         """Get logs from a SparkConnect session.
 
@@ -779,6 +781,10 @@ class KubernetesBackend(RuntimeBackend):
 
             follow:
                 Whether to stream logs continuously.
+
+            tail_lines:
+                Number of lines from the end of the logs to return. If None,
+                returns all available logs.
 
         Yields:
             Log lines from the SparkConnect driver pod.
@@ -804,6 +810,7 @@ class KubernetesBackend(RuntimeBackend):
                     namespace=self.namespace,
                     pod_name=info.driver_pod_name,
                     follow=follow,
+                    tail_lines=tail_lines,
                 )
 
             except TimeoutError as e:
@@ -1254,6 +1261,8 @@ class KubernetesBackend(RuntimeBackend):
         self,
         name: str,
         follow: bool = False,
+        *,
+        tail_lines: int | None = None,
     ) -> Iterator[str]:
         """Get logs from a Spark job.
 
@@ -1264,6 +1273,8 @@ class KubernetesBackend(RuntimeBackend):
         Args:
             name: Name of the SparkApplication.
             follow: Whether to stream logs continuously.
+            tail_lines: Number of lines from the end of the logs to return. If None,
+                returns all available logs.
 
         Yields:
             Log lines from the SparkApplication driver pod.
@@ -1287,6 +1298,7 @@ class KubernetesBackend(RuntimeBackend):
                     namespace=self.namespace,
                     pod_name=job.driver_pod_name,
                     follow=follow,
+                    tail_lines=tail_lines,
                 )
 
             except TimeoutError as e:

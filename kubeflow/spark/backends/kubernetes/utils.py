@@ -53,6 +53,7 @@ def read_pod_logs(
     namespace: str,
     pod_name: str,
     follow: bool = False,
+    tail_lines: int | None = None,
 ) -> Iterator[str]:
     """Read logs from a Kubernetes pod.
 
@@ -61,6 +62,8 @@ def read_pod_logs(
         namespace: Kubernetes namespace.
         pod_name: Name of the pod.
         follow: Whether to stream logs continuously.
+        tail_lines: Number of lines from the end of the logs to return. If None,
+            returns all available logs.
 
     Yields:
         Log lines from the pod.
@@ -75,6 +78,7 @@ def read_pod_logs(
                 name=pod_name,
                 namespace=namespace,
                 follow=True,
+                tail_lines=tail_lines,
                 _preload_content=False,
                 async_req=True,
             )
@@ -87,6 +91,7 @@ def read_pod_logs(
             thread = core_api.read_namespaced_pod_log(
                 name=pod_name,
                 namespace=namespace,
+                tail_lines=tail_lines,
                 async_req=True,
             )
 
