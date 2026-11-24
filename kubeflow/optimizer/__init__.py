@@ -18,6 +18,9 @@ from kubeflow.common.types import KubernetesBackendConfig
 # Import the Kubeflow Optimizer client.
 from kubeflow.optimizer.api.optimizer_client import OptimizerClient
 
+# Import the Kubeflow Optimizer metrics reporting helper.
+from kubeflow.optimizer.metrics import report_metrics
+
 # Import the Kubeflow Optimizer types.
 from kubeflow.optimizer.types.algorithm_types import GridSearch, RandomSearch
 from kubeflow.optimizer.types.optimization_types import (
@@ -42,4 +45,5 @@ __all__ = [
     "Search",
     "TrainJobTemplate",
     "TrialConfig",
+    "report_metrics",
 ]
