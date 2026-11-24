@@ -121,6 +121,60 @@ def test_get_container_devices(test_case: TestCase):
     "test_case",
     [
         TestCase(
+            name="separate resource requests and limits",
+            expected_status=SUCCESS,
+            config={
+                "resources_per_node": types.Resources(
+                    requests={"cpu": 4, "memory": "8Gi"},
+                    limits={"cpu": 8, "memory": "16Gi"},
+                )
+            },
+            expected_output=models.IoK8sApiCoreV1ResourceRequirements(
+                requests={
+                    "cpu": models.IoK8sApimachineryPkgApiResourceQuantity(4),
+                    "memory": models.IoK8sApimachineryPkgApiResourceQuantity("8Gi"),
+                },
+                limits={
+                    "cpu": models.IoK8sApimachineryPkgApiResourceQuantity(8),
+                    "memory": models.IoK8sApimachineryPkgApiResourceQuantity("16Gi"),
+                },
+            ),
+        ),
+        TestCase(
+            name="resource requests without limits",
+            expected_status=SUCCESS,
+            config={
+                "resources_per_node": types.Resources(
+                    requests={"cpu": 2, "memory": "4Gi"},
+                )
+            },
+            expected_output=models.IoK8sApiCoreV1ResourceRequirements(
+                requests={
+                    "cpu": models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                    "memory": models.IoK8sApimachineryPkgApiResourceQuantity("4Gi"),
+                },
+                limits=None,
+            ),
+        ),
+        TestCase(
+            name="resource aliases apply to separate requests and limits",
+            expected_status=SUCCESS,
+            config={
+                "resources_per_node": types.Resources(
+                    requests={"storage": "50Gi"},
+                    limits={"storage": "100Gi"},
+                )
+            },
+            expected_output=models.IoK8sApiCoreV1ResourceRequirements(
+                requests={
+                    "ephemeral-storage": models.IoK8sApimachineryPkgApiResourceQuantity("50Gi"),
+                },
+                limits={
+                    "ephemeral-storage": models.IoK8sApimachineryPkgApiResourceQuantity("100Gi"),
+                },
+            ),
+        ),
+        TestCase(
             name="mig alias expands to fully qualified key",
             expected_status=SUCCESS,
             config={
@@ -154,6 +208,17 @@ def test_get_container_devices(test_case: TestCase):
                     "mig-1g.5gb": 1,
                     "nvidia.com/mig-2g.10gb": 1,
                 }
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="gpu request and mig limit raises error",
+            expected_status=FAILED,
+            config={
+                "resources_per_node": types.Resources(
+                    requests={"gpu": 1},
+                    limits={"mig-1g.5gb": 1},
+                )
             },
             expected_error=ValueError,
         ),

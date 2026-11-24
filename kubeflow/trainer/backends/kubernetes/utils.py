@@ -234,12 +234,12 @@ def get_trainjob_node_step(
     return step
 
 
-def get_resources_per_node(
-    resources_per_node: dict,
-) -> models.IoK8sApiCoreV1ResourceRequirements:
-    """
-    Get the Trainer resources for the training node from the given dict.
-    """
+def _convert_resource_values(
+    resource_values: dict | None,
+) -> dict[str, models.IoK8sApimachineryPkgApiResourceQuantity] | None:
+    """Convert resource aliases and values to Kubernetes model types."""
+    if resource_values is None:
+        return None
 
     # Convert only standard resource keys and aliases to lowercase.
     # Extended resources (e.g., "example.com/Custom-NPU") preserve their original case.
@@ -253,28 +253,53 @@ def get_resources_per_node(
     resource_aliases = {"gpu": "nvidia.com/gpu", "storage": "ephemeral-storage"}
 
     resources = {}
-    for k, v in resources_per_node.items():
+    for k, v in resource_values.items():
         key = k.lower() if k.lower() in standard_resources or k.lower().startswith("mig-") else k
         key = resource_aliases.get(key, key)
+        if key.startswith("mig-"):
+            key = f"{constants.GPU_MIG_PREFIX}{key[len('mig-') :]}"
         resources[key] = models.IoK8sApimachineryPkgApiResourceQuantity(v)
+    return resources
 
-    # Optional alias for MIG: "mig-<profile>" -> "nvidia.com/mig-<profile>"
-    # Example: "mig-1g.5gb" -> "nvidia.com/mig-1g.5gb"
-    mig_alias_keys = [k for k in resources if k.startswith("mig-")]
-    for k in mig_alias_keys:
-        resources[f"{constants.GPU_MIG_PREFIX}{k[len('mig-') :]}"] = resources.pop(k)
 
-    mig_keys = [k for k in resources if k.startswith(constants.GPU_MIG_PREFIX)]
+def _validate_accelerator_resources(
+    requests: dict[str, models.IoK8sApimachineryPkgApiResourceQuantity] | None,
+    limits: dict[str, models.IoK8sApimachineryPkgApiResourceQuantity] | None,
+) -> None:
+    """Reject incompatible GPU and MIG resource combinations."""
+    resource_keys = set(requests or {}) | set(limits or {})
+    mig_keys = sorted(k for k in resource_keys if k.startswith(constants.GPU_MIG_PREFIX))
     if len(mig_keys) > 1:
         raise ValueError(f"Multiple MIG resource types are not supported: {mig_keys}")
-    if mig_keys and "nvidia.com/gpu" in resources:
+    if mig_keys and constants.GPU_LABEL in resource_keys:
         raise ValueError(
-            f"GPU (nvidia.com/gpu) and MIG ({mig_keys[0]}) cannot be requested together"
+            f"GPU ({constants.GPU_LABEL}) and MIG ({mig_keys[0]}) cannot be requested together"
         )
 
+
+def get_resources_per_node(
+    resources_per_node: dict | types.Resources,
+) -> models.IoK8sApiCoreV1ResourceRequirements:
+    """Build the resource requests and limits for a training node.
+
+    Args:
+        resources_per_node: A dictionary applied to both requests and limits, or Resources
+            containing separate values.
+
+    Returns:
+        Kubernetes resource requirements for the training node.
+    """
+    if isinstance(resources_per_node, types.Resources):
+        requests = _convert_resource_values(resources_per_node.requests)
+        limits = _convert_resource_values(resources_per_node.limits)
+    else:
+        requests = _convert_resource_values(resources_per_node)
+        limits = requests.copy() if requests is not None else None
+
+    _validate_accelerator_resources(requests, limits)
     return models.IoK8sApiCoreV1ResourceRequirements(
-        requests=resources,
-        limits=resources,
+        requests=requests,
+        limits=limits,
     )
 
 

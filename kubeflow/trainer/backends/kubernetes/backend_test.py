@@ -1333,6 +1333,38 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             ),
         ),
         TestCase(
+            name="valid flow with separate resource requests and limits",
+            expected_status=SUCCESS,
+            config={
+                "trainer": types.CustomTrainerContainer(
+                    image="example.com/my-image",
+                    resources_per_node=types.Resources(
+                        requests={"cpu": 2, "memory": "8Gi"},
+                        limits={"cpu": 4, "memory": "16Gi"},
+                    ),
+                )
+            },
+            expected_output=get_train_job(
+                runtime_name=TORCH_RUNTIME,
+                train_job_name=TRAIN_JOB_WITH_CUSTOM_TRAINER,
+                train_job_trainer=get_custom_trainer_container(
+                    image="example.com/my-image",
+                    num_nodes=None,
+                    resources_per_node=models.IoK8sApiCoreV1ResourceRequirements(
+                        requests={
+                            "cpu": models.IoK8sApimachineryPkgApiResourceQuantity(2),
+                            "memory": models.IoK8sApimachineryPkgApiResourceQuantity("8Gi"),
+                        },
+                        limits={
+                            "cpu": models.IoK8sApimachineryPkgApiResourceQuantity(4),
+                            "memory": models.IoK8sApimachineryPkgApiResourceQuantity("16Gi"),
+                        },
+                    ),
+                    env=None,
+                ),
+            ),
+        ),
+        TestCase(
             name="timeout error when deleting job",
             expected_status=FAILED,
             config={
