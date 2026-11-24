@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import MagicMock, Mock
 
 import pytest
@@ -103,6 +104,7 @@ def test_init_import_error(test_case, monkeypatch):
                 "is_secure": False,
                 "user_token": None,
                 "custom_ca": None,
+                "async_runner": None,
             },
         ),
         TestCase(
@@ -119,6 +121,7 @@ def test_init_import_error(test_case, monkeypatch):
                 "is_secure": True,
                 "user_token": None,
                 "custom_ca": None,
+                "async_runner": None,
             },
         ),
         TestCase(
@@ -136,6 +139,7 @@ def test_init_import_error(test_case, monkeypatch):
                 "is_secure": False,
                 "user_token": None,
                 "custom_ca": None,
+                "async_runner": None,
             },
         ),
         TestCase(
@@ -152,6 +156,7 @@ def test_init_import_error(test_case, monkeypatch):
                 "is_secure": True,
                 "user_token": None,
                 "custom_ca": None,
+                "async_runner": None,
             },
         ),
         TestCase(
@@ -168,6 +173,7 @@ def test_init_import_error(test_case, monkeypatch):
                 "is_secure": False,
                 "user_token": None,
                 "custom_ca": None,
+                "async_runner": None,
             },
         ),
     ],
@@ -194,6 +200,22 @@ def test_init(test_case, monkeypatch):
     except Exception as e:
         assert test_case.expected_status == FAILED
         assert type(e) is test_case.expected_error
+
+
+def test_init_forwards_async_runner(monkeypatch):
+    """async_runner is forwarded so callers can avoid model-registry's nest_asyncio patch."""
+
+    from kubeflow.hub.api.model_registry_client import ModelRegistryClient
+
+    def runner(coro):
+        return asyncio.run(coro)
+
+    mock_registry_class = MagicMock()
+    monkeypatch.setattr("model_registry.ModelRegistry", mock_registry_class)
+
+    ModelRegistryClient(base_url="http://localhost", author="test", async_runner=runner)
+
+    assert mock_registry_class.call_args[1]["async_runner"] is runner
 
 
 @pytest.mark.parametrize(

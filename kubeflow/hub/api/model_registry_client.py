@@ -14,8 +14,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Coroutine, Iterator, Mapping
+from typing import TYPE_CHECKING, Any
 
 from kubeflow.hub.types.types import StorageConfig
 
@@ -46,6 +46,7 @@ class ModelRegistryClient:
         is_secure: bool | None = None,
         user_token: str | None = None,
         custom_ca: str | None = None,
+        async_runner: Callable[[Coroutine[Any, Any, Any]], Any] | None = None,
     ):
         """Initialize the ModelRegistryClient.
 
@@ -66,6 +67,11 @@ class ModelRegistryClient:
                 - no scheme defaults to True
             user_token: The PEM-encoded user token as a string. Defaults to None.
             custom_ca: Path to the PEM-encoded root certificates as a string. Defaults to None.
+            async_runner: A bound method or function that takes a coroutine and runs it to
+                completion. When omitted, model-registry applies ``nest_asyncio``, which
+                patches ``asyncio.Task``, ``Future`` and ``run`` for the whole host process.
+                Pass a runner to avoid that in applications that manage their own event
+                loop. Defaults to None.
 
         Raises:
             ImportError: If model-registry is not installed.
@@ -97,6 +103,7 @@ class ModelRegistryClient:
             is_secure=is_secure,
             user_token=user_token,
             custom_ca=custom_ca,
+            async_runner=async_runner,
         )
 
     def register_model(
