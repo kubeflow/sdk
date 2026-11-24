@@ -1857,6 +1857,95 @@ def test_wait_for_job_status(kubernetes_backend, test_case):
 @pytest.mark.parametrize(
     "test_case",
     [
+        *[
+            TestCase(
+                name=f"HTTP {code} is retried",
+                expected_status=SUCCESS,
+                config={"error": ApiException(status=code)},
+            )
+            for code in (429, 500, 502, 503, 504)
+        ],
+        TestCase(
+            name="request timeout is retried",
+            expected_status=SUCCESS,
+            config={"error": multiprocessing.TimeoutError()},
+        ),
+        TestCase(
+            name="forbidden is not retried",
+            expected_status=FAILED,
+            config={"error": ApiException(status=403)},
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="not found is not retried",
+            expected_status=FAILED,
+            config={"error": ApiException(status=404)},
+            expected_error=RuntimeError,
+        ),
+    ],
+)
+def test_wait_for_job_status_api_errors(kubernetes_backend, test_case):
+    """Test that wait_for_job_status retries only transient API errors."""
+    print("Executing test:", test_case.name)
+
+    thread = Mock()
+    thread.get.side_effect = [
+        test_case.config["error"],
+        get_spark_application("test-job", state="COMPLETED").to_dict(),
+    ]
+
+    with (
+        patch.object(
+            kubernetes_backend.custom_api,
+            "get_namespaced_custom_object",
+            side_effect=None,
+            return_value=thread,
+        ),
+        patch("kubeflow.spark.backends.kubernetes.backend.time.sleep"),
+    ):
+        if test_case.expected_status == SUCCESS:
+            job = kubernetes_backend.wait_for_job_status(name="test-job")
+            assert job.status == SparkJobStatus.COMPLETED
+            assert thread.get.call_count == 2
+        else:
+            with pytest.raises(test_case.expected_error):
+                kubernetes_backend.wait_for_job_status(name="test-job")
+            assert thread.get.call_count == 1
+
+    print("test execution complete")
+
+
+def test_wait_for_job_status_transient_errors_stop_at_deadline(kubernetes_backend):
+    """Test that transient errors never extend the wait past the timeout."""
+    thread = Mock()
+    thread.get.side_effect = ApiException(status=503)
+    clock = [0.0]
+    sleeps = []
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        clock[0] += seconds
+
+    with (
+        patch.object(
+            kubernetes_backend.custom_api,
+            "get_namespaced_custom_object",
+            side_effect=None,
+            return_value=thread,
+        ),
+        patch("kubeflow.spark.backends.kubernetes.backend.time") as mock_time,
+    ):
+        mock_time.monotonic.side_effect = lambda: clock[0]
+        mock_time.sleep.side_effect = sleep
+        with pytest.raises(TimeoutError, match="Timeout waiting for Spark job"):
+            kubernetes_backend.wait_for_job_status(name="test-job", timeout=5, polling_interval=2)
+
+    assert sleeps == [2, 2, 1]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         TestCase(
             name="get logs",
             expected_status=SUCCESS,

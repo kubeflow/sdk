@@ -65,3 +65,6 @@ FUNC_JOB_SCRIPT_TEMPLATE = textwrap.dedent(
     printf "%s" "$SCRIPT" > "{{func_file}}"
     """
 )
+
+# Kubernetes API status codes that are retried while waiting for a session or job
+TRANSIENT_HTTP_STATUS_CODES = frozenset({429, 500, 502, 503, 504})

@@ -359,13 +359,10 @@ class KubernetesBackend(RuntimeBackend):
             except RuntimeError as e:
                 # get_session wraps ApiException in RuntimeError, so inspect the cause.
                 cause = e.__cause__
-                if not isinstance(cause, client.ApiException) or cause.status not in {
-                    429,
-                    500,
-                    502,
-                    503,
-                    504,
-                }:
+                if (
+                    not isinstance(cause, client.ApiException)
+                    or cause.status not in constants.TRANSIENT_HTTP_STATUS_CODES
+                ):
                     raise
 
                 logger.warning(
@@ -1200,7 +1197,8 @@ class KubernetesBackend(RuntimeBackend):
         Raises:
             ValueError: If polling_interval is negative.
             RuntimeError: If the SparkApplication reaches the FAILED state before reaching
-                one of the target statuses.
+                one of the target statuses, or if getting the job fails with a
+                non-transient error.
             TimeoutError: If the target status is not reached within the timeout.
         """
         if timeout <= 0:
@@ -1211,44 +1209,72 @@ class KubernetesBackend(RuntimeBackend):
 
         start_time = time.monotonic()
         last_log_time = start_time
+        deadline = start_time + timeout
 
         while True:
-            job = self.get_job(name)
-
-            if job.status in status:
-                logger.info(
-                    "Job reached target state: %s/%s status=%s (%.0fs)",
+            try:
+                job = self.get_job(name)
+            except TimeoutError as e:
+                # The request itself timed out. This is transient, so retry
+                # as long as the overall wait deadline has not expired.
+                logger.warning(
+                    "Timeout getting job %s/%s, retrying: %s",
                     self.namespace,
                     name,
-                    job.status,
-                    time.monotonic() - start_time,
+                    e,
                 )
-                return job
-            if job.status == SparkJobStatus.FAILED and SparkJobStatus.FAILED not in status:
-                raise RuntimeError(
-                    f"Spark job reached failed state: {self.namespace}/{name}(status={job.status})"
-                )
+            except RuntimeError as e:
+                # get_job wraps ApiException in RuntimeError, so inspect the cause.
+                cause = e.__cause__
+                if (
+                    not isinstance(cause, client.ApiException)
+                    or cause.status not in constants.TRANSIENT_HTTP_STATUS_CODES
+                ):
+                    raise
 
-            now = time.monotonic()
-
-            if now - last_log_time >= 10.0:
-                logger.info(
-                    "Waiting for job: %s/%s status=%s elapsed=%.0fs",
+                logger.warning(
+                    "Transient HTTP %s getting job %s/%s, retrying",
+                    cause.status,
                     self.namespace,
                     name,
-                    job.status,
-                    now - start_time,
                 )
-                last_log_time = now
+            else:
+                if job.status in status:
+                    logger.info(
+                        "Job reached target state: %s/%s status=%s (%.0fs)",
+                        self.namespace,
+                        name,
+                        job.status,
+                        time.monotonic() - start_time,
+                    )
+                    return job
+                if job.status == SparkJobStatus.FAILED and SparkJobStatus.FAILED not in status:
+                    raise RuntimeError(
+                        f"Spark job reached failed state: "
+                        f"{self.namespace}/{name}(status={job.status})"
+                    )
 
-            if now - start_time >= timeout:
+                now = time.monotonic()
+                if now - last_log_time >= 10.0:
+                    logger.info(
+                        "Waiting for job: %s/%s status=%s elapsed=%.0fs",
+                        self.namespace,
+                        name,
+                        job.status,
+                        now - start_time,
+                    )
+                    last_log_time = now
+
+            # Don't sleep beyond the overall deadline.
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 raise TimeoutError(
                     f"Timeout waiting for Spark job to reach "
                     f"{status}: {self.namespace}/{name} "
                     f"(timeout: {timeout}s)"
                 )
 
-            time.sleep(polling_interval)
+            time.sleep(min(polling_interval, remaining))
 
     def get_job_logs(
         self,
