@@ -1874,3 +1874,41 @@ def test_get_job_events(kubernetes_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+def test_get_job_events_with_event_time_only(kubernetes_backend):
+    """Test KubernetesBackend.get_job_events keeps events that only set eventTime."""
+    mock_thread = Mock()
+    mock_thread.get.return_value = models.IoK8sApiCoreV1EventList(
+        items=[
+            models.IoK8sApiCoreV1Event(
+                metadata=models.IoK8sApimachineryPkgApisMetaV1ObjectMeta(
+                    name="test-event-3",
+                    namespace=DEFAULT_NAMESPACE,
+                ),
+                involvedObject=models.IoK8sApiCoreV1ObjectReference(
+                    kind="Pod",
+                    name="node-0-pod",
+                    namespace=DEFAULT_NAMESPACE,
+                ),
+                message="0/3 nodes are available: insufficient nvidia.com/gpu",
+                reason="FailedScheduling",
+                eventTime=datetime.datetime(2025, 6, 1, 10, 32, 0),
+            ),
+        ]
+    )
+    kubernetes_backend.core_api.list_namespaced_event = Mock(return_value=mock_thread)
+
+    events = kubernetes_backend.get_job_events(BASIC_TRAIN_JOB_NAME)
+
+    assert [asdict(e) for e in events] == [
+        asdict(
+            types.Event(
+                involved_object_kind="Pod",
+                involved_object_name="node-0-pod",
+                message="0/3 nodes are available: insufficient nvidia.com/gpu",
+                reason="FailedScheduling",
+                event_time=datetime.datetime(2025, 6, 1, 10, 32, 0),
+            )
+        )
+    ]
