@@ -222,13 +222,14 @@ def get_command_using_train_func(
 
     # Wrap function code to execute it from the file. For example:
     # TODO (andreyvelich): Find a better way to run users' scripts.
-    # def train(parameters):
+    # def train(lr, epochs):
     #     print('Start Training...')
-    # train({'lr': 0.01})
+    # train(**{'lr': 0.01, 'epochs': 5})
     if train_func_parameters is None:
         func_code = f"{func_code}\n{train_func.__name__}()\n"
     else:
-        func_code = f"{func_code}\n{train_func.__name__}({train_func_parameters})\n"
+        # Always unpack kwargs for training function calls.
+        func_code = f"{func_code}\n{train_func.__name__}(**{train_func_parameters})\n"
 
     with open(func_file, "w") as f:
         f.write(func_code)
