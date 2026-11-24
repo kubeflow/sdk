@@ -30,7 +30,10 @@ from kubeflow_spark_api import models
 from kubernetes import client
 
 from kubeflow.common import constants as common_constants
-from kubeflow.common.utils import validate_python_function
+from kubeflow.common.utils import (
+    get_embedded_python_script,
+    validate_python_function,
+)
 from kubeflow.spark.backends.kubernetes import constants
 from kubeflow.spark.types.types import (
     Driver,
@@ -777,9 +780,9 @@ def get_command_using_spark_func(
     return [
         "bash",
         "-c",
-        constants.FUNC_JOB_SCRIPT_TEMPLATE.format(
+        get_embedded_python_script(
             func_code=func_code,
-            func_file=(f"{constants.FUNC_JOB_SCRIPT_DIR}/{constants.FUNC_JOB_SCRIPT_NAME}"),
+            func_file=f"{constants.FUNC_JOB_SCRIPT_DIR}/{constants.FUNC_JOB_SCRIPT_NAME}",
         ),
     ]
 

@@ -359,7 +359,7 @@ async def async_func() -> None:
 def func_with_reserved_delimiter() -> None:
     print(
         """
-__KUBEFLOW_FUNC_JOB_SCRIPT__
+__KUBEFLOW_EMBEDDED_SCRIPT__
 """
     )
 
