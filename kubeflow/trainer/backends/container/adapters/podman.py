@@ -112,10 +112,19 @@ class PodmanClientAdapter(BaseContainerClientAdapter):
         """Get Podman container by ID."""
         return self.client.containers.get(container_id)
 
-    def container_logs(self, container_id: str, follow: bool) -> Iterator[str]:
+    def container_logs(
+        self,
+        container_id: str,
+        follow: bool,
+        tail_lines: int | None = None,
+    ) -> Iterator[str]:
         """Stream logs from Podman container."""
         container = self.get_container(container_id)
-        logs = container.logs(stream=bool(follow), follow=bool(follow))
+        logs = container.logs(
+            stream=bool(follow),
+            follow=bool(follow),
+            tail="all" if tail_lines is None else tail_lines,
+        )
         if follow:
             for chunk in logs:
                 if isinstance(chunk, bytes):
