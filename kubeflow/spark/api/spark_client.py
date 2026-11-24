@@ -55,6 +55,26 @@ class SparkClient:
         else:
             raise ValueError(f"Invalid backend config: {type(backend_config)}")
 
+    def close(self) -> None:
+        """Release resources owned by the client."""
+        close = getattr(self.backend, "close", None)
+        if callable(close):
+            close()
+
+    def __enter__(self) -> "SparkClient":
+        """Enter the runtime context."""
+        return self
+
+    def __exit__(
+        self,
+        exc_type,
+        exc_value,
+        exc_tb,
+    ) -> bool:
+        """Exit the runtime context."""
+        self.close()
+        return False
+
     # ------------------------------------------------------------------
     # Spark Connect sessions
     # ------------------------------------------------------------------
