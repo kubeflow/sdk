@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Types used by Kubeflow Hub clients and storage."""
+
 from kubeflow.hub.types.types import OCIUploadParams, S3UploadParams, StorageConfig
 
 __all__ = ["StorageConfig", "S3UploadParams", "OCIUploadParams"]
