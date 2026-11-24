@@ -184,7 +184,7 @@ class SparkClient:
         This method supports two job types:
 
         - **FileJob**: Submit a Spark application referenced by a local
-        or remote file source.
+          or remote file source.
         - **FuncJob**: Submit a Python function as a Spark batch job.
 
         Args:
