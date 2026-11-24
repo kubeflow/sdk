@@ -269,17 +269,22 @@ class LocalProcessBackend(RuntimeBackend):
         if not job.steps:
             return constants.TRAINJOB_CREATED
         statuses = [_step.job.status for _step in job.steps]
-        # if status is running or failed will take precedence over completed
-        if constants.TRAINJOB_FAILED in statuses:
-            status = constants.TRAINJOB_FAILED
-        elif constants.TRAINJOB_RUNNING in statuses:
-            status = constants.TRAINJOB_RUNNING
-        elif constants.TRAINJOB_CREATED in statuses:
-            status = constants.TRAINJOB_CREATED
-        else:
-            status = constants.TRAINJOB_COMPLETE
 
-        return status
+    # Priority: Failed > Running > Created > Complete
+        if constants.TRAINJOB_FAILED in statuses:
+            return constants.TRAINJOB_FAILED
+
+        if constants.TRAINJOB_RUNNING in statuses:
+            return constants.TRAINJOB_RUNNING
+        if constants.TRAINJOB_CREATED in statuses:
+            return constants.TRAINJOB_CREATED
+
+    # ✅ NEW FIX: Ensure all steps are actually complete
+        if all(status == constants.TRAINJOB_COMPLETE for status in statuses):
+            return constants.TRAINJOB_COMPLETE
+
+    # fallback (safety)
+        return constants.TRAINJOB_RUNNING
 
     def __register_job(
         self,
