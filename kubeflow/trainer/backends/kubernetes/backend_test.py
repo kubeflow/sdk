@@ -1593,6 +1593,42 @@ def test_get_job(kubernetes_backend, test_case):
 
 
 @pytest.mark.parametrize(
+    "conditions",
+    [
+        None,
+        [
+            models.IoK8sApimachineryPkgApisMetaV1Condition(
+                type="Suspended",
+                status="False",
+                lastTransitionTime=datetime.datetime.now(),
+                reason="Resumed",
+                message="TrainJob is resumed",
+            )
+        ],
+    ],
+    ids=["no conditions", "resumed"],
+)
+def test_get_job_running_status(kubernetes_backend, conditions):
+    """Test KubernetesBackend.get_job reports Running when all nodes run, also after a resume."""
+    train_job = create_train_job(train_job_name=BASIC_TRAIN_JOB_NAME)
+    train_job.status = models.TrainerV1alpha1TrainJobStatus(conditions=conditions)
+    train_job.spec.trainer = train_job.spec.trainer or models.TrainerV1alpha1Trainer()
+    train_job.spec.trainer.num_nodes = 1
+
+    def get_response(*args, **kwargs):
+        if args[3] != TRAIN_JOBS:
+            return get_namespaced_custom_object_response(*args, **kwargs)
+        mock_thread = Mock()
+        mock_thread.get.return_value = train_job
+        return mock_thread
+
+    kubernetes_backend.custom_api.get_namespaced_custom_object = Mock(side_effect=get_response)
+
+    job = kubernetes_backend.get_job(BASIC_TRAIN_JOB_NAME)
+    assert job.status == constants.TRAINJOB_RUNNING
+
+
+@pytest.mark.parametrize(
     "test_case",
     [
         TestCase(
