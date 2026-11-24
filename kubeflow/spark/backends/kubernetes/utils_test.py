@@ -46,7 +46,7 @@ from kubeflow.spark.backends.kubernetes.utils import (
     read_pod_logs,
     validate_spark_connect_url,
 )
-from kubeflow.spark.options import Labels
+from kubeflow.spark.options import DynamicAllocation, Labels
 from kubeflow.spark.types.types import (
     Driver,
     Executor,
@@ -623,6 +623,57 @@ def test_build_service_url(test_case: TestCase) -> None:
             },
         ),
         TestCase(
+            name="spark connect cr without dynamic allocation",
+            expected_status=SUCCESS,
+            config={
+                "num_executors": 5,
+            },
+        ),
+        TestCase(
+            name="spark connect cr with dynamic allocation",
+            expected_status=SUCCESS,
+            config={
+                "options": [
+                    DynamicAllocation(max_executors=20),
+                ],
+            },
+        ),
+        TestCase(
+            name="spark connect cr with dynamic allocation min max and initial executors",
+            expected_status=SUCCESS,
+            config={
+                "options": [
+                    DynamicAllocation(
+                        max_executors=50,
+                        min_executors=1,
+                        initial_executors=2,
+                        shuffle_tracking_enabled=True,
+                        shuffle_tracking_timeout=60000,
+                    ),
+                ],
+            },
+        ),
+        TestCase(
+            name="spark connect cr with dynamic allocation keeps num executors",
+            expected_status=SUCCESS,
+            config={
+                "num_executors": 5,
+                "options": [
+                    DynamicAllocation(max_executors=20, min_executors=1),
+                ],
+            },
+        ),
+        TestCase(
+            name="spark connect cr with dynamic allocation keeps executor num instances",
+            expected_status=SUCCESS,
+            config={
+                "executor": Executor(num_instances=4),
+                "options": [
+                    DynamicAllocation(max_executors=20),
+                ],
+            },
+        ),
+        TestCase(
             name="kep107 level3 advanced mode",
             expected_status=SUCCESS,
             config={
@@ -732,6 +783,35 @@ def test_build_spark_connect_cr(test_case: TestCase, mock_k8s_backend) -> None:
 
     elif test_case.name == "spark connect cr with options":
         assert spark_connect.metadata.labels["team"] == "ml"
+
+    elif test_case.name == "spark connect cr without dynamic allocation":
+        assert spark_connect.spec.dynamic_allocation is None
+        assert spark_connect.spec.executor.instances == 5
+
+    elif test_case.name == "spark connect cr with dynamic allocation":
+        assert spark_connect.spec.dynamic_allocation.enabled is True
+        assert spark_connect.spec.dynamic_allocation.max_executors == 20
+        assert spark_connect.spec.dynamic_allocation.min_executors is None
+        assert spark_connect.spec.dynamic_allocation.initial_executors is None
+        assert spark_connect.spec.executor.instances == constants.DEFAULT_NUM_EXECUTORS
+
+    elif test_case.name == "spark connect cr with dynamic allocation min max and initial executors":
+        assert spark_connect.spec.dynamic_allocation.enabled is True
+        assert spark_connect.spec.dynamic_allocation.max_executors == 50
+        assert spark_connect.spec.dynamic_allocation.min_executors == 1
+        assert spark_connect.spec.dynamic_allocation.initial_executors == 2
+        assert spark_connect.spec.dynamic_allocation.shuffle_tracking_enabled is True
+        assert spark_connect.spec.dynamic_allocation.shuffle_tracking_timeout == 60000
+
+    elif test_case.name == "spark connect cr with dynamic allocation keeps num executors":
+        assert spark_connect.spec.dynamic_allocation.enabled is True
+        assert spark_connect.spec.dynamic_allocation.min_executors == 1
+        assert spark_connect.spec.dynamic_allocation.max_executors == 20
+        assert spark_connect.spec.executor.instances == 5
+
+    elif test_case.name == "spark connect cr with dynamic allocation keeps executor num instances":
+        assert spark_connect.spec.dynamic_allocation.enabled is True
+        assert spark_connect.spec.executor.instances == 4
 
     print("test execution complete")
 
@@ -1501,6 +1581,35 @@ def test_get_spark_job_executor_spec(test_case: TestCase) -> None:
                 ],
             },
         ),
+        TestCase(
+            name="file job without dynamic allocation",
+            expected_status=SUCCESS,
+            config={
+                "name": "test-job",
+                "namespace": "default",
+                "main_file": "s3://bucket/job.py",
+                "num_executors": 3,
+            },
+        ),
+        TestCase(
+            name="file job with dynamic allocation",
+            expected_status=SUCCESS,
+            config={
+                "name": "test-job",
+                "namespace": "default",
+                "main_file": "s3://bucket/job.py",
+                "num_executors": 3,
+                "options": [
+                    DynamicAllocation(
+                        max_executors=20,
+                        min_executors=1,
+                        initial_executors=2,
+                        shuffle_tracking_enabled=True,
+                        shuffle_tracking_timeout=60000,
+                    ),
+                ],
+            },
+        ),
     ],
 )
 def test_get_spark_application_cr_from_file_job(test_case: TestCase, mock_k8s_backend) -> None:
@@ -1545,6 +1654,19 @@ def test_get_spark_application_cr_from_file_job(test_case: TestCase, mock_k8s_ba
 
     elif test_case.name == "file job with spark conf":
         assert app.spec.spark_conf == test_case.config["spark_conf"]
+
+    elif test_case.name == "file job without dynamic allocation":
+        assert app.spec.dynamic_allocation is None
+        assert app.spec.executor.instances == 3
+
+    elif test_case.name == "file job with dynamic allocation":
+        assert app.spec.dynamic_allocation.enabled is True
+        assert app.spec.dynamic_allocation.max_executors == 20
+        assert app.spec.dynamic_allocation.min_executors == 1
+        assert app.spec.dynamic_allocation.initial_executors == 2
+        assert app.spec.dynamic_allocation.shuffle_tracking_enabled is True
+        assert app.spec.dynamic_allocation.shuffle_tracking_timeout == 60000
+        assert app.spec.executor.instances == 3
 
     print("test execution complete")
 
