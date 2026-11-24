@@ -1212,6 +1212,13 @@ class KubernetesBackend(RuntimeBackend):
         deadline = start_time + timeout
 
         while True:
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"Timeout waiting for Spark job to reach "
+                    f"{status}: {self.namespace}/{name} "
+                    f"(timeout: {timeout}s)"
+                )
+
             try:
                 job = self.get_job(name)
             except TimeoutError as e:
@@ -1266,14 +1273,7 @@ class KubernetesBackend(RuntimeBackend):
                     last_log_time = now
 
             # Don't sleep beyond the overall deadline.
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise TimeoutError(
-                    f"Timeout waiting for Spark job to reach "
-                    f"{status}: {self.namespace}/{name} "
-                    f"(timeout: {timeout}s)"
-                )
-
+            remaining = max(0, deadline - time.monotonic())
             time.sleep(min(polling_interval, remaining))
 
     def get_job_logs(

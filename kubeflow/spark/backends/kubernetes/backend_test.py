@@ -1941,6 +1941,8 @@ def test_wait_for_job_status_transient_errors_stop_at_deadline(kubernetes_backen
             kubernetes_backend.wait_for_job_status(name="test-job", timeout=5, polling_interval=2)
 
     assert sleeps == [2, 2, 1]
+    # Requests at t=0, 2 and 4, none at the deadline.
+    assert thread.get.call_count == 3
 
 
 @pytest.mark.parametrize(
