@@ -54,7 +54,7 @@ def local_backend():
     backend = LocalProcessBackend(cfg)
     yield backend
     # Cleanup: Clear jobs to prevent test pollution
-    backend._LocalProcessBackend__local_jobs.clear()
+    backend._LocalProcessBackend__local_jobs.clear()  # type: ignore
 
 
 @pytest.fixture
@@ -83,7 +83,7 @@ def mock_train_environment():
             packages=["torch"],
             image=LOCAL_RUNTIME_IMAGE,
         )
-        mock_trainer.set_command = Mock()
+        mock_trainer.set_command = Mock()  # type: ignore
         mock_get_trainer.return_value = mock_trainer
 
         yield {

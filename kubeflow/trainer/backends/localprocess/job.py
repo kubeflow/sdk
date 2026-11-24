@@ -27,9 +27,9 @@ class LocalJob(threading.Thread):
         self,
         name,
         command: list | tuple[str] | str,
-        execution_dir: str = None,
-        env: dict[str, str] = None,
-        dependencies: list = None,
+        execution_dir: str | None = None,
+        env: dict[str, str] | None = None,
+        dependencies: list | None = None,
     ):
         """Creates a LocalJob.
 
@@ -67,14 +67,10 @@ class LocalJob(threading.Thread):
                     self._stdout = f"Dependency {dep.name} failed. Skipping"
                 return
 
-        current_dir = os.getcwd()
         try:
             self._start_time = datetime.now()
             _c = " ".join(self.command)
             logger.debug(f"[{self.name}] Started at {self._start_time} with command: \n {_c}")
-
-            # change working directory to venv before executing script
-            os.chdir(self.execution_dir)
 
             self._process = subprocess.Popen(
                 self.command,
@@ -84,6 +80,7 @@ class LocalJob(threading.Thread):
                 encoding="utf-8",
                 bufsize=1,
                 env=self.env,
+                cwd=self.execution_dir,
             )
             # set job status
             self._status = constants.TRAINJOB_RUNNING
@@ -97,7 +94,16 @@ class LocalJob(threading.Thread):
                     return
 
                 # Read output line by line (for streaming)
+                assert self._process is not None
+                assert self._process.stdout is not None
                 output_line = self._process.stdout.readline()
+
+                if self._cancel_requested.is_set():
+                    self._stdout += "[JobCancelled]\n"
+                    self._status = constants.TRAINJOB_FAILED
+                    self._success = False
+                    return
+
                 with self._lock:
                     if output_line:
                         self._stdout += output_line
@@ -106,6 +112,8 @@ class LocalJob(threading.Thread):
                 if not output_line and self._process.poll() is not None:
                     break
 
+            assert self._process is not None
+            assert self._process.stdout is not None
             self._process.stdout.close()
             self._returncode = self._process.wait()
             self._end_time = datetime.now()
@@ -119,15 +127,13 @@ class LocalJob(threading.Thread):
                 constants.TRAINJOB_COMPLETE if self._success else (constants.TRAINJOB_FAILED)
             )
             self._stdout += msg
-            logger.debug("Job output: ", self._stdout)
+            logger.debug("Job output:\n%s", self._stdout)
 
         except Exception as e:
             with self._lock:
                 self._stdout += f"Exception: {e}\n"
                 self._success = False
                 self._status = constants.TRAINJOB_FAILED
-        finally:
-            os.chdir(current_dir)
 
     @property
     def stdout(self):
@@ -144,6 +150,8 @@ class LocalJob(threading.Thread):
 
     def cancel(self):
         self._cancel_requested.set()
+        if self._process is not None and self._process.poll() is None:
+            self._process.terminate()
 
     @property
     def returncode(self):
