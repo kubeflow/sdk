@@ -106,6 +106,7 @@ class LocalProcessBackend(RuntimeBackend):
         # create temp dir
         venv_dir = tempfile.mkdtemp(prefix=trainjob_name)
         logger.debug(f"operating in {venv_dir}")
+        venv_dir = venv_dir.replace("\\", "/")
 
         # get local runtime trainer
         runtime.trainer = local_utils.get_local_runtime_trainer(
