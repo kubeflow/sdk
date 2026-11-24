@@ -18,6 +18,7 @@ This module uses pytest and unittest.mock to simulate Kubernetes API interaction
 It tests KubernetesBackend's behavior across job listing, resource creation etc.
 """
 
+from collections.abc import Iterator
 import copy
 from dataclasses import asdict
 import datetime
@@ -1670,6 +1671,131 @@ def test_get_job_logs(kubernetes_backend, test_case):
         assert logs_list == test_case.expected_output
     except Exception as e:
         assert type(e) is test_case.expected_error
+    print("test execution complete")
+
+
+def _stream_then_fail(lines: list[str], error: Exception) -> Iterator[str]:
+    """Simulate a log stream that returns some lines and then breaks."""
+    yield from lines
+    raise error
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="no retry when the first read works",
+            config={"follow": False, "effects": ["line1\nline2"], "delays": []},
+            expected_output=["line1", "line2"],
+        ),
+        TestCase(
+            name="retry once when the API server is unavailable",
+            config={
+                "follow": False,
+                "effects": [client.ApiException(status=503), "line1\nline2"],
+                "delays": [1],
+            },
+            expected_output=["line1", "line2"],
+        ),
+        TestCase(
+            name="retry with exponential backoff when throttled",
+            config={
+                "follow": False,
+                "effects": [
+                    client.ApiException(status=429),
+                    client.ApiException(status=429),
+                    "line1",
+                ],
+                "delays": [1, 2],
+            },
+            expected_output=["line1"],
+        ),
+        TestCase(
+            name="give up after max attempts",
+            expected_status=FAILED,
+            config={
+                "follow": False,
+                "effects": [client.ApiException(status=503)] * 3,
+                "delays": [1, 2],
+                "message": "after 3 attempts",
+            },
+            expected_output=[],
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="no retry for permanent API errors",
+            expected_status=FAILED,
+            config={
+                "follow": False,
+                "effects": [client.ApiException(status=404), "line1"],
+                "delays": [],
+            },
+            expected_output=[],
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="no retry for unexpected errors",
+            expected_status=FAILED,
+            config={"follow": False, "effects": [ValueError("boom"), "line1"], "delays": []},
+            expected_output=[],
+            expected_error=RuntimeError,
+        ),
+        TestCase(
+            name="retry when following logs and the stream fails to start",
+            config={
+                "follow": True,
+                "effects": [client.ApiException(status=503), ["line1", "line2"]],
+                "delays": [1],
+            },
+            expected_output=["line1", "line2"],
+        ),
+        TestCase(
+            name="no retry when the stream breaks after returning lines",
+            expected_status=FAILED,
+            config={
+                "follow": True,
+                "effects": [
+                    _stream_then_fail(["line1"], client.ApiException(status=503)),
+                    ["line1", "line2"],
+                ],
+                "delays": [],
+            },
+            expected_output=["line1"],
+            expected_error=RuntimeError,
+        ),
+    ],
+)
+def test_get_job_logs_retry(kubernetes_backend, test_case):
+    """Test KubernetesBackend.get_job_logs retries only on transient API errors."""
+    print("Executing test:", test_case.name)
+    effects = test_case.config["effects"]
+    read_log = Mock(side_effect=effects)
+    kubernetes_backend.core_api.read_namespaced_pod_log = read_log
+    logs, error = [], None
+
+    with (
+        patch("kubeflow.trainer.backends.kubernetes.backend.time.sleep") as mock_sleep,
+        patch("kubeflow.trainer.backends.kubernetes.backend.watch.Watch") as mock_watch,
+    ):
+        # The Watch calls the same API method to start the stream, so it gets the same effects.
+        mock_watch.return_value.stream = read_log
+        try:
+            for line in kubernetes_backend.get_job_logs(
+                BASIC_TRAIN_JOB_NAME, follow=test_case.config["follow"]
+            ):
+                logs.append(line)
+        except Exception as e:
+            error = e
+
+    if test_case.expected_error:
+        assert type(error) is test_case.expected_error
+        assert test_case.config.get("message", "Failed to read logs") in str(error)
+    else:
+        assert error is None
+    assert logs == test_case.expected_output
+    assert [c.args[0] for c in mock_sleep.call_args_list] == test_case.config["delays"]
+    # Every attempt reads once, so the number of reads is the number of retries plus one.
+    assert read_log.call_count == len(test_case.config["delays"]) + 1
     print("test execution complete")
 
 

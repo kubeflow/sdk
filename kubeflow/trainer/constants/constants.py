@@ -118,6 +118,15 @@ JOB_INDEX_LABEL = "batch.kubernetes.io/job-completion-index"
 # but one or more of the containers has not been made ready to run.
 POD_PENDING = "Pending"
 
+# The HTTP status codes of the Kubernetes API errors that are worth retrying when reading Pod logs.
+# The 429 status means the API server is throttling the client, 5xx means it is unavailable.
+POD_LOG_RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
+
+# The max number of attempts to start reading Pod logs, and the initial delay between attempts.
+# The delay doubles after every failed attempt (1s, 2s, ...).
+POD_LOG_MAX_ATTEMPTS = 3
+POD_LOG_RETRY_DELAY_SECONDS = 1
+
 # The label selector for Pods created by the TrainJob.
 # It checks the following rJob.name: dataset-initializer, model-initializer, launcher, node.
 POD_LABEL_SELECTOR = (
