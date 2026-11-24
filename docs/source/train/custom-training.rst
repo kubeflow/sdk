@@ -9,8 +9,7 @@ Basic Example
 
 .. code-block:: python
 
-   from kubeflow.trainer import TrainerClient
-   from kubeflow.trainer.types import CustomTrainer
+   from kubeflow.trainer import TrainerClient, CustomTrainer
 
    def my_training_function():
        """Your training code runs inside this function."""

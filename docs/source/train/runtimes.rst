@@ -93,7 +93,7 @@ If the built-in runtimes don't have what you need, use a custom container instea
 
 .. code-block:: python
 
-   from kubeflow.trainer.types import CustomTrainerContainer
+   from kubeflow.trainer import CustomTrainerContainer
 
    client.train(
        trainer=CustomTrainerContainer(

@@ -66,8 +66,7 @@ Use the :class:`~kubeflow.trainer.TrainerClient` to submit your function to Kube
 
 .. code-block:: python
 
-   from kubeflow.trainer import TrainerClient
-   from kubeflow.trainer.types import CustomTrainer
+   from kubeflow.trainer import TrainerClient, CustomTrainer
 
    # Create client (connects to your Kubernetes cluster)
    client = TrainerClient()

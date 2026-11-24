@@ -29,8 +29,7 @@ Here's how simple it is to train a model:
 
 .. code-block:: python
 
-   from kubeflow.trainer import TrainerClient
-   from kubeflow.trainer.types import CustomTrainer
+   from kubeflow.trainer import TrainerClient, CustomTrainer
 
    def train():
        """Your normal training code - nothing special needed."""
