@@ -111,7 +111,9 @@ class KubernetesBackend(RuntimeBackend):
                 )
             )
 
-            trial_template.trainer.func_args[param_name] = f"${{trialParameters.{param_name}}}"
+            trial_template.trainer.func_args[param_name] = utils.get_trial_parameter_func_arg(
+                param_name, param_spec
+            )
 
         # Build the Experiment.
         experiment = models.V1beta1Experiment(

@@ -14,10 +14,36 @@
 
 from dataclasses import dataclass
 from enum import Enum
+import math
+from typing import Any
 
 from kubeflow_katib_api import models as katib_models
+from pydantic import PrivateAttr
 
 import kubeflow.optimizer.constants.constants as constants
+
+
+def _is_python_literal(value: Any) -> bool:
+    """Check that `str(value)` is a Python literal that evaluates back to the value."""
+    if isinstance(value, float):
+        return math.isfinite(value)
+    return isinstance(value, (bool, int))
+
+
+class ChoiceParameterSpec(katib_models.V1beta1ParameterSpec):
+    """Categorical ParameterSpec that remembers the type of its values.
+
+    Katib stores every categorical value as a string, so the original types are lost in the
+    spec itself. They are needed to pass numbers and booleans to the training function as
+    numbers and booleans rather than as strings.
+    """
+
+    _literal_values: bool = PrivateAttr(default=False)
+
+    @property
+    def literal_values(self) -> bool:
+        """Whether every value was given as a finite number or a boolean."""
+        return self._literal_values
 
 
 # Search space distribution helpers
@@ -64,16 +90,21 @@ class Search:
     def choice(values: list) -> katib_models.V1beta1ParameterSpec:
         """Sample a categorical value from the list.
 
+        The training function receives the value with its original type when every value is
+        a number or a boolean. Otherwise, every value is passed as a string.
+
         Args:
             values: List of categorical values.
 
         Returns:
             Katib ParameterSpec object.
         """
-        return katib_models.V1beta1ParameterSpec(
+        spec = ChoiceParameterSpec(
             parameterType=constants.CATEGORICAL_PARAMETERS,
             feasibleSpace=katib_models.V1beta1FeasibleSpace(list=[str(v) for v in values]),
         )
+        spec._literal_values = bool(values) and all(_is_python_literal(v) for v in values)
+        return spec
 
 
 # Distribution for the search space.
