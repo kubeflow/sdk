@@ -39,6 +39,20 @@ To check formatting:
 make verify
 ```
 
+### Spark Development
+
+To work on SparkClient features, install the optional `spark` dependencies:
+
+```sh
+uv pip install -e '.[spark]'
+```
+
+This installs `pyspark-client` (Spark Connect client) and the other Spark-related
+extras declared in `pyproject.toml`.
+
+For ready-to-run examples, see the [Spark examples](./examples/spark/) directory
+and its [README](./examples/spark/README.md).
+
 ## Testing
 
 The Kubeflow SDK project includes several types of tests to ensure code quality and functionality.
@@ -48,6 +62,12 @@ To run unit tests locally use the following make command:
 
 ```shell
 make test-python
+```
+
+To run only the Spark unit tests:
+
+```shell
+uv run pytest -q kubeflow/spark/
 ```
 
 ### E2E Tests
