@@ -209,6 +209,7 @@ class PodmanClientAdapter(BaseContainerClientAdapter):
 
     def list_containers(self, filters: dict[str, list[str]] | None = None) -> list[dict]:
         """List Podman containers with optional filters."""
+        filters = filters or {}
         # Work-around for https://github.com/containers/podman-py/issues/542
         for k, v in filters.items():
             if len(v) == 1:
