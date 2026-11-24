@@ -839,6 +839,12 @@ class KubernetesBackend(RuntimeBackend):
             if "args" in trainer_overrides:
                 trainer_cr.args = trainer_overrides["args"]
 
+        # A reusable runtime may rely on the image supplied by a custom trainer.
+        if not (trainer_cr.image or runtime.trainer.image):
+            raise ValueError(
+                "A trainer image must be provided by the runtime or the custom trainer."
+            )
+
         # Convert runtime patches dicts to native model objects.
         runtime_patch_models = None
         if runtime_patches:

@@ -119,7 +119,7 @@ def get_runtime_trainer(
 
     trainer_container = get_runtime_trainer_container(replicated_jobs)
 
-    if not (trainer_container and trainer_container.image):
+    if trainer_container is None:
         raise Exception(f"Runtime doesn't have trainer container {replicated_jobs}")
 
     trainer = types.RuntimeTrainer(
@@ -129,7 +129,8 @@ def get_runtime_trainer(
             else types.TrainerType.CUSTOM_TRAINER
         ),
         framework=framework,
-        image=trainer_container.image,
+        # A reusable runtime may leave the image to the TrainJob's custom trainer.
+        image=trainer_container.image or "",
     )
 
     # Get the container devices.
