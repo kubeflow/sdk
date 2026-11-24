@@ -411,6 +411,20 @@ def test_list_jobs(local_backend, test_case):
     assert isinstance(jobs, list)
 
 
+def test_list_jobs_without_filter_preserves_registered_runtime(
+    local_backend, mock_train_environment
+):
+    """Listing every job reports the runtime registered with each job."""
+    runtime = local_backend.get_runtime(TORCH_RUNTIME)
+    trainer = types.CustomTrainer(func=dummy_training_function)
+    job_name = local_backend.train(runtime=runtime, trainer=trainer)
+
+    jobs = local_backend.list_jobs()
+
+    job = next(job for job in jobs if job.name == job_name)
+    assert job.runtime == runtime
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
