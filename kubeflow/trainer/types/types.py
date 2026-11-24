@@ -191,6 +191,17 @@ class LoraConfig:
     quantize_base: bool | None = None
     use_dora: bool | None = None
 
+    def __post_init__(self):
+        """Validate LoraConfig parameters."""
+        if self.lora_rank is not None and self.lora_rank <= 0:
+            raise ValueError(f"lora_rank must be greater than 0, got {self.lora_rank}")
+        if self.lora_alpha is not None and self.lora_alpha <= 0:
+            raise ValueError(f"lora_alpha must be greater than 0, got {self.lora_alpha}")
+        if self.lora_dropout is not None and not (0.0 <= self.lora_dropout <= 1.0):
+            raise ValueError(
+                f"lora_dropout must be between 0.0 and 1.0, got {self.lora_dropout}"
+            )
+
 
 # Configuration for the TorchTune LLM Trainer.
 @dataclass
