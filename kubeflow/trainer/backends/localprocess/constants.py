@@ -76,13 +76,13 @@ LOCAL_EXEC_JOB_CLEANUP_SCRIPT = textwrap.dedent(
 LOCAL_EXEC_JOB_TEMPLATE = textwrap.dedent(
     """
     set -e
+    trap '$CLEANUP_SCRIPT' EXIT
     $OS_PYTHON_BIN -m venv --without-pip $PYENV_LOCATION
     echo "Operating inside $PYENV_LOCATION"
     source $PYENV_LOCATION/bin/activate
     $PYENV_LOCATION/bin/python -m ensurepip --upgrade --default-pip
     $DEPENDENCIES_SCRIPT
     $ENTRYPOINT
-    $CLEANUP_SCRIPT
     """
 )
 
