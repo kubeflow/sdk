@@ -417,12 +417,32 @@ def test_create_default_runtimes():
             },
         ),
         TestCase(
+            name="discover runtime files ignores paths that only end with the runtimes path",
+            expected_status=SUCCESS,
+            config={
+                "html_content": """
+                <html>
+                    <a href="/kubeflow/trainer/blob/master/manifests/base/runtimes/torch_distributed.yaml">torch_distributed.yaml</a>
+                    <a href="/kubeflow/trainer/blob/master/archive/manifests/base/runtimes/old_link.yaml">old_link.yaml</a>
+                    <script type="application/json">
+                    {"items":[
+                        {"name":"jax_distributed.yaml","path":"manifests/base/runtimes/jax_distributed.yaml","contentType":"file"},
+                        {"name":"old_json.yaml","path":"archive/manifests/base/runtimes/old_json.yaml","contentType":"file"}
+                    ]}
+                    </script>
+                </html>
+                """,
+                "expected_files": ["torch_distributed.yaml", "jax_distributed.yaml"],
+                "excluded_files": ["old_link.yaml", "old_json.yaml"],
+            },
+        ),
+        TestCase(
             name="discover runtime files custom repo",
             expected_status=SUCCESS,
             config={
                 "html_content": """
                 <html>
-                    <a href="/myorg/myrepo/blob/main/custom/path/custom_runtime.yaml">custom_runtime.yaml</a>
+                    <a href="/myorg/myrepo/blob/master/custom/path/custom_runtime.yaml">custom_runtime.yaml</a>
                 </html>
                 """,
                 "expected_files": ["custom_runtime.yaml"],
