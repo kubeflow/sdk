@@ -16,7 +16,7 @@
 
 from datetime import datetime
 import multiprocessing
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, call, patch
 
 from kubeflow_spark_api import models
 from kubernetes import client
@@ -78,6 +78,57 @@ def kubernetes_backend():
         ),
     ):
         yield KubernetesBackend(KubernetesBackendConfig())
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="config_file and context are both passed to kube-config",
+            expected_status=SUCCESS,
+            config={
+                "backend_config": KubernetesBackendConfig(
+                    config_file="/tmp/kubeconfig", context="ctx"
+                ),
+            },
+            expected_output=[call(config_file="/tmp/kubeconfig", context="ctx")],
+        ),
+        TestCase(
+            name="client_configuration is used and kube-config is not loaded",
+            expected_status=SUCCESS,
+            config={
+                "backend_config": KubernetesBackendConfig(
+                    client_configuration=client.Configuration(host="https://custom-k8s:6443"),
+                ),
+            },
+            expected_output=[],
+        ),
+    ],
+)
+def test_backend_config_loading(test_case):
+    """Test KubernetesBackend loads its client config through the common loader."""
+    print("Executing test:", test_case.name)
+
+    backend_config = test_case.config["backend_config"]
+    with (
+        patch("kubernetes.config.load_kube_config") as mock_load_kube_config,
+        patch("kubernetes.config.load_incluster_config") as mock_load_incluster_config,
+    ):
+        backend = KubernetesBackend(backend_config)
+
+    assert test_case.expected_status == SUCCESS
+    assert mock_load_kube_config.call_args_list == test_case.expected_output
+    mock_load_incluster_config.assert_not_called()
+
+    expected_host = (
+        backend_config.client_configuration.host
+        if backend_config.client_configuration
+        else client.Configuration.get_default_copy().host
+    )
+    assert backend.custom_api.api_client.configuration.host == expected_host
+    assert backend.core_api.api_client is backend.custom_api.api_client
+
+    print("test execution complete")
 
 
 # --------------------------
