@@ -39,6 +39,7 @@ from kubeflow.test.common import (
     RUNTIME,
     SUCCESS,
     TIMEOUT,
+    FakeClock,
     TestCase,
 )
 from kubeflow.trainer.backends.kubernetes.backend import KubernetesBackend
@@ -1782,6 +1783,61 @@ def test_wait_for_job_status(kubernetes_backend, test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
 
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="job reaching status after round(timeout / polling_interval) polls succeeds",
+            expected_status=SUCCESS,
+            config={"timeout": 5, "polling_interval": 2, "complete_on_poll": 3},
+            expected_output=3,
+        ),
+        TestCase(
+            name="timeout error is raised only after the full timeout elapses",
+            expected_status=FAILED,
+            config={"timeout": 5, "polling_interval": 2, "complete_on_poll": None},
+            expected_output=3,
+            expected_error=TimeoutError,
+        ),
+    ],
+)
+def test_wait_for_job_status_honors_full_timeout(kubernetes_backend, test_case):
+    """Test KubernetesBackend.wait_for_job_status polls for the whole timeout.
+
+    round(5 / 2) is 2, so a fixed iteration count stops polling at t=4 even
+    though the caller asked to wait 5 seconds.
+    """
+    print("Executing test:", test_case.name)
+    timeout = test_case.config["timeout"]
+    complete_on_poll = test_case.config["complete_on_poll"]
+    clock = FakeClock()
+    polls = 0
+
+    def mock_get_job(name):
+        nonlocal polls
+        polls += 1
+        done = complete_on_poll is not None and polls >= complete_on_poll
+        return Mock(status=constants.TRAINJOB_COMPLETE if done else constants.TRAINJOB_RUNNING)
+
+    kubernetes_backend.get_job = mock_get_job
+
+    with patch("kubeflow.trainer.backends.kubernetes.backend.time", clock):
+        try:
+            job = kubernetes_backend.wait_for_job_status(
+                name=BASIC_TRAIN_JOB_NAME,
+                timeout=timeout,
+                polling_interval=test_case.config["polling_interval"],
+            )
+            assert test_case.expected_status == SUCCESS
+            assert job.status == constants.TRAINJOB_COMPLETE
+        except Exception as e:
+            assert type(e) is test_case.expected_error
+            assert clock.now >= timeout
+
+    assert polls == test_case.expected_output
     print("test execution complete")
 
 
