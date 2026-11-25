@@ -50,7 +50,9 @@ logger = logging.getLogger(__name__)
 class KubernetesBackend(RuntimeBackend):
     def __init__(self, cfg: KubernetesBackendConfig):
         if cfg.namespace is None:
-            cfg.namespace = common_utils.get_default_target_namespace(cfg.context)
+            cfg.namespace = common_utils.get_default_target_namespace(
+                cfg.context, config_file=cfg.config_file
+            )
 
         # If client configuration is not set, use kube-config to access Kubernetes APIs.
         if cfg.client_configuration is None:
