@@ -230,12 +230,48 @@ def test_get_default_target_namespace_with_config_file_and_context():
 def test_get_default_target_namespace_in_k8s_without_config_file():
     from unittest.mock import mock_open, patch
 
+    mocked_open = mock_open(read_data="in-cluster-ns\n")
     with (
         patch("kubeflow.common.utils.is_running_in_k8s", return_value=True),
-        patch("builtins.open", mock_open(read_data="in-cluster-ns\n")),
+        patch("builtins.open", mocked_open),
     ):
         ns = utils.get_default_target_namespace()
         assert ns == "in-cluster-ns"
+        mocked_open.assert_called_once_with(
+            "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+        )
+
+
+def test_get_default_target_namespace_without_current_context():
+    import os
+    import tempfile
+
+    import yaml
+
+    cfg_no_current = {
+        "apiVersion": "v1",
+        "kind": "Config",
+        "contexts": [
+            {
+                "name": "team-b-ctx",
+                "context": {"cluster": "c1", "user": "u1", "namespace": "team-b"},
+            }
+        ],
+        "clusters": [{"name": "c1", "cluster": {"server": "https://127.0.0.1:6443"}}],
+        "users": [{"name": "u1", "user": {"token": "dummy"}}],
+    }
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        yaml.safe_dump(cfg_no_current, f)
+        path = f.name
+
+    try:
+        with pytest.MonkeyPatch().context() as mp:
+            mp.setattr(utils, "is_running_in_k8s", lambda: False)
+            ns = utils.get_default_target_namespace(context="team-b-ctx", config_file=path)
+            assert ns == "team-b"
+    finally:
+        os.remove(path)
 
 
 def test_get_default_target_namespace_in_k8s_with_explicit_config_file():

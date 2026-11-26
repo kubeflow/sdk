@@ -47,6 +47,17 @@ def get_default_target_namespace(
         The resolved Kubernetes namespace string.
     """
     if config_file or not is_running_in_k8s():
+        if context:
+            try:
+                loader = config.kube_config._get_kube_config_loader(
+                    filename=config_file, active_context=context
+                )
+                if loader.current_context and "context" in loader.current_context:
+                    return loader.current_context["context"].get(
+                        "namespace", constants.DEFAULT_NAMESPACE
+                    )
+            except Exception:
+                pass
         try:
             all_contexts, current_context = config.list_kube_config_contexts(
                 config_file=config_file
@@ -55,9 +66,11 @@ def get_default_target_namespace(
             if context:
                 for c in all_contexts:
                     if isinstance(c, dict) and c.get("name") == context:
-                        return c["context"]["namespace"]
+                        return c["context"].get("namespace", constants.DEFAULT_NAMESPACE)
             # Otherwise, try to get namespace from the current context.
-            return current_context["context"]["namespace"]
+            if current_context and "context" in current_context:
+                return current_context["context"].get("namespace", constants.DEFAULT_NAMESPACE)
+            return constants.DEFAULT_NAMESPACE
         except Exception:
             return constants.DEFAULT_NAMESPACE
     try:
