@@ -1069,15 +1069,15 @@ def test_wait_for_job_status(optimizer_backend, test_case):
 
     fake_time = [0.0]
 
-    def fake_time_time():
+    def fake_monotonic() -> float:
         return fake_time[0]
 
-    def fake_sleep(seconds):
+    def fake_sleep(seconds: float) -> None:
         fake_time[0] += seconds
 
     try:
         with (
-            patch("time.time", side_effect=fake_time_time),
+            patch("time.monotonic", side_effect=fake_monotonic),
             patch("time.sleep", side_effect=fake_sleep),
         ):
             job = optimizer_backend.wait_for_job_status(**wait_kwargs)
@@ -1099,13 +1099,15 @@ def test_wait_for_job_status(optimizer_backend, test_case):
     print("test execution complete")
 
 
-def test_wait_for_job_status_polls_for_full_timeout(optimizer_backend):
+def test_wait_for_job_status_polls_for_full_timeout(
+    optimizer_backend: KubernetesBackend,
+) -> None:
     """Test KubernetesBackend.wait_for_job_status polls until timeout elapses."""
     experiment = create_experiment_cr(name=BASIC_OPTIMIZATION_JOB_NAME)
 
     poll_count = 0
 
-    def patched_get(*args, **kwargs):
+    def patched_get(*args: Any, **kwargs: Any) -> Mock:
         nonlocal poll_count
         mock_thread = Mock()
         if args[3] == constants.EXPERIMENT_PLURAL:
@@ -1117,14 +1119,14 @@ def test_wait_for_job_status_polls_for_full_timeout(optimizer_backend):
 
     fake_time = [0.0]
 
-    def fake_time_time():
+    def fake_monotonic() -> float:
         return fake_time[0]
 
-    def fake_sleep(seconds):
+    def fake_sleep(seconds: float) -> None:
         fake_time[0] += seconds
 
     with (
-        patch("time.time", side_effect=fake_time_time),
+        patch("time.monotonic", side_effect=fake_monotonic),
         patch("time.sleep", side_effect=fake_sleep),
         pytest.raises(TimeoutError),
     ):

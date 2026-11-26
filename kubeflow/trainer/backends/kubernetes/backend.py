@@ -494,8 +494,8 @@ class KubernetesBackend(RuntimeBackend):
                 f"Received polling_interval={polling_interval}, timeout={timeout}"
             )
 
-        end_time = time.time() + timeout
-        while time.time() < end_time:
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
             # Check the status after event is generated for the TrainJob's Pods.
             trainjob = self.get_job(name)
             logger.debug(f"TrainJob {name}, status {trainjob.status}")

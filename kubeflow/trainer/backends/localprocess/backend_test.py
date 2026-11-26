@@ -474,7 +474,9 @@ def test_wait_for_job_status(local_backend, test_case):
             local_backend.wait_for_job_status(**test_case.config)
 
 
-def test_wait_for_job_status_polls_for_full_timeout(local_backend):
+def test_wait_for_job_status_polls_for_full_timeout(
+    local_backend: LocalProcessBackend,
+) -> None:
     """Test LocalProcessBackend.wait_for_job_status polls until timeout elapses."""
     stub_job = Mock()
     stub_job.name = BASIC_TRAIN_JOB_NAME
@@ -482,7 +484,7 @@ def test_wait_for_job_status_polls_for_full_timeout(local_backend):
 
     poll_count = 0
 
-    def mock_get_job(name):
+    def mock_get_job(name: str) -> Mock:
         nonlocal poll_count
         poll_count += 1
         job = Mock(spec=types.TrainJob)
@@ -493,14 +495,14 @@ def test_wait_for_job_status_polls_for_full_timeout(local_backend):
 
     fake_time = [0.0]
 
-    def fake_time_time():
+    def fake_monotonic() -> float:
         return fake_time[0]
 
-    def fake_sleep(seconds):
+    def fake_sleep(seconds: float) -> None:
         fake_time[0] += seconds
 
     with (
-        patch("time.time", side_effect=fake_time_time),
+        patch("time.monotonic", side_effect=fake_monotonic),
         patch("time.sleep", side_effect=fake_sleep),
         pytest.raises(TimeoutError),
     ):

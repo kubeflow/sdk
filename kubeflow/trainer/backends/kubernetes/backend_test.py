@@ -1785,12 +1785,14 @@ def test_wait_for_job_status(kubernetes_backend, test_case):
     print("test execution complete")
 
 
-def test_wait_for_job_status_polls_for_full_timeout(kubernetes_backend):
+def test_wait_for_job_status_polls_for_full_timeout(
+    kubernetes_backend: KubernetesBackend,
+) -> None:
     """Test KubernetesBackend.wait_for_job_status polls until timeout elapses."""
     original_get_job = kubernetes_backend.get_job
     poll_count = 0
 
-    def mock_get_job(name):
+    def mock_get_job(name: str) -> types.TrainJob:
         nonlocal poll_count
         poll_count += 1
         job = original_get_job(name)
@@ -1801,14 +1803,14 @@ def test_wait_for_job_status_polls_for_full_timeout(kubernetes_backend):
 
     fake_time = [0.0]
 
-    def fake_time_time():
+    def fake_monotonic() -> float:
         return fake_time[0]
 
-    def fake_sleep(seconds):
+    def fake_sleep(seconds: float) -> None:
         fake_time[0] += seconds
 
     with (
-        patch("time.time", side_effect=fake_time_time),
+        patch("time.monotonic", side_effect=fake_monotonic),
         patch("time.sleep", side_effect=fake_sleep),
         pytest.raises(TimeoutError),
     ):

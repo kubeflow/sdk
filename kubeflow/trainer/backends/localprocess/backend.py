@@ -236,8 +236,8 @@ class LocalProcessBackend(RuntimeBackend):
         if _job is None:
             raise ValueError(f"No TrainJob with name {name}")
 
-        end_time = time.time() + timeout
-        while time.time() < end_time:
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
             # Get current job status
             trainjob = self.get_job(name)
 
