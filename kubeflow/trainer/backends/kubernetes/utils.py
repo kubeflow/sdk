@@ -18,6 +18,7 @@ from collections.abc import Callable
 from dataclasses import fields
 from datetime import datetime, timezone
 import inspect
+import json
 import logging
 import os
 import shlex
@@ -576,6 +577,22 @@ def get_args_from_peft_config(peft_config: types.LoraConfig) -> list[str]:
     return args
 
 
+def _torchtune_string_override(key: str, value: str) -> str:
+    """
+    Build a torchtune CLI override for a free-form string value.
+
+    torchtune splits each override on "=" and parses the value as YAML, so values such as
+    "Summarize: be brief" or "Answer # briefly" would not reach the recipe unchanged.
+    A JSON string is a valid double-quoted YAML scalar, which OmegaConf reads back as-is.
+    """
+    if "=" in value:
+        raise ValueError(
+            f"{key} must not contain '=': torchtune splits command-line overrides on '=', "
+            f"got {value!r}"
+        )
+    return f"{key}={json.dumps(value)}"
+
+
 def get_args_from_dataset_preprocess_config(
     dataset_preprocess_config: types.TorchTuneInstructDataset,
 ) -> list[str]:
@@ -601,7 +618,7 @@ def get_args_from_dataset_preprocess_config(
 
     # Override the split field if it is provided.
     if dataset_preprocess_config.split:
-        args.append(f"dataset.split={dataset_preprocess_config.split}")
+        args.append(_torchtune_string_override("dataset.split", dataset_preprocess_config.split))
 
     # Override the train_on_input field if it is provided.
     if dataset_preprocess_config.train_on_input is not None:
@@ -609,7 +626,11 @@ def get_args_from_dataset_preprocess_config(
 
     # Override the new_system_prompt field if it is provided.
     if dataset_preprocess_config.new_system_prompt:
-        args.append(f"dataset.new_system_prompt={dataset_preprocess_config.new_system_prompt}")
+        args.append(
+            _torchtune_string_override(
+                "dataset.new_system_prompt", dataset_preprocess_config.new_system_prompt
+            )
+        )
 
     # Override the column_map field if it is provided.
     if dataset_preprocess_config.column_map:
