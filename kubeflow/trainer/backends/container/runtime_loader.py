@@ -452,6 +452,10 @@ def _parse_source_url(source: str) -> tuple[str, str]:
         return ("http", source)
     elif source.startswith("file://"):
         path = urllib.parse.unquote(source[7:])  # Remove 'file://', decode e.g. %20
+        # RFC 8089: "localhost" is the local machine, so file://localhost/C:/dir -> C:/dir.
+        # Shares such as file://localhost/C$/dir have no drive letter and stay UNC below.
+        if path.lower().startswith("localhost/") and _WINDOWS_DRIVE_PATH.match(path[10:]):
+            path = path[10:]
         if not path.startswith("/") and not _WINDOWS_DRIVE_PATH.match(path):
             # UNC form, as produced by Path.as_uri(): file://server/share/dir -> //server/share/dir
             return ("file", "//" + path)
@@ -510,6 +514,19 @@ def _load_from_github_url(github_path: str) -> list[base_types.Runtime]:
                     logger.debug(f"Loaded runtime from GitHub: {runtime.name}")
         except Exception as e:
             logger.debug(f"Failed to parse GitHub runtime {runtime_file}: {e}")
+
+    # The default source is expected to be unreachable offline, where the built-in runtimes
+    # take over, so only a user-configured GitHub source warns when it yields nothing.
+    is_default_source = (owner, repo, custom_path) == (
+        "kubeflow",
+        "trainer",
+        "manifests/base/runtimes",
+    )
+    if not runtimes and not is_default_source:
+        logger.warning(
+            f"No runtimes loaded from GitHub source github://{github_path}. "
+            "Check the repository path and network access."
+        )
 
     return runtimes
 

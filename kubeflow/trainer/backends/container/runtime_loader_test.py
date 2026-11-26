@@ -188,6 +188,24 @@ SAMPLE_RUNTIME_YAML = {
             },
         ),
         TestCase(
+            name="parse localhost file url with windows drive",
+            expected_status=SUCCESS,
+            config={
+                "url": "file://localhost/C:/runtimes",
+                "expected_type": "file",
+                "expected_path": "C:/runtimes",
+            },
+        ),
+        TestCase(
+            name="parse localhost admin share file url as unc",
+            expected_status=SUCCESS,
+            config={
+                "url": "file://localhost/C%24/runtimes",
+                "expected_type": "file",
+                "expected_path": "//localhost/C$/runtimes",
+            },
+        ),
+        TestCase(
             name="parse home-relative path",
             expected_status=SUCCESS,
             config={
@@ -766,3 +784,25 @@ def test_load_from_http_url_warns_on_failure(caplog: pytest.LogCaptureFixture) -
 
     assert runtimes == []
     assert "Failed to load runtime from HTTP https://example.com/runtime.yaml" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "github_path, expect_warning",
+    [
+        ("myorg/myrepo/runtimes", True),
+        ("kubeflow/trainer", False),
+    ],
+)
+def test_load_from_github_url_warns_for_custom_source(
+    caplog: pytest.LogCaptureFixture, github_path: str, expect_warning: bool
+) -> None:
+    """A user-configured GitHub source that yields nothing warns; the default stays quiet."""
+    with (
+        patch.object(runtime_loader, "_discover_github_runtime_files", return_value=[]),
+        caplog.at_level(logging.WARNING, logger=runtime_loader.__name__),
+    ):
+        runtimes = runtime_loader._load_from_github_url(github_path)
+
+    assert runtimes == []
+    warned = f"No runtimes loaded from GitHub source github://{github_path}" in caplog.text
+    assert warned is expect_warning
