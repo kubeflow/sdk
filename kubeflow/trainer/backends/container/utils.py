@@ -20,6 +20,7 @@ from dataclasses import dataclass
 import logging
 import os
 from pathlib import Path
+import re
 import shlex
 
 from kubeflow.common.constants import UNKNOWN
@@ -229,6 +230,25 @@ def aggregate_container_statuses(adapter, containers: list[dict]) -> str:
     """
     statuses = [get_container_status(adapter, c["id"]) for c in containers]
     return aggregate_status_from_containers(statuses)
+
+
+def sort_containers_by_name(containers: list[dict]) -> list[dict]:
+    """
+    Sort container info dicts by name, comparing digit runs as numbers.
+
+    Node containers are named `<job>-node-<rank>`, so a plain string sort would put
+    node-10 before node-2.
+
+    Args:
+        containers: List of container info dicts with 'name' key.
+
+    Returns:
+        A new list of the containers, sorted by name with numbers in numeric order.
+    """
+    return sorted(
+        containers,
+        key=lambda c: [int(p) if p.isdigit() else p for p in re.split(r"(\d+)", c["name"])],
+    )
 
 
 @dataclass

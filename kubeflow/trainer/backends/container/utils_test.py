@@ -170,6 +170,56 @@ def test_aggregate_status_from_containers(test_case: TestCase):
     "test_case",
     [
         TestCase(
+            name="empty list",
+            expected_status=SUCCESS,
+            config={"names": []},
+            expected_output=[],
+        ),
+        TestCase(
+            name="nodes past 10 sort by rank",
+            expected_status=SUCCESS,
+            config={"names": ["job-node-10", "job-node-2", "job-node-0", "job-node-11"]},
+            expected_output=["job-node-0", "job-node-2", "job-node-10", "job-node-11"],
+        ),
+        TestCase(
+            name="initializers sort before nodes",
+            expected_status=SUCCESS,
+            config={
+                "names": [
+                    "job-node-1",
+                    "job-model-initializer",
+                    "job-node-0",
+                    "job-dataset-initializer",
+                ]
+            },
+            expected_output=[
+                "job-dataset-initializer",
+                "job-model-initializer",
+                "job-node-0",
+                "job-node-1",
+            ],
+        ),
+        TestCase(
+            name="digits in the job name",
+            expected_status=SUCCESS,
+            config={"names": ["a1b2-node-10", "a1b2-node-9", "a1b2-dataset-initializer"]},
+            expected_output=["a1b2-dataset-initializer", "a1b2-node-9", "a1b2-node-10"],
+        ),
+    ],
+)
+def test_sort_containers_by_name(test_case: TestCase):
+    """Test that containers are sorted by name with node ranks in numeric order."""
+    print("Executing test:", test_case.name)
+    containers = [{"name": name} for name in test_case.config["names"]]
+    result = container_utils.sort_containers_by_name(containers)
+    assert [c["name"] for c in result] == test_case.expected_output
+    print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
             name="valid function",
             expected_status=SUCCESS,
             config={"func": simple_train_func},
