@@ -36,9 +36,9 @@ def dummy_training_function():
     print("Training started")
 
 
-def dummy_training_function_with_args(lr, epochs):
+def dummy_training_function_with_args(parameters):
     """Dummy training function with parameters, used to exercise real inspect.getsource()."""
-    print(f"lr={lr} epochs={epochs}")
+    print(f"lr={parameters['lr']} epochs={parameters['epochs']}")
 
 
 def _make_runtime(command=("python",), has_trainer=True):
