@@ -14,16 +14,17 @@
 
 """Unit tests for SparkClient API."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from kubeflow.common.types import KubernetesBackendConfig
-from kubeflow.spark.api.spark_client import SparkClient
+from kubeflow.spark.api.spark_client import SparkClient, _append_headers_to_url
 from kubeflow.spark.options import Labels
 from kubeflow.spark.types.types import (
     FileJob,
     FuncJob,
+    SparkConnectAuth,
     SparkJob,
 )
 from kubeflow.test.common import FAILED, SUCCESS, TestCase
@@ -173,3 +174,222 @@ def test_submit_job_success(job, options):
             spark_conf=None,
             options=options,
         )
+
+
+# ------------------------------------------------------------------
+# SparkConnectAuth dataclass validation
+# ------------------------------------------------------------------
+
+
+class TestSparkConnectAuth:
+    """Tests for the SparkConnectAuth dataclass."""
+
+    def test_token_only(self):
+        auth = SparkConnectAuth(token="my-token")
+        assert auth.token == "my-token"
+        assert auth.headers is None
+        assert auth.channel_builder is None
+
+    def test_headers_only(self):
+        auth = SparkConnectAuth(headers={"x-api-key": "key-123"})
+        assert auth.token is None
+        assert auth.headers == {"x-api-key": "key-123"}
+        assert auth.channel_builder is None
+
+    def test_channel_builder_only(self):
+        builder = MagicMock()
+        auth = SparkConnectAuth(channel_builder=builder)
+        assert auth.token is None
+        assert auth.headers is None
+        assert auth.channel_builder is builder
+
+    def test_token_and_headers(self):
+        auth = SparkConnectAuth(token="tok", headers={"x-api-key": "k"})
+        assert auth.token == "tok"
+        assert auth.headers == {"x-api-key": "k"}
+
+    def test_channel_builder_with_token_raises(self):
+        with pytest.raises(ValueError, match="channel_builder cannot be combined"):
+            SparkConnectAuth(token="tok", channel_builder=MagicMock())
+
+    def test_channel_builder_with_headers_raises(self):
+        with pytest.raises(ValueError, match="channel_builder cannot be combined"):
+            SparkConnectAuth(headers={"x-api-key": "k"}, channel_builder=MagicMock())
+
+    def test_all_none_is_valid(self):
+        auth = SparkConnectAuth()
+        assert auth.token is None
+        assert auth.headers is None
+        assert auth.channel_builder is None
+
+
+# ------------------------------------------------------------------
+# connect() – authentication paths
+# ------------------------------------------------------------------
+
+
+class TestConnectAuth:
+    """Tests for SparkClient.connect() with SparkConnectAuth."""
+
+    @patch("kubeflow.spark.api.spark_client.KubernetesBackend")
+    @patch("kubeflow.spark.api.spark_client.SparkSession")
+    def test_connect_token_shorthand_backward_compat(self, mock_session, _mock_backend):
+        """token= alone still works exactly as before."""
+        mock_builder = MagicMock()
+        mock_session.builder.remote.return_value = mock_builder
+        mock_builder.config.return_value = mock_builder
+        mock_builder.getOrCreate.return_value = MagicMock()
+
+        client = SparkClient()
+        client.connect(base_url="sc://host:15002", token="my-tok")
+
+        mock_session.builder.remote.assert_called_once_with("sc://host:15002")
+        mock_builder.config.assert_called_once_with("spark.connect.authenticate.token", "my-tok")
+        mock_builder.getOrCreate.assert_called_once()
+
+    @patch("kubeflow.spark.api.spark_client.KubernetesBackend")
+    @patch("kubeflow.spark.api.spark_client.SparkSession")
+    def test_connect_auth_token(self, mock_session, _mock_backend):
+        """auth=SparkConnectAuth(token=...) sets the bearer token."""
+        mock_builder = MagicMock()
+        mock_session.builder.remote.return_value = mock_builder
+        mock_builder.config.return_value = mock_builder
+        mock_builder.getOrCreate.return_value = MagicMock()
+
+        client = SparkClient()
+        client.connect(
+            base_url="sc://host:15002",
+            auth=SparkConnectAuth(token="auth-tok"),
+        )
+
+        mock_session.builder.remote.assert_called_once_with("sc://host:15002")
+        mock_builder.config.assert_called_once_with("spark.connect.authenticate.token", "auth-tok")
+
+    @patch("kubeflow.spark.api.spark_client.KubernetesBackend")
+    @patch("kubeflow.spark.api.spark_client.SparkSession")
+    def test_connect_auth_headers(self, mock_session, _mock_backend):
+        """auth=SparkConnectAuth(headers=...) appends headers to URL."""
+        mock_builder = MagicMock()
+        mock_session.builder.remote.return_value = mock_builder
+        mock_builder.getOrCreate.return_value = MagicMock()
+
+        client = SparkClient()
+        client.connect(
+            base_url="sc://gateway:443",
+            auth=SparkConnectAuth(headers={"x-api-key": "key-123"}),
+        )
+
+        # Headers are appended as ;key=value to the URL
+        expected_url = "sc://gateway:443;x-api-key=key-123"
+        mock_session.builder.remote.assert_called_once_with(expected_url)
+        # No token config should be set
+        mock_builder.config.assert_not_called()
+
+    @patch("kubeflow.spark.api.spark_client.KubernetesBackend")
+    @patch("kubeflow.spark.api.spark_client.SparkSession")
+    def test_connect_auth_token_and_headers(self, mock_session, _mock_backend):
+        """Token + headers both work together."""
+        mock_builder = MagicMock()
+        mock_session.builder.remote.return_value = mock_builder
+        mock_builder.config.return_value = mock_builder
+        mock_builder.getOrCreate.return_value = MagicMock()
+
+        client = SparkClient()
+        client.connect(
+            base_url="sc://host:15002",
+            auth=SparkConnectAuth(token="tok", headers={"x-identity": "user-1"}),
+        )
+
+        expected_url = "sc://host:15002;x-identity=user-1"
+        mock_session.builder.remote.assert_called_once_with(expected_url)
+        mock_builder.config.assert_called_once_with("spark.connect.authenticate.token", "tok")
+
+    @patch("kubeflow.spark.api.spark_client.KubernetesBackend")
+    @patch("kubeflow.spark.api.spark_client.SparkSession")
+    def test_connect_auth_channel_builder(self, mock_session, _mock_backend):
+        """auth=SparkConnectAuth(channel_builder=...) uses channelBuilder."""
+        mock_builder = MagicMock()
+        mock_session.builder.channelBuilder.return_value = mock_builder
+        mock_builder.getOrCreate.return_value = MagicMock()
+
+        channel = MagicMock()
+        client = SparkClient()
+        client.connect(
+            base_url="sc://host:15002",
+            auth=SparkConnectAuth(channel_builder=channel),
+        )
+
+        mock_session.builder.channelBuilder.assert_called_once_with(channel)
+        mock_builder.getOrCreate.assert_called_once()
+        # remote() should NOT be called when using channel_builder
+        mock_session.builder.remote.assert_not_called()
+
+    @patch("kubeflow.spark.api.spark_client.KubernetesBackend")
+    def test_connect_token_and_auth_token_conflict(self, _mock_backend):
+        """Both token= and auth.token set raises ValueError."""
+        client = SparkClient()
+        with pytest.raises(ValueError, match="Ambiguous authentication"):
+            client.connect(
+                base_url="sc://host:15002",
+                token="standalone-tok",
+                auth=SparkConnectAuth(token="auth-tok"),
+            )
+
+    @patch("kubeflow.spark.api.spark_client.KubernetesBackend")
+    @patch("kubeflow.spark.api.spark_client.SparkSession")
+    def test_connect_token_shorthand_with_auth_headers(self, mock_session, _mock_backend):
+        """token= combined with auth(headers=...) merges both."""
+        mock_builder = MagicMock()
+        mock_session.builder.remote.return_value = mock_builder
+        mock_builder.config.return_value = mock_builder
+        mock_builder.getOrCreate.return_value = MagicMock()
+
+        client = SparkClient()
+        client.connect(
+            base_url="sc://host:15002",
+            token="my-tok",
+            auth=SparkConnectAuth(headers={"x-api-key": "key-123"}),
+        )
+
+        expected_url = "sc://host:15002;x-api-key=key-123"
+        mock_session.builder.remote.assert_called_once_with(expected_url)
+        mock_builder.config.assert_called_once_with("spark.connect.authenticate.token", "my-tok")
+
+    @patch("kubeflow.spark.api.spark_client.KubernetesBackend")
+    @patch("kubeflow.spark.api.spark_client.SparkSession")
+    def test_connect_no_auth(self, mock_session, _mock_backend):
+        """base_url without any auth falls back to plain connect."""
+        mock_builder = MagicMock()
+        mock_session.builder.remote.return_value = mock_builder
+        mock_builder.getOrCreate.return_value = MagicMock()
+
+        client = SparkClient()
+        client.connect(base_url="sc://host:15002")
+
+        mock_session.builder.remote.assert_called_once_with("sc://host:15002")
+        mock_builder.config.assert_not_called()
+
+
+# ------------------------------------------------------------------
+# _append_headers_to_url helper
+# ------------------------------------------------------------------
+
+
+class TestAppendHeadersToUrl:
+    """Tests for the _append_headers_to_url helper."""
+
+    def test_single_header(self):
+        result = _append_headers_to_url("sc://host:15002", {"x-api-key": "key-123"})
+        assert result == "sc://host:15002;x-api-key=key-123"
+
+    def test_multiple_headers(self):
+        result = _append_headers_to_url(
+            "sc://host:443",
+            {"x-api-key": "k", "x-identity": "user-1"},
+        )
+        assert "x-api-key=k" in result
+        assert "x-identity=user-1" in result
+
+    def test_url_already_has_params(self):
+        result = _append_headers_to_url("sc://host:15002;use_ssl=true", {"x-api-key": "k"})
+        assert result == "sc://host:15002;use_ssl=true;x-api-key=k"

@@ -36,6 +36,71 @@ class SparkConnectState(str, Enum):
 
 
 @dataclass
+class SparkConnectAuth:
+    """Authentication configuration for a Spark Connect session.
+
+    Supports three mechanisms that cover the ways a Spark Connect client
+    can authenticate:
+
+    * **Bearer token** – sent via ``spark.connect.authenticate.token``.
+    * **Extra gRPC headers** – arbitrary key/value pairs appended to the
+      Spark Connect URL as ``;key=value`` parameters, which PySpark
+      forwards as gRPC metadata.  Useful for gateways and proxies that
+      expect their own header (an API key, an identity header, etc.).
+    * **Custom channel builder** – a ``ChannelBuilder`` instance passed
+      to ``SparkSession.builder.channelBuilder()`` for mTLS client
+      certificates, tokens that expire and need refreshing, or gRPC
+      interceptors.
+
+    Args:
+        token: Bearer token string.
+        headers: Extra gRPC metadata headers as ``{name: value}`` dict.
+        channel_builder: A PySpark ``ChannelBuilder`` (or compatible
+            object) for full control over the gRPC channel.
+
+    Raises:
+        ValueError: If ``channel_builder`` is combined with ``token``
+            or ``headers``, since the channel builder owns the entire
+            channel and those options would be silently ignored.
+
+    Example::
+
+        from kubeflow.spark import SparkClient, SparkConnectAuth
+
+        client = SparkClient()
+
+        # Bearer token
+        client.connect(
+            base_url="sc://spark.example:443",
+            auth=SparkConnectAuth(token="my-token"),
+        )
+
+        # Gateway / proxy header
+        client.connect(
+            base_url="sc://gateway:443",
+            auth=SparkConnectAuth(headers={"x-api-key": "key-123"}),
+        )
+
+        # Custom channel builder (mTLS, token refresh, interceptors)
+        client.connect(
+            base_url="sc://spark.example:443",
+            auth=SparkConnectAuth(channel_builder=my_builder),
+        )
+    """
+
+    token: str | None = None
+    headers: dict[str, str] | None = None
+    channel_builder: Any | None = None
+
+    def __post_init__(self) -> None:
+        if self.channel_builder is not None and (self.token or self.headers):
+            raise ValueError(
+                "channel_builder cannot be combined with token or headers; "
+                "the channel builder owns the entire gRPC channel"
+            )
+
+
+@dataclass
 class SparkConnectInfo:
     """Information about a SparkConnect session.
 

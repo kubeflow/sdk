@@ -27,6 +27,7 @@ from kubeflow.spark.types.types import (
     Executor,
     FileJob,
     FuncJob,
+    SparkConnectAuth,
     SparkConnectInfo,
     SparkJob,
     SparkJobStatus,
@@ -63,6 +64,7 @@ class SparkClient:
         self,
         base_url: str | None = None,
         token: str | None = None,
+        auth: SparkConnectAuth | None = None,
         num_executors: int | None = None,
         resources_per_executor: dict | None = None,
         spark_conf: dict[str, str] | None = None,
@@ -75,41 +77,99 @@ class SparkClient:
         """Connect to or create a SparkConnect session.
 
         This method supports two modes based on parameters:
-        - **Connect mode**: When `base_url` is provided, connects to an existing Spark Connect server
-        - **Create mode**: When `base_url` is not provided, creates a new Spark Connect session
+        - **Connect mode**: When ``base_url`` is provided, connects to an
+          existing Spark Connect server.
+        - **Create mode**: When ``base_url`` is not provided, creates a new
+          Spark Connect session on Kubernetes.
+
+        Authentication (connect mode only) can be supplied in three ways:
+
+        1. ``token`` – shorthand for ``auth=SparkConnectAuth(token=...)``.
+        2. ``auth=SparkConnectAuth(token=..., headers=..., channel_builder=...)``
+           – full control over the authentication mechanism.
+        3. Both ``token`` and ``auth`` may be provided **only** when
+           ``auth.token`` is ``None``; the standalone ``token`` is then used
+           as the bearer token alongside any headers configured in ``auth``.
 
         Args:
-            base_url: Optional URL to existing Spark Connect server (e.g., "sc://server:15002").
-                 If provided, connects to existing server. If None, creates new session.
+            base_url: Optional URL to existing Spark Connect server
+                (e.g., ``"sc://server:15002"``).  If provided, connects to
+                existing server.  If ``None``, creates a new session.
             token: Optional authentication token for existing server.
+                Shorthand for ``auth=SparkConnectAuth(token=...)``.
+            auth: Optional :class:`SparkConnectAuth` with full
+                authentication configuration (token, headers, or
+                channel_builder).
             num_executors: Number of executor instances (create mode only).
-            resources_per_executor: Resource requirements per executor as dict.
-                Format: `{"cpu": "5", "memory": "10Gi"}` (create mode only).
+            resources_per_executor: Resource requirements per executor as
+                dict.  Format: ``{"cpu": "5", "memory": "10Gi"}``
+                (create mode only).
             spark_conf: Spark configuration dictionary (create mode only).
             driver: Driver configuration object (create mode only).
             executor: Executor configuration object (create mode only).
             options: List of configuration options (create mode only).
-                Use Name option for custom session name.
+                Use ``Name`` option for custom session name.
             timeout: Timeout in seconds to wait for session ready.
-            connect_timeout: Timeout in seconds for SparkSession.getOrCreate() (create mode only).
+            connect_timeout: Timeout in seconds for
+                ``SparkSession.getOrCreate()`` (create mode only).
 
         Returns:
             SparkSession connected to Spark (self-managing).
 
         Raises:
-            ValueError: If base_url is invalid or the provided resource configuration is invalid.
-            TimeoutError: If creating a Spark Connect session or connecting to it times out.
-            RuntimeError: If the Spark Connect session cannot be created or connected to.
+            ValueError: If ``base_url`` is invalid, the provided resource
+                configuration is invalid, or both ``token`` and
+                ``auth.token`` are set.
+            TimeoutError: If creating a Spark Connect session or connecting
+                to it times out.
+            RuntimeError: If the Spark Connect session cannot be created or
+                connected to.
 
         Note:
-            Server port defaults to 15002 (Spark Connect gRPC). PySpark and server Spark
-            major.minor should match; see constants and pyproject.toml [spark].
+            Server port defaults to 15002 (Spark Connect gRPC).  PySpark
+            and server Spark major.minor should match; see constants and
+            ``pyproject.toml [spark]``.
         """
         if base_url:
             validate_spark_connect_url(base_url)
-            builder = SparkSession.builder.remote(base_url)
+
+            # --- resolve effective auth ----------------------------------
+            effective_auth = auth
             if token:
-                builder = builder.config("spark.connect.authenticate.token", token)
+                if effective_auth is not None and effective_auth.token:
+                    raise ValueError(
+                        "Ambiguous authentication: both the standalone "
+                        "'token' parameter and 'auth.token' are set. "
+                        "Use one or the other."
+                    )
+                # Merge the standalone token into auth.
+                if effective_auth is None:
+                    effective_auth = SparkConnectAuth(token=token)
+                else:
+                    # auth was given (maybe with headers) but without a
+                    # token – attach the standalone token.
+                    effective_auth = SparkConnectAuth(
+                        token=token,
+                        headers=effective_auth.headers,
+                        channel_builder=effective_auth.channel_builder,
+                    )
+
+            if effective_auth is None:
+                return SparkSession.builder.remote(base_url).getOrCreate()
+
+            # --- channel_builder path ------------------------------------
+            if effective_auth.channel_builder is not None:
+                builder = SparkSession.builder.channelBuilder(effective_auth.channel_builder)
+                return builder.getOrCreate()
+
+            # --- URL-based path (token and/or headers) -------------------
+            url = base_url
+            if effective_auth.headers:
+                url = _append_headers_to_url(base_url, effective_auth.headers)
+
+            builder = SparkSession.builder.remote(url)
+            if effective_auth.token:
+                builder = builder.config("spark.connect.authenticate.token", effective_auth.token)
             return builder.getOrCreate()
 
         return self.backend.create_and_connect(
@@ -312,3 +372,26 @@ class SparkClient:
             name=name,
             follow=follow,
         )
+
+
+# ------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------
+
+
+def _append_headers_to_url(base_url: str, headers: dict[str, str]) -> str:
+    """Append extra gRPC metadata headers to a Spark Connect URL.
+
+    PySpark treats every ``;key=value`` segment in the connection string
+    as gRPC metadata, so we simply append the headers to the URL.
+
+    Args:
+        base_url: Original ``sc://`` URL.
+        headers: Header name/value pairs to append.
+
+    Returns:
+        URL with ``;key=value`` pairs appended.
+    """
+    suffix = ";".join(f"{k}={v}" for k, v in headers.items())
+    separator = ";" if ";" not in base_url else ";"
+    return f"{base_url}{separator}{suffix}"
