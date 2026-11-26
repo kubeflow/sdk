@@ -103,6 +103,9 @@ class LocalProcessBackend(RuntimeBackend):
         if not isinstance(trainer, types.CustomTrainer):
             raise ValueError("CustomTrainer must be set with LocalProcessBackend")
 
+        if initializer is not None:
+            raise ValueError("Initializer is not supported with LocalProcessBackend")
+
         # create temp dir
         venv_dir = tempfile.mkdtemp(prefix=trainjob_name)
         logger.debug(f"operating in {venv_dir}")
