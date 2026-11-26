@@ -18,9 +18,11 @@ Unit tests for runtime_loader module.
 Tests runtime loading from various sources including GitHub, HTTP, and filesystem.
 """
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
+import yaml
 
 from kubeflow.test.common import FAILED, SUCCESS, TestCase
 from kubeflow.trainer.backends.container import runtime_loader
@@ -120,6 +122,75 @@ SAMPLE_RUNTIME_YAML = {
                 "expected_type": "file",
                 "expected_path": "/absolute/path/to/runtime.yaml",
             },
+        ),
+        TestCase(
+            name="parse file url with percent-encoded space",
+            expected_status=SUCCESS,
+            config={
+                "url": "file:///path/to/my%20runtimes",
+                "expected_type": "file",
+                "expected_path": "/path/to/my runtimes",
+            },
+        ),
+        TestCase(
+            name="parse windows file url from Path.as_uri()",
+            expected_status=SUCCESS,
+            config={
+                "url": "file:///C:/Users/me/my%20runtimes",
+                "expected_type": "file",
+                "expected_path": "C:/Users/me/my runtimes",
+            },
+        ),
+        TestCase(
+            name="parse windows file url without leading slash",
+            expected_status=SUCCESS,
+            config={
+                "url": "file://C:/Users/me/runtimes",
+                "expected_type": "file",
+                "expected_path": "C:/Users/me/runtimes",
+            },
+        ),
+        TestCase(
+            name="parse windows path with backslashes",
+            expected_status=SUCCESS,
+            config={
+                "url": "C:\\Users\\me\\runtimes",
+                "expected_type": "file",
+                "expected_path": "C:\\Users\\me\\runtimes",
+            },
+        ),
+        TestCase(
+            name="parse windows path with forward slashes",
+            expected_status=SUCCESS,
+            config={
+                "url": "d:/runtimes/custom.yaml",
+                "expected_type": "file",
+                "expected_path": "d:/runtimes/custom.yaml",
+            },
+        ),
+        TestCase(
+            name="parse windows unc path",
+            expected_status=SUCCESS,
+            config={
+                "url": "\\\\server\\share\\runtimes",
+                "expected_type": "file",
+                "expected_path": "\\\\server\\share\\runtimes",
+            },
+        ),
+        TestCase(
+            name="parse home-relative path",
+            expected_status=SUCCESS,
+            config={
+                "url": "~/runtimes",
+                "expected_type": "file",
+                "expected_path": "~/runtimes",
+            },
+        ),
+        TestCase(
+            name="parse relative path",
+            expected_status=FAILED,
+            config={"url": "runtimes/custom.yaml"},
+            expected_error=ValueError,
         ),
         TestCase(
             name="parse unsupported scheme",
@@ -640,3 +711,31 @@ def test_parse_runtime_yaml_extracts_image(test_case):
     except Exception as e:
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+@pytest.mark.parametrize("as_uri", [False, True], ids=["native path", "file uri"])
+def test_list_training_runtimes_from_local_path(tmp_path, as_uri):
+    r"""A local runtime directory is loaded whether given as a native path or a file:// URI.
+
+    On a Windows client this covers drive paths (C:\...) and file:///C:/... URIs.
+    """
+    runtime_dir = tmp_path / "my runtimes"
+    runtime_dir.mkdir()
+    custom = {**SAMPLE_RUNTIME_YAML, "metadata": {**SAMPLE_RUNTIME_YAML["metadata"]}}
+    custom["metadata"]["name"] = "my-custom-runtime"
+    (runtime_dir / "custom.yaml").write_text(yaml.safe_dump(custom))
+
+    source = runtime_dir.as_uri() if as_uri else str(runtime_dir)
+    runtimes = runtime_loader.list_training_runtimes_from_sources([source])
+
+    assert "my-custom-runtime" in [r.name for r in runtimes]
+
+
+def test_list_training_runtimes_warns_on_unusable_source(caplog):
+    """An unusable source is reported at WARNING, not hidden behind the built-in runtimes."""
+    with caplog.at_level(logging.WARNING, logger=runtime_loader.__name__):
+        runtimes = runtime_loader.list_training_runtimes_from_sources(["relative/runtimes"])
+
+    assert "Failed to load from source relative/runtimes" in caplog.text
+    # Built-in runtimes are still returned as the fallback.
+    assert runtimes
