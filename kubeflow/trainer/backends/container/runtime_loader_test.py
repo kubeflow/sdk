@@ -19,6 +19,7 @@ Tests runtime loading from various sources including GitHub, HTTP, and filesyste
 """
 
 import logging
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -175,6 +176,15 @@ SAMPLE_RUNTIME_YAML = {
                 "url": "\\\\server\\share\\runtimes",
                 "expected_type": "file",
                 "expected_path": "\\\\server\\share\\runtimes",
+            },
+        ),
+        TestCase(
+            name="parse windows unc file url from Path.as_uri()",
+            expected_status=SUCCESS,
+            config={
+                "url": "file://server/share/my%20runtimes",
+                "expected_type": "file",
+                "expected_path": "//server/share/my runtimes",
             },
         ),
         TestCase(
@@ -714,7 +724,7 @@ def test_parse_runtime_yaml_extracts_image(test_case):
 
 
 @pytest.mark.parametrize("as_uri", [False, True], ids=["native path", "file uri"])
-def test_list_training_runtimes_from_local_path(tmp_path, as_uri):
+def test_list_training_runtimes_from_local_path(tmp_path: Path, as_uri: bool) -> None:
     r"""A local runtime directory is loaded whether given as a native path or a file:// URI.
 
     On a Windows client this covers drive paths (C:\...) and file:///C:/... URIs.
@@ -731,7 +741,9 @@ def test_list_training_runtimes_from_local_path(tmp_path, as_uri):
     assert "my-custom-runtime" in [r.name for r in runtimes]
 
 
-def test_list_training_runtimes_warns_on_unusable_source(caplog):
+def test_list_training_runtimes_warns_on_unusable_source(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """An unusable source is reported at WARNING, not hidden behind the built-in runtimes."""
     with caplog.at_level(logging.WARNING, logger=runtime_loader.__name__):
         runtimes = runtime_loader.list_training_runtimes_from_sources(["relative/runtimes"])
@@ -739,3 +751,18 @@ def test_list_training_runtimes_warns_on_unusable_source(caplog):
     assert "Failed to load from source relative/runtimes" in caplog.text
     # Built-in runtimes are still returned as the fallback.
     assert runtimes
+
+
+def test_load_from_http_url_warns_on_failure(caplog: pytest.LogCaptureFixture) -> None:
+    """A configured HTTP(S) source that can't be fetched is reported at WARNING."""
+    with (
+        patch(
+            "urllib.request.urlopen",
+            side_effect=runtime_loader.urllib.error.URLError("connection refused"),
+        ),
+        caplog.at_level(logging.WARNING, logger=runtime_loader.__name__),
+    ):
+        runtimes = runtime_loader._load_from_http_url("https://example.com/runtime.yaml")
+
+    assert runtimes == []
+    assert "Failed to load runtime from HTTP https://example.com/runtime.yaml" in caplog.text

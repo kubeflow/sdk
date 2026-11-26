@@ -452,6 +452,9 @@ def _parse_source_url(source: str) -> tuple[str, str]:
         return ("http", source)
     elif source.startswith("file://"):
         path = urllib.parse.unquote(source[7:])  # Remove 'file://', decode e.g. %20
+        if not path.startswith("/") and not _WINDOWS_DRIVE_PATH.match(path):
+            # UNC form, as produced by Path.as_uri(): file://server/share/dir -> //server/share/dir
+            return ("file", "//" + path)
         # RFC 8089 Windows form, as produced by Path.as_uri(): file:///C:/dir -> C:/dir
         if path.startswith("/") and _WINDOWS_DRIVE_PATH.match(path[1:]):
             path = path[1:]
@@ -536,7 +539,9 @@ def _load_from_http_url(url: str) -> list[base_types.Runtime]:
             runtimes.append(runtime)
             logger.debug(f"Loaded runtime from HTTP: {runtime.name}")
     except Exception as e:
-        logger.debug(f"Failed to load runtime from HTTP {url}: {e}")
+        # An HTTP(S) source is configured explicitly, so don't fall back to the built-in
+        # runtimes silently.
+        logger.warning(f"Failed to load runtime from HTTP {url}: {e}")
 
     return runtimes
 
