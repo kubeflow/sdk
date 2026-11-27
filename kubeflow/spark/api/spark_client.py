@@ -15,6 +15,7 @@
 """SparkClient for Kubeflow SDK."""
 
 from collections.abc import Iterator
+from urllib.parse import quote
 
 from pyspark.sql import SparkSession
 
@@ -31,6 +32,34 @@ from kubeflow.spark.types.types import (
     SparkJob,
     SparkJobStatus,
 )
+
+
+def _connect_url_with_token(base_url: str, token: str) -> str:
+    """Return a Spark Connect URL that carries the authentication token.
+
+    PySpark applies a token to the gRPC channel only when it arrives in the
+    connection URL or in the ``SPARK_CONNECT_AUTHENTICATE_TOKEN`` environment
+    variable. The ``spark.connect.authenticate.token`` config is read by a
+    locally started server only, so a remote server never receives it as a
+    credential. Parameters follow an empty path as ``;key=value`` pairs and
+    PySpark URL-decodes each value, so the token is quoted to keep delimiters
+    such as ``;`` and ``=`` intact.
+
+    Args:
+        base_url: Spark Connect URL such as ``sc://server:15002``, optionally
+            already carrying parameters such as ``;use_ssl=true``.
+        token: Authentication token required by the server.
+
+    Returns:
+        The URL with the token appended as a parameter, e.g.
+        ``sc://server:15002/;token=team-token``.
+    """
+    stem, _, params = base_url.partition(";")
+    if not stem.endswith("/"):
+        stem += "/"
+    parts = [param for param in params.split(";") if param]
+    parts.append(f"token={quote(token, safe='')}")
+    return f"{stem};{';'.join(parts)}"
 
 
 class SparkClient:
@@ -81,7 +110,9 @@ class SparkClient:
         Args:
             base_url: Optional URL to existing Spark Connect server (e.g., "sc://server:15002").
                  If provided, connects to existing server. If None, creates new session.
-            token: Optional authentication token for existing server.
+            token: Optional authentication token for existing server. It is sent as a
+                bearer credential through the Spark Connect URL, so a server that
+                checks tokens accepts the session.
             num_executors: Number of executor instances (create mode only).
             resources_per_executor: Resource requirements per executor as dict.
                 Format: `{"cpu": "5", "memory": "10Gi"}` (create mode only).
@@ -107,10 +138,9 @@ class SparkClient:
         """
         if base_url:
             validate_spark_connect_url(base_url)
-            builder = SparkSession.builder.remote(base_url)
             if token:
-                builder = builder.config("spark.connect.authenticate.token", token)
-            return builder.getOrCreate()
+                base_url = _connect_url_with_token(base_url, token)
+            return SparkSession.builder.remote(base_url).getOrCreate()
 
         return self.backend.create_and_connect(
             num_executors=num_executors,
