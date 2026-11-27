@@ -772,6 +772,11 @@ def test_train(container_backend, monkeypatch, tmp_path, test_case):
             expected_status=SUCCESS,
             config={"num_jobs": 0},
         ),
+        TestCase(
+            name="list job with more than 10 nodes keeps steps in rank order",
+            expected_status=SUCCESS,
+            config={"num_jobs": 1, "num_nodes": 12},
+        ),
     ],
 )
 def test_list_jobs(container_backend, test_case):
@@ -780,9 +785,10 @@ def test_list_jobs(container_backend, test_case):
     try:
         runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
         created_jobs = []
+        num_nodes = test_case.config.get("num_nodes", 1)
 
         for _ in range(test_case.config["num_jobs"]):
-            trainer = types.CustomTrainer(func=simple_train_func, num_nodes=1)
+            trainer = types.CustomTrainer(func=simple_train_func, num_nodes=num_nodes)
             job_name = container_backend.train(runtime=runtime, trainer=trainer)
             created_jobs.append(job_name)
 
@@ -794,6 +800,10 @@ def test_list_jobs(container_backend, test_case):
             job_names = [job.name for job in jobs]
             for created_job in created_jobs:
                 assert created_job in job_names
+            for job in jobs:
+                assert [step.name for step in job.steps] == [
+                    f"{constants.NODE}-{i}" for i in range(num_nodes)
+                ]
 
     except Exception as e:
         assert type(e) is test_case.expected_error
@@ -809,6 +819,11 @@ def test_list_jobs(container_backend, test_case):
             config={"num_nodes": 2},
         ),
         TestCase(
+            name="get existing job with more than 10 nodes keeps steps in rank order",
+            expected_status=SUCCESS,
+            config={"num_nodes": 12},
+        ),
+        TestCase(
             name="get nonexistent job",
             expected_status=FAILED,
             config={"job_name": "nonexistent-job"},
@@ -820,7 +835,7 @@ def test_get_job(container_backend, test_case):
     """Test getting a specific job."""
     print("Executing test:", test_case.name)
     try:
-        if test_case.name == "get existing job":
+        if test_case.expected_status == SUCCESS:
             trainer = types.CustomTrainer(
                 func=simple_train_func, num_nodes=test_case.config["num_nodes"]
             )
@@ -829,12 +844,13 @@ def test_get_job(container_backend, test_case):
 
             job = container_backend.get_job(job_name)
 
-            assert test_case.expected_status == SUCCESS
             assert job.name == job_name
             assert job.num_nodes == test_case.config["num_nodes"]
-            assert len(job.steps) == test_case.config["num_nodes"]
+            assert [step.name for step in job.steps] == [
+                f"{constants.NODE}-{i}" for i in range(test_case.config["num_nodes"])
+            ]
 
-        elif test_case.name == "get nonexistent job":
+        else:
             container_backend.get_job(test_case.config["job_name"])
 
     except Exception as e:

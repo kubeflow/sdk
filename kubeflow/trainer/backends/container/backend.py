@@ -699,7 +699,7 @@ class ContainerBackend(RuntimeBackend):
 
         # Build steps from containers
         steps = []
-        for container in sorted(containers, key=lambda c: c["name"]):
+        for container in container_utils.sort_containers_by_name(containers):
             step_name = container["labels"].get(f"{self.label_prefix}/step", "")
             steps.append(
                 types.Step(
@@ -779,7 +779,7 @@ class ContainerBackend(RuntimeBackend):
         # Check if requesting logs from all node containers (default behavior)
         want_all_nodes = step == constants.NODE + "-0"
 
-        for container in sorted(containers, key=lambda c: c["name"]):
+        for container in container_utils.sort_containers_by_name(containers):
             container_step = container["labels"].get(f"{self.label_prefix}/step", "")
 
             # If want_all_nodes, only show node containers, not initializers
@@ -813,7 +813,7 @@ class ContainerBackend(RuntimeBackend):
         lines = [f"TrainJob {name} is Failed"]
         try:
             containers = self._get_job_containers(name)
-            for container in sorted(containers, key=lambda c: c["name"]):
+            for container in container_utils.sort_containers_by_name(containers):
                 step = container["labels"].get(f"{self.label_prefix}/step", "unknown")
                 status, exit_code = self._adapter.container_status(container["id"])
                 lines.append(f"  {step}: status={status}, exit_code={exit_code}")
