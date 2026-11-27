@@ -330,12 +330,38 @@ def test_get_runtime_packages(local_backend, test_case):
             },
             expected_error=ValueError,
         ),
+        TestCase(
+            name="train with initializer raises ValueError",
+            expected_status=FAILED,
+            config={
+                "runtime": types.Runtime(
+                    name=TORCH_RUNTIME,
+                    trainer=types.RuntimeTrainer(
+                        trainer_type=types.TrainerType.CUSTOM_TRAINER,
+                        framework="torch",
+                        num_nodes=1,
+                        image=LOCAL_RUNTIME_IMAGE,
+                    ),
+                    kind=types.RuntimeKind.TRAINING_RUNTIME,
+                ),
+                "trainer": types.CustomTrainer(
+                    func=dummy_training_function,
+                ),
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(
+                        storage_uri="hf://dataset",
+                    ),
+                ),
+            },
+            expected_error=ValueError,
+        ),
     ],
 )
 def test_train(local_backend, mock_train_environment, test_case):
     """Test LocalProcessBackend.train() with success and failure cases."""
     runtime = test_case.config.get("runtime")
     trainer = test_case.config.get("trainer")
+    initializer = test_case.config.get("initializer")
     options = test_case.config.get("options", [])
 
     mocks = mock_train_environment
@@ -345,6 +371,7 @@ def test_train(local_backend, mock_train_environment, test_case):
             local_backend.train(
                 runtime=runtime,
                 trainer=trainer,
+                initializer=initializer,
                 options=options,
             )
 
@@ -356,6 +383,9 @@ def test_train(local_backend, mock_train_environment, test_case):
             assert "Runtime must be provided" in error_msg
         elif "without custom trainer" in test_case.name:
             assert "CustomTrainer must be set" in error_msg
+        elif "with initializer" in test_case.name:
+            assert "Initializer is not supported" in error_msg
+
     else:
         train_job_name = local_backend.train(
             runtime=runtime,
