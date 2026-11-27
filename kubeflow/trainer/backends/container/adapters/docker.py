@@ -20,6 +20,7 @@ BaseContainerClientAdapter interface for Docker runtime.
 """
 
 from collections.abc import Iterator
+import contextlib
 
 from kubeflow.trainer.backends.container.adapters.base import BaseContainerClientAdapter
 
@@ -86,20 +87,41 @@ class DockerClientAdapter(BaseContainerClientAdapter):
         labels: dict[str, str],
         volumes: dict[str, dict[str, str]],
         working_dir: str,
+        *,
+        gpu_ids: list[int] | None = None,
     ) -> str:
         """Create and start a Docker container."""
-        container = self.client.containers.run(
+        create_kwargs: dict = {}
+        if gpu_ids:
+            import docker.types  # type: ignore
+
+            # Requires the NVIDIA Container Toolkit (or Docker Desktop with WSL2 GPU support).
+            create_kwargs["device_requests"] = [
+                docker.types.DeviceRequest(
+                    device_ids=[str(i) for i in gpu_ids], capabilities=[["gpu"]]
+                )
+            ]
+
+        container = self.client.containers.create(
             image=image,
             command=tuple(command),
             name=name,
-            detach=True,
             working_dir=working_dir,
             network=network_id,
             environment=environment,
             labels=labels,
             volumes=volumes,
             auto_remove=False,
+            **create_kwargs,
         )
+        try:
+            container.start()
+        except Exception:
+            # Startup can fail after creation (e.g. no GPU runtime). Remove the container so
+            # it doesn't keep the name and isn't left behind untracked.
+            with contextlib.suppress(Exception):
+                container.remove(force=True)
+            raise
         return container.id
 
     def get_container(self, container_id: str):

@@ -25,6 +25,7 @@ Key differences from Docker:
 """
 
 from collections.abc import Iterator
+import contextlib
 
 from kubeflow.trainer.backends.container.adapters.base import BaseContainerClientAdapter
 
@@ -92,9 +93,17 @@ class PodmanClientAdapter(BaseContainerClientAdapter):
         labels: dict[str, str],
         volumes: dict[str, dict[str, str]],
         working_dir: str,
+        *,
+        gpu_ids: list[int] | None = None,
     ) -> str:
         """Create and start a Podman container."""
-        container = self.client.containers.run(
+        create_kwargs: dict = {}
+        if gpu_ids:
+            # Requires NVIDIA CDI specs (nvidia-ctk cdi generate). podman-py iterates over
+            # `devices`, so only pass it when GPUs are requested (None would raise TypeError).
+            create_kwargs["devices"] = [f"nvidia.com/gpu={i}" for i in gpu_ids]
+
+        container = self.client.containers.create(
             image=image,
             command=command,
             name=name,
@@ -103,9 +112,16 @@ class PodmanClientAdapter(BaseContainerClientAdapter):
             environment=environment,
             labels=labels,
             volumes=volumes,
-            detach=True,
-            remove=False,
+            **create_kwargs,
         )
+        try:
+            container.start()
+        except Exception:
+            # Startup can fail after creation (e.g. missing CDI specs). Remove the container so
+            # it doesn't keep the name and isn't left behind untracked.
+            with contextlib.suppress(Exception):
+                container.remove(force=True)
+            raise
         return container.id
 
     def get_container(self, container_id: str):
