@@ -96,16 +96,21 @@ def _discover_github_runtime_files(
         # Look for .yaml filenames in the HTML content
         import re
 
-        # Pattern to match .yaml files in the HTML
-        # Matches word characters, hyphens, underscores followed by .yaml
-        pattern = r"([\w-]+\.yaml)"
+        # Pattern to match .yaml files directly under the requested path, either as a
+        # file link or as an embedded JSON "path" entry. The page also embeds the
+        # repository root file tree, so a looser pattern would pick up root files
+        # such as .coderabbit.yaml or files in other directories.
+        pattern = (
+            rf'(?:/{re.escape(owner)}/{re.escape(repo)}/blob/{re.escape(branch)}/|"path":")'
+            rf"{re.escape(path)}/([\w-]+\.yaml)"
+        )
         matches = re.findall(pattern, html_content)
 
-        # Filter out kustomization.yaml, config files, and duplicates
+        # Filter out kustomization.yaml and duplicates
         # Keep only runtime files (typically named *_distributed.yaml or similar)
         runtime_files = []
         seen = set()
-        exclude_files = {"kustomization.yaml", "golangci.yaml", "pre-commit-config.yaml"}
+        exclude_files = {"kustomization.yaml"}
 
         for match in matches:
             filename = match

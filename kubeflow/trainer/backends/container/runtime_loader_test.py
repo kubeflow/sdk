@@ -381,13 +381,59 @@ def test_create_default_runtimes():
             config={
                 "html_content": """
                 <html>
-                    <a>torch_distributed.yaml</a>
-                    <a>deepspeed_distributed.yaml</a>
-                    <a>kustomization.yaml</a>
+                    <a href="/kubeflow/trainer/blob/master/manifests/base/runtimes/torch_distributed.yaml">torch_distributed.yaml</a>
+                    <a href="/kubeflow/trainer/blob/master/manifests/base/runtimes/deepspeed_distributed.yaml">deepspeed_distributed.yaml</a>
+                    <a href="/kubeflow/trainer/blob/master/manifests/base/runtimes/kustomization.yaml">kustomization.yaml</a>
                 </html>
                 """,
                 "expected_files": ["torch_distributed.yaml", "deepspeed_distributed.yaml"],
                 "excluded_files": ["kustomization.yaml"],
+            },
+        ),
+        TestCase(
+            name="discover runtime files ignores files outside the runtimes path",
+            expected_status=SUCCESS,
+            config={
+                "html_content": """
+                <html>
+                    <a href="/kubeflow/trainer/blob/master/manifests/base/runtimes/torch_distributed.yaml">torch_distributed.yaml</a>
+                    <script type="application/json">
+                    {"items":[
+                        {"name":".coderabbit.yaml","path":".coderabbit.yaml","contentType":"file"},
+                        {"name":".golangci.yaml","path":".golangci.yaml","contentType":"file"},
+                        {"name":".kube-linter.yaml","path":".kube-linter.yaml","contentType":"file"},
+                        {"name":"values.yaml","path":"charts/values.yaml","contentType":"file"}
+                    ]}
+                    </script>
+                </html>
+                """,
+                "expected_files": ["torch_distributed.yaml"],
+                "excluded_files": [
+                    "coderabbit.yaml",
+                    "golangci.yaml",
+                    "kube-linter.yaml",
+                    "values.yaml",
+                ],
+            },
+        ),
+        TestCase(
+            name="discover runtime files ignores paths that only end with the runtimes path",
+            expected_status=SUCCESS,
+            config={
+                "html_content": """
+                <html>
+                    <a href="/kubeflow/trainer/blob/master/manifests/base/runtimes/torch_distributed.yaml">torch_distributed.yaml</a>
+                    <a href="/kubeflow/trainer/blob/master/archive/manifests/base/runtimes/old_link.yaml">old_link.yaml</a>
+                    <script type="application/json">
+                    {"items":[
+                        {"name":"jax_distributed.yaml","path":"manifests/base/runtimes/jax_distributed.yaml","contentType":"file"},
+                        {"name":"old_json.yaml","path":"archive/manifests/base/runtimes/old_json.yaml","contentType":"file"}
+                    ]}
+                    </script>
+                </html>
+                """,
+                "expected_files": ["torch_distributed.yaml", "jax_distributed.yaml"],
+                "excluded_files": ["old_link.yaml", "old_json.yaml"],
             },
         ),
         TestCase(
@@ -396,7 +442,7 @@ def test_create_default_runtimes():
             config={
                 "html_content": """
                 <html>
-                    <a>custom_runtime.yaml</a>
+                    <a href="/myorg/myrepo/blob/master/custom/path/custom_runtime.yaml">custom_runtime.yaml</a>
                 </html>
                 """,
                 "expected_files": ["custom_runtime.yaml"],
