@@ -16,6 +16,7 @@
 Unit tests for TrainerClient backend selection.
 """
 
+import logging
 from unittest.mock import Mock, patch
 
 import pytest
@@ -70,3 +71,26 @@ def test_backend_selection(test_case):
         client = TrainerClient(backend_config=test_case["backend_config"])
         backend_name = client.backend.__class__.__name__
         assert backend_name == test_case["expected_backend"]
+
+
+def test_client_initialization_is_silent_by_default(caplog, capsys):
+    """TrainerClient initialization does not emit output or logs by default."""
+    TrainerClient(backend_config=LocalProcessBackendConfig())
+
+    assert caplog.records == []
+    assert capsys.readouterr() == ("", "")
+
+
+def test_client_initialization_emits_debug_log(caplog):
+    """TrainerClient initialization emits a debug message when enabled."""
+    caplog.set_level("DEBUG", logger="kubeflow")
+
+    TrainerClient(backend_config=LocalProcessBackendConfig())
+
+    assert "Initializing TrainerClient with local process backend" in caplog.text
+
+
+def test_root_logger_has_null_handler():
+    """The root kubeflow logger has a NullHandler so the SDK is silent by default."""
+    handlers = logging.getLogger("kubeflow").handlers
+    assert any(isinstance(h, logging.NullHandler) for h in handlers)

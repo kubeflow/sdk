@@ -12,4 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
+
+logging.getLogger("kubeflow").addHandler(logging.NullHandler())
+
 __version__ = "0.5.0"

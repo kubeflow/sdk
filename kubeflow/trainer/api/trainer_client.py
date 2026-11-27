@@ -57,10 +57,13 @@ class TrainerClient:
             backend_config = KubernetesBackendConfig()
 
         if isinstance(backend_config, KubernetesBackendConfig):
+            logger.debug("Initializing TrainerClient with Kubernetes backend")
             self.backend = KubernetesBackend(backend_config)
         elif isinstance(backend_config, LocalProcessBackendConfig):
+            logger.debug("Initializing TrainerClient with local process backend")
             self.backend = LocalProcessBackend(backend_config)
         elif isinstance(backend_config, ContainerBackendConfig):
+            logger.debug("Initializing TrainerClient with container backend")
             self.backend = ContainerBackend(backend_config)
         else:
             raise ValueError(f"Invalid backend config '{backend_config}'")
