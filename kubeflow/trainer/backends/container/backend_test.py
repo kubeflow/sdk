@@ -890,13 +890,41 @@ def test_get_job(container_backend, test_case):
                 ),
             },
         ),
+        TestCase(
+            name="get logs default multi-node returns only node-0",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+                "num_nodes": 2,
+            },
+        ),
+        TestCase(
+            name="get logs from node-1 in multi-node job",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+                "step": constants.NODE + "-1",
+                "num_nodes": 2,
+            },
+        ),
+        TestCase(
+            name="get logs default with initializer returns only node-0",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+                "initializer": types.Initializer(
+                    dataset=types.HuggingFaceDatasetInitializer(storage_uri="hf://user/dataset"),
+                ),
+            },
+        ),
     ],
 )
 def test_get_job_logs(container_backend, test_case):
     """Test getting job logs."""
     print("Executing test:", test_case.name)
     try:
-        trainer = types.CustomTrainer(func=simple_train_func, num_nodes=1)
+        num_nodes = test_case.config.get("num_nodes", 1)
+        trainer = types.CustomTrainer(func=simple_train_func, num_nodes=num_nodes)
         runtime = container_backend.get_runtime(constants.DEFAULT_TRAINING_RUNTIME)
 
         initializer = test_case.config.get("initializer")
@@ -917,18 +945,27 @@ def test_get_job_logs(container_backend, test_case):
             runtime=runtime, trainer=trainer, initializer=initializer
         )
 
-        step = test_case.config.get("step")
-        if step:
+        if "step" in test_case.config:
             logs = list(
                 container_backend.get_job_logs(
-                    job_name, follow=test_case.config["follow"], step=step
+                    job_name, follow=test_case.config["follow"], step=test_case.config["step"]
                 )
             )
         else:
             logs = list(container_backend.get_job_logs(job_name, follow=test_case.config["follow"]))
+        step = test_case.config.get("step", constants.NODE + "-0")
 
         assert test_case.expected_status == SUCCESS
         assert len(logs) > 0
+
+        # Assert log source: every log line must come from a container whose
+        # step matches the requested step, and none from other steps.
+        containers = container_backend._get_job_containers(job_name)
+        label_key = f"{container_backend.label_prefix}/step"
+        allowed_ids = [c["id"] for c in containers if c["labels"].get(label_key, "") == step]
+        disallowed_ids = [c["id"] for c in containers if c["labels"].get(label_key, "") != step]
+        assert all(any(cid in log for cid in allowed_ids) for log in logs)
+        assert not any(any(cid in log for cid in disallowed_ids) for log in logs)
 
         if not initializer:
             if test_case.config["follow"]:

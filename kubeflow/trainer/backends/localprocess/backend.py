@@ -34,6 +34,10 @@ from kubeflow.trainer.types import types
 
 logger = logging.getLogger(__name__)
 
+# Name under which the single training step is registered in the local process
+# backend. Used to map the public default step ("node-0") to the actual step.
+_DEFAULT_TRAIN_STEP_NAME = "train"
+
 
 class LocalProcessBackend(RuntimeBackend):
     def __init__(
@@ -137,7 +141,7 @@ class LocalProcessBackend(RuntimeBackend):
 
         self.__register_job(
             train_job_name=trainjob_name,
-            step_name="train",
+            step_name=_DEFAULT_TRAIN_STEP_NAME,
             job=train_job,
             runtime=runtime,
         )
@@ -200,10 +204,15 @@ class LocalProcessBackend(RuntimeBackend):
         if not _job:
             raise ValueError(f"No TrainJob with name {name}")
 
-        want_all_steps = step == constants.NODE + "-0"
+        # Resolve the public default step ("node-0") to the local backend's
+        # single training step when no step is literally named "node-0".
+        resolved_step = step
+        steps = _job[0].steps or []
+        if step == constants.NODE + "-0" and not any(_s.step_name == step for _s in steps):
+            resolved_step = _DEFAULT_TRAIN_STEP_NAME
 
-        for _step in _job[0].steps:
-            if not want_all_steps and _step.step_name != step:
+        for _step in steps:
+            if _step.step_name != resolved_step:
                 continue
             # Flatten the generator and pass through flags so it behaves as expected
             # (adjust args if stream_logs has different signature)
