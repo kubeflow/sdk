@@ -62,6 +62,16 @@ def _canonicalize_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
+def _requirement_key(requirement: str) -> str:
+    """
+    Key used to match requirements. A direct URL without a name (e.g. 'git+https://...')
+    has no package name to match on, so the whole string is used.
+    """
+    if re.match(r"^\s*[A-Za-z][A-Za-z0-9+.-]*://", requirement):
+        return requirement.strip()
+    return _canonicalize_name(_extract_name(requirement))
+
+
 def get_install_packages(
     runtime_packages: list[str],
     trainer_packages: list[str] | None = None,
@@ -90,8 +100,7 @@ def get_install_packages(
     last_runtime_index_by_name: dict[str, int] = {}
 
     for i, orig in enumerate(runtime_packages):
-        raw_name = _extract_name(orig)
-        canon = _canonicalize_name(raw_name)
+        canon = _requirement_key(orig)
         runtime_parsed.append((orig, canon))
         last_runtime_index_by_name[canon] = i  # last occurrence index wins among runtime
 
@@ -99,11 +108,10 @@ def get_install_packages(
     trainer_parsed: list[tuple[str, str]] = []
     seen_trainer: set[str] = set()
     for orig in trainer_packages:
-        raw_name = _extract_name(orig)
-        canon = _canonicalize_name(raw_name)
+        canon = _requirement_key(orig)
         if canon in seen_trainer:
             raise ValueError(
-                f"Duplicate dependency in trainer_packages: '{raw_name}' (canonical: '{canon}')"
+                f"Duplicate dependency in trainer_packages: '{orig}' (canonical: '{canon}')"
             )
         seen_trainer.add(canon)
         trainer_parsed.append((orig, canon))
