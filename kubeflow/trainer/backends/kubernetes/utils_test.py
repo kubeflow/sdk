@@ -19,6 +19,7 @@ from unittest.mock import MagicMock, patch
 
 from kubeflow_trainer_api import models
 import pytest
+import yaml
 
 from kubeflow.test.common import FAILED, SUCCESS, TestCase
 import kubeflow.trainer.backends.kubernetes.utils as utils
@@ -910,6 +911,39 @@ def test_get_args_from_peft_config(test_case: TestCase):
             },
             expected_error=ValueError,
         ),
+        TestCase(
+            name="new_system_prompt is emitted as a quoted string",
+            expected_status=SUCCESS,
+            config={
+                "dataset_preprocess_config": types.TorchTuneInstructDataset(
+                    new_system_prompt="Summarize: be brief",
+                ),
+            },
+            expected_output=[
+                f"dataset={constants.TORCH_TUNE_INSTRUCT_DATASET}",
+                'dataset.new_system_prompt="Summarize: be brief"',
+            ],
+        ),
+        TestCase(
+            name="new_system_prompt containing '=' raises ValueError",
+            expected_status=FAILED,
+            config={
+                "dataset_preprocess_config": types.TorchTuneInstructDataset(
+                    new_system_prompt="Reply as key=value pairs",
+                ),
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="split containing '=' raises ValueError",
+            expected_status=FAILED,
+            config={
+                "dataset_preprocess_config": types.TorchTuneInstructDataset(
+                    split="train=1",
+                ),
+            },
+            expected_error=ValueError,
+        ),
     ],
 )
 def test_get_args_from_dataset_preprocess_config(test_case: TestCase):
@@ -926,6 +960,30 @@ def test_get_args_from_dataset_preprocess_config(test_case: TestCase):
         assert test_case.expected_status == FAILED
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "You are a helpful assistant.",
+        "Summarize: be brief",
+        "Answer in English # no markdown",
+        "[INST] Be concise",
+        "{role} assistant",
+        "yes",
+        "null",
+        'He said "hi"',
+        "line one\nline two",
+    ],
+)
+def test_new_system_prompt_round_trips_through_yaml(prompt: str):
+    """torchtune parses override values as YAML, so the prompt must parse back unchanged."""
+    args = utils.get_args_from_dataset_preprocess_config(
+        types.TorchTuneInstructDataset(new_system_prompt=prompt, split="train[:10%]")
+    )
+    values = dict(arg.split("=", 1) for arg in args)
+    assert yaml.safe_load(values["dataset.new_system_prompt"]) == prompt
+    assert yaml.safe_load(values["dataset.split"]) == "train[:10%]"
 
 
 def _build_builtin_runtime() -> types.Runtime:
@@ -1012,7 +1070,7 @@ def _build_builtin_runtime() -> types.Runtime:
             },
             expected_output=[
                 f"dataset={constants.TORCH_TUNE_INSTRUCT_DATASET}",
-                "dataset.split=train",
+                'dataset.split="train"',
             ],
         ),
         TestCase(
