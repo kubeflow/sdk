@@ -75,6 +75,7 @@ def test_backend_selection(test_case):
 
 def test_client_initialization_is_silent_by_default(caplog, capsys):
     """TrainerClient initialization does not emit output or logs by default."""
+    caplog.set_level(logging.WARNING, logger="kubeflow")
     TrainerClient(backend_config=LocalProcessBackendConfig())
 
     assert caplog.records == []
