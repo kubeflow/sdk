@@ -14,6 +14,7 @@
 
 import os
 import tempfile
+import threading
 import time
 from unittest.mock import MagicMock, patch
 
@@ -1446,6 +1447,7 @@ def test_update_trainjob_status(test_case: TestCase):
     expected = test_case.expected_output
 
     utils._last_update_time = 0.0
+    utils._in_flight = False
     utils._cached_token = None
     utils._token_read_time = 0.0
     utils._http_session = None
@@ -1574,6 +1576,103 @@ def test_update_trainjob_status(test_case: TestCase):
         if ca_path:
             os.unlink(ca_path)
     print("test execution complete")
+
+
+def test_update_trainjob_status_concurrent_throttling():
+    utils._last_update_time = 0.0
+    utils._in_flight = False
+    utils._cached_token = None
+    utils._token_read_time = 0.0
+    utils._http_session = None
+
+    token_path = _make_token_file()
+    env = {
+        "KUBEFLOW_TRAINER_SERVER_URL": "https://trainer.example.com/status",
+        "KUBEFLOW_TRAINER_SERVER_TOKEN": token_path,
+    }
+
+    try:
+        calls = []
+        results = []
+
+        def slow_post(*args, **kwargs):
+            calls.append(kwargs)
+            time.sleep(0.05)
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.text = ""
+            return resp
+
+        with (
+            patch.dict(os.environ, env),
+            patch("kubeflow.trainer.backends.kubernetes.utils._get_status_session") as session_fn,
+        ):
+            session_fn.return_value.post.side_effect = slow_post
+
+            threads = []
+            for _ in range(10):
+
+                def worker():
+                    res = utils.update_trainjob_status(progress_percent=10)
+                    results.append(res)
+
+                t = threading.Thread(target=worker)
+                threads.append(t)
+
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+        # Exactly 1 thread succeeds and only 1 HTTP post is made
+        assert len(calls) == 1
+        assert results.count(True) == 1
+        assert results.count(False) == 9
+        assert utils._in_flight is False
+        assert utils._last_update_time > 0.0
+    finally:
+        os.unlink(token_path)
+
+
+def test_update_trainjob_status_rollback_on_failure():
+    utils._last_update_time = 0.0
+    utils._in_flight = False
+    utils._cached_token = None
+    utils._token_read_time = 0.0
+    utils._http_session = None
+
+    token_path = _make_token_file()
+    env = {
+        "KUBEFLOW_TRAINER_SERVER_URL": "https://trainer.example.com/status",
+        "KUBEFLOW_TRAINER_SERVER_TOKEN": token_path,
+    }
+
+    try:
+        with (
+            patch.dict(os.environ, env),
+            patch("kubeflow.trainer.backends.kubernetes.utils._get_status_session") as session_fn,
+        ):
+            mock_resp = MagicMock()
+            mock_resp.status_code = 500
+            mock_resp.text = "internal error"
+            session_fn.return_value.post.return_value = mock_resp
+
+            # First attempt fails with 500
+            res1 = utils.update_trainjob_status(progress_percent=10)
+            assert res1 is False
+            assert utils._in_flight is False
+            # Verify _last_update_time rolled back to 0.0
+            assert utils._last_update_time == 0.0
+
+            # Next attempt immediately retries and succeeds when server recovers
+            mock_resp.status_code = 200
+            mock_resp.text = ""
+            res2 = utils.update_trainjob_status(progress_percent=20)
+            assert res2 is True
+            assert utils._in_flight is False
+            assert utils._last_update_time > 0.0
+    finally:
+        os.unlink(token_path)
 
 
 @pytest.mark.parametrize(
