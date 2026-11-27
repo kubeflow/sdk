@@ -81,14 +81,11 @@ The SDK passes the URI through to the Spark runtime, which is responsible for re
    client.submit_job(job=FileJob(file_source="https://raw.githubusercontent.com/<repo>/<branch>/etl.py"))
 
 .. note::
-   ``https://`` is the scheme with a working, tested example today (see
-   ``examples/spark`` in the ``kubeflow/sdk`` repo). ``s3a://``, ``gs://``, and
-   ``hdfs://`` are supported the same way in principle — the SDK just passes the
-   URI to Spark — but they haven't been verified end-to-end and may need
-   additional filesystem connector packages that aren't guaranteed to be
-   preinstalled in every Spark image. Until there's an example notebook
-   covering that setup, start with ``https://`` if you want something that's
-   known to work.
+   ``https://`` and ``s3a://`` are covered with tested examples (see
+   ``examples/spark`` in the ``kubeflow/sdk`` repo). ``gs://`` and ``hdfs://``
+   are supported the same way in principle — the SDK passes the URI to Spark —
+   though they may need additional filesystem connector packages configured
+   in the Spark runtime.
 
 **Local sources** — when ``file_source`` uses a local URI
 (``local:///opt/spark/app/etl.py``), the file must already be available to the
