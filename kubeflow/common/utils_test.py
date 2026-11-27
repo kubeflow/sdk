@@ -148,3 +148,161 @@ def test_validate_python_function(test_case):
             utils.validate_python_function(func)
     else:
         utils.validate_python_function(func)
+
+
+def test_get_default_target_namespace_from_current_context():
+    contexts = [
+        {"name": "ctx-1", "context": {"namespace": "ns-1"}},
+    ]
+    curr = {"name": "ctx-1", "context": {"namespace": "ns-1"}}
+    with (
+        pytest.MonkeyPatch().context() as mp,
+    ):
+        mp.setattr(utils, "is_running_in_k8s", lambda: False)
+        with pytest.MonkeyPatch().context() as mp2:
+            from kubernetes import config
+
+            mp2.setattr(
+                config, "list_kube_config_contexts", lambda config_file=None: (contexts, curr)
+            )
+            ns = utils.get_default_target_namespace()
+            assert ns == "ns-1"
+
+
+def test_get_default_target_namespace_from_specified_context():
+    contexts = [
+        {"name": "ctx-1", "context": {"namespace": "ns-1"}},
+        {"name": "ctx-2", "context": {"namespace": "ns-2"}},
+    ]
+    curr = {"name": "ctx-1", "context": {"namespace": "ns-1"}}
+    from kubernetes import config
+
+    with pytest.MonkeyPatch().context() as mp:
+        mp.setattr(utils, "is_running_in_k8s", lambda: False)
+        mp.setattr(config, "list_kube_config_contexts", lambda config_file=None: (contexts, curr))
+        ns = utils.get_default_target_namespace(context="ctx-2")
+        assert ns == "ns-2"
+
+
+def test_get_default_target_namespace_with_config_file():
+    contexts = [
+        {"name": "remote-ctx", "context": {"namespace": "team-b"}},
+    ]
+    curr = {"name": "remote-ctx", "context": {"namespace": "team-b"}}
+    from kubernetes import config
+
+    passed_config_file = []
+
+    def mock_list(config_file=None):
+        passed_config_file.append(config_file)
+        return contexts, curr
+
+    with pytest.MonkeyPatch().context() as mp:
+        mp.setattr(utils, "is_running_in_k8s", lambda: False)
+        mp.setattr(config, "list_kube_config_contexts", mock_list)
+        ns = utils.get_default_target_namespace(config_file="/custom/kubeconfig")
+        assert ns == "team-b"
+        assert passed_config_file == ["/custom/kubeconfig"]
+
+
+def test_get_default_target_namespace_with_config_file_and_context():
+    contexts = [
+        {"name": "ctx-a", "context": {"namespace": "team-a"}},
+        {"name": "ctx-b", "context": {"namespace": "team-b"}},
+    ]
+    curr = {"name": "ctx-a", "context": {"namespace": "team-a"}}
+    from kubernetes import config
+
+    passed_config_file = []
+
+    def mock_list(config_file=None):
+        passed_config_file.append(config_file)
+        return contexts, curr
+
+    with pytest.MonkeyPatch().context() as mp:
+        mp.setattr(utils, "is_running_in_k8s", lambda: False)
+        mp.setattr(config, "list_kube_config_contexts", mock_list)
+        ns = utils.get_default_target_namespace(context="ctx-b", config_file="/custom/kubeconfig")
+        assert ns == "team-b"
+        assert passed_config_file == ["/custom/kubeconfig"]
+
+
+def test_get_default_target_namespace_in_k8s_without_config_file():
+    from unittest.mock import mock_open, patch
+
+    mocked_open = mock_open(read_data="in-cluster-ns\n")
+    with (
+        patch("kubeflow.common.utils.is_running_in_k8s", return_value=True),
+        patch("builtins.open", mocked_open),
+    ):
+        ns = utils.get_default_target_namespace()
+        assert ns == "in-cluster-ns"
+        mocked_open.assert_called_once_with(
+            "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+        )
+
+
+def test_get_default_target_namespace_without_current_context():
+    import os
+    import tempfile
+
+    import yaml
+
+    cfg_no_current = {
+        "apiVersion": "v1",
+        "kind": "Config",
+        "contexts": [
+            {
+                "name": "team-b-ctx",
+                "context": {"cluster": "c1", "user": "u1", "namespace": "team-b"},
+            }
+        ],
+        "clusters": [{"name": "c1", "cluster": {"server": "https://127.0.0.1:6443"}}],
+        "users": [{"name": "u1", "user": {"token": "dummy"}}],
+    }
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        yaml.safe_dump(cfg_no_current, f)
+        path = f.name
+
+    try:
+        with pytest.MonkeyPatch().context() as mp:
+            mp.setattr(utils, "is_running_in_k8s", lambda: False)
+            ns = utils.get_default_target_namespace(context="team-b-ctx", config_file=path)
+            assert ns == "team-b"
+    finally:
+        os.remove(path)
+
+
+def test_get_default_target_namespace_in_k8s_with_explicit_config_file():
+    contexts = [
+        {"name": "ext-ctx", "context": {"namespace": "external-ns"}},
+    ]
+    curr = {"name": "ext-ctx", "context": {"namespace": "external-ns"}}
+    from kubernetes import config
+
+    passed_config_file = []
+
+    def mock_list(config_file=None):
+        passed_config_file.append(config_file)
+        return contexts, curr
+
+    with pytest.MonkeyPatch().context() as mp:
+        mp.setattr(utils, "is_running_in_k8s", lambda: True)
+        mp.setattr(config, "list_kube_config_contexts", mock_list)
+        ns = utils.get_default_target_namespace(config_file="/custom/kubeconfig")
+        assert ns == "external-ns"
+        assert passed_config_file == ["/custom/kubeconfig"]
+
+
+def test_get_default_target_namespace_fallback_on_exception():
+    from kubernetes import config
+
+    def mock_list(config_file=None):
+        raise RuntimeError("failed to read contexts")
+
+    with pytest.MonkeyPatch().context() as mp:
+        mp.setattr(utils, "is_running_in_k8s", lambda: False)
+        mp.setattr(config, "list_kube_config_contexts", mock_list)
+        ns = utils.get_default_target_namespace(config_file="/nonexistent")
+        assert ns == "default"

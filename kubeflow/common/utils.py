@@ -26,21 +26,58 @@ def is_running_in_k8s() -> bool:
     return os.path.isdir("/var/run/secrets/kubernetes.io/")
 
 
-def get_default_target_namespace(context: str | None = None) -> str:
-    if not is_running_in_k8s():
+def get_default_target_namespace(
+    context: str | None = None,
+    *,
+    config_file: str | None = None,
+) -> str:
+    """Get the default target Kubernetes namespace.
+
+    If config_file is provided or the client is not running inside a Kubernetes cluster,
+    the namespace is resolved from the specified (or default) kubeconfig.
+    If running inside a Kubernetes cluster without an explicit config_file,
+    the in-cluster service account namespace is used.
+    Falls back to 'default' if the namespace cannot be resolved.
+
+    Args:
+        context: The kubeconfig context name to resolve the namespace from.
+        config_file: Path to the kubeconfig file.
+
+    Returns:
+        The resolved Kubernetes namespace string.
+    """
+    if config_file or not is_running_in_k8s():
+        if context:
+            try:
+                loader = config.kube_config._get_kube_config_loader(
+                    filename=config_file, active_context=context
+                )
+                if loader.current_context and "context" in loader.current_context:
+                    return loader.current_context["context"].get(
+                        "namespace", constants.DEFAULT_NAMESPACE
+                    )
+            except Exception:
+                pass
         try:
-            all_contexts, current_context = config.list_kube_config_contexts()
+            all_contexts, current_context = config.list_kube_config_contexts(
+                config_file=config_file
+            )
             # If context is set, we should get namespace from it.
             if context:
                 for c in all_contexts:
                     if isinstance(c, dict) and c.get("name") == context:
-                        return c["context"]["namespace"]
+                        return c["context"].get("namespace", constants.DEFAULT_NAMESPACE)
             # Otherwise, try to get namespace from the current context.
-            return current_context["context"]["namespace"]
+            if current_context and "context" in current_context:
+                return current_context["context"].get("namespace", constants.DEFAULT_NAMESPACE)
+            return constants.DEFAULT_NAMESPACE
         except Exception:
             return constants.DEFAULT_NAMESPACE
-    with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace") as f:
-        return f.readline()
+    try:
+        with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace") as f:
+            return f.readline().strip()
+    except Exception:
+        return constants.DEFAULT_NAMESPACE
 
 
 def validate_wait_for_job_status(polling_interval: int, timeout: int) -> None:

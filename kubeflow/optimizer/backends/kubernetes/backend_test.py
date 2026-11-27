@@ -1173,3 +1173,23 @@ def test_get_job_events(optimizer_backend, test_case):
         assert test_case.expected_status != SUCCESS
         assert type(e) is test_case.expected_error
     print("test execution complete")
+
+
+def test_optimizer_kubernetes_backend_default_namespace_resolves_with_config_file():
+    cfg = KubernetesBackendConfig(config_file="/custom/kubeconfig", context="team-b-ctx")
+    with (
+        patch(
+            "kubeflow.common.utils.get_default_target_namespace", return_value="team-b"
+        ) as mock_get_ns,
+        patch("kubernetes.config.load_kube_config"),
+        patch("kubernetes.client.ApiClient"),
+        patch("kubernetes.client.CustomObjectsApi"),
+        patch("kubernetes.client.CoreV1Api"),
+        patch(
+            "kubeflow.trainer.backends.kubernetes.backend.KubernetesBackend.__init__",
+            return_value=None,
+        ),
+    ):
+        backend = KubernetesBackend(cfg)
+        mock_get_ns.assert_called_once_with("team-b-ctx", config_file="/custom/kubeconfig")
+        assert backend.namespace == "team-b"
