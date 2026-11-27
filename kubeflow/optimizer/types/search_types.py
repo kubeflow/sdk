@@ -34,7 +34,12 @@ class Search:
 
         Returns:
             Katib ParameterSpec object.
+
+        Raises:
+            ValueError: If ``min`` is not strictly less than ``max``.
         """
+        if not (min < max):
+            raise ValueError("min must be strictly less than max")
         return katib_models.V1beta1ParameterSpec(
             parameterType=constants.DOUBLE_PARAMETER,
             feasibleSpace=katib_models.V1beta1FeasibleSpace(
@@ -52,7 +57,15 @@ class Search:
 
         Returns:
             Katib ParameterSpec object.
+
+        Raises:
+            ValueError: If ``min`` is not strictly greater than 0, or if
+                ``min`` is not strictly less than ``max``.
         """
+        if not (min > 0):
+            raise ValueError("min must be strictly greater than 0")
+        if not (min < max):
+            raise ValueError("min must be strictly less than max")
         return katib_models.V1beta1ParameterSpec(
             parameterType=constants.DOUBLE_PARAMETER,
             feasibleSpace=katib_models.V1beta1FeasibleSpace(
@@ -69,7 +82,12 @@ class Search:
 
         Returns:
             Katib ParameterSpec object.
+
+        Raises:
+            ValueError: If ``values`` is empty.
         """
+        if not values:
+            raise ValueError("must have at least 1 items")
         return katib_models.V1beta1ParameterSpec(
             parameterType=constants.CATEGORICAL_PARAMETERS,
             feasibleSpace=katib_models.V1beta1FeasibleSpace(list=[str(v) for v in values]),
