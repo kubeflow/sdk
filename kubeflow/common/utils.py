@@ -20,10 +20,44 @@ import textwrap
 from kubernetes import config
 
 from kubeflow.common import constants
+from kubeflow.common.types import KubernetesBackendConfig
 
 
 def is_running_in_k8s() -> bool:
     return os.path.isdir("/var/run/secrets/kubernetes.io/")
+
+
+def load_kube_config(cfg: KubernetesBackendConfig) -> None:
+    """Load the Kubernetes client configuration for a backend.
+
+    Trainer, Optimizer and Spark share this so that a given KubernetesBackendConfig
+    resolves to the same cluster in every client.
+
+    Precedence:
+        1. ``client_configuration`` is set: nothing is loaded, the caller builds its
+           API client from it.
+        2. ``config_file`` is set, or the SDK runs outside a pod: kube-config is loaded
+           with ``config_file`` and ``context``.
+        3. Otherwise in-cluster config is loaded. If that fails, kube-config is tried
+           so a pod with a mounted kube-config still works.
+
+    Args:
+        cfg: Kubernetes backend configuration.
+
+    Raises:
+        kubernetes.config.ConfigException: If no configuration can be loaded.
+    """
+    if cfg.client_configuration is not None:
+        return
+
+    if cfg.config_file or not is_running_in_k8s():
+        config.load_kube_config(config_file=cfg.config_file, context=cfg.context)
+        return
+
+    try:
+        config.load_incluster_config()
+    except config.ConfigException:
+        config.load_kube_config(context=cfg.context)
 
 
 def get_default_target_namespace(context: str | None = None) -> str:

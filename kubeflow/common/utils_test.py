@@ -11,10 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from unittest.mock import call, patch
+
+from kubernetes import client, config
 import pytest
 
 from kubeflow.common import utils
-from kubeflow.test.common import SUCCESS, TestCase
+from kubeflow.common.types import KubernetesBackendConfig
+from kubeflow.test.common import FAILED, SUCCESS, TestCase
 
 # --------------------------
 # Test Helpers
@@ -97,6 +101,133 @@ def test_validate_wait_for_job_status(test_case):
             utils.validate_wait_for_job_status(polling_interval, timeout)
     else:
         utils.validate_wait_for_job_status(polling_interval, timeout)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="client_configuration set, nothing loaded",
+            expected_status=SUCCESS,
+            config={
+                "backend_config": KubernetesBackendConfig(
+                    client_configuration=client.Configuration(),
+                    config_file="/tmp/kubeconfig",
+                    context="ctx",
+                ),
+                "in_cluster": True,
+            },
+            expected_output={"load_kube_config": [], "load_incluster_config": []},
+        ),
+        TestCase(
+            name="config_file and context are both passed through",
+            expected_status=SUCCESS,
+            config={
+                "backend_config": KubernetesBackendConfig(
+                    config_file="/tmp/kubeconfig", context="ctx"
+                ),
+                "in_cluster": False,
+            },
+            expected_output={
+                "load_kube_config": [call(config_file="/tmp/kubeconfig", context="ctx")],
+                "load_incluster_config": [],
+            },
+        ),
+        TestCase(
+            name="config_file wins over in-cluster config",
+            expected_status=SUCCESS,
+            config={
+                "backend_config": KubernetesBackendConfig(
+                    config_file="/tmp/kubeconfig", context="ctx"
+                ),
+                "in_cluster": True,
+            },
+            expected_output={
+                "load_kube_config": [call(config_file="/tmp/kubeconfig", context="ctx")],
+                "load_incluster_config": [],
+            },
+        ),
+        TestCase(
+            name="context outside a pod loads kube-config with that context",
+            expected_status=SUCCESS,
+            config={"backend_config": KubernetesBackendConfig(context="ctx"), "in_cluster": False},
+            expected_output={
+                "load_kube_config": [call(config_file=None, context="ctx")],
+                "load_incluster_config": [],
+            },
+        ),
+        TestCase(
+            name="nothing set outside a pod loads the default kube-config",
+            expected_status=SUCCESS,
+            config={"backend_config": KubernetesBackendConfig(), "in_cluster": False},
+            expected_output={
+                "load_kube_config": [call(config_file=None, context=None)],
+                "load_incluster_config": [],
+            },
+        ),
+        TestCase(
+            name="inside a pod loads in-cluster config",
+            expected_status=SUCCESS,
+            config={"backend_config": KubernetesBackendConfig(context="ctx"), "in_cluster": True},
+            expected_output={"load_kube_config": [], "load_incluster_config": [call()]},
+        ),
+        TestCase(
+            name="in-cluster config failure falls back to kube-config",
+            expected_status=SUCCESS,
+            config={
+                "backend_config": KubernetesBackendConfig(context="ctx"),
+                "in_cluster": True,
+                "incluster_error": config.ConfigException("Service host/port is not set."),
+            },
+            expected_output={
+                "load_kube_config": [call(context="ctx")],
+                "load_incluster_config": [call()],
+            },
+        ),
+        TestCase(
+            name="error is raised when neither config can be loaded",
+            expected_status=FAILED,
+            config={
+                "backend_config": KubernetesBackendConfig(),
+                "in_cluster": True,
+                "incluster_error": config.ConfigException("Service host/port is not set."),
+                "load_error": config.ConfigException("Invalid kube-config file."),
+            },
+            expected_error=config.ConfigException,
+        ),
+    ],
+)
+def test_load_kube_config(test_case):
+    """Test load_kube_config picks one config source per KubernetesBackendConfig."""
+    print("Executing test:", test_case.name)
+
+    with (
+        patch(
+            "kubeflow.common.utils.is_running_in_k8s",
+            return_value=test_case.config["in_cluster"],
+        ),
+        patch(
+            "kubernetes.config.load_kube_config",
+            side_effect=test_case.config.get("load_error"),
+        ) as mock_load_kube_config,
+        patch(
+            "kubernetes.config.load_incluster_config",
+            side_effect=test_case.config.get("incluster_error"),
+        ) as mock_load_incluster_config,
+    ):
+        if test_case.expected_error:
+            with pytest.raises(test_case.expected_error, match="Invalid kube-config file"):
+                utils.load_kube_config(test_case.config["backend_config"])
+            return
+
+        utils.load_kube_config(test_case.config["backend_config"])
+
+    assert test_case.expected_status == SUCCESS
+    assert mock_load_kube_config.call_args_list == test_case.expected_output["load_kube_config"]
+    assert (
+        mock_load_incluster_config.call_args_list
+        == test_case.expected_output["load_incluster_config"]
+    )
 
 
 @pytest.mark.parametrize(
