@@ -409,7 +409,7 @@ class DataCacheInitializer(BaseInitializer):
         uri_path = self.storage_uri[len("cache://") :]
         parts = uri_path.split("/")
 
-        if len(parts) != 2:
+        if len(parts) != 2 or not all(parts):
             raise ValueError(
                 f"storage_uri must be in format "
                 f"'cache://<SCHEMA_NAME>/<TABLE_NAME>', got {self.storage_uri}"
