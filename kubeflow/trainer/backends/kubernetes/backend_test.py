@@ -32,6 +32,7 @@ from kubeflow_trainer_api import models
 from kubernetes import client
 import pytest
 
+import kubeflow.common.constants as common_constants
 from kubeflow.common.types import KubernetesBackendConfig
 from kubeflow.test.common import (
     DEFAULT_NAMESPACE,
@@ -900,21 +901,42 @@ def _run_verify_backend_with_core_api(core_api: Mock) -> tuple[list[str], int]:
                 ],
             },
         ),
+        TestCase(
+            name="uses KUBEFLOW_TRAINER_NAMESPACE when set",
+            expected_status=SUCCESS,
+            config={
+                "core_api": _build_core_api_mock({"kubeflow_trainer_version": "1.0.0"}),
+                "env_vars": {
+                    common_constants.KUBEFLOW_TRAINER_NAMESPACE_ENV_VAR: "custom-trainer-ns",
+                },
+                "expected_namespace": "custom-trainer-ns",
+            },
+        ),
     ],
 )
-def test_verify_backend(test_case):
+def test_verify_backend(test_case, monkeypatch):
     """Test KubernetesBackend.verify_backend across version metadata scenarios."""
 
     print("Executing test:", test_case.name)
 
+    for key, value in test_case.config.get("env_vars", {}).items():
+        monkeypatch.setenv(key, value)
+
     core_api: Mock = test_case.config["core_api"]
     expect_warning: bool = test_case.config.get("expect_warning", False)
     must_contain: list[str] = test_case.config.get("must_contain", [])
+    expected_namespace: str | None = test_case.config.get("expected_namespace")
 
     warnings, call_count = _run_verify_backend_with_core_api(core_api)
     combined = "\n".join(warnings)
 
     assert call_count >= 1
+
+    if expected_namespace:
+        core_api.read_namespaced_config_map.assert_called_with(
+            name="kubeflow-trainer-public",
+            namespace=expected_namespace,
+        )
 
     if expect_warning:
         assert warnings, "Expected warning logs but found none"
