@@ -30,8 +30,10 @@ from datetime import datetime, timedelta
 import json
 import logging
 from pathlib import Path
+import re
 from typing import Any
 import urllib.error
+import urllib.parse
 import urllib.request
 
 import yaml
@@ -50,6 +52,9 @@ GITHUB_RUNTIMES_BASE_URL = (
     "https://raw.githubusercontent.com/kubeflow/trainer/master/manifests/base/runtimes"
 )
 GITHUB_RUNTIMES_TREE_URL = "https://github.com/kubeflow/trainer/tree/master/manifests/base/runtimes"
+
+# Windows drive path such as C:\runtimes or C:/runtimes
+_WINDOWS_DRIVE_PATH = re.compile(r"^[A-Za-z]:[\\/]")
 
 __all__ = [
     "TRAINING_RUNTIMES_DIR",
@@ -420,12 +425,20 @@ def _parse_runtime_yaml(data: dict[str, Any], source: str = "unknown") -> base_t
     )
 
 
+def _is_local_path(source: str) -> bool:
+    """Whether a source is a local path: POSIX absolute, ~, Windows drive or UNC path."""
+    return source.startswith(("/", "~", "\\\\")) or _WINDOWS_DRIVE_PATH.match(source) is not None
+
+
 def _parse_source_url(source: str) -> tuple[str, str]:
     """
     Parse a source URL to determine its type and path.
 
+    Parsing doesn't depend on the client OS, so Windows paths are recognized everywhere.
+
     Args:
-        source: Source URL with scheme (github://, https://, file://, or absolute path)
+        source: Source URL with scheme (github://, https://, http://, file://) or a local
+            path (/abs/path, ~/path, C:\\path, C:/path or \\\\server\\share\\path)
 
     Returns:
         Tuple of (source_type, path) where source_type is one of:
@@ -438,9 +451,19 @@ def _parse_source_url(source: str) -> tuple[str, str]:
     elif source.startswith("http://"):
         return ("http", source)
     elif source.startswith("file://"):
-        return ("file", source[7:])  # Remove 'file://'
-    elif source.startswith("/"):
-        # Absolute path without file:// prefix
+        path = urllib.parse.unquote(source[7:])  # Remove 'file://', decode e.g. %20
+        # RFC 8089: "localhost" is the local machine, so file://localhost/C:/dir -> C:/dir.
+        # Shares such as file://localhost/C$/dir have no drive letter and stay UNC below.
+        if path.lower().startswith("localhost/") and _WINDOWS_DRIVE_PATH.match(path[10:]):
+            path = path[10:]
+        if not path.startswith("/") and not _WINDOWS_DRIVE_PATH.match(path):
+            # UNC form, as produced by Path.as_uri(): file://server/share/dir -> //server/share/dir
+            return ("file", "//" + path)
+        # RFC 8089 Windows form, as produced by Path.as_uri(): file:///C:/dir -> C:/dir
+        if path.startswith("/") and _WINDOWS_DRIVE_PATH.match(path[1:]):
+            path = path[1:]
+        return ("file", path)
+    elif _is_local_path(source):
         return ("file", source)
     else:
         raise ValueError(
@@ -492,6 +515,19 @@ def _load_from_github_url(github_path: str) -> list[base_types.Runtime]:
         except Exception as e:
             logger.debug(f"Failed to parse GitHub runtime {runtime_file}: {e}")
 
+    # The default source is expected to be unreachable offline, where the built-in runtimes
+    # take over, so only a user-configured GitHub source warns when it yields nothing.
+    is_default_source = (owner, repo, custom_path) == (
+        "kubeflow",
+        "trainer",
+        "manifests/base/runtimes",
+    )
+    if not runtimes and not is_default_source:
+        logger.warning(
+            f"No runtimes loaded from GitHub source github://{github_path}. "
+            "Check the repository path and network access."
+        )
+
     return runtimes
 
 
@@ -520,7 +556,9 @@ def _load_from_http_url(url: str) -> list[base_types.Runtime]:
             runtimes.append(runtime)
             logger.debug(f"Loaded runtime from HTTP: {runtime.name}")
     except Exception as e:
-        logger.debug(f"Failed to load runtime from HTTP {url}: {e}")
+        # An HTTP(S) source is configured explicitly, so don't fall back to the built-in
+        # runtimes silently.
+        logger.warning(f"Failed to load runtime from HTTP {url}: {e}")
 
     return runtimes
 
@@ -599,7 +637,8 @@ def list_training_runtimes_from_sources(sources: list[str]) -> list[base_types.R
                     runtimes.append(runtime)
                     runtime_names_seen.add(runtime.name)
         except Exception as e:
-            logger.debug(f"Failed to load from source {source}: {e}")
+            # Warn, so a misconfigured source isn't silently replaced by the built-in runtimes
+            logger.warning(f"Failed to load from source {source}: {e}")
 
     # Fallback to default runtimes from constants if not found in sources
     for default_runtime in _create_default_runtimes():

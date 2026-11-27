@@ -49,7 +49,8 @@ class TrainingRuntimeSource(BaseModel):
             "Runtime sources with URL schemes (checked in priority order):\n"
             "  - github://owner/repo[/path] - GitHub repository\n"
             "  - https://url or http://url - HTTP(S) endpoint\n"
-            "  - file:///path or /absolute/path - Local filesystem\n"
+            "  - file:///path, /absolute/path, ~/path, or a Windows path such as\n"
+            "    C:\\path or file:///C:/path - Local filesystem\n"
             "If a runtime is not found in configured sources, built-in runtimes "
             "packaged with kubeflow-trainer are used as default."
         ),
