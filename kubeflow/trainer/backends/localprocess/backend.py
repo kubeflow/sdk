@@ -236,7 +236,10 @@ class LocalProcessBackend(RuntimeBackend):
         if _job is None:
             raise ValueError(f"No TrainJob with name {name}")
 
-        for _ in range(round(timeout / polling_interval)):
+        # Poll until a deadline so the full timeout is honored, even when it
+        # is not a multiple of polling_interval.
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
             # Get current job status
             trainjob = self.get_job(name)
 

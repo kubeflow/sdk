@@ -20,7 +20,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from kubeflow.test.common import FAILED, SUCCESS, TestCase
+from kubeflow.test.common import FAILED, SUCCESS, FakeClock, TestCase
 from kubeflow.trainer.backends.localprocess.backend import LocalProcessBackend
 from kubeflow.trainer.backends.localprocess.constants import LOCAL_RUNTIME_IMAGE
 from kubeflow.trainer.backends.localprocess.types import (
@@ -472,6 +472,67 @@ def test_wait_for_job_status(local_backend, test_case):
     if test_case.expected_status == FAILED:
         with pytest.raises(test_case.expected_error):
             local_backend.wait_for_job_status(**test_case.config)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TestCase(
+            name="job reaching status after round(timeout / polling_interval) polls succeeds",
+            expected_status=SUCCESS,
+            config={"timeout": 5, "polling_interval": 2, "complete_on_poll": 3},
+            expected_output=3,
+        ),
+        TestCase(
+            name="timeout error is raised only after the full timeout elapses",
+            expected_status=FAILED,
+            config={"timeout": 5, "polling_interval": 2, "complete_on_poll": None},
+            expected_output=3,
+            expected_error=TimeoutError,
+        ),
+    ],
+)
+def test_wait_for_job_status_honors_full_timeout(local_backend, test_case):
+    """Test LocalProcessBackend.wait_for_job_status polls for the whole timeout.
+
+    round(5 / 2) is 2, so a fixed iteration count stops polling at t=4 even
+    though the caller asked to wait 5 seconds.
+    """
+    timeout = test_case.config["timeout"]
+    complete_on_poll = test_case.config["complete_on_poll"]
+    clock = FakeClock()
+    polls = 0
+
+    registered_job = Mock()
+    registered_job.name = BASIC_TRAIN_JOB_NAME
+    local_backend._LocalProcessBackend__local_jobs.append(registered_job)
+
+    def mock_get_job(name):
+        nonlocal polls
+        polls += 1
+        done = complete_on_poll is not None and polls >= complete_on_poll
+        return Mock(status=constants.TRAINJOB_COMPLETE if done else constants.TRAINJOB_RUNNING)
+
+    local_backend.get_job = mock_get_job
+
+    with patch("kubeflow.trainer.backends.localprocess.backend.time", clock):
+        if test_case.expected_status == FAILED:
+            with pytest.raises(test_case.expected_error):
+                local_backend.wait_for_job_status(
+                    name=BASIC_TRAIN_JOB_NAME,
+                    timeout=timeout,
+                    polling_interval=test_case.config["polling_interval"],
+                )
+            assert clock.now >= timeout
+        else:
+            job = local_backend.wait_for_job_status(
+                name=BASIC_TRAIN_JOB_NAME,
+                timeout=timeout,
+                polling_interval=test_case.config["polling_interval"],
+            )
+            assert job.status == constants.TRAINJOB_COMPLETE
+
+    assert polls == test_case.expected_output
 
 
 @pytest.mark.parametrize(

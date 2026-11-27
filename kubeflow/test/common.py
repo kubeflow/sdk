@@ -35,3 +35,16 @@ class TestCase:
     expected_output: Any | None = None
     expected_error: type[Exception] | None = None
     __test__ = False
+
+
+class FakeClock:
+    """Stand-in for the `time` module whose `sleep` advances `monotonic` instantly."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
