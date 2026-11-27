@@ -107,6 +107,8 @@ class PodSpecPatch:
         affinity: Affinity rules for pod scheduling.
         tolerations: Tolerations for pod scheduling.
         scheduling_gates: Scheduling gates for the pods.
+        termination_grace_period_seconds: Seconds the pod has to terminate
+            gracefully after a termination signal before it is forcibly killed.
     """
 
     service_account_name: str | None = None
@@ -119,6 +121,7 @@ class PodSpecPatch:
     affinity: dict | None = None
     tolerations: list[dict] | None = None
     scheduling_gates: list[dict] | None = None
+    termination_grace_period_seconds: int | None = None
 
     def __post_init__(self):
         """Validate pod spec patch configuration."""
@@ -150,6 +153,13 @@ class PodSpecPatch:
             or not all(isinstance(g, dict) for g in self.scheduling_gates)
         ):
             raise ValueError("scheduling_gates must be a list of dictionaries")
+
+        if self.termination_grace_period_seconds is not None and (
+            not isinstance(self.termination_grace_period_seconds, int)
+            or isinstance(self.termination_grace_period_seconds, bool)
+            or self.termination_grace_period_seconds < 0
+        ):
+            raise ValueError("termination_grace_period_seconds must be a non-negative integer")
 
 
 @dataclass

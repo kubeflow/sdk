@@ -298,6 +298,18 @@ class TestPodSpecPatch:
                 {"scheduling_gates": ["gate1"]},
                 "scheduling_gates must be a list of dictionaries",
             ),
+            (
+                {"termination_grace_period_seconds": "3600"},
+                "termination_grace_period_seconds must be a non-negative integer",
+            ),
+            (
+                {"termination_grace_period_seconds": 3600.5},
+                "termination_grace_period_seconds must be a non-negative integer",
+            ),
+            (
+                {"termination_grace_period_seconds": -1},
+                "termination_grace_period_seconds must be a non-negative integer",
+            ),
         ],
     )
     def test_pod_spec_patch_validation(self, kwargs, expected_error):
@@ -391,6 +403,66 @@ class TestRuntimePatchApplication:
                                                             "nodeSelector": {
                                                                 "node-type": "gpu-a100"
                                                             }
+                                                        },
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    ],
+                                },
+                            },
+                        },
+                    },
+                ],
+            },
+        }
+
+        assert job_spec == expected
+
+    def test_runtime_patch_with_termination_grace_period(self, mock_kubernetes_backend):
+        """Test RuntimePatch with termination grace period serializes to the CRD field."""
+        patch = RuntimePatch(
+            training_runtime_spec=TrainingRuntimeSpecPatch(
+                template=JobSetTemplatePatch(
+                    spec=JobSetSpecPatch(
+                        replicated_jobs=[
+                            ReplicatedJobPatch(
+                                name="node",
+                                template=JobTemplatePatch(
+                                    spec=JobSpecPatch(
+                                        template=PodTemplatePatch(
+                                            spec=PodSpecPatch(
+                                                termination_grace_period_seconds=3600,
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ],
+                    ),
+                ),
+            ),
+        )
+
+        job_spec = {}
+        patch(job_spec, None, mock_kubernetes_backend)
+
+        expected = {
+            "spec": {
+                "runtimePatches": [
+                    {
+                        "manager": "trainer.kubeflow.org/kubeflow-sdk",
+                        "trainingRuntimeSpec": {
+                            "template": {
+                                "spec": {
+                                    "replicatedJobs": [
+                                        {
+                                            "name": "node",
+                                            "template": {
+                                                "spec": {
+                                                    "template": {
+                                                        "spec": {
+                                                            "terminationGracePeriodSeconds": 3600,
                                                         },
                                                     },
                                                 },
