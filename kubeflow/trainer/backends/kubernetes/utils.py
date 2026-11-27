@@ -697,6 +697,7 @@ _throttle_lock = threading.Lock()
 _token_lock = threading.Lock()
 _session_lock = threading.Lock()
 _last_update_time: float = 0.0
+_in_flight: bool = False
 _cached_token: str | None = None
 _token_read_time: float = 0.0
 _http_session: Session | None = None
@@ -736,13 +737,52 @@ def _get_cached_token(token_path: str | None) -> str | None:
 
 
 def _should_throttle() -> bool:
+    if _in_flight:
+        return True
     now = time.monotonic()
     return (now - _last_update_time) < _MIN_UPDATE_INTERVAL_SECONDS
 
 
 def _update_last_time() -> None:
-    global _last_update_time
-    _last_update_time = time.monotonic()
+    global _in_flight, _last_update_time
+    with _throttle_lock:
+        _in_flight = False
+        _last_update_time = time.monotonic()
+
+
+def _reserve_throttle() -> tuple[bool, float, float]:
+    """Check throttle and atomically reserve the update window.
+
+    Returns:
+        tuple of (throttled, reserved_time, previous_time).
+        If throttled is True, reserved_time and previous_time are unused.
+    """
+    global _in_flight, _last_update_time
+    with _throttle_lock:
+        if _should_throttle():
+            return True, 0.0, 0.0
+        _in_flight = True
+        previous_time = _last_update_time
+        reserved_time = time.monotonic()
+        _last_update_time = reserved_time
+        return False, reserved_time, previous_time
+
+
+def _complete_throttle_success() -> None:
+    """Mark the in-flight status update as completed successfully."""
+    global _in_flight, _last_update_time
+    with _throttle_lock:
+        _in_flight = False
+        _last_update_time = time.monotonic()
+
+
+def _rollback_throttle(reserved_time: float, previous_time: float) -> None:
+    """Roll back the throttle reservation if it has not been overwritten."""
+    global _in_flight, _last_update_time
+    with _throttle_lock:
+        _in_flight = False
+        if _last_update_time == reserved_time:
+            _last_update_time = previous_time
 
 
 def update_trainjob_status(
@@ -772,14 +812,16 @@ def update_trainjob_status(
     Returns:
         True if update was sent successfully, False otherwise.
     """
+    reserved_time: float | None = None
+    previous_time: float = 0.0
     try:
         url = os.environ.get(_ENV_SERVER_URL)
         if not url:
             return False
 
-        with _throttle_lock:
-            if _should_throttle():
-                return False
+        throttled, reserved_time, previous_time = _reserve_throttle()
+        if throttled:
+            return False
 
         ca_file = os.environ.get(_ENV_CA_CERT)
         token_path = os.environ.get(_ENV_TOKEN_PATH)
@@ -787,6 +829,7 @@ def update_trainjob_status(
         token = _get_cached_token(token_path)
         if not token:
             _logger.debug("No authentication token available")
+            _rollback_throttle(reserved_time, previous_time)
             return False
 
         trainer_status: dict = {
@@ -830,18 +873,23 @@ def update_trainjob_status(
         )
 
         if response.status_code == 200:
-            _update_last_time()
+            _complete_throttle_success()
             _logger.debug("Status update sent: %s%%", progress_percent)
             return True
         else:
+            _rollback_throttle(reserved_time, previous_time)
             _logger.warning("Status update failed: HTTP %s", response.status_code)
             _logger.debug("Response body: %.500s", response.text)
             return False
 
     except requests.RequestException as e:
+        if reserved_time is not None:
+            _rollback_throttle(reserved_time, previous_time)
         _logger.warning("Failed to send status update: %s", e)
         return False
     except Exception as e:
+        if reserved_time is not None:
+            _rollback_throttle(reserved_time, previous_time)
         _logger.warning("Unexpected error in update_trainjob_status: %s", e)
         return False
 
