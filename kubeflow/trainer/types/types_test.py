@@ -91,6 +91,36 @@ from kubeflow.trainer.types import types
             },
             expected_error=ValueError,
         ),
+        TestCase(
+            name="empty schema in storage_uri raises ValueError",
+            expected_status=FAILED,
+            config={
+                "storage_uri": "cache:///test_table",
+                "num_data_nodes": 3,
+                "metadata_loc": "gs://my-bucket/metadata",
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="empty table in storage_uri raises ValueError",
+            expected_status=FAILED,
+            config={
+                "storage_uri": "cache://test_schema/",
+                "num_data_nodes": 3,
+                "metadata_loc": "gs://my-bucket/metadata",
+            },
+            expected_error=ValueError,
+        ),
+        TestCase(
+            name="empty schema and table in storage_uri raises ValueError",
+            expected_status=FAILED,
+            config={
+                "storage_uri": "cache:///",
+                "num_data_nodes": 3,
+                "metadata_loc": "gs://my-bucket/metadata",
+            },
+            expected_error=ValueError,
+        ),
     ],
 )
 def test_data_cache_initializer(test_case: TestCase):
