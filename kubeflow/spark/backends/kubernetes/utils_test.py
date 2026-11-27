@@ -1161,6 +1161,49 @@ def test_resolve_executor_resources(test_case: TestCase) -> None:
             expected_status=SUCCESS,
             config={
                 "follow": False,
+                "logs": "log line 1\nlog line 2",
+            },
+            expected_output=[
+                "log line 1",
+                "log line 2",
+            ],
+        ),
+        TestCase(
+            name="read logs with a trailing newline",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+                "logs": "log line 1\nlog line 2\n",
+            },
+            expected_output=[
+                "log line 1",
+                "log line 2",
+            ],
+        ),
+        TestCase(
+            name="read logs with blank lines",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+                "logs": "log line 1\n\nlog line 2\n\n",
+            },
+            expected_output=["log line 1", "", "log line 2", ""],
+        ),
+        TestCase(
+            name="read empty logs",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+                "logs": "",
+            },
+            expected_output=[],
+        ),
+        TestCase(
+            name="read logs with CRLF line endings",
+            expected_status=SUCCESS,
+            config={
+                "follow": False,
+                "logs": "log line 1\r\nlog line 2\r\n",
             },
             expected_output=[
                 "log line 1",
@@ -1172,6 +1215,84 @@ def test_resolve_executor_resources(test_case: TestCase) -> None:
             expected_status=SUCCESS,
             config={
                 "follow": True,
+                "chunks": [b"log line 1\n", b"log line 2\n"],
+            },
+            expected_output=[
+                "log line 1",
+                "log line 2",
+            ],
+        ),
+        TestCase(
+            name="follow logs with a line split across chunks",
+            expected_status=SUCCESS,
+            config={
+                "follow": True,
+                "chunks": [b"log line 1\nlog ", b"line 2\n"],
+            },
+            expected_output=[
+                "log line 1",
+                "log line 2",
+            ],
+        ),
+        TestCase(
+            name="follow logs with several lines in one chunk",
+            expected_status=SUCCESS,
+            config={
+                "follow": True,
+                "chunks": [b"log line 1\nlog line 2\n"],
+            },
+            expected_output=[
+                "log line 1",
+                "log line 2",
+            ],
+        ),
+        TestCase(
+            name="follow logs with a character split across chunks",
+            expected_status=SUCCESS,
+            config={
+                "follow": True,
+                "chunks": [b"caf\xc3", b"\xa9\n"],
+            },
+            expected_output=[
+                "café",
+            ],
+        ),
+        TestCase(
+            name="follow logs without a trailing newline",
+            expected_status=SUCCESS,
+            config={
+                "follow": True,
+                "chunks": [b"log line 1\nlog line 2"],
+            },
+            expected_output=[
+                "log line 1",
+                "log line 2",
+            ],
+        ),
+        TestCase(
+            name="follow logs with blank lines",
+            expected_status=SUCCESS,
+            config={
+                "follow": True,
+                "chunks": [b"log line 1\n\nlog line 2\n\n"],
+            },
+            expected_output=["log line 1", "", "log line 2", ""],
+        ),
+        TestCase(
+            name="follow empty logs",
+            expected_status=SUCCESS,
+            config={
+                "follow": True,
+                "chunks": [b""],
+            },
+            expected_output=[],
+        ),
+        TestCase(
+            name="follow logs with a CRLF split across chunks",
+            expected_status=SUCCESS,
+            config={
+                "follow": True,
+                "chunks": [b"log line 1\r", b"\nlog line 2\r\n"],
             },
             expected_output=[
                 "log line 1",
@@ -1198,17 +1319,12 @@ def test_read_pod_logs(test_case: TestCase) -> None:
     core_api = Mock()
     thread = Mock()
 
-    if test_case.name == "read logs":
-        thread.get.return_value = "log line 1\nlog line 2"
+    if "logs" in test_case.config:
+        thread.get.return_value = test_case.config["logs"]
 
-    elif test_case.name == "follow logs":
+    elif test_case.config.get("follow"):
         stream = Mock()
-        stream.stream.return_value = iter(
-            [
-                b"log line 1\n",
-                b"log line 2\n",
-            ]
-        )
+        stream.stream.return_value = iter(test_case.config["chunks"])
         thread.get.return_value = stream
 
     elif test_case.name == "timeout":
@@ -1231,14 +1347,14 @@ def test_read_pod_logs(test_case: TestCase) -> None:
 
         assert logs == test_case.expected_output
 
-        if test_case.name == "read logs":
+        if not test_case.config["follow"]:
             core_api.read_namespaced_pod_log.assert_called_once_with(
                 name="driver-pod",
                 namespace="default",
                 async_req=True,
             )
 
-        elif test_case.name == "follow logs":
+        else:
             core_api.read_namespaced_pod_log.assert_called_once_with(
                 name="driver-pod",
                 namespace="default",
