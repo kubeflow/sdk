@@ -192,9 +192,13 @@ def _resolve_executor_resources(
 def _memory_kubernetes_to_spark(memory: str) -> str:
     """Convert Kubernetes-style memory to Spark-compatible memory.
 
-    Spark accepts integer memory values with JVM suffixes (k, m, g, t).
-    Kubernetes quantities may contain fractional values (e.g. 1.5Gi), so
-    these are converted to an absolute MiB value.
+    Kubernetes quantities use two unit families: binary (``Ki``..``Ei``, powers
+    of 1024) and decimal SI (``k``, ``M``, ``G``, ``T``, ``P``, ``E``, powers of
+    1000). Spark has no decimal units -- ``JavaUtils`` reads ``k``/``m``/``g``/
+    ``t``/``p`` as powers of 1024 regardless of case -- so decimal quantities are
+    resolved to an absolute MiB value rather than passed through. Fractional
+    quantities (e.g. ``1.5Gi``) are also resolved to MiB, since Spark rejects
+    fractional byte strings.
 
     Args:
         memory: Memory value using Kubernetes or Spark notation.
@@ -213,7 +217,9 @@ def _memory_kubernetes_to_spark(memory: str) -> str:
     if not match:
         return memory
 
-    coefficient, suffix = match.group(1), (match.group(2) or "").lower()
+    # Keep the original case: Kubernetes decimal kilo is "k", while "K" is not a
+    # valid Kubernetes suffix and is treated as Spark's binary "k".
+    coefficient, suffix = match.group(1), match.group(2)
 
     exponent_by_suffix = {
         "ki": 10,
@@ -232,19 +238,32 @@ def _memory_kubernetes_to_spark(memory: str) -> str:
         "p": 50,
         "pb": 50,
         "ei": 60,
+        "e": 60,
     }
 
-    if suffix not in exponent_by_suffix:
+    if suffix.lower() not in exponent_by_suffix:
         return memory
 
-    exponent = exponent_by_suffix[suffix]
+    exponent = exponent_by_suffix[suffix.lower()]
+
+    # Kubernetes quantities are fixed-point, so scale the coefficient into an
+    # integer and keep all arithmetic exact.
+    whole, _, fraction = coefficient.partition(".")
+    scaled_coefficient = int(whole + fraction)
+    scale = 10 ** len(fraction)
+
+    # Kubernetes decimal SI units (case-sensitive) -> absolute MiB.
+    if suffix in {"k", "M", "G", "T", "P", "E"}:
+        multiplier = 1000 ** (exponent // 10)
+        mebibytes = scaled_coefficient * multiplier // (scale * 2**20)
+        return f"{max(mebibytes, 1)}m"
 
     spark_suffix = {10: "k", 20: "m", 30: "g", 40: "t", 50: "p"}.get(exponent)
-    if "." not in coefficient and spark_suffix is not None:
+    if scale == 1 and spark_suffix is not None:
         return coefficient + spark_suffix
 
-    total_bytes = math.ceil(float(coefficient) * (2**exponent))
-    return f"{math.ceil(total_bytes / (2**20))}m"
+    mebibytes = scaled_coefficient * (2**exponent) // (scale * 2**20)
+    return f"{max(mebibytes, 1)}m"
 
 
 def _validate_cpu_value(cpu: str | int | None) -> int:
