@@ -583,3 +583,23 @@ def test_get_job_status(local_backend, test_case):
 
     status = local_backend._LocalProcessBackend__get_job_status(job)
     assert status == test_case.expected_output
+
+
+def test_wait_for_job_status_raises_on_failed_job(local_backend, monkeypatch):
+    """wait_for_job_status should immediately raise RuntimeError when job fails."""
+
+    trainjob = Mock()
+    trainjob.status = constants.TRAINJOB_FAILED
+
+    job = Mock()
+    job.name = "failed-job"
+    local_backend._LocalProcessBackend__local_jobs.append(job)
+
+    monkeypatch.setattr(local_backend, "get_job", lambda name: trainjob)
+
+    with pytest.raises(RuntimeError, match="TrainJob failed-job is Failed"):
+        local_backend.wait_for_job_status(
+            name="failed-job",
+            timeout=2,
+            polling_interval=1,
+        )
