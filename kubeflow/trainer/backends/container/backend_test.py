@@ -35,6 +35,7 @@ from kubeflow.trainer.backends.container.adapters.base import (
 from kubeflow.trainer.backends.container.backend import ContainerBackend
 from kubeflow.trainer.backends.container.types import ContainerBackendConfig
 from kubeflow.trainer.constants import constants
+from kubeflow.trainer.options import Name
 from kubeflow.trainer.types import types
 
 
@@ -1196,3 +1197,95 @@ def test_create_adapter_error_message_format():
         # Guard the patch target: the failure must come from the mocked adapter, not from
         # a genuinely unavailable Docker daemon.
         assert mock_docker.called
+
+
+def test_train_refuses_a_name_already_in_use(container_backend, monkeypatch, tmp_path):
+    """A taken name is refused before anything is created, leaving the job untouched."""
+    adapter = container_backend._adapter
+    workdir = tmp_path / "finetune"
+    monkeypatch.setattr(
+        "kubeflow.trainer.backends.container.utils.workdir_path",
+        lambda job_name: str(workdir),
+    )
+    monkeypatch.setattr(
+        "kubeflow.trainer.backends.container.utils.create_workdir",
+        lambda job_name: str(workdir),
+    )
+    adapter.containers_created.append(
+        {
+            "id": "container-existing",
+            "name": "finetune-node-0",
+            "image": "local/trainer",
+            "command": [],
+            "network": "finetune-net",
+            "environment": {},
+            "labels": {f"{container_backend.label_prefix}/trainjob-name": "finetune"},
+            "volumes": {},
+            "working_dir": "/workspace",
+            "status": "running",
+            "exit_code": None,
+        }
+    )
+
+    trainer = types.CustomTrainer(func=simple_train_func)
+
+    with pytest.raises(ValueError, match="already exists"):
+        container_backend.train(trainer=trainer, options=[Name("finetune")])
+
+    assert not workdir.exists()
+    assert adapter.networks_created == []
+    assert len(adapter.containers_created) == 1
+
+
+def test_failed_train_keeps_resources_it_did_not_create(container_backend, monkeypatch, tmp_path):
+    """A workdir and network that predate the call survive a failed train()."""
+    adapter = container_backend._adapter
+    workdir = tmp_path / "keep-me"
+    workdir.mkdir()
+    (workdir / "model.bin").write_text("trained", encoding="utf-8")
+    monkeypatch.setattr(
+        "kubeflow.trainer.backends.container.utils.workdir_path",
+        lambda job_name: str(workdir),
+    )
+    monkeypatch.setattr(
+        "kubeflow.trainer.backends.container.utils.create_workdir",
+        lambda job_name: str(workdir),
+    )
+    adapter.networks_created.append({"id": "net-keep-me-net", "name": "keep-me-net", "labels": {}})
+    monkeypatch.setattr(adapter, "pull_image", Mock(side_effect=RuntimeError("pull_image failed")))
+
+    trainer = types.CustomTrainer(func=simple_train_func)
+
+    with pytest.raises(RuntimeError, match="pull_image failed"):
+        container_backend.train(trainer=trainer, options=[Name("keep-me")])
+
+    assert (workdir / "model.bin").read_text(encoding="utf-8") == "trained"
+    assert "net-keep-me-net" not in adapter.networks_deleted
+
+
+def test_failed_train_removes_only_resources_it_created(container_backend, monkeypatch, tmp_path):
+    """A failed train() still removes the workdir and network it created itself."""
+    adapter = container_backend._adapter
+    workdir = tmp_path / "fresh"
+    monkeypatch.setattr(
+        "kubeflow.trainer.backends.container.utils.workdir_path",
+        lambda job_name: str(workdir),
+    )
+
+    def create_workdir(job_name):
+        workdir.mkdir(parents=True, exist_ok=True)
+        return str(workdir)
+
+    monkeypatch.setattr(
+        "kubeflow.trainer.backends.container.utils.create_workdir",
+        create_workdir,
+    )
+    monkeypatch.setattr(adapter, "pull_image", Mock(side_effect=RuntimeError("pull_image failed")))
+
+    trainer = types.CustomTrainer(func=simple_train_func)
+
+    with pytest.raises(RuntimeError, match="pull_image failed"):
+        container_backend.train(trainer=trainer, options=[Name("fresh")])
+
+    assert not workdir.exists()
+    assert "net-fresh-net" in adapter.networks_deleted

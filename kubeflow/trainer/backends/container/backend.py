@@ -288,12 +288,25 @@ class ContainerBackend(RuntimeBackend):
         )
 
         logger.debug(f"Starting training job: {trainjob_name}")
+
+        existing = self._adapter.list_containers(
+            filters={"label": [f"{self.label_prefix}/trainjob-name={trainjob_name}"]}
+        )
+        if existing:
+            raise ValueError(
+                f"TrainJob {trainjob_name} already exists. "
+                "Delete it with delete_job() or pass a different name."
+            )
+
         # Track created resources so a failure at any setup step can clean them up.
         workdir: str | None = None
+        workdir_created = False
         network_id: str | None = None
+        network_created = False
         container_ids: list[str] = []
         try:
             # Create per-job working directory on host (for outputs, checkpoints, etc.)
+            workdir_created = not os.path.isdir(container_utils.workdir_path(trainjob_name))
             workdir = container_utils.create_workdir(trainjob_name)
             logger.debug(f"Created working directory: {workdir}")
 
@@ -301,8 +314,10 @@ class ContainerBackend(RuntimeBackend):
             num_nodes = trainer.num_nodes or runtime.trainer.num_nodes or 1
             logger.debug(f"Creating network for {num_nodes} nodes")
 
+            network_name = f"{trainjob_name}-net"
+            network_created = self._adapter.get_network(network_name) is None
             network_id = self._adapter.create_network(
-                name=f"{trainjob_name}-net",
+                name=network_name,
                 labels={
                     f"{self.label_prefix}/trainjob-name": trainjob_name,
                     f"{self.label_prefix}/runtime-name": runtime.name,
@@ -469,12 +484,11 @@ class ContainerBackend(RuntimeBackend):
                 # Stop and remove any containers and the network that were created
                 self._cleanup_container_resources(
                     container_ids=container_ids,
-                    network_id=network_id,
+                    network_id=network_id if network_created else None,
                     stop_timeout=5,
                 )
 
-                # Remove working directory if it was created
-                if workdir and os.path.isdir(workdir):
+                if workdir_created and workdir and os.path.isdir(workdir):
                     shutil.rmtree(workdir, ignore_errors=True)
 
             except Exception as cleanup_error:
