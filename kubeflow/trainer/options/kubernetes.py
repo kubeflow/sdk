@@ -107,6 +107,8 @@ class PodSpecPatch:
         affinity: Affinity rules for pod scheduling.
         tolerations: Tolerations for pod scheduling.
         scheduling_gates: Scheduling gates for the pods.
+        scheduler_name: Scheduler name for the pods.
+        resource_claims: Resource claims for the pods.
         termination_grace_period_seconds: Seconds the pod has to terminate
             gracefully after a termination signal before it is forcibly killed.
     """
@@ -121,6 +123,8 @@ class PodSpecPatch:
     affinity: dict | None = None
     tolerations: list[dict] | None = None
     scheduling_gates: list[dict] | None = None
+    scheduler_name: str | None = None
+    resource_claims: list[dict] | None = None
     termination_grace_period_seconds: int | None = None
 
     def __post_init__(self):
@@ -153,6 +157,17 @@ class PodSpecPatch:
             or not all(isinstance(g, dict) for g in self.scheduling_gates)
         ):
             raise ValueError("scheduling_gates must be a list of dictionaries")
+
+        if self.scheduler_name is not None and (
+            not isinstance(self.scheduler_name, str) or not self.scheduler_name.strip()
+        ):
+            raise ValueError("scheduler_name must be a non-empty string")
+
+        if self.resource_claims is not None and (
+            not isinstance(self.resource_claims, list)
+            or not all(isinstance(c, dict) for c in self.resource_claims)
+        ):
+            raise ValueError("resource_claims must be a list of dictionaries")
 
         if self.termination_grace_period_seconds is not None and (
             not isinstance(self.termination_grace_period_seconds, int)

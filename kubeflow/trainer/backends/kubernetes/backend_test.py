@@ -1436,6 +1436,78 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
             ),
         ),
         TestCase(
+            name="train with scheduler_name and resource_claims in runtime patch",
+            expected_status=SUCCESS,
+            config={
+                "runtime": TORCH_RUNTIME,
+                "options": [
+                    RuntimePatch(
+                        training_runtime_spec=TrainingRuntimeSpecPatch(
+                            template=JobSetTemplatePatch(
+                                spec=JobSetSpecPatch(
+                                    replicated_jobs=[
+                                        ReplicatedJobPatch(
+                                            name="node",
+                                            template=JobTemplatePatch(
+                                                spec=JobSpecPatch(
+                                                    template=PodTemplatePatch(
+                                                        spec=PodSpecPatch(
+                                                            scheduler_name="volcano",
+                                                            resource_claims=[
+                                                                {
+                                                                    "name": "gpu",
+                                                                    "resourceClaimTemplateName": "gpu-template",
+                                                                }
+                                                            ],
+                                                        ),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
+                    ),
+                ],
+            },
+            expected_output=get_train_job(
+                runtime_name=TORCH_RUNTIME,
+                train_job_name=BASIC_TRAIN_JOB_NAME,
+                runtime_patches=[
+                    models.TrainerV1alpha1RuntimePatch(
+                        manager="trainer.kubeflow.org/kubeflow-sdk",
+                        training_runtime_spec=models.TrainerV1alpha1TrainingRuntimeSpecPatch(
+                            template=models.TrainerV1alpha1JobSetTemplatePatch(
+                                spec=models.TrainerV1alpha1JobSetSpecPatch(
+                                    replicated_jobs=[
+                                        models.TrainerV1alpha1ReplicatedJobPatch(
+                                            name="node",
+                                            template=models.TrainerV1alpha1JobTemplatePatch(
+                                                spec=models.TrainerV1alpha1JobSpecPatch(
+                                                    template=models.TrainerV1alpha1PodTemplatePatch(
+                                                        spec=models.TrainerV1alpha1PodSpecPatch(
+                                                            scheduler_name="volcano",
+                                                            resource_claims=[
+                                                                models.IoK8sApiCoreV1PodResourceClaim(
+                                                                    name="gpu",
+                                                                    resource_claim_template_name="gpu-template",
+                                                                )
+                                                            ],
+                                                        ),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
+                    ),
+                ],
+            ),
+        ),
+        TestCase(
             name="train with active deadline seconds",
             expected_status=SUCCESS,
             config={

@@ -299,6 +299,26 @@ class TestPodSpecPatch:
                 "scheduling_gates must be a list of dictionaries",
             ),
             (
+                {"scheduler_name": 123},
+                "scheduler_name must be a non-empty string",
+            ),
+            (
+                {"scheduler_name": ""},
+                "scheduler_name must be a non-empty string",
+            ),
+            (
+                {"scheduler_name": "   "},
+                "scheduler_name must be a non-empty string",
+            ),
+            (
+                {"resource_claims": "invalid_type"},
+                "resource_claims must be a list of dictionaries",
+            ),
+            (
+                {"resource_claims": ["claim1"]},
+                "resource_claims must be a list of dictionaries",
+            ),
+            (
                 {"termination_grace_period_seconds": "3600"},
                 "termination_grace_period_seconds must be a non-negative integer",
             ),
@@ -463,6 +483,71 @@ class TestRuntimePatchApplication:
                                                     "template": {
                                                         "spec": {
                                                             "terminationGracePeriodSeconds": 3600,
+                                                        },
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    ],
+                                },
+                            },
+                        },
+                    },
+                ],
+            },
+        }
+
+        assert job_spec == expected
+
+    def test_runtime_patch_with_scheduler_name_and_resource_claims(self, mock_kubernetes_backend):
+        """Test RuntimePatch with scheduler_name and resource_claims serializes to CRD fields."""
+        claims = [
+            {"name": "gpu", "resourceClaimTemplateName": "gpu-claim-template"},
+        ]
+        patch = RuntimePatch(
+            training_runtime_spec=TrainingRuntimeSpecPatch(
+                template=JobSetTemplatePatch(
+                    spec=JobSetSpecPatch(
+                        replicated_jobs=[
+                            ReplicatedJobPatch(
+                                name="node",
+                                template=JobTemplatePatch(
+                                    spec=JobSpecPatch(
+                                        template=PodTemplatePatch(
+                                            spec=PodSpecPatch(
+                                                scheduler_name="volcano",
+                                                resource_claims=claims,
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ],
+                    ),
+                ),
+            ),
+        )
+
+        job_spec = {}
+        patch(job_spec, None, mock_kubernetes_backend)
+
+        expected = {
+            "spec": {
+                "runtimePatches": [
+                    {
+                        "manager": "trainer.kubeflow.org/kubeflow-sdk",
+                        "trainingRuntimeSpec": {
+                            "template": {
+                                "spec": {
+                                    "replicatedJobs": [
+                                        {
+                                            "name": "node",
+                                            "template": {
+                                                "spec": {
+                                                    "template": {
+                                                        "spec": {
+                                                            "schedulerName": "volcano",
+                                                            "resourceClaims": claims,
                                                         },
                                                     },
                                                 },
