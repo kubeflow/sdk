@@ -17,6 +17,7 @@ import inspect
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 from string import Template
 import textwrap
@@ -176,8 +177,13 @@ def get_dependencies_command(
         trainer_packages=trainer_packages,
     )
 
-    options = [f"--index-url {pip_index_urls[0]}"]
-    options.extend(f"--extra-index-url {extra_index_url}" for extra_index_url in pip_index_urls[1:])
+    # Quote the index URLs and packages with shlex.quote() so they reach pip unchanged,
+    # e.g. environment markers such as 'numpy; python_version >= "3.9"' contain quotes.
+    options = [f"--index-url {shlex.quote(pip_index_urls[0])}"]
+    options.extend(
+        f"--extra-index-url {shlex.quote(extra_index_url)}"
+        for extra_index_url in pip_index_urls[1:]
+    )
 
     """
            PIP_DISABLE_PIP_VERSION_CHECK=1 pip install $QUIET $AS_USER \
@@ -186,7 +192,7 @@ def get_dependencies_command(
     mapping = {
         "QUIET": "--quiet" if quiet else "",
         "PIP_INDEX": " ".join(options),
-        "PACKAGE_STR": '"{}"'.format('" "'.join(packages)),  # quote deps
+        "PACKAGE_STR": " ".join(shlex.quote(pkg) for pkg in packages),
     }
     t = Template(local_exec_constants.DEPENDENCIES_SCRIPT)
     result = t.substitute(**mapping)
