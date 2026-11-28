@@ -338,6 +338,12 @@ class TestPodSpecPatch:
             PodSpecPatch(**kwargs)
         assert expected_error in str(exc_info.value)
 
+    def test_pod_spec_patch_positional_compatibility(self):
+        """Test existing positional field order is preserved when new fields are keyword-only."""
+        patch = PodSpecPatch(*([None] * 10), 3600, scheduler_name="volcano")
+        assert patch.termination_grace_period_seconds == 3600
+        assert patch.scheduler_name == "volcano"
+
 
 class TestRuntimePatch:
     """Test RuntimePatch validation."""

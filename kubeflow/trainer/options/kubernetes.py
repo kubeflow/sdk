@@ -123,9 +123,9 @@ class PodSpecPatch:
     affinity: dict | None = None
     tolerations: list[dict] | None = None
     scheduling_gates: list[dict] | None = None
-    scheduler_name: str | None = None
-    resource_claims: list[dict] | None = None
     termination_grace_period_seconds: int | None = None
+    scheduler_name: str | None = dataclasses.field(default=None, kw_only=True)
+    resource_claims: list[dict] | None = dataclasses.field(default=None, kw_only=True)
 
     def __post_init__(self):
         """Validate pod spec patch configuration."""
