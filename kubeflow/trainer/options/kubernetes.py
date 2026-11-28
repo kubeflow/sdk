@@ -33,12 +33,18 @@ class ContainerPatch:
         volume_mounts: Volume mounts to add/merge with the container.
                       Each dict should have 'name' and 'mountPath' keys at minimum.
         security_context: Security context for the container.
+        resources: Compute resource requirements and DRA claim references for
+            the container (e.g., ``{"claims": [{"name": "gpu"}]}``).
+            Containers consume a pod-level claim declared in
+            ``PodSpecPatch.resource_claims`` by referencing its ``name`` in
+            ``resources["claims"]``.
     """
 
     name: str
     env: list[dict] | None = None
     volume_mounts: list[dict] | None = None
     security_context: dict | None = None
+    resources: dict | None = dataclasses.field(default=None, kw_only=True)
 
     def __post_init__(self):
         """Validate the container patch configuration."""
@@ -47,6 +53,9 @@ class ContainerPatch:
 
         if self.security_context is not None and not isinstance(self.security_context, dict):
             raise ValueError("security_context must be a dictionary")
+
+        if self.resources is not None and not isinstance(self.resources, dict):
+            raise ValueError("resources must be a dictionary")
 
         if self.env is not None:
             if not isinstance(self.env, list):
@@ -107,6 +116,10 @@ class PodSpecPatch:
         affinity: Affinity rules for pod scheduling.
         tolerations: Tolerations for pod scheduling.
         scheduling_gates: Scheduling gates for the pods.
+        scheduler_name: Scheduler name for the pods.
+        resource_claims: Pod-level DRA resource claims. Containers consume a
+            claim by referencing its ``name`` in
+            ``ContainerPatch(resources={"claims": [{"name": ...}]})``.
         termination_grace_period_seconds: Seconds the pod has to terminate
             gracefully after a termination signal before it is forcibly killed.
     """
@@ -122,6 +135,8 @@ class PodSpecPatch:
     tolerations: list[dict] | None = None
     scheduling_gates: list[dict] | None = None
     termination_grace_period_seconds: int | None = None
+    scheduler_name: str | None = dataclasses.field(default=None, kw_only=True)
+    resource_claims: list[dict] | None = dataclasses.field(default=None, kw_only=True)
 
     def __post_init__(self):
         """Validate pod spec patch configuration."""
@@ -153,6 +168,17 @@ class PodSpecPatch:
             or not all(isinstance(g, dict) for g in self.scheduling_gates)
         ):
             raise ValueError("scheduling_gates must be a list of dictionaries")
+
+        if self.scheduler_name is not None and (
+            not isinstance(self.scheduler_name, str) or not self.scheduler_name.strip()
+        ):
+            raise ValueError("scheduler_name must be a non-empty string")
+
+        if self.resource_claims is not None and (
+            not isinstance(self.resource_claims, list)
+            or not all(isinstance(c, dict) for c in self.resource_claims)
+        ):
+            raise ValueError("resource_claims must be a list of dictionaries")
 
         if self.termination_grace_period_seconds is not None and (
             not isinstance(self.termination_grace_period_seconds, int)
