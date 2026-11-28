@@ -33,12 +33,18 @@ class ContainerPatch:
         volume_mounts: Volume mounts to add/merge with the container.
                       Each dict should have 'name' and 'mountPath' keys at minimum.
         security_context: Security context for the container.
+        resources: Compute resource requirements and DRA claim references for
+            the container (e.g., ``{"claims": [{"name": "gpu"}]}``).
+            Containers consume a pod-level claim declared in
+            ``PodSpecPatch.resource_claims`` by referencing its ``name`` in
+            ``resources["claims"]``.
     """
 
     name: str
     env: list[dict] | None = None
     volume_mounts: list[dict] | None = None
     security_context: dict | None = None
+    resources: dict | None = dataclasses.field(default=None, kw_only=True)
 
     def __post_init__(self):
         """Validate the container patch configuration."""
@@ -47,6 +53,9 @@ class ContainerPatch:
 
         if self.security_context is not None and not isinstance(self.security_context, dict):
             raise ValueError("security_context must be a dictionary")
+
+        if self.resources is not None and not isinstance(self.resources, dict):
+            raise ValueError("resources must be a dictionary")
 
         if self.env is not None:
             if not isinstance(self.env, list):
@@ -108,7 +117,9 @@ class PodSpecPatch:
         tolerations: Tolerations for pod scheduling.
         scheduling_gates: Scheduling gates for the pods.
         scheduler_name: Scheduler name for the pods.
-        resource_claims: Resource claims for the pods.
+        resource_claims: Pod-level DRA resource claims. Containers consume a
+            claim by referencing its ``name`` in
+            ``ContainerPatch(resources={"claims": [{"name": ...}]})``.
         termination_grace_period_seconds: Seconds the pod has to terminate
             gracefully after a termination signal before it is forcibly killed.
     """

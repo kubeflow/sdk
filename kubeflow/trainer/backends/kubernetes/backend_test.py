@@ -47,6 +47,7 @@ from kubeflow.trainer.constants import constants
 from kubeflow.trainer.options import (
     ActiveDeadlineSeconds,
     Annotations,
+    ContainerPatch,
     JobSetSpecPatch,
     JobSetTemplatePatch,
     JobSpecPatch,
@@ -1459,6 +1460,14 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                                                                     "resourceClaimTemplateName": "gpu-template",
                                                                 }
                                                             ],
+                                                            containers=[
+                                                                ContainerPatch(
+                                                                    name="node",
+                                                                    resources={
+                                                                        "claims": [{"name": "gpu"}]
+                                                                    },
+                                                                )
+                                                            ],
                                                         ),
                                                     ),
                                                 ),
@@ -1492,6 +1501,18 @@ def test_get_runtime_packages(kubernetes_backend, test_case):
                                                                 models.IoK8sApiCoreV1PodResourceClaim(
                                                                     name="gpu",
                                                                     resource_claim_template_name="gpu-template",
+                                                                )
+                                                            ],
+                                                            containers=[
+                                                                models.TrainerV1alpha1ContainerPatch(
+                                                                    name="node",
+                                                                    resources=models.IoK8sApiCoreV1ResourceRequirements(
+                                                                        claims=[
+                                                                            models.IoK8sApiCoreV1ResourceClaim(
+                                                                                name="gpu"
+                                                                            )
+                                                                        ]
+                                                                    ),
                                                                 )
                                                             ],
                                                         ),

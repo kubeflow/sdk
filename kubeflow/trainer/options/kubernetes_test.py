@@ -239,6 +239,10 @@ class TestContainerPatch:
                 {"name": "trainer", "security_context": "invalid_type"},
                 "security_context must be a dictionary",
             ),
+            (
+                {"name": "trainer", "resources": "invalid_type"},
+                "resources must be a dictionary",
+            ),
         ],
     )
     def test_container_patch_validation(self, kwargs, expected_error):
@@ -523,6 +527,12 @@ class TestRuntimePatchApplication:
                                             spec=PodSpecPatch(
                                                 scheduler_name="volcano",
                                                 resource_claims=claims,
+                                                containers=[
+                                                    ContainerPatch(
+                                                        name="node",
+                                                        resources={"claims": [{"name": "gpu"}]},
+                                                    )
+                                                ],
                                             ),
                                         ),
                                     ),
@@ -554,6 +564,14 @@ class TestRuntimePatchApplication:
                                                         "spec": {
                                                             "schedulerName": "volcano",
                                                             "resourceClaims": claims,
+                                                            "containers": [
+                                                                {
+                                                                    "name": "node",
+                                                                    "resources": {
+                                                                        "claims": [{"name": "gpu"}]
+                                                                    },
+                                                                }
+                                                            ],
                                                         },
                                                     },
                                                 },
